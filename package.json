@@ -1,0 +1,62 @@
+{
+  "name": "smartsh!t",
+  "version": "0.1.0",
+  "description": "AI-powered spreadsheet for budgets and expenses — chat instead of formulas",
+  "author": "Ocean82 (https://github.com/Ocean82)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Ocean82/smartshit.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Ocean82/smartshit/issues"
+  },
+  "homepage": "https://github.com/Ocean82/smartshit#readme",
+  "keywords": [
+    "spreadsheet",
+    "ai",
+    "local-llm",
+    "ollama",
+    "react",
+    "typescript",
+    "budget",
+    "expenses",
+    "hyperformula",
+    "self-hosted"
+  ],
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:server": "npm run dev --prefix server",
+    "dev:all": "npm run dev:server & npm run dev",
+    "build": "vite build",
+    "build:server": "npm run build --prefix server",
+    "preview": "vite preview",
+    "model:copy": "powershell -ExecutionPolicy Bypass -File scripts/copy-model.ps1",
+    "model:setup": "npm run setup-model --prefix server"
+  },
+  "dependencies": {
+    "@types/uuid": "^10.0.0",
+    "clsx": "2.1.1",
+    "hyperformula": "^3.3.0",
+    "immer": "^11.1.8",
+    "lucide-react": "^1.21.0",
+    "react": "19.2.6",
+    "react-dom": "19.2.6",
+    "tailwind-merge": "3.4.0",
+    "uuid": "^14.0.1",
+    "xlsx": "^0.18.5",
+    "zustand": "^5.0.14"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "4.1.17",
+    "@types/node": "22.19.17",
+    "@types/react": "19.2.7",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "5.1.1",
+    "tailwindcss": "4.1.17",
+    "typescript": "5.9.3",
+    "vite": "7.3.2",
+    "vite-plugin-singlefile": "2.3.0"
+  }
+}

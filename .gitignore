@@ -1,0 +1,19 @@
+node_modules/
+dist/
+.env
+.env.local
+*.log
+.DS_Store
+Thumbs.db
+
+# Large model weights — copy locally or mount on server
+models/*.gguf
+models/*.onnx
+models/*.onnx.data
+models/*.onnx_data*
+
+server/node_modules/
+server/dist/
+
+# Archived local prototypes (consolidated into root src/)
+prototypes/

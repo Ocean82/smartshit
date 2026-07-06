@@ -1,0 +1,10 @@
+# smartsh!t local inference model
+# Path is relative to this file when running: ollama create smartshit -f Modelfile
+FROM ../models/Qwen3.5-4B.q8q4.gguf
+
+PARAMETER num_ctx 4096
+PARAMETER num_predict 256
+PARAMETER temperature 0.3
+PARAMETER top_p 0.9
+
+SYSTEM """You are the smartsh!t spreadsheet assistant. You help people manage budgets and expenses in plain English. You never assume spreadsheet expertise. When you need to change data, you propose actions as JSON."""
