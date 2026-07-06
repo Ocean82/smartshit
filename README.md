@@ -7,6 +7,7 @@
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](https://react.dev/)
 [![Ollama](https://img.shields.io/badge/LLM-Ollama-black)](https://ollama.com/)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+[![Sponsor](https://img.shields.io/badge/Sponsor-Ocean82-ea4aaa?logo=github-sponsors&logoColor=white)](https://github.com/sponsors/Ocean82)
 
 > Original project by **[Ocean82](https://github.com/Ocean82)** — MIT licensed. Forks and contributions welcome.
 
@@ -31,11 +32,9 @@ Fast keyword intent handles common requests instantly. Open-ended questions can 
 
 ## Screenshots
 
-| Chat-first UI | Spreadsheet engine |
-|---|---|
-| Natural language on the left | HyperFormula grid on the right |
+![smartsh!t — AI assistant beside a live spreadsheet grid](docs/images/smartshit-screenshot.png)
 
-*(Add screenshots via PR — `docs/images/` welcome)*
+Chat on the left, spreadsheet on the right. Describe budgets, expenses, or invoices in plain English — click **Apply** to write templates and formulas to the sheet.
 
 ---
 
@@ -165,6 +164,16 @@ See **[CONTRIBUTING.md](CONTRIBUTING.md)** for setup and PR guidelines.
 - [ ] Deploy guide (static frontend + API VM)
 - [ ] Optional cloud model providers
 - [ ] Collaborative editing
+
+---
+
+## Sponsorship
+
+If smartsh!t is useful to you or your team, consider sponsoring development:
+
+**[Sponsor Ocean82 on GitHub](https://github.com/sponsors/Ocean82)**
+
+Sponsors help fund local-model testing, template quality, and keeping the project maintained for everyone.
 
 ---
 
