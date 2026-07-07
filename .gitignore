@@ -17,3 +17,14 @@ server/dist/
 
 # Archived local prototypes (consolidated into root src/)
 prototypes/
+
+# Local scratch notes (not shipped documentation)
+docs/images/notes
+
+# Editor / agent local state
+.cursor/
+
+# Test and build caches
+coverage/
+*.tsbuildinfo
+.vite/
