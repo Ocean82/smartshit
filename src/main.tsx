@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App'
+import { AuthProvider, AuthGate } from '@/auth'
 import { useStore } from '@/store/useStore'
 import { savePersistedState } from '@/lib/persistence'
 
@@ -21,6 +22,10 @@ useStore.subscribe((state) => {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <AuthProvider>
+      <AuthGate>
+        <App />
+      </AuthGate>
+    </AuthProvider>
   </StrictMode>,
 )

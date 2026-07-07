@@ -40,6 +40,14 @@ export const config = {
   numPredict: Number(process.env.NUM_PREDICT ?? 512),
   corsOrigin: process.env.CORS_ORIGIN ?? '*',
 
+  // Stripe
+  stripeSecretKey: process.env.STRIPE_SECRET_KEY ?? '',
+  stripePriceId: process.env.STRIPE_PRICE_ID ?? 'price_1TqYGCP38C54URjEZIBJEXDU',
+  stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET ?? '',
+
+  // App URL for redirects
+  appUrl: process.env.APP_URL ?? 'https://smartsht.com',
+
   analysis: {
     maxRowsPreview: 25,
     maxRowsAnalysis: 10_000,
