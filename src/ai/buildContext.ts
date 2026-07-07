@@ -9,7 +9,7 @@ export interface SpreadsheetContextPayload {
   cellSummary: Record<string, string | number | boolean | null>
 }
 
-const MAX_SUMMARY_CELLS = 80
+const MAX_SUMMARY_CELLS = 30
 
 export function buildSpreadsheetContext(
   workbook: WorkbookData,

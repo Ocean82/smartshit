@@ -2,6 +2,8 @@
 
 **Talk to your spreadsheet. No formulas required.**
 
+🌐 **[smartsht.com](https://smartsht.com)**
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](https://react.dev/)
@@ -46,7 +48,7 @@ Chat on the left, spreadsheet on the right. Describe budgets, expenses, or invoi
 |------|---------|
 | Node.js | 20+ |
 | Ollama | latest |
-| RAM | 8 GB+ recommended for local AI |
+| RAM | 4 GB+ recommended for local AI |
 
 ### 1. Clone and install
 
@@ -59,7 +61,7 @@ npm install --prefix server
 
 ### 2. Add a local model (optional but recommended)
 
-Download **Qwen3.5-4B** GGUF (~2.7 GB) into `models/` — see [models/README.md](models/README.md).
+Download **Qwen2.5-Coder-1.5B** GGUF (~1.6 GB) into `models/` — see [models/README.md](models/README.md).
 
 ```bash
 npm run model:setup
@@ -114,7 +116,7 @@ Click **Apply** on suggested actions to write to the sheet.
 |-------|------|
 | Frontend | React 19, Vite 7, Tailwind CSS 4, Zustand, HyperFormula |
 | Backend | Express 5, TypeScript |
-| AI | Ollama + Qwen3.5-4B (GGUF), intent fast-path for templates |
+| AI | Ollama + Qwen2.5-Coder-1.5B (GGUF), streaming SSE, intent fast-path |
 | I/O | SheetJS (`xlsx`) import/export |
 
 ---
@@ -142,8 +144,14 @@ Copy `.env.example` to `.env` for server overrides:
 | `PORT` | `8787` | API port |
 | `OLLAMA_BASE_URL` | `http://127.0.0.1:11434` | Ollama endpoint |
 | `SMARTSHIT_MODEL` | `smartshit` | Registered Ollama model name |
-| `NUM_PREDICT` | `256` | Max tokens (keeps CPU inference fast) |
+| `NUM_PREDICT` | `512` | Max tokens per response |
 | `VITE_AI_API_URL` | *(empty)* | Production API URL for built frontend |
+| `OPENROUTER_API_KEY` | *(empty)* | OpenRouter API key (recommended primary provider) |
+| `OPENROUTER_MODEL` | `qwen/qwen3-32b` | OpenRouter model slug |
+| `HUGGINGFACE_API_KEY` | *(empty)* | Hugging Face Inference Router key |
+| `HUGGINGFACE_MODEL` | `Qwen/Qwen3-32B` | Hugging Face model id |
+| `GROQ_API_KEY` | *(empty)* | Groq API key |
+| `LLM_PROVIDER_ORDER` | `openrouter,huggingface,groq,ollama` | Failover order for chat providers |
 
 ---
 
@@ -159,7 +167,8 @@ See **[CONTRIBUTING.md](CONTRIBUTING.md)** for setup and PR guidelines.
 
 ## Roadmap
 
-- [ ] Streaming chat responses
+- [x] Streaming chat responses
+- [x] Faster local model (Qwen2.5-Coder-1.5B)
 - [ ] More expense/inventory templates
 - [ ] Deploy guide (static frontend + API VM)
 - [ ] Optional cloud model providers
