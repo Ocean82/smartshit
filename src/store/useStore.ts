@@ -23,8 +23,7 @@ import {
 } from '@/engine/spreadsheet';
 import { loadPersistedState } from '@/lib/persistence';
 import { buildSpreadsheetContext } from '@/ai/buildContext';
-import { chatWithAgentServer, serverResponseToChatMessage } from '@/ai/agentClient';
-import { isWeakServerResponse } from '@/ai/responseQuality';
+import { chatWithAgentServerStream, serverResponseToChatMessage } from '@/ai/agentClient';
 import { v4 as uuid } from 'uuid';
 import { defaultSkills } from '@/data/skills';
 
@@ -369,8 +368,18 @@ export const useStore = create<AppState>()(
           timestamp: Date.now(),
         };
 
+        // Create a placeholder assistant message for streaming
+        const streamingMsgId = uuid();
+        const streamingMsg: ChatMessage = {
+          id: streamingMsgId,
+          role: 'assistant',
+          content: '',
+          timestamp: Date.now(),
+        };
+
         set((s) => {
           s.messages.push(userMsg);
+          s.messages.push(streamingMsg);
           s.chatInput = '';
           s.isAiProcessing = true;
         });
@@ -386,23 +395,44 @@ export const useStore = create<AppState>()(
           );
           const history = state.messages
             .filter((m) => m.role === 'user' || m.role === 'assistant')
-            .slice(0, -1)
-            .slice(-12)
+            .slice(0, -2) // Exclude the user msg and streaming placeholder we just added
+            .slice(-8)
             .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }));
 
-          const serverResult = await chatWithAgentServer(input, context, history);
+          const serverResult = await chatWithAgentServerStream(
+            input,
+            context,
+            history,
+            (token) => {
+              // Update the streaming message with each token
+              set((s) => {
+                const msg = s.messages.find((m) => m.id === streamingMsgId);
+                if (msg) msg.content += token;
+              });
+            },
+          );
 
-          let response: ChatMessage;
-          if (serverResult && !isWeakServerResponse(serverResult)) {
-            response = serverResponseToChatMessage(serverResult);
+          if (serverResult) {
+            // Replace streaming message with the final parsed response
+            const finalMsg = serverResponseToChatMessage(serverResult);
+            set((s) => {
+              const idx = s.messages.findIndex((m) => m.id === streamingMsgId);
+              if (idx >= 0) {
+                s.messages[idx] = { ...finalMsg, id: streamingMsgId };
+              }
+              s.isAiProcessing = false;
+            });
           } else {
-            response = processAICommand(input, get);
+            // Streaming failed — fall back to local pattern matching
+            const fallbackResponse = processAICommand(input, get);
+            set((s) => {
+              const idx = s.messages.findIndex((m) => m.id === streamingMsgId);
+              if (idx >= 0) {
+                s.messages[idx] = { ...fallbackResponse, id: streamingMsgId };
+              }
+              s.isAiProcessing = false;
+            });
           }
-
-          set((s) => {
-            s.messages.push(response);
-            s.isAiProcessing = false;
-          });
         })();
       },
 

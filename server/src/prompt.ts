@@ -47,38 +47,31 @@ export interface ChatResponseBody {
   source: 'llm' | 'fallback' | 'template'
 }
 
+/**
+ * Build a compact system prompt — shorter = faster on small CPU models.
+ */
 export function buildSystemPrompt(context?: SpreadsheetContextInput): string {
   const tools = SPREADSHEET_AGENT_TOOLS.join(', ')
-  const contextBlock = context
-    ? `\n\nCurrent workbook:\n- Name: ${context.workbookName ?? 'Workbook'}\n- Active sheet: ${context.activeSheet ?? 'Sheet1'}\n- Sheets: ${(context.sheetNames ?? []).join(', ') || 'none'}\n- Selection: ${(context.selectedCells ?? []).join(', ') || 'none'}\n- Populated cells (sample): ${JSON.stringify(context.cellSummary ?? {}).slice(0, 2000)}`
-    : ''
 
-  return `You are smartsh!t, an AI assistant for everyday people managing budgets, expenses, and simple business spreadsheets.
+  // Only include a slim context — max 30 cells to keep prompt short
+  let contextBlock = ''
+  if (context) {
+    const cellEntries = Object.entries(context.cellSummary ?? {}).slice(0, 30)
+    const cellStr = cellEntries.length > 0
+      ? cellEntries.map(([k, v]) => `${k}=${v ?? ''}`).join(', ')
+      : 'empty'
+    contextBlock = `\nSheet: "${context.activeSheet}" | Cells: ${cellStr}`
+  }
+
+  return `You are smartsh!t, a spreadsheet AI assistant. Respond ONLY with valid JSON.
+
+Format: {"message":"explanation","actions":[{"tool":"name","params":{},"description":"label"}]}
+
+Tools: ${tools}
 
 Rules:
-- Explain things in plain English. Avoid jargon unless the user asks for formulas.
-- When the user wants changes, respond with JSON ONLY (no markdown fences).
-- Use "actions" for spreadsheet mutations. Use an empty actions array for explanations only.
-- Prefer high-level tools over raw cell writes when a template fits.
-
-Available action tools: ${tools}
-
-JSON response shape:
-{
-  "message": "friendly explanation for the user",
-  "actions": [
-    {
-      "tool": "create_budget_template",
-      "params": {},
-      "description": "short label shown in preview"
-    }
-  ]
-}
-
-Examples:
-- "build a monthly budget" -> create_budget_template
-- "track sales" -> create_sales_tracker
-- "explain my sheet" -> message only, actions: []
-- "add 10% to column B" -> modify_column with params { "column": "B", "operation": "multiply", "factor": 1.1 }
+- message: plain English, friendly, short
+- actions: array of tool calls (empty if just explaining)
+- No markdown fences, no extra text outside JSON
 ${contextBlock}`
 }

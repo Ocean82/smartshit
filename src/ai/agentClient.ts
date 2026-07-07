@@ -34,6 +34,7 @@ export async function fetchServerHealth(): Promise<ServerHealth | null> {
   }
 }
 
+/** Non-streaming chat — fallback if SSE fails */
 export async function chatWithAgentServer(
   message: string,
   context: SpreadsheetContextPayload,
@@ -44,11 +45,77 @@ export async function chatWithAgentServer(
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message, context, history }),
-      signal: AbortSignal.timeout(300_000),
+      signal: AbortSignal.timeout(120_000),
     })
     if (!res.ok) return null
     return (await res.json()) as ServerChatResponse
   } catch {
+    return null
+  }
+}
+
+/**
+ * Streaming chat via SSE.
+ * Calls `onToken` with each text chunk as it arrives.
+ * Returns the final structured response when complete.
+ */
+export async function chatWithAgentServerStream(
+  message: string,
+  context: SpreadsheetContextPayload,
+  history: Array<{ role: 'user' | 'assistant'; content: string }>,
+  onToken: (token: string) => void,
+  signal?: AbortSignal,
+): Promise<ServerChatResponse | null> {
+  try {
+    const res = await fetch(`${API_BASE}/api/chat/stream`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message, context, history }),
+      signal: signal ?? AbortSignal.timeout(120_000),
+    })
+
+    if (!res.ok) return null
+    const reader = res.body?.getReader()
+    if (!reader) return null
+
+    const decoder = new TextDecoder()
+    let finalResponse: ServerChatResponse | null = null
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      const text = decoder.decode(value, { stream: true })
+      const lines = text.split('\n')
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue
+        const jsonStr = line.slice(6).trim()
+        if (!jsonStr) continue
+
+        try {
+          const event = JSON.parse(jsonStr) as
+            | { type: 'token'; content: string }
+            | { type: 'complete'; message: string; actions: ServerAgentAction[]; source: string }
+
+          if (event.type === 'token') {
+            onToken(event.content)
+          } else if (event.type === 'complete') {
+            finalResponse = {
+              message: event.message,
+              actions: event.actions,
+              source: event.source as ServerChatResponse['source'],
+            }
+          }
+        } catch {
+          // Skip malformed events
+        }
+      }
+    }
+
+    return finalResponse
+  } catch (err) {
+    if ((err as Error).name === 'AbortError') return null
     return null
   }
 }

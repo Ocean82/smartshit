@@ -125,13 +125,15 @@ export function ChatPanel() {
               <div className="flex items-center gap-2 text-sm text-gray-500">
                 <Loader2 size={14} className="animate-spin" aria-hidden="true" />
                 <span>
-                  Thinking…
-                  {waitSeconds > 0 ? ` (${waitSeconds}s — local model on CPU)` : ''}
+                  {messages[messages.length - 1]?.role === 'assistant' && messages[messages.length - 1]?.content
+                    ? 'Finishing up…'
+                    : `Thinking…${waitSeconds > 0 ? ` (${waitSeconds}s)` : ''}`
+                  }
                 </span>
               </div>
-              {waitSeconds >= 15 && (
+              {waitSeconds >= 15 && !messages[messages.length - 1]?.content && (
                 <p className="mt-1 text-[11px] text-gray-400">
-                  Template requests like &quot;build a budget&quot; should be instant. Open-ended questions can take 15–30s.
+                  Template requests like &quot;build a budget&quot; are instant. Open-ended questions take a few seconds.
                 </p>
               )}
             </div>
