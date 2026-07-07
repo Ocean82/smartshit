@@ -12,6 +12,22 @@ export const config = {
   groqApiKey: process.env.GROQ_API_KEY ?? '',
   groqModel: process.env.GROQ_MODEL ?? 'llama-3.1-8b-instant',
 
+  // OpenRouter (optional primary)
+  openRouterApiKey: process.env.OPENROUTER_API_KEY ?? '',
+  openRouterModel: process.env.OPENROUTER_MODEL ?? 'qwen/qwen3-32b',
+  openRouterBaseUrl: process.env.OPENROUTER_BASE_URL ?? 'https://openrouter.ai/api/v1',
+
+  // Hugging Face Inference Router (optional primary)
+  huggingFaceApiKey: process.env.HUGGINGFACE_API_KEY ?? '',
+  huggingFaceModel: process.env.HUGGINGFACE_MODEL ?? 'Qwen/Qwen3-32B',
+  huggingFaceBaseUrl: process.env.HUGGINGFACE_BASE_URL ?? 'https://router.huggingface.co/v1',
+
+  // Provider failover priority
+  llmProviderOrder: (process.env.LLM_PROVIDER_ORDER ?? 'openrouter,huggingface,groq,ollama')
+    .split(',')
+    .map((provider) => provider.trim().toLowerCase())
+    .filter(Boolean),
+
   // Ollama (fallback — local CPU inference)
   ollamaBaseUrl: process.env.OLLAMA_BASE_URL ?? 'http://127.0.0.1:11434',
   modelName: process.env.SMARTSHIT_MODEL ?? 'smartshit',

@@ -146,6 +146,12 @@ Copy `.env.example` to `.env` for server overrides:
 | `SMARTSHIT_MODEL` | `smartshit` | Registered Ollama model name |
 | `NUM_PREDICT` | `512` | Max tokens per response |
 | `VITE_AI_API_URL` | *(empty)* | Production API URL for built frontend |
+| `OPENROUTER_API_KEY` | *(empty)* | OpenRouter API key (recommended primary provider) |
+| `OPENROUTER_MODEL` | `qwen/qwen3-32b` | OpenRouter model slug |
+| `HUGGINGFACE_API_KEY` | *(empty)* | Hugging Face Inference Router key |
+| `HUGGINGFACE_MODEL` | `Qwen/Qwen3-32B` | Hugging Face model id |
+| `GROQ_API_KEY` | *(empty)* | Groq API key |
+| `LLM_PROVIDER_ORDER` | `openrouter,huggingface,groq,ollama` | Failover order for chat providers |
 
 ---
 
