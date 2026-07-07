@@ -1,15 +1,81 @@
 import type { WorkbookData, SheetData, Selection } from '@/types'
 import { refToCell, cellToRef } from '@/engine/spreadsheet'
+import { computeSheetInsights, type SheetInsights } from '@/ai/sheetInsights'
+import { buildSheetProfile } from '@/ai/sheetProfile'
+import type { SheetProfile } from '@/ai/types'
+import { AI_ANALYSIS_CONFIG } from '@/ai/config'
+
+export interface SheetDimensions {
+  rows: number
+  cols: number
+  populatedCells: number
+}
 
 export interface SpreadsheetContextPayload {
   workbookName: string
   activeSheet: string
   sheetNames: string[]
   selectedCells: string[]
-  cellSummary: Record<string, string | number | boolean | null>
+  dimensions: SheetDimensions
+  headers: string[]
+  sampleRows: string[][]
+  selectionSnapshot: Record<string, string | number | null>
+  insights: SheetInsights
+  profile?: SheetProfile
+  deterministicSummary?: string
+  /** @deprecated kept for backward compatibility */
+  cellSummary?: Record<string, string | number | boolean | null>
 }
 
-const MAX_SUMMARY_CELLS = 30
+const MAX_SAMPLE_ROWS = AI_ANALYSIS_CONFIG.maxRowsPreview
+
+function getSheetBounds(sheet: SheetData): { maxRow: number; maxCol: number } {
+  let maxRow = 0
+  let maxCol = 0
+  for (const cellId of Object.keys(sheet.cells)) {
+    const { row, col } = cellToRef(cellId)
+    maxRow = Math.max(maxRow, row)
+    maxCol = Math.max(maxCol, col)
+  }
+  return { maxRow, maxCol }
+}
+
+function cellDisplayValue(
+  sheet: SheetData,
+  row: number,
+  col: number,
+  getComputedValue: (row: number, col: number) => string,
+): string | number | null {
+  const cellId = refToCell(row, col)
+  const cell = sheet.cells[cellId]
+  if (cell?.formula) return cell.formula
+  if (cell?.value !== null && cell?.value !== undefined && cell?.value !== '') return cell.value
+  const computed = getComputedValue(row, col)
+  if (!computed) return null
+  const num = Number(computed)
+  return Number.isFinite(num) && computed.trim() !== '' ? num : computed
+}
+
+function buildSampleRows(
+  sheet: SheetData,
+  maxRow: number,
+  maxCol: number,
+  getComputedValue: (row: number, col: number) => string,
+): string[][] {
+  const rows: string[][] = []
+  const limit = Math.min(maxRow + 1, MAX_SAMPLE_ROWS)
+
+  for (let r = 0; r < limit; r++) {
+    const rowValues: string[] = []
+    for (let c = 0; c <= maxCol; c++) {
+      const val = cellDisplayValue(sheet, r, c, getComputedValue)
+      rowValues.push(val === null ? '' : String(val))
+    }
+    if (rowValues.some((v) => v !== '')) rows.push(rowValues)
+  }
+
+  return rows
+}
 
 export function buildSpreadsheetContext(
   workbook: WorkbookData,
@@ -18,6 +84,8 @@ export function buildSpreadsheetContext(
   getComputedValue: (row: number, col: number) => string,
 ): SpreadsheetContextPayload {
   const selectedCells: string[] = []
+  const selectionSnapshot: Record<string, string | number | null> = {}
+
   if (selection) {
     const minR = Math.min(selection.startRow, selection.endRow)
     const maxR = Math.max(selection.startRow, selection.endRow)
@@ -25,24 +93,33 @@ export function buildSpreadsheetContext(
     const maxC = Math.max(selection.startCol, selection.endCol)
     for (let r = minR; r <= maxR; r++) {
       for (let c = minC; c <= maxC; c++) {
-        selectedCells.push(refToCell(r, c))
+        const ref = refToCell(r, c)
+        selectedCells.push(ref)
+        const val = cellDisplayValue(sheet, r, c, getComputedValue)
+        if (val !== null) selectionSnapshot[ref] = val
       }
     }
   }
 
-  const cellSummary: Record<string, string | number | boolean | null> = {}
-  const entries = Object.entries(sheet.cells).slice(0, MAX_SUMMARY_CELLS)
-  for (const [cellId, cell] of entries) {
-    const ref = cellToRef(cellId)
-    const computed = getComputedValue(ref.row, ref.col)
-    cellSummary[cellId] = cell.formula ?? cell.value ?? (computed || null)
-  }
+  const { maxRow, maxCol } = getSheetBounds(sheet)
+  const insights = computeSheetInsights(sheet, getComputedValue)
+  const profile = buildSheetProfile(sheet, getComputedValue)
+  const sampleRows = buildSampleRows(sheet, maxRow, maxCol, getComputedValue)
 
   return {
     workbookName: workbook.name,
     activeSheet: sheet.name,
     sheetNames: workbook.sheets.map((s) => s.name),
     selectedCells,
-    cellSummary,
+    dimensions: {
+      rows: maxRow + 1,
+      cols: maxCol + 1,
+      populatedCells: Object.keys(sheet.cells).length,
+    },
+    headers: insights.headers,
+    sampleRows,
+    selectionSnapshot,
+    insights,
+    profile,
   }
 }

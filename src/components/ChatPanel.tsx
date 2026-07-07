@@ -1,9 +1,20 @@
 import { useRef, useEffect, useState } from 'react'
 import { useStore } from '@/store/useStore'
+import { fetchServerHealth, type ServerHealth } from '@/ai/agentClient'
 import {
-  Send, Check, XCircle, Sparkles, Bot, User, Loader2,
+  Send, Check, XCircle, Sparkles, Bot, User, Loader2, Paperclip, X,
 } from 'lucide-react'
 import type { AgentAction } from '@/types'
+
+function healthFooterMessage(health: ServerHealth | null): string {
+  if (!health) return 'AI server offline — deterministic analysis only'
+  const hasCloud = !!(health.groq || health.openrouter || health.huggingface)
+  if (health.ok && hasCloud) return 'Usually responds in a few seconds'
+  if (health.ok || (health.ollama && health.modelRegistered)) {
+    return 'First reply may take 1–2 min while the model loads'
+  }
+  return 'AI server offline — deterministic analysis only'
+}
 
 export function ChatPanel() {
   const {
@@ -15,11 +26,24 @@ export function ChatPanel() {
     applyAction,
     rejectAction,
     skills,
+    attachedFilePreview,
+    attachFileForChat,
+    importAttachedFile,
+    clearAttachedFile,
   } = useStore()
+
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const [waitSeconds, setWaitSeconds] = useState(0)
+  const [health, setHealth] = useState<ServerHealth | null>(null)
+
+  useEffect(() => {
+    void fetchServerHealth().then(setHealth)
+    const id = setInterval(() => { void fetchServerHealth().then(setHealth) }, 15000)
+    return () => clearInterval(id)
+  }, [])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -96,6 +120,20 @@ export function ChatPanel() {
               >
                 <MessageContent content={msg.content} />
               </div>
+              {msg.role === 'assistant' && msg.suggestions && msg.suggestions.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {msg.suggestions.map((suggestion) => (
+                    <button
+                      key={suggestion}
+                      type="button"
+                      className="px-2.5 py-1 text-[11px] rounded-full border border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100 transition-colors text-left"
+                      onClick={() => setChatInput(suggestion)}
+                    >
+                      {suggestion}
+                    </button>
+                  ))}
+                </div>
+              )}
               {msg.actions && msg.actions.length > 0 && (
                 <div className="mt-2 space-y-2">
                   {msg.actions.map((action) => (
@@ -143,7 +181,53 @@ export function ChatPanel() {
       </div>
 
       <div className="px-3 py-3 border-t border-gray-200 bg-gray-50">
+        {attachedFilePreview && (
+          <div className="mb-2 flex items-center justify-between gap-2 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-2 text-xs">
+            <div className="flex items-center gap-2 min-w-0">
+              <Paperclip size={14} className="text-blue-600 shrink-0" />
+              <span className="truncate text-blue-900">{attachedFilePreview.fileName}</span>
+              <span className="text-blue-600 shrink-0">— asking about attached file</span>
+            </div>
+            <div className="flex items-center gap-1 shrink-0">
+              <button
+                type="button"
+                className="px-2 py-1 rounded-md bg-blue-600 text-white hover:bg-blue-700"
+                onClick={() => void importAttachedFile()}
+              >
+                Import
+              </button>
+              <button
+                type="button"
+                className="p-1 rounded-md text-blue-700 hover:bg-blue-100"
+                onClick={clearAttachedFile}
+                aria-label="Remove attachment"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          </div>
+        )}
         <div className="flex items-end gap-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".xlsx,.csv"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0]
+              if (file) void attachFileForChat(file)
+              e.target.value = ''
+            }}
+          />
+          <button
+            type="button"
+            className="p-2.5 rounded-xl border border-gray-300 bg-white text-gray-600 hover:bg-gray-100 disabled:opacity-50"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isAiProcessing}
+            title="Attach spreadsheet file"
+          >
+            <Paperclip size={16} />
+          </button>
           <textarea
             ref={inputRef}
             className="flex-1 resize-none rounded-xl border border-gray-300 px-3.5 py-2.5 text-sm focus:border-blue-400 focus:ring-1 focus:ring-blue-200 outline-none bg-white"
@@ -163,7 +247,7 @@ export function ChatPanel() {
           </button>
         </div>
         <p className="text-[10px] text-gray-400 mt-1.5 text-center">
-          Powered by local smartsh!t server — first reply may take 1–2 min while the model loads.
+          {healthFooterMessage(health)}
         </p>
       </div>
     </div>

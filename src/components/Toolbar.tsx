@@ -8,6 +8,7 @@ import {
   Filter, SortAsc, Scissors, Copy, ClipboardPaste,
 } from 'lucide-react';
 import { useRef } from 'react';
+import { v4 as uuid } from 'uuid';
 
 export function Toolbar() {
   const {
@@ -89,7 +90,7 @@ export function Toolbar() {
     if (file.name.match(/\.xlsx?$/i)) {
       pushHistory('Import Excel');
       const imported = await importWorkbookFromFile(file);
-      useStore.getState().importWorkbook(imported);
+      useStore.getState().importWorkbook(imported, { fileName: file.name });
       if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
@@ -121,6 +122,12 @@ export function Toolbar() {
         });
       });
       useStore.getState().bulkSetCells(cells);
+      useStore.getState().addMessage({
+        id: uuid(),
+        role: 'assistant',
+        content: `Imported **${file.name}** — ${rows.length} rows on the current sheet.\n\nAsk me to explain it, find overspending, or suggest savings.`,
+        timestamp: Date.now(),
+      });
     };
     reader.readAsText(file);
     if (fileInputRef.current) fileInputRef.current.value = '';

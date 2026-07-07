@@ -22,8 +22,18 @@ import {
   SpreadsheetEngine,
 } from '@/engine/spreadsheet';
 import { loadPersistedState } from '@/lib/persistence';
+import { processMessage } from '@/ai/brain';
 import { buildSpreadsheetContext } from '@/ai/buildContext';
-import { chatWithAgentServerStream, serverResponseToChatMessage } from '@/ai/agentClient';
+import { toolResultToChatMessage, toolResultToMessage } from '@/ai/responseBuilder';
+import { buildFilePreview } from '@/ai/filePreview';
+import { classifyMode, isLlmOnlyMode, isBudgetExplainQuery } from '@/ai/mode';
+import { analyzeBudget, budgetAnalysisToToolResult, savingsRecommendation } from '@/ai/skills/budget';
+import { applyCleaningChanges, previewCleaning } from '@/ai/skills/cleaning';
+import { parseUserIntent } from '@/ai/intentParser';
+import { AI_ANALYSIS_CONFIG } from '@/ai/config';
+import { resolveActTemplates } from '@shared/actTemplates';
+import type { SheetInsights } from '@/ai/sheetInsights';
+import type { AttachedFilePreview } from '@/ai/types';
 import { v4 as uuid } from 'uuid';
 import { defaultSkills } from '@/data/skills';
 
@@ -62,6 +72,7 @@ interface AppState {
   messages: ChatMessage[];
   chatInput: string;
   isAiProcessing: boolean;
+  attachedFilePreview: AttachedFilePreview | null;
 
   // Skills
   skills: Skill[];
@@ -105,6 +116,9 @@ interface AppState {
   setChatInput: (val: string) => void;
   addMessage: (msg: ChatMessage) => void;
   sendMessage: () => void;
+  attachFileForChat: (file: File) => Promise<void>;
+  importAttachedFile: () => Promise<void>;
+  clearAttachedFile: () => void;
   applyAction: (actionId: string) => void;
   rejectAction: (actionId: string) => void;
 
@@ -133,7 +147,7 @@ interface AppState {
 
   // Bulk operations (for AI)
   bulkSetCells: (cells: Record<string, { value: string | number | boolean | null; formula?: string }>) => void;
-  importWorkbook: (workbook: WorkbookData) => void;
+  importWorkbook: (workbook: WorkbookData, meta?: { fileName?: string }) => void;
 
   // Scroll
   setScrollPosition: (row: number, col: number) => void;
@@ -187,6 +201,7 @@ export const useStore = create<AppState>()(
       messages: persisted?.messages?.length ? persisted.messages : [defaultWelcome],
       chatInput: '',
       isAiProcessing: false,
+      attachedFilePreview: null,
       skills: defaultSkills,
       clipboard: null,
       activeFilters: [],
@@ -368,7 +383,6 @@ export const useStore = create<AppState>()(
           timestamp: Date.now(),
         };
 
-        // Create a placeholder assistant message for streaming
         const streamingMsgId = uuid();
         const streamingMsg: ChatMessage = {
           id: streamingMsgId,
@@ -387,54 +401,101 @@ export const useStore = create<AppState>()(
         void (async () => {
           const state = get();
           const sheet = state.getActiveSheet();
+          const history = state.messages
+            .filter((m) => m.role === 'user' || m.role === 'assistant')
+            .slice(0, -2)
+            .slice(-8)
+            .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }));
+
+          const priorInsights = state.messages
+            .filter((m) => m.role === 'assistant' && m.insightsSnapshot)
+            .at(-1)?.insightsSnapshot as SheetInsights | undefined;
+
           const context = buildSpreadsheetContext(
             state.workbook,
             sheet,
             state.selection,
             state.getComputedValue,
           );
-          const history = state.messages
-            .filter((m) => m.role === 'user' || m.role === 'assistant')
-            .slice(0, -2) // Exclude the user msg and streaming placeholder we just added
-            .slice(-8)
-            .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }));
 
-          const serverResult = await chatWithAgentServerStream(
-            input,
-            context,
+          const result = await processMessage({
+            message: input,
+            workbook: state.workbook,
+            sheet,
+            selection: state.selection,
+            getComputedValue: state.getComputedValue,
+            attachedPreview: state.attachedFilePreview,
+            priorInsights: priorInsights ?? null,
             history,
-            (token) => {
-              // Update the streaming message with each token
+            onToken: (token) => {
               set((s) => {
                 const msg = s.messages.find((m) => m.id === streamingMsgId);
                 if (msg) msg.content += token;
               });
             },
-          );
+          });
 
-          if (serverResult) {
-            // Replace streaming message with the final parsed response
-            const finalMsg = serverResponseToChatMessage(serverResult);
-            set((s) => {
-              const idx = s.messages.findIndex((m) => m.id === streamingMsgId);
-              if (idx >= 0) {
-                s.messages[idx] = { ...finalMsg, id: streamingMsgId };
-              }
-              s.isAiProcessing = false;
-            });
-          } else {
-            // Streaming failed — fall back to local pattern matching
-            const fallbackResponse = processAICommand(input, get);
-            set((s) => {
-              const idx = s.messages.findIndex((m) => m.id === streamingMsgId);
-              if (idx >= 0) {
-                s.messages[idx] = { ...fallbackResponse, id: streamingMsgId };
-              }
-              s.isAiProcessing = false;
-            });
+          let finalMsg = toolResultToChatMessage(result, {
+            id: streamingMsgId,
+            insightsSnapshot: context.insights as unknown as Record<string, unknown>,
+          });
+
+          if (!result.success && !isLlmOnlyMode(classifyMode(input))) {
+            finalMsg = { ...processAICommand(input, get), id: streamingMsgId };
           }
+
+          set((s) => {
+            const idx = s.messages.findIndex((m) => m.id === streamingMsgId);
+            if (idx >= 0) s.messages[idx] = finalMsg;
+            s.isAiProcessing = false;
+          });
         })();
       },
+
+      attachFileForChat: async (file) => {
+        const maxBytes = AI_ANALYSIS_CONFIG.maxFileSizeMb * 1024 * 1024;
+        if (file.size > maxBytes) {
+          get().addMessage({
+            id: uuid(),
+            role: 'assistant',
+            content: `File is too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Maximum is ${AI_ANALYSIS_CONFIG.maxFileSizeMb} MB.`,
+            timestamp: Date.now(),
+          });
+          return;
+        }
+
+        try {
+          const preview = await buildFilePreview(file, (workbook, row, col) => {
+            const sheet = workbook.sheets.find((s) => s.id === workbook.activeSheetId) ?? workbook.sheets[0];
+            const cellId = refToCell(row, col);
+            const val = sheet.cells[cellId]?.value;
+            return val === null || val === undefined ? '' : String(val);
+          });
+          set((s) => { s.attachedFilePreview = preview; });
+        } catch {
+          get().addMessage({
+            id: uuid(),
+            role: 'assistant',
+            content: `Could not read **${file.name}**. Make sure it is a valid .xlsx or .csv file.`,
+            timestamp: Date.now(),
+          });
+        }
+      },
+
+      importAttachedFile: async () => {
+        const preview = get().attachedFilePreview;
+        if (!preview) return;
+        get().importWorkbook(preview.workbook, { fileName: preview.fileName });
+        set((s) => { s.attachedFilePreview = null; });
+        get().addMessage({
+          id: uuid(),
+          role: 'assistant',
+          content: `Imported **${preview.fileName}** into your workbook. Ask me to explain the data or build a budget from it.`,
+          timestamp: Date.now(),
+        });
+      },
+
+      clearAttachedFile: () => set((s) => { s.attachedFilePreview = null; }),
 
       applyAction: (actionId) => {
         const state = get();
@@ -695,15 +756,30 @@ export const useStore = create<AppState>()(
         });
       },
 
-      importWorkbook: (workbook) => {
+      importWorkbook: (workbook, meta) => {
         const eng = get().engine;
         eng.loadWorkbook(workbook);
+        const sheet = workbook.sheets.find((s) => s.id === workbook.activeSheetId) ?? workbook.sheets[0];
+        const rowCount = sheet
+          ? Object.keys(sheet.cells).length > 0
+            ? Math.max(...Object.keys(sheet.cells).map((id) => cellToRef(id).row)) + 1
+            : 0
+          : 0;
+
         set((s) => {
           s.workbook = workbook;
           s.activeSheetId = workbook.activeSheetId;
           s.undoStack = [];
           s.redoStack = [];
           s.workbook.updatedAt = Date.now();
+
+          const fileLabel = meta?.fileName ?? 'your file';
+          s.messages.push({
+            id: uuid(),
+            role: 'assistant',
+            content: `Imported **${fileLabel}** — ${rowCount} rows on **${sheet?.name ?? 'Sheet 1'}**.\n\nAsk me to explain it, find overspending, or suggest savings.`,
+            timestamp: Date.now(),
+          });
         });
       },
 
@@ -728,193 +804,101 @@ export const useStore = create<AppState>()(
   })
 );
 
-// AI Command Processing (simulated - placeholder for real LLM integration)
+// AI Command Processing (local fallback when server is unavailable)
 function processAICommand(
   input: string,
   get: () => AppState
 ): ChatMessage {
+  const mode = classifyMode(input);
   const lower = input.toLowerCase();
   const actions: AgentAction[] = [];
 
-  // Pattern matching for common commands
-  if (
-    lower.includes('budget')
-    || lower.includes('monthly budget')
-    || lower.includes('expense')
-    || lower.includes('spending')
-    || (lower.includes('track') && (lower.includes('money') || lower.includes('cost') || lower.includes('spend')))
-  ) {
-    actions.push({
-      id: uuid(),
-      tool: 'create_budget_template',
-      params: {},
-      description: 'Create a monthly budget template with categories, amounts, and totals',
-      status: 'pending',
-      preview: {
-        changes: [
-          { cell: 'A1', oldValue: null, newValue: 'Monthly Budget' },
-          { cell: 'A3', oldValue: null, newValue: 'Category' },
-          { cell: 'B3', oldValue: null, newValue: 'Budget' },
-          { cell: 'C3', oldValue: null, newValue: 'Actual' },
-          { cell: 'D3', oldValue: null, newValue: 'Difference' },
-        ],
-      },
-    });
+  if (mode === 'help') {
     return {
       id: uuid(),
       role: 'assistant',
-      content: `I'll create a **Monthly Budget Template** for you! 📊\n\nThis will include:\n- Income & Expense categories\n- Budget vs Actual columns\n- Auto-calculated differences\n- Summary totals with formulas\n\nClick **Apply** to add it to your spreadsheet.`,
+      content: `Here's what I can do:\n\n**Understand your data**\n- "Explain my expenses"\n- "Where am I losing money?"\n\n**Build spreadsheets**\n- "Create a monthly budget"\n- "Make a sales tracker"\n\nImport a file, then ask me about it.`,
       timestamp: Date.now(),
-      actions,
     };
   }
 
-  if (
-    lower.includes('sales')
-    || lower.includes('inventory')
-    || lower.includes('stock')
-    || (lower.includes('track') && lower.includes('sales'))
-  ) {
-    actions.push({
-      id: uuid(),
-      tool: 'create_sales_tracker',
-      params: {},
-      description: 'Create a sales tracking spreadsheet with products, quantities, and revenue',
-      status: 'pending',
-    });
+  if (isLlmOnlyMode(mode)) {
+    const state = get();
+    const sheet = state.getActiveSheet();
+    const context = buildSpreadsheetContext(
+      state.workbook,
+      sheet,
+      state.selection,
+      state.getComputedValue,
+    );
+    const intent = parseUserIntent(input);
+    const insights = context.insights;
+    const monthlyIncome = typeof intent.parameters.monthlyIncome === 'number'
+      ? intent.parameters.monthlyIncome
+      : insights.totalIncome;
+
+    if (mode === 'advise' && monthlyIncome && monthlyIncome > 0) {
+      const result = savingsRecommendation(monthlyIncome, insights);
+      return {
+        id: uuid(),
+        role: 'assistant',
+        content: toolResultToMessage(result),
+        timestamp: Date.now(),
+        suggestions: result.suggestions,
+      };
+    }
+
+    if (mode === 'advise' || (mode === 'explain' && isBudgetExplainQuery(input))) {
+      const result = budgetAnalysisToToolResult(analyzeBudget(context.profile!, insights));
+      return {
+        id: uuid(),
+        role: 'assistant',
+        content: toolResultToMessage(result),
+        timestamp: Date.now(),
+        suggestions: result.suggestions,
+        insightsSnapshot: insights as unknown as Record<string, unknown>,
+      };
+    }
+
+    const parts: string[] = [`I would analyze your sheet **${context.activeSheet}** here, but the AI server is offline.`];
+
+    if (insights.topExpenses?.length) {
+      parts.push(`\nTop expenses I can see:\n${insights.topExpenses.slice(0, 5).map((e) => `- ${e.label}: $${e.amount}`).join('\n')}`);
+    }
+    if (insights.negativeVariances?.length) {
+      parts.push(`\nOver budget:\n${insights.negativeVariances.slice(0, 5).map((v) => `- ${v.label}: ${v.difference}`).join('\n')}`);
+    }
+    if (insights.netCashflow !== undefined) {
+      parts.push(`\nNet cashflow: $${insights.netCashflow}`);
+    }
+
+    parts.push('\nStart the server with `npm run dev:server` for a full AI answer.');
     return {
       id: uuid(),
       role: 'assistant',
-      content: `I'll create a **Sales Tracker** for you! 💰\n\nThis will include:\n- Product/Service listing\n- Quantity & Unit Price\n- Revenue calculations\n- Monthly summary\n\nClick **Apply** to add it to your spreadsheet.`,
+      content: parts.join(''),
       timestamp: Date.now(),
-      actions,
     };
   }
 
-  if (lower.includes('total') || lower.includes('sum')) {
-    const colMatch = lower.match(/column\s+([a-z])/i);
-    const col = colMatch ? colMatch[1].toUpperCase() : 'B';
-    actions.push({
-      id: uuid(),
-      tool: 'apply_formula',
-      params: { column: col, formula: 'SUM' },
-      description: `Add SUM formula for column ${col}`,
-      status: 'pending',
-    });
-    return {
-      id: uuid(),
-      role: 'assistant',
-      content: `I'll add a **SUM formula** for column ${col}. 🔢\n\nThis will calculate the total of all numeric values in the column.\n\nClick **Apply** to add the formula.`,
-      timestamp: Date.now(),
-      actions,
-    };
-  }
-
-  if (lower.includes('format') || lower.includes('bold') || lower.includes('color')) {
-    const sel = get().selection;
-    actions.push({
-      id: uuid(),
-      tool: 'format_cells',
-      params: { bold: lower.includes('bold'), bgColor: lower.includes('color') ? '#E8F5E9' : undefined },
-      description: 'Format selected cells',
-      status: 'pending',
-    });
-    return {
-      id: uuid(),
-      role: 'assistant',
-      content: `I'll format the ${sel ? 'selected cells' : 'header row'}. 🎨\n\nClick **Apply** to apply the formatting.`,
-      timestamp: Date.now(),
-      actions,
-    };
-  }
-
-  if (lower.includes('chart') || lower.includes('graph')) {
-    actions.push({
-      id: uuid(),
-      tool: 'create_chart',
-      params: { type: lower.includes('pie') ? 'pie' : lower.includes('line') ? 'line' : 'bar' },
-      description: 'Create a chart from the data',
-      status: 'pending',
-    });
-    return {
-      id: uuid(),
-      role: 'assistant',
-      content: `I'll create a **chart** from your data. 📈\n\nClick **Apply** to generate the chart.`,
-      timestamp: Date.now(),
-      actions,
-    };
-  }
-
-  if (lower.includes('add') && lower.includes('%')) {
-    const pctMatch = lower.match(/(\d+)%/);
-    const pct = pctMatch ? parseInt(pctMatch[1]) : 10;
-    const colMatch = lower.match(/column\s+([a-z])/i);
-    const col = colMatch ? colMatch[1].toUpperCase() : 'B';
-    actions.push({
-      id: uuid(),
-      tool: 'modify_column',
-      params: { column: col, operation: 'multiply', factor: 1 + pct / 100 },
-      description: `Add ${pct}% to all values in column ${col}`,
-      status: 'pending',
-    });
-    return {
-      id: uuid(),
-      role: 'assistant',
-      content: `I'll increase all values in column **${col}** by **${pct}%**. 📊\n\nClick **Apply** to make the change.`,
-      timestamp: Date.now(),
-      actions,
-    };
-  }
-
-  if (lower.includes('employee') || lower.includes('roster') || lower.includes('team')) {
-    actions.push({
-      id: uuid(),
-      tool: 'create_employee_roster',
-      params: {},
-      description: 'Create an employee roster template',
-      status: 'pending',
-    });
-    return {
-      id: uuid(),
-      role: 'assistant',
-      content: `I'll create an **Employee Roster** for you! 👥\n\nThis will include:\n- Employee details\n- Department & Role\n- Contact information\n- Start dates\n\nClick **Apply** to add it to your spreadsheet.`,
-      timestamp: Date.now(),
-      actions,
-    };
-  }
-
-  if (lower.includes('project') && (lower.includes('track') || lower.includes('plan') || lower.includes('timeline'))) {
-    actions.push({
-      id: uuid(),
-      tool: 'create_project_tracker',
-      params: {},
-      description: 'Create a project tracking spreadsheet',
-      status: 'pending',
-    });
-    return {
-      id: uuid(),
-      role: 'assistant',
-      content: `I'll create a **Project Tracker** for you! 📋\n\nThis will include:\n- Task list with priorities\n- Status tracking\n- Due dates & assignees\n- Progress calculation\n\nClick **Apply** to add it to your spreadsheet.`,
-      timestamp: Date.now(),
-      actions,
-    };
-  }
-
-  if (lower.includes('invoice')) {
-    actions.push({
-      id: uuid(),
-      tool: 'create_invoice',
-      params: {},
-      description: 'Create a professional invoice template',
-      status: 'pending',
-    });
-    return {
-      id: uuid(),
-      role: 'assistant',
-      content: `I'll create a **Professional Invoice** template! 🧾\n\nThis will include:\n- Company & client details\n- Line items with quantities & prices\n- Subtotal, tax, and total calculations\n- Payment terms\n\nClick **Apply** to add it to your spreadsheet.`,
-      timestamp: Date.now(),
-      actions,
-    };
+  // Act mode — shared template resolver
+  if (mode === 'act') {
+    const template = resolveActTemplates(input);
+    if (template.actions.length > 0 || template.message) {
+      return {
+        id: uuid(),
+        role: 'assistant',
+        content: template.message,
+        timestamp: Date.now(),
+        actions: template.actions.map((action) => ({
+          id: uuid(),
+          tool: action.tool,
+          params: action.params,
+          description: action.description,
+          status: 'pending' as const,
+        })),
+      };
+    }
   }
 
   if (lower.includes('hello') || lower.includes('hi') || lower.includes('hey')) {
@@ -930,25 +914,8 @@ function processAICommand(
     return {
       id: uuid(),
       role: 'assistant',
-      content: `Here's everything I can do: 🤖\n\n**📋 Templates**\n- Budget template\n- Sales tracker\n- Employee roster\n- Project tracker\n- Invoice\n\n**🔢 Formulas**\n- Add SUM, AVERAGE, COUNT\n- Calculate totals\n\n**📈 Charts**\n- Bar, Line, Pie charts\n\n**🎨 Formatting**\n- Bold, italic, colors\n- Cell backgrounds\n\n**✏️ Data Operations**\n- Increase/decrease values by %\n- Clear sheets\n- Sort & filter\n\n**💡 Pro tip**: Select cells first, then ask me to work with them!`,
+      content: `Here's everything I can do:\n\n**Templates** — budget, sales tracker, invoice, KPI dashboard\n**Understand data** — explain expenses, top-N queries, filters\n**Build** — formulas, charts, formatting\n\nImport a file via the chat paperclip, then ask about it.`,
       timestamp: Date.now(),
-    };
-  }
-
-  if (lower.includes('clear') || lower.includes('reset')) {
-    actions.push({
-      id: uuid(),
-      tool: 'clear_sheet',
-      params: {},
-      description: 'Clear all data from the current sheet',
-      status: 'pending',
-    });
-    return {
-      id: uuid(),
-      role: 'assistant',
-      content: `I'll **clear the current sheet**. ⚠️\n\nThis will remove all data. Click **Apply** to confirm.`,
-      timestamp: Date.now(),
-      actions,
     };
   }
 
@@ -1356,6 +1323,88 @@ function executeAction(
       state.setCellFormat('E18', { bold: true, fontSize: 14, bgColor: '#DBEAFE' });
       state.setCellFormat('E16', { bold: true });
       state.setCellFormat('A21', { italic: true, fontColor: '#6B7280' });
+      break;
+    }
+
+    case 'clean_sheet_data': {
+      const preview = params.preview as import('@/ai/skills/cleaning').CleaningPreview | undefined;
+      const cleaning = preview ?? previewCleaning(state.getActiveSheet());
+      const { cellUpdates, rowsToDelete } = applyCleaningChanges(state.getActiveSheet(), cleaning);
+      state.bulkSetCells(cellUpdates);
+      for (const row of rowsToDelete) {
+        get().deleteRow(row);
+      }
+      break;
+    }
+
+    case 'create_kpi_dashboard': {
+      const cells: Record<string, { value: string | number | boolean | null; formula?: string }> = {
+        'A1': { value: 'KPI Dashboard' },
+        'A3': { value: 'Metric' },
+        'B3': { value: 'Target' },
+        'C3': { value: 'Actual' },
+        'D3': { value: 'Status' },
+        'A4': { value: 'Revenue' },
+        'B4': { value: 100000 },
+        'C4': { value: 92000 },
+        'D4': { value: 'Behind' },
+        'A5': { value: 'New Customers' },
+        'B5': { value: 50 },
+        'C5': { value: 58 },
+        'D5': { value: 'On Track' },
+        'A6': { value: 'Churn Rate %' },
+        'B6': { value: 5 },
+        'C6': { value: 4.2 },
+        'D6': { value: 'On Track' },
+        'A7': { value: 'NPS' },
+        'B7': { value: 70 },
+        'C7': { value: 72 },
+        'D7': { value: 'On Track' },
+        'A9': { value: 'Summary' },
+        'B9': { value: null, formula: '=COUNTIF(D4:D7,"On Track")' },
+        'C9': { value: 'metrics on track' },
+      };
+      state.bulkSetCells(cells);
+      const headerFormat = { bold: true, bgColor: '#0F766E', fontColor: '#FFFFFF', textAlign: 'center' as const };
+      ['A3', 'B3', 'C3', 'D3'].forEach((c) => state.setCellFormat(c, headerFormat));
+      state.setCellFormat('A1', { bold: true, fontSize: 16, fontColor: '#0F766E' });
+      break;
+    }
+
+    case 'create_expense_report': {
+      const cells: Record<string, { value: string | number | boolean | null; formula?: string }> = {
+        'A1': { value: 'Expense Report' },
+        'A2': { value: 'Employee: __________' },
+        'A3': { value: 'Period: __________' },
+        'A5': { value: 'Date' },
+        'B5': { value: 'Category' },
+        'C5': { value: 'Description' },
+        'D5': { value: 'Amount' },
+        'E5': { value: 'Approved' },
+        'A6': { value: '2024-01-05' },
+        'B6': { value: 'Travel' },
+        'C6': { value: 'Client meeting' },
+        'D6': { value: 245.5 },
+        'E6': { value: 'Yes' },
+        'A7': { value: '2024-01-12' },
+        'B7': { value: 'Meals' },
+        'C7': { value: 'Team lunch' },
+        'D7': { value: 86.2 },
+        'E7': { value: 'Yes' },
+        'A8': { value: '2024-01-18' },
+        'B8': { value: 'Supplies' },
+        'C8': { value: 'Office materials' },
+        'D8': { value: 42 },
+        'E8': { value: 'Pending' },
+        'A10': { value: 'Total' },
+        'D10': { value: null, formula: '=SUM(D6:D8)' },
+      };
+      state.bulkSetCells(cells);
+      const headerFormat = { bold: true, bgColor: '#B45309', fontColor: '#FFFFFF', textAlign: 'center' as const };
+      ['A5', 'B5', 'C5', 'D5', 'E5'].forEach((c) => state.setCellFormat(c, headerFormat));
+      state.setCellFormat('A1', { bold: true, fontSize: 16, fontColor: '#B45309' });
+      state.setCellFormat('A10', { bold: true });
+      state.setCellFormat('D10', { bold: true, bgColor: '#FEF3C7' });
       break;
     }
 

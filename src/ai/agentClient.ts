@@ -14,6 +14,7 @@ export interface ServerChatResponse {
   message: string
   actions: ServerAgentAction[]
   source: 'llm' | 'fallback' | 'template'
+  suggestions?: string[]
 }
 
 export interface ServerHealth {
@@ -21,7 +22,11 @@ export interface ServerHealth {
   ollama: boolean
   modelRegistered: boolean
   modelName: string
-  modelFileExists: boolean
+  groq?: boolean
+  openrouter?: boolean
+  huggingface?: boolean
+  /** @deprecated use modelRegistered */
+  modelFileExists?: boolean
 }
 
 export async function fetchServerHealth(): Promise<ServerHealth | null> {
@@ -96,7 +101,7 @@ export async function chatWithAgentServerStream(
         try {
           const event = JSON.parse(jsonStr) as
             | { type: 'token'; content: string }
-            | { type: 'complete'; message: string; actions: ServerAgentAction[]; source: string }
+            | { type: 'complete'; message: string; actions: ServerAgentAction[]; source: string; suggestions?: string[] }
 
           if (event.type === 'token') {
             onToken(event.content)
@@ -105,6 +110,7 @@ export async function chatWithAgentServerStream(
               message: event.message,
               actions: event.actions,
               source: event.source as ServerChatResponse['source'],
+              suggestions: event.suggestions,
             }
           }
         } catch {
@@ -137,6 +143,7 @@ export function serverResponseToChatMessage(
     role: 'assistant',
     content: response.message,
     timestamp,
+    suggestions: response.suggestions,
     actions: actions.length > 0 ? actions : undefined,
   }
 }

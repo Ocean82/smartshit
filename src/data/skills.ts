@@ -50,9 +50,9 @@ export const defaultSkills: Skill[] = [
     id: 'data-analysis',
     name: 'Data Analyzer',
     category: 'Data',
-    description: 'Analyze existing data with summary statistics and insights',
-    prompt: 'Analyze the data in the current sheet',
-    tools: ['analyze_data'],
+    description: 'Explain your sheet data in plain English with insights',
+    prompt: 'Explain the data in my current sheet',
+    tools: [],
     icon: '🔍',
   },
   {

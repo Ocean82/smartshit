@@ -18,7 +18,6 @@ const ALLOWED_TOOLS = new Set([
   'apply_formula',
   'format_cells',
   'create_chart',
-  'analyze_data',
   'modify_column',
   'clear_sheet',
 ])

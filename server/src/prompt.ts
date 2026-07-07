@@ -1,13 +1,18 @@
+import type { AgentMode } from './mode.js'
+import type { UserIntent } from '../../shared/intentTypes.js'
+
 export const SPREADSHEET_AGENT_TOOLS = [
   'create_budget_template',
   'create_sales_tracker',
   'create_invoice',
   'create_project_tracker',
   'create_employee_roster',
+  'create_kpi_dashboard',
+  'create_expense_report',
+  'clean_sheet_data',
   'apply_formula',
   'format_cells',
   'create_chart',
-  'analyze_data',
   'modify_column',
   'clear_sheet',
 ] as const
@@ -19,12 +24,64 @@ export interface ChatMessageInput {
   content: string
 }
 
+export interface SheetDimensionsInput {
+  rows: number
+  cols: number
+  populatedCells: number
+}
+
+export interface ColumnStatInput {
+  column: string
+  label: string
+  sum?: number
+  min?: number
+  max?: number
+  average?: number
+  count: number
+}
+
+export interface SheetInsightsInput {
+  headerRow: number
+  headers: string[]
+  columnStats: ColumnStatInput[]
+  categoryTotals?: Array<{ category: string; total: number }>
+  topExpenses?: Array<{ label: string; amount: number; row?: number }>
+  negativeVariances?: Array<{ label: string; budget?: number; actual?: number; difference: number }>
+  totalIncome?: number
+  totalExpenses?: number
+  netCashflow?: number
+}
+
+export interface ColumnProfileInput {
+  name: string
+  column: string
+  dtype: string
+  role: string
+  sumVal?: number
+}
+
+export interface SheetProfileInput {
+  name: string
+  rowCount: number
+  colCount: number
+  detectedPurpose: string
+  columns: ColumnProfileInput[]
+}
+
 export interface SpreadsheetContextInput {
   workbookName: string
   activeSheet: string
   sheetNames: string[]
   selectedCells: string[]
-  cellSummary: Record<string, string | number | boolean | null>
+  dimensions?: SheetDimensionsInput
+  headers?: string[]
+  sampleRows?: string[][]
+  selectionSnapshot?: Record<string, string | number | null>
+  insights?: SheetInsightsInput
+  profile?: SheetProfileInput
+  deterministicSummary?: string
+  /** @deprecated legacy flat cell map */
+  cellSummary?: Record<string, string | number | boolean | null>
 }
 
 export interface AgentActionInput {
@@ -45,23 +102,147 @@ export interface ChatResponseBody {
   message: string
   actions: AgentActionInput[]
   source: 'llm' | 'fallback' | 'template'
+  suggestions?: string[]
+}
+
+function formatContextBlock(context?: SpreadsheetContextInput): string {
+  if (!context) return '\nNo spreadsheet data loaded yet.'
+
+  const lines: string[] = [
+    `\nWorkbook: "${context.workbookName}"`,
+    `Active sheet: "${context.activeSheet}"`,
+    `Sheets: ${context.sheetNames.join(', ')}`,
+  ]
+
+  if (context.dimensions) {
+    lines.push(
+      `Size: ${context.dimensions.rows} rows x ${context.dimensions.cols} cols (${context.dimensions.populatedCells} cells)`,
+    )
+  }
+
+  if (context.headers?.length) {
+    lines.push(`Headers: ${context.headers.join(' | ')}`)
+  }
+
+  if (context.selectedCells?.length) {
+    lines.push(`Selected: ${context.selectedCells.join(', ')}`)
+  }
+
+  if (context.selectionSnapshot && Object.keys(context.selectionSnapshot).length > 0) {
+    const sel = Object.entries(context.selectionSnapshot)
+      .map(([k, v]) => `${k}=${v}`)
+      .join(', ')
+    lines.push(`Selection values: ${sel}`)
+  }
+
+  if (context.sampleRows?.length) {
+    const preview = context.sampleRows
+      .slice(0, 15)
+      .map((row, i) => `  Row ${i + 1}: ${row.join(' | ')}`)
+      .join('\n')
+    lines.push(`Data preview:\n${preview}`)
+  }
+
+  if (context.deterministicSummary?.trim()) {
+    lines.push(`Pre-computed analysis (cite these numbers):\n${context.deterministicSummary}`)
+  }
+
+  if (context.profile) {
+    const p = context.profile
+    lines.push(
+      `Sheet profile: ${p.name} (${p.detectedPurpose}), ${p.rowCount}x${p.colCount}`,
+    )
+    if (p.columns.length) {
+      lines.push(
+        `Columns: ${p.columns.slice(0, 8).map((c) => `${c.name}(${c.role})`).join(', ')}`,
+      )
+    }
+  }
+
+  if (context.insights) {
+    const ins = context.insights
+    const insightLines: string[] = []
+
+    if (ins.totalIncome !== undefined) insightLines.push(`Total income: ${ins.totalIncome}`)
+    if (ins.totalExpenses !== undefined) insightLines.push(`Total expenses: ${ins.totalExpenses}`)
+    if (ins.netCashflow !== undefined) insightLines.push(`Net cashflow: ${ins.netCashflow}`)
+
+    if (ins.topExpenses?.length) {
+      insightLines.push(
+        `Top expenses: ${ins.topExpenses.map((e) => `${e.label}=$${e.amount}`).join(', ')}`,
+      )
+    }
+
+    if (ins.categoryTotals?.length) {
+      insightLines.push(
+        `By category: ${ins.categoryTotals.map((c) => `${c.category}=$${c.total}`).join(', ')}`,
+      )
+    }
+
+    if (ins.negativeVariances?.length) {
+      insightLines.push(
+        `Over budget: ${ins.negativeVariances.map((v) => `${v.label} (${v.difference})`).join(', ')}`,
+      )
+    }
+
+    if (ins.columnStats?.length) {
+      const stats = ins.columnStats
+        .filter((c) => c.sum !== undefined)
+        .map((c) => `${c.label}: sum=${c.sum}, avg=${c.average?.toFixed(2)}`)
+        .join('; ')
+      if (stats) insightLines.push(`Column stats: ${stats}`)
+    }
+
+    if (insightLines.length > 0) {
+      lines.push(`Computed insights:\n${insightLines.map((l) => `  - ${l}`).join('\n')}`)
+    }
+  }
+
+  return lines.join('\n')
 }
 
 /**
- * Build a compact system prompt — shorter = faster on small CPU models.
+ * Plain-English assistant for explain / advise / chat modes — no tools.
  */
-export function buildSystemPrompt(context?: SpreadsheetContextInput): string {
-  const tools = SPREADSHEET_AGENT_TOOLS.join(', ')
+export function buildExplainPrompt(
+  context: SpreadsheetContextInput | undefined,
+  mode: AgentMode,
+  userIntent?: UserIntent,
+): string {
+  const contextBlock = formatContextBlock(context)
 
-  // Only include a slim context — max 30 cells to keep prompt short
-  let contextBlock = ''
-  if (context) {
-    const cellEntries = Object.entries(context.cellSummary ?? {}).slice(0, 30)
-    const cellStr = cellEntries.length > 0
-      ? cellEntries.map(([k, v]) => `${k}=${v ?? ''}`).join(', ')
-      : 'empty'
-    contextBlock = `\nSheet: "${context.activeSheet}" | Cells: ${cellStr}`
-  }
+  const intentBlock = userIntent
+    ? `\nParsed user intent: ${userIntent.intentType} (confidence ${userIntent.confidence})` +
+      (userIntent.targetColumns.length ? `\nTarget columns: ${userIntent.targetColumns.join(', ')}` : '') +
+      (userIntent.parameters.n ? `\nTop/bottom N: ${userIntent.parameters.n}` : '') +
+      (userIntent.parameters.compareLeft ? `\nFilter: ${userIntent.parameters.compareLeft} ${userIntent.parameters.compareOp} ${userIntent.parameters.compareRight}` : '')
+    : ''
+
+  const adviseAddendum = mode === 'advise'
+    ? `\nYou are also a practical finance coach. Give specific, actionable savings advice using the numbers above. Suggest realistic targets (e.g. 50/30/20 rule) when income/expenses are known. If data is missing, ask one short clarifying question.`
+    : ''
+
+  return `You are smartsh!t, a friendly spreadsheet assistant. The user wants you to UNDERSTAND and EXPLAIN their data — not create new templates.
+
+Respond in plain English (markdown is OK). Be specific — cite actual numbers, categories, and rows from the sheet data below.
+
+Rules:
+- Answer the user's question directly
+- Reference real values from the spreadsheet context
+- Do NOT suggest creating a new template unless they explicitly asked to build one
+- Do NOT output JSON or tool calls
+- Keep answers concise but helpful (2-6 short paragraphs max)
+${adviseAddendum}
+${intentBlock}
+${contextBlock}`
+}
+
+/**
+ * JSON tool-calling assistant for act mode.
+ */
+export function buildActionPrompt(context?: SpreadsheetContextInput): string {
+  const tools = SPREADSHEET_AGENT_TOOLS.join(', ')
+  const contextBlock = formatContextBlock(context)
 
   return `You are smartsh!t, a spreadsheet AI assistant. Respond ONLY with valid JSON.
 
@@ -71,7 +252,12 @@ Tools: ${tools}
 
 Rules:
 - message: plain English, friendly, short
-- actions: array of tool calls (empty if just explaining)
+- actions: array of tool calls (empty array if no sheet changes needed)
 - No markdown fences, no extra text outside JSON
 ${contextBlock}`
+}
+
+/** @deprecated use buildActionPrompt or buildExplainPrompt */
+export function buildSystemPrompt(context?: SpreadsheetContextInput): string {
+  return buildActionPrompt(context)
 }

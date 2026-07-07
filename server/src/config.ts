@@ -39,4 +39,10 @@ export const config = {
   /** Max tokens to generate per response */
   numPredict: Number(process.env.NUM_PREDICT ?? 512),
   corsOrigin: process.env.CORS_ORIGIN ?? '*',
+
+  analysis: {
+    maxRowsPreview: 25,
+    maxRowsAnalysis: 10_000,
+    outlierStdThreshold: 2.5,
+  },
 }

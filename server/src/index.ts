@@ -1,13 +1,20 @@
-import fs from 'node:fs'
 import cors from 'cors'
 import express from 'express'
 import { config } from './config.js'
 import { chatWithOllama, chatWithOllamaStream, modelIsRegistered, ollamaReachable } from './ollama.js'
 import { groqAvailable, chatWithGroqStream } from './groq.js'
 import { chatWithOpenAiCompatible, chatWithOpenAiCompatibleStream, openAiCompatibleAvailable } from './openaiCompatible.js'
-import { buildSystemPrompt, type ChatRequestBody, type ChatResponseBody } from './prompt.js'
+import {
+  buildActionPrompt,
+  buildExplainPrompt,
+  type ChatRequestBody,
+  type ChatResponseBody,
+} from './prompt.js'
 import { parseAgentResponse } from './parseResponse.js'
 import { resolveIntent, isWeakResponse } from './intent.js'
+import { classifyMode, isLlmOnlyMode } from './mode.js'
+import { parseUserIntent } from './intentParser.js'
+import type { UserIntent } from '../../shared/intentTypes.js'
 
 const app = express()
 app.use(cors({ origin: config.corsOrigin }))
@@ -107,6 +114,92 @@ async function callProvider(provider: ProviderName, messages: Array<{ role: 'sys
   return chatWithOllama(messages)
 }
 
+function sendSseComplete(
+  res: express.Response,
+  payload: ChatResponseBody & { errors?: string[] },
+): void {
+  res.write(`data: ${JSON.stringify({ type: 'complete', ...payload })}\n\n`)
+  res.end()
+}
+
+async function runLlmChat(params: {
+  body: ChatRequestBody
+  userMessage: string
+  mode: ReturnType<typeof classifyMode>
+  intent: ReturnType<typeof resolveIntent>
+  userIntent: UserIntent
+  stream: boolean
+  onChunk?: (chunk: string) => void
+  signal?: AbortSignal
+}): Promise<ChatResponseBody> {
+  const { body, userMessage, mode, intent, userIntent, stream, onChunk, signal } = params
+  const llmOnly = isLlmOnlyMode(mode) || body.forceLlm
+
+  const history = (body.history ?? []).filter((m) => m.role === 'user' || m.role === 'assistant')
+  const systemPrompt = llmOnly
+    ? buildExplainPrompt(body.context, mode, userIntent)
+    : buildActionPrompt(body.context)
+
+  const messages = [
+    { role: 'system' as const, content: systemPrompt },
+    ...history.slice(-4),
+    { role: 'user' as const, content: userMessage },
+  ]
+
+  const availableProviders = providerOrder().filter(providerIsConfigured)
+  const providerErrors: string[] = []
+  let fullText = ''
+  let usedProvider: ProviderName | null = null
+
+  for (const provider of availableProviders) {
+    try {
+      if (stream && onChunk && signal) {
+        fullText = await callProviderStream(provider, messages, onChunk, signal)
+      } else {
+        fullText = await callProvider(provider, messages)
+      }
+      usedProvider = provider
+      break
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error'
+      providerErrors.push(`${provider}: ${message}`)
+    }
+  }
+
+  if (!usedProvider) {
+    return {
+      message:
+        intent.message ||
+        'AI is currently unavailable. Configure OPENROUTER_API_KEY, HUGGINGFACE_API_KEY, GROQ_API_KEY, or a local Ollama model.',
+      actions: llmOnly ? [] : intent.actions,
+      source: 'fallback',
+    }
+  }
+
+  if (llmOnly) {
+    const text = fullText.trim()
+    return {
+      message: text || 'I could not generate a response. Try rephrasing your question.',
+      actions: [],
+      source: 'llm',
+    }
+  }
+
+  let parsed = parseAgentResponse(fullText)
+  if (isWeakResponse(parsed.message, parsed.actions)) {
+    parsed = {
+      message: intent.message || fullText || 'Try a specific request like "build a monthly budget".',
+      actions: intent.actions,
+    }
+  }
+
+  return {
+    message: parsed.message,
+    actions: parsed.actions,
+    source: 'llm',
+  }
+}
+
 // ─── Health ──────────────────────────────────────────────────────────────────
 
 app.get('/health', async (_req, res) => {
@@ -143,111 +236,64 @@ app.post('/api/chat/stream', async (req, res) => {
     return
   }
 
+  const mode = classifyMode(userMessage)
+  const userIntent = parseUserIntent(userMessage)
   const intent = resolveIntent(userMessage)
+  const llmOnly = isLlmOnlyMode(mode) || body.forceLlm
 
-  // Fast path — instant template response
-  if (!body.forceLlm && (intent.actions.length > 0 || intent.message.length > 0)) {
-    res.setHeader('Content-Type', 'text/event-stream')
-    res.setHeader('Cache-Control', 'no-cache')
-    res.setHeader('Connection', 'keep-alive')
-    res.setHeader('X-Accel-Buffering', 'no')
-
-    const payload: ChatResponseBody = {
-      message: intent.message,
-      actions: intent.actions,
-      source: 'template',
-    }
-    res.write(`data: ${JSON.stringify({ type: 'complete', ...payload })}\n\n`)
-    res.end()
-    return
-  }
-
-  // Set up SSE headers
   res.setHeader('Content-Type', 'text/event-stream')
   res.setHeader('Cache-Control', 'no-cache')
   res.setHeader('Connection', 'keep-alive')
   res.setHeader('X-Accel-Buffering', 'no')
+
+  // Static help response
+  if (mode === 'help' && !body.forceLlm) {
+    sendSseComplete(res, { message: intent.message, actions: [], source: 'template' })
+    return
+  }
+
+  // Act-mode template fast path
+  if (!llmOnly && (intent.actions.length > 0 || intent.message.length > 0)) {
+    sendSseComplete(res, {
+      message: intent.message,
+      actions: intent.actions,
+      source: 'template',
+    })
+    return
+  }
+
   res.flushHeaders()
 
   const abortController = new AbortController()
   req.on('close', () => abortController.abort())
 
-  const history = (body.history ?? []).filter((m) => m.role === 'user' || m.role === 'assistant')
-  const messages = [
-    { role: 'system' as const, content: buildSystemPrompt(body.context) },
-    ...history.slice(-4),
-    { role: 'user' as const, content: userMessage },
-  ]
-
-  const availableProviders = providerOrder().filter(providerIsConfigured)
-  const providerErrors: string[] = []
-
   try {
-    let fullText = ''
-    let usedProvider: ProviderName | null = null
-
-    for (const provider of availableProviders) {
-      try {
-        fullText = await callProviderStream(
-          provider,
-          messages,
-          (chunk) => {
-            if (!res.writableEnded) {
-              res.write(`data: ${JSON.stringify({ type: 'token', content: chunk })}\n\n`)
-            }
-          },
-          abortController.signal,
-        )
-        usedProvider = provider
-        break
-      } catch (err) {
-        const message = err instanceof Error ? err.message : 'Unknown error'
-        providerErrors.push(`${provider}: ${message}`)
-      }
-    }
-
-    if (!usedProvider) {
-      const payload: ChatResponseBody = {
-        message:
-          intent.message ||
-          'AI is currently unavailable. Configure OPENROUTER_API_KEY, HUGGINGFACE_API_KEY, GROQ_API_KEY, or a local Ollama model.',
-        actions: intent.actions,
-        source: 'fallback',
-      }
-      res.write(`data: ${JSON.stringify({ type: 'complete', ...payload, errors: providerErrors })}\n\n`)
-      res.end()
-      return
-    }
-
-    // Parse the final accumulated text into structured response
-    let parsed = parseAgentResponse(fullText)
-
-    if (isWeakResponse(parsed.message, parsed.actions)) {
-      parsed = {
-        message: intent.message || fullText || 'Try a specific request like "build a monthly budget".',
-        actions: intent.actions,
-      }
-    }
+    const result = await runLlmChat({
+      body,
+      userMessage,
+      mode,
+      intent,
+      userIntent,
+      stream: true,
+      onChunk: (chunk) => {
+        if (!res.writableEnded) {
+          res.write(`data: ${JSON.stringify({ type: 'token', content: chunk })}\n\n`)
+        }
+      },
+      signal: abortController.signal,
+    })
 
     if (!res.writableEnded) {
-      const payload: ChatResponseBody = {
-        message: parsed.message,
-        actions: parsed.actions,
-        source: 'llm',
-      }
-      res.write(`data: ${JSON.stringify({ type: 'complete', ...payload })}\n\n`)
-      res.end()
+      sendSseComplete(res, result)
     }
   } catch (err) {
     if (!res.writableEnded) {
       const message = err instanceof Error ? err.message : 'Unknown error'
-      const payload: ChatResponseBody = {
+      sendSseComplete(res, {
         message: `${intent.message || 'Something went wrong.'}\n\n(${message})`,
-        actions: intent.actions,
+        actions: llmOnly ? [] : intent.actions,
         source: 'fallback',
-      }
-      res.write(`data: ${JSON.stringify({ type: 'complete', ...payload })}\n\n`)
-      res.end()
+      })
     }
   }
 })
@@ -263,68 +309,42 @@ app.post('/api/chat', async (req, res) => {
     return
   }
 
+  const mode = classifyMode(userMessage)
+  const userIntent = parseUserIntent(userMessage)
   const intent = resolveIntent(userMessage)
+  const llmOnly = isLlmOnlyMode(mode) || body.forceLlm
 
-  if (!body.forceLlm && (intent.actions.length > 0 || intent.message.length > 0)) {
-    const payload: ChatResponseBody = {
-      message: intent.message,
-      actions: intent.actions,
-      source: intent.actions.length > 0 ? 'template' : 'fallback',
-    }
-    res.json(payload)
+  if (mode === 'help' && !body.forceLlm) {
+    res.json({ message: intent.message, actions: [], source: 'template' })
     return
   }
 
-  // Try configured providers in order with graceful fallback
+  if (!llmOnly && (intent.actions.length > 0 || intent.message.length > 0)) {
+    res.json({
+      message: intent.message,
+      actions: intent.actions,
+      source: intent.actions.length > 0 ? 'template' : 'fallback',
+    })
+    return
+  }
+
   try {
-    const history = (body.history ?? []).filter((m) => m.role === 'user' || m.role === 'assistant')
-    const messages = [
-      { role: 'system' as const, content: buildSystemPrompt(body.context) },
-      ...history.slice(-4),
-      { role: 'user' as const, content: userMessage },
-    ]
-
-    const availableProviders = providerOrder().filter(providerIsConfigured)
-    let raw = ''
-    let usedProvider: ProviderName | null = null
-
-    for (const provider of availableProviders) {
-      try {
-        raw = await callProvider(provider, messages)
-        usedProvider = provider
-        break
-      } catch {
-        // keep trying the next provider
-      }
-    }
-
-    if (!usedProvider) {
-      const payload: ChatResponseBody = {
-        message:
-          intent.message ||
-          'AI is currently unavailable. Configure OPENROUTER_API_KEY, HUGGINGFACE_API_KEY, GROQ_API_KEY, or a local Ollama model.',
-        actions: intent.actions,
-        source: 'fallback',
-      }
-      res.status(200).json(payload)
-      return
-    }
-
-    let parsed = parseAgentResponse(raw)
-    if (isWeakResponse(parsed.message, parsed.actions)) {
-      parsed = { message: intent.message || 'Try a specific request.', actions: intent.actions }
-    }
-
-    const payload: ChatResponseBody = { message: parsed.message, actions: parsed.actions, source: 'llm' }
-    res.json(payload)
+    const result = await runLlmChat({
+      body,
+      userMessage,
+      mode,
+      intent,
+      userIntent,
+      stream: false,
+    })
+    res.json(result)
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error'
-    const payload: ChatResponseBody = {
+    res.json({
       message: `${intent.message || 'Something went wrong.'}\n\n(${message})`,
-      actions: intent.actions,
+      actions: llmOnly ? [] : intent.actions,
       source: 'fallback',
-    }
-    res.status(200).json(payload)
+    })
   }
 })
 

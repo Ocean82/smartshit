@@ -102,6 +102,9 @@ export interface ChatMessage {
   timestamp: number;
   actions?: AgentAction[];
   status?: 'pending' | 'applied' | 'rejected';
+  toolUsed?: string;
+  insightsSnapshot?: Record<string, unknown>;
+  suggestions?: string[];
 }
 
 export interface AgentAction {
