@@ -16,6 +16,8 @@ import { classifyMode, isLlmOnlyMode } from './mode.js'
 import { parseUserIntent } from './intentParser.js'
 import type { UserIntent } from '../../shared/intentTypes.js'
 
+import { checkUsage, recordUsage, getUsageStats } from './usage.js'
+
 const app = express()
 app.use(cors({ origin: config.corsOrigin }))
 app.use(express.json({ limit: '1mb' }))
@@ -271,6 +273,20 @@ app.post('/api/chat/stream', async (req, res) => {
     abortController.abort()
   })
 
+  // ─── Usage gate (free tier enforcement) ────────────────────────────────────
+  const userId = (body as unknown as Record<string, unknown>).userId as string | undefined
+  const isPro = (body as unknown as Record<string, unknown>).isPro === true
+  const usage = checkUsage(userId, isPro)
+
+  if (!usage.allowed) {
+    sendSseComplete(res, {
+      message: `You've used all ${usage.limit} free AI questions for today. Upgrade to Pro for unlimited access.`,
+      actions: [],
+      source: 'fallback',
+    })
+    return
+  }
+
   res.flushHeaders()
 
   // Use a separate signal for the LLM call — only timeout-based, not tied to req close
@@ -295,6 +311,11 @@ app.post('/api/chat/stream', async (req, res) => {
     })
 
     clearTimeout(llmTimeout)
+
+    // Record usage for free-tier tracking (only after successful LLM response)
+    if (result.source === 'llm') {
+      recordUsage(userId)
+    }
 
     if (!res.writableEnded) {
       sendSseComplete(res, result)
@@ -359,6 +380,14 @@ app.post('/api/chat', async (req, res) => {
       source: 'fallback',
     })
   }
+})
+
+// ─── Usage check endpoint ────────────────────────────────────────────────────
+
+app.post('/api/usage', (req, res) => {
+  const { userId, isPro } = req.body as { userId?: string; isPro?: boolean }
+  const stats = getUsageStats(userId, isPro === true)
+  res.json(stats)
 })
 
 // ─── Stripe Checkout ─────────────────────────────────────────────────────────
