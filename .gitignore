@@ -24,6 +24,9 @@ docs/images/notes
 # Editor / agent local state
 .cursor/
 
+# PM2 ecosystem config (contains server secrets)
+server/ecosystem.config.cjs
+
 # Test and build caches
 coverage/
 *.tsbuildinfo
