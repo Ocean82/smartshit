@@ -348,6 +348,51 @@ app.post('/api/chat', async (req, res) => {
   }
 })
 
+// ─── Stripe Checkout ─────────────────────────────────────────────────────────
+
+app.post('/api/checkout', async (req, res) => {
+  const { userId, email, priceId } = req.body as { userId?: string; email?: string; priceId?: string }
+
+  if (!userId || !email) {
+    res.status(400).json({ error: 'userId and email are required' })
+    return
+  }
+
+  try {
+    const { createCheckoutSession } = await import('./stripe.js')
+    const session = await createCheckoutSession({
+      userId,
+      email,
+      priceId: priceId || config.stripePriceId,
+    })
+    res.json({ url: session.url })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Checkout failed'
+    res.status(500).json({ error: message })
+  }
+})
+
+// ─── Stripe Webhook ──────────────────────────────────────────────────────────
+
+app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+  try {
+    const event = JSON.parse(req.body.toString()) as { type: string; data: { object: Record<string, unknown> } }
+    const { handleStripeWebhook } = await import('./stripe.js')
+    const result = await handleStripeWebhook(event)
+
+    if (result) {
+      // In production, update Clerk user metadata here via Clerk Backend API
+      console.log(`Stripe webhook: user ${result.userId} -> plan ${result.plan}`)
+    }
+
+    res.json({ received: true })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Webhook error'
+    console.error('Stripe webhook error:', message)
+    res.status(400).json({ error: message })
+  }
+})
+
 // ─── Start ───────────────────────────────────────────────────────────────────
 
 app.listen(config.port, config.host, () => {
@@ -357,4 +402,5 @@ app.listen(config.port, config.host, () => {
   console.log(`HuggingFace: ${providerIsConfigured('huggingface') ? `✓ (${config.huggingFaceModel})` : '✗ (no API key)'}`)
   console.log(`Groq: ${groqAvailable() ? `✓ (${config.groqModel})` : '✗ (no API key)'}`)
   console.log(`Ollama: ${config.ollamaBaseUrl} (model: ${config.modelName})`)
+  console.log(`Stripe: ${config.stripeSecretKey ? '✓' : '✗ (no secret key)'}`)
 })
