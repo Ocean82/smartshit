@@ -55,7 +55,7 @@ function App() {
         {/* Spreadsheet + summary on the right */}
         <div className="flex-1 flex flex-col overflow-hidden min-w-0 relative">
           <SummaryCards />
-          <div className="flex-1 overflow-hidden relative">
+          <div className="flex-1 flex flex-col overflow-hidden relative">
             <SpreadsheetGrid />
             <ChartOverlay />
           </div>
