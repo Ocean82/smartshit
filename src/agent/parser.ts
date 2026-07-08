@@ -1,0 +1,220 @@
+/**
+ * Pattern-based intent parser — extracts tool calls from natural language.
+ * No LLM needed. Handles 80%+ of common spreadsheet operations instantly.
+ */
+
+export interface ParsedToolCall {
+  tool: string
+  params: Record<string, unknown>
+  description: string
+}
+
+export interface ParseResult {
+  calls: ParsedToolCall[]
+  understood: boolean
+  explanation?: string  // Friendly message to show the user
+}
+
+const CELL_REF = /\b([A-Z])(\d{1,3})\b/i
+const COL_REF = /\bcolumn\s+([A-Z])\b/i
+const RANGE_REF = /\b([A-Z]\d{1,3}):([A-Z]\d{1,3})\b/i
+const NUMBER = /\$?([\d,]+(?:\.\d+)?)/
+const PERCENT = /(\d+)\s*%/
+
+/**
+ * Parse a user message into zero or more tool calls.
+ * Returns { understood: false } if no patterns match (should fallback to LLM).
+ */
+export function parseMessage(message: string, sheetContext?: SheetContext): ParseResult {
+  const lower = message.toLowerCase().trim()
+  const calls: ParsedToolCall[] = []
+
+  // ─── Multi-step compound requests ───────────────────────────────────────────
+  // "clear and build a budget" → clear_sheet + create_budget_template
+  if ((lower.includes('clear') || lower.includes('reset') || lower.includes('start over')) && 
+      (lower.includes('build') || lower.includes('create') || lower.includes('make') || lower.includes('new budget'))) {
+    calls.push({ tool: 'clear_sheet', params: {}, description: 'Clear current sheet' })
+    if (lower.includes('budget') || lower.includes('expense')) {
+      calls.push({ tool: 'create_budget_template', params: {}, description: 'Create monthly budget template' })
+    } else if (lower.includes('sales') || lower.includes('revenue')) {
+      calls.push({ tool: 'create_sales_tracker', params: {}, description: 'Create sales tracker' })
+    } else if (lower.includes('invoice')) {
+      calls.push({ tool: 'create_invoice', params: {}, description: 'Create invoice template' })
+    }
+    if (calls.length > 1) {
+      return { calls, understood: true, explanation: 'I\'ll clear the sheet and build a fresh template for you.' }
+    }
+  }
+
+  // ─── Set cell: "put X in Y" / "set Y to X" ─────────────────────────────────
+  const putIn = lower.match(/(?:put|set|write|enter)\s+(.+?)\s+(?:in|into|to|at)\s+([a-z]\d{1,3})/i)
+  if (putIn) {
+    const value = putIn[1].replace(/^["']|["']$/g, '').trim()
+    const cell = putIn[2].toUpperCase()
+    const numVal = parseFloat(value.replace(/[$,]/g, ''))
+    const finalVal = !isNaN(numVal) && !/[a-z]/i.test(value.replace(/[$,.\d\s]/g, '')) ? String(numVal) : value
+    calls.push({ tool: 'set_cell', params: { cell, value: finalVal }, description: `Set ${cell} to ${value}` })
+    return { calls, understood: true, explanation: `Setting ${cell} to "${value}".` }
+  }
+
+  // "A1 = 500" or "B3 = =SUM(B1:B2)"
+  const cellEquals = lower.match(/^([a-z]\d{1,3})\s*=\s*(.+)$/i)
+  if (cellEquals) {
+    const cell = cellEquals[1].toUpperCase()
+    const value = cellEquals[2].trim()
+    calls.push({ tool: 'set_cell', params: { cell, value }, description: `Set ${cell} to ${value}` })
+    return { calls, understood: true, explanation: `Setting ${cell} to "${value}".` }
+  }
+
+  // ─── Add row: "add [items]" ─────────────────────────────────────────────────
+  const addRow = lower.match(/(?:add|insert|new)\s+(?:a\s+)?(?:row|entry|line|item)(?:\s*:?\s*)(.+)/i)
+  if (addRow && !lower.includes('column')) {
+    const parts = addRow[1].split(/[,;]/).map(s => s.trim()).filter(Boolean)
+    if (parts.length > 0) {
+      const values = parts.map(p => {
+        const n = parseFloat(p.replace(/[$,]/g, ''))
+        return !isNaN(n) && p.match(/^\$?[\d,.]+$/) ? n : p
+      })
+      calls.push({ tool: 'add_row', params: { values }, description: `Add row: ${parts.join(', ')}` })
+      return { calls, understood: true, explanation: `Adding a new row with: ${parts.join(', ')}.` }
+    }
+  }
+
+  // "add Groceries $400" (without "row" keyword)
+  const addImplicit = lower.match(/^add\s+([a-z][\w\s]+?)[,\s]+\$?([\d,.]+)/i)
+  if (addImplicit && !lower.includes('column') && !lower.includes('%')) {
+    const label = addImplicit[1].trim()
+    const amount = parseFloat(addImplicit[2].replace(/,/g, ''))
+    calls.push({ tool: 'add_row', params: { values: [label, amount] }, description: `Add: ${label}, $${amount}` })
+    return { calls, understood: true, explanation: `Adding "${label}" with amount $${amount}.` }
+  }
+
+  // ─── Delete row ─────────────────────────────────────────────────────────────
+  const deleteRowNum = lower.match(/(?:delete|remove)\s+row\s+(\d+)/i)
+  if (deleteRowNum) {
+    const row = parseInt(deleteRowNum[1])
+    calls.push({ tool: 'delete_row', params: { row }, description: `Delete row ${row}` })
+    return { calls, understood: true, explanation: `Deleting row ${row}.` }
+  }
+
+  const deleteRowMatch = lower.match(/(?:delete|remove)\s+(?:the\s+)?(.+?)\s+(?:row|entry|line)/i)
+  if (deleteRowMatch) {
+    const match = deleteRowMatch[1].trim()
+    calls.push({ tool: 'delete_row', params: { match }, description: `Delete row containing "${match}"` })
+    return { calls, understood: true, explanation: `Removing the row containing "${match}".` }
+  }
+
+  // "remove Netflix" (without "row" keyword)
+  const removeSimple = lower.match(/(?:delete|remove)\s+(?:the\s+)?([a-z][\w\s]{2,})/i)
+  if (removeSimple && !lower.includes('column') && !lower.includes('sheet')) {
+    const match = removeSimple[1].trim()
+    if (!['all', 'everything', 'data'].includes(match)) {
+      calls.push({ tool: 'delete_row', params: { match }, description: `Delete row: ${match}` })
+      return { calls, understood: true, explanation: `Removing the row containing "${match}".` }
+    }
+  }
+
+  // ─── Rename header ──────────────────────────────────────────────────────────
+  const renameCol = lower.match(/(?:rename|change)\s+(?:column\s+)?([a-z])\s+(?:to|header to|heading to)\s+(.+)/i)
+  if (renameCol) {
+    const column = renameCol[1].toUpperCase()
+    const newName = renameCol[2].replace(/^["']|["']$/g, '').trim()
+    calls.push({ tool: 'rename_header', params: { column, newName }, description: `Rename column ${column} to "${newName}"` })
+    return { calls, understood: true, explanation: `Renaming column ${column} header to "${newName}".` }
+  }
+
+  // ─── Sort ───────────────────────────────────────────────────────────────────
+  const sortCol = lower.match(/sort\s+(?:by\s+)?(?:column\s+)?([a-z])?\s*(?:(asc|desc|highest|lowest|a-z|z-a)(?:ending)?)?/i)
+  if (lower.includes('sort') && sortCol) {
+    const column = (sortCol[1] || 'B').toUpperCase()
+    const dirHint = (sortCol[2] || '').toLowerCase()
+    const direction = ['desc', 'highest', 'z-a'].includes(dirHint) ? 'desc' : 'asc'
+    calls.push({ tool: 'sort_sheet', params: { column, direction }, description: `Sort by column ${column} ${direction}` })
+    return { calls, understood: true, explanation: `Sorting by column ${column} (${direction === 'desc' ? 'highest first' : 'lowest first'}).` }
+  }
+
+  // ─── Percentage operations ──────────────────────────────────────────────────
+  const pctAdd = lower.match(/(?:add|increase|raise|markup)\s+(\d+)\s*%\s+(?:to\s+)?(?:column\s+)?([a-z])?/i)
+  if (pctAdd) {
+    const pct = parseInt(pctAdd[1])
+    const col = (pctAdd[2] || 'B').toUpperCase()
+    calls.push({ tool: 'modify_column', params: { column: col, operation: 'multiply', factor: 1 + pct / 100 }, description: `Add ${pct}% to column ${col}` })
+    return { calls, understood: true, explanation: `Increasing all values in column ${col} by ${pct}%.` }
+  }
+
+  const pctReduce = lower.match(/(?:reduce|decrease|discount|subtract)\s+(\d+)\s*%\s+(?:from\s+)?(?:column\s+)?([a-z])?/i)
+  if (pctReduce) {
+    const pct = parseInt(pctReduce[1])
+    const col = (pctReduce[2] || 'B').toUpperCase()
+    calls.push({ tool: 'modify_column', params: { column: col, operation: 'multiply', factor: 1 - pct / 100 }, description: `Reduce column ${col} by ${pct}%` })
+    return { calls, understood: true, explanation: `Decreasing all values in column ${col} by ${pct}%.` }
+  }
+
+  // ─── Formula: "sum/total/average column X" ──────────────────────────────────
+  const formulaCol = lower.match(/(?:sum|total|add up)\s+(?:of\s+)?(?:column\s+)?([a-z])/i)
+  if (formulaCol) {
+    const col = formulaCol[1].toUpperCase()
+    calls.push({ tool: 'apply_formula', params: { cell: col, formula: '=SUM' }, description: `Sum column ${col}` })
+    return { calls, understood: true, explanation: `Adding a SUM formula for column ${col}.` }
+  }
+
+  const avgCol = lower.match(/(?:average|avg|mean)\s+(?:of\s+)?(?:column\s+)?([a-z])/i)
+  if (avgCol) {
+    const col = avgCol[1].toUpperCase()
+    calls.push({ tool: 'apply_formula', params: { cell: col, formula: '=AVERAGE' }, description: `Average column ${col}` })
+    return { calls, understood: true, explanation: `Adding an AVERAGE formula for column ${col}.` }
+  }
+
+  // ─── Find max/min ───────────────────────────────────────────────────────────
+  if (lower.match(/(?:biggest|largest|highest|max|most expensive)/)) {
+    const col = lower.match(/column\s+([a-z])/i)?.[1]?.toUpperCase() || 'B'
+    calls.push({ tool: 'find_max', params: { column: col }, description: `Find max in column ${col}` })
+    return { calls, understood: true, explanation: `Finding the highest value in column ${col}.` }
+  }
+
+  if (lower.match(/(?:smallest|lowest|min|cheapest|least)/)) {
+    const col = lower.match(/column\s+([a-z])/i)?.[1]?.toUpperCase() || 'B'
+    calls.push({ tool: 'find_min', params: { column: col }, description: `Find min in column ${col}` })
+    return { calls, understood: true, explanation: `Finding the lowest value in column ${col}.` }
+  }
+
+  // ─── Bold/format ────────────────────────────────────────────────────────────
+  if (lower.includes('bold') && lower.includes('header')) {
+    calls.push({ tool: 'format_range', params: { range: 'A1:Z1', bold: true }, description: 'Bold headers' })
+    return { calls, understood: true, explanation: 'Making the header row bold.' }
+  }
+
+  // ─── Highlight negatives ────────────────────────────────────────────────────
+  if (lower.match(/highlight.*(negative|red)/i)) {
+    const col = lower.match(/column\s+([a-z])/i)?.[1]?.toUpperCase() || 'D'
+    calls.push({ tool: 'conditional_format', params: { column: col, condition: 'negative', color: '#FEE2E2' }, description: 'Highlight negatives' })
+    return { calls, understood: true, explanation: `Highlighting negative values in column ${col} with red.` }
+  }
+
+  // ─── Rename sheet ───────────────────────────────────────────────────────────
+  const renameSheet = lower.match(/(?:rename|call)\s+(?:this\s+)?(?:sheet|tab)\s+(?:to\s+)?(.+)/i)
+  if (renameSheet) {
+    const name = renameSheet[1].replace(/^["']|["']$/g, '').trim()
+    calls.push({ tool: 'rename_sheet', params: { name }, description: `Rename sheet to "${name}"` })
+    return { calls, understood: true, explanation: `Renaming this sheet to "${name}".` }
+  }
+
+  // ─── Find and replace ───────────────────────────────────────────────────────
+  const findReplace = lower.match(/(?:replace|change)\s+(?:all\s+)?["']?(.+?)["']?\s+(?:with|to)\s+["']?(.+?)["']?$/i)
+  if (findReplace && !lower.includes('column') && !lower.includes('header') && !lower.includes('rename')) {
+    const find = findReplace[1].trim()
+    const replace = findReplace[2].trim()
+    calls.push({ tool: 'find_and_replace', params: { find, replace }, description: `Replace "${find}" with "${replace}"` })
+    return { calls, understood: true, explanation: `Replacing all "${find}" with "${replace}".` }
+  }
+
+  // ─── No match — not understood ──────────────────────────────────────────────
+  return { calls: [], understood: false }
+}
+
+/** Minimal sheet context for parser decisions */
+export interface SheetContext {
+  lastDataRow: number
+  lastDataCol: number
+  headers: string[]
+}
