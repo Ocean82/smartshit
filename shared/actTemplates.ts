@@ -3,6 +3,14 @@ import type { ActTemplateResult } from './intentTypes.js'
 export function resolveActTemplates(message: string): ActTemplateResult {
   const lower = message.toLowerCase().trim()
 
+  // ─── Destructive actions must match first (before "budget" keyword catches "clear the budget") ───
+  if (lower.includes('clear') || lower.includes('reset') || lower.includes('start over') || lower.includes('blank')) {
+    return {
+      message: 'This will clear all data on the current sheet. Click Apply to confirm.',
+      actions: [{ tool: 'clear_sheet', params: {}, description: 'Clear current sheet' }],
+    }
+  }
+
   if (lower.includes('expense report') || (lower.includes('expense') && lower.includes('report'))) {
     return {
       message: 'I will generate an expense report template with categories, amounts, and approval fields.',
@@ -150,12 +158,7 @@ export function resolveActTemplates(message: string): ActTemplateResult {
     }
   }
 
-  if (lower.includes('clear') || lower.includes('reset') || lower.includes('start over') || lower.includes('blank')) {
-    return {
-      message: 'This will clear all data on the current sheet. Click Apply to confirm.',
-      actions: [{ tool: 'clear_sheet', params: {}, description: 'Clear current sheet' }],
-    }
-  }
+  // "clear/reset" already handled at top of function
 
   return { message: '', actions: [] }
 }

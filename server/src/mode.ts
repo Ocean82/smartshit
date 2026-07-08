@@ -61,6 +61,20 @@ const ACT_SIGNALS = [
   'template',
   'track my',
   'track the',
+  'clear',
+  'reset',
+  'start over',
+  'delete all',
+  'remove all',
+  'new budget',
+  'new sheet',
+  'sum ',
+  'total ',
+  'average ',
+  'format ',
+  'bold ',
+  'chart',
+  'graph',
 ]
 
 function matchesAny(text: string, signals: string[]): boolean {
