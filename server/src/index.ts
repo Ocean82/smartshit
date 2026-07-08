@@ -351,7 +351,8 @@ app.post('/api/chat', async (req, res) => {
 // ─── Stripe Checkout ─────────────────────────────────────────────────────────
 
 app.post('/api/checkout', async (req, res) => {
-  const { userId, email, priceId } = req.body as { userId?: string; email?: string; priceId?: string }
+  // Only trust userId and email from client — price is always server-controlled
+  const { userId, email } = req.body as { userId?: string; email?: string }
 
   if (!userId || !email) {
     res.status(400).json({ error: 'userId and email are required' })
@@ -360,11 +361,7 @@ app.post('/api/checkout', async (req, res) => {
 
   try {
     const { createCheckoutSession } = await import('./stripe.js')
-    const session = await createCheckoutSession({
-      userId,
-      email,
-      priceId: priceId || config.stripePriceId,
-    })
+    const session = await createCheckoutSession(userId, email)
     res.json({ url: session.url })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Checkout failed'
@@ -376,9 +373,12 @@ app.post('/api/checkout', async (req, res) => {
 
 app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
   try {
-    const event = JSON.parse(req.body.toString()) as { type: string; data: { object: Record<string, unknown> } }
-    const { handleStripeWebhook } = await import('./stripe.js')
-    const result = await handleStripeWebhook(event)
+    const { verifyWebhookSignature, handleStripeWebhook } = await import('./stripe.js')
+    const signatureHeader = req.headers['stripe-signature'] as string | undefined
+
+    // Verify signature — rejects spoofed or replayed webhooks
+    const event = verifyWebhookSignature(req.body, signatureHeader)
+    const result = handleStripeWebhook(event)
 
     if (result) {
       // In production, update Clerk user metadata here via Clerk Backend API

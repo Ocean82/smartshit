@@ -1,6 +1,6 @@
-import { useUser } from '@clerk/react'
+import { useAuth } from '@clerk/react'
 
-const STRIPE_PRICE_ID = import.meta.env.VITE_STRIPE_PRICE_ID ?? ''
+const CLERK_PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ?? ''
 const API_BASE = import.meta.env.VITE_AI_API_URL ?? ''
 
 interface UpgradePromptProps {
@@ -9,31 +9,8 @@ interface UpgradePromptProps {
 }
 
 export function UpgradePrompt({ remaining, dailyLimit }: UpgradePromptProps) {
-  const { user } = useUser()
-
-  const handleUpgrade = async () => {
-    if (!user) return
-
-    try {
-      const res = await fetch(`${API_BASE}/api/checkout`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: user.id,
-          email: user.primaryEmailAddress?.emailAddress,
-          priceId: STRIPE_PRICE_ID,
-        }),
-      })
-
-      if (res.ok) {
-        const { url } = await res.json()
-        if (url) window.location.href = url
-      }
-    } catch {
-      // Fallback — open Stripe direct
-      window.open('https://smartsht.com', '_blank')
-    }
-  }
+  // Don't render upgrade prompts in dev mode without Clerk
+  if (!CLERK_PUBLISHABLE_KEY) return null
 
   if (remaining > 0) {
     return (
@@ -45,10 +22,37 @@ export function UpgradePrompt({ remaining, dailyLimit }: UpgradePromptProps) {
     )
   }
 
+  return <UpgradeCard />
+}
+
+/** Separated so useAuth is only called when Clerk is definitely configured */
+function UpgradeCard() {
+  const { userId, sessionClaims } = useAuth()
+  const email = (sessionClaims as Record<string, unknown>)?.email as string | undefined
+
+  const handleUpgrade = async () => {
+    if (!userId) return
+
+    try {
+      const res = await fetch(`${API_BASE}/api/checkout`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, email: email ?? '' }),
+      })
+
+      if (res.ok) {
+        const { url } = await res.json()
+        if (url) window.location.href = url
+      }
+    } catch {
+      // Silent fail — user can retry
+    }
+  }
+
   return (
     <div className="mx-3 mb-2 px-4 py-3 rounded-xl bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200">
       <p className="text-sm font-medium text-gray-800 mb-1">
-        You've used all {dailyLimit} free questions today
+        You've used all your free questions today
       </p>
       <p className="text-xs text-gray-600 mb-3">
         Upgrade to Pro for unlimited AI, all templates, and more.
