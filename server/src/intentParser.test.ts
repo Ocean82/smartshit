@@ -29,4 +29,11 @@ describe('parseUserIntent', () => {
     const intent = parseUserIntent('I make $5000/month, what should I save?')
     expect(intent.parameters.monthlyIncome).toBe(5000)
   })
+
+  it('extracts comparison filters for variance queries', () => {
+    const intent = parseUserIntent('Show rows where actual > budget')
+    expect(intent.intentType).toBe('filter')
+    expect(intent.parameters.compareLeft).toBe('actual')
+    expect(intent.parameters.compareRight).toBe('budget')
+  })
 })

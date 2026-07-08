@@ -67,5 +67,6 @@ export interface BudgetAnalysis {
 export interface AttachedFilePreview {
   fileName: string
   workbook: import('@/types').WorkbookData
+  importWarnings?: string[]
   context: import('@/ai/buildContext').SpreadsheetContextPayload
 }

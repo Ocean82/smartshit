@@ -1,6 +1,10 @@
 import type { SheetInsights } from '@/ai/sheetInsights'
 import type { BudgetAnalysis, SheetProfile, ToolResult } from '@/ai/types'
 
+function formatCurrency(value: number): string {
+  return `$${value.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
+}
+
 export function analyzeBudget(
   profile: SheetProfile,
   insights: SheetInsights,
@@ -20,6 +24,7 @@ export function analyzeBudget(
   const monthlyExpenses = insights.totalExpenses
   let savingsRate: number | undefined
   let recommendation503020: BudgetAnalysis['recommendation503020']
+  const assumptions: string[] = []
 
   if (monthlyIncome && monthlyIncome > 0) {
     const expenses = monthlyExpenses ?? 0
@@ -29,18 +34,26 @@ export function analyzeBudget(
       wants: monthlyIncome * 0.3,
       savings: monthlyIncome * 0.2,
     }
+  } else {
+    assumptions.push('No clear income column detected; savings-rate guidance may be conservative.')
   }
 
   const parts: string[] = []
   if (overspendingCategories.length > 0) {
     parts.push(
-      `Top spending areas: ${overspendingCategories.map((c) => `${c.category} ($${c.amount.toFixed(2)})`).join(', ')}`,
+      `Top spending areas: ${overspendingCategories.map((c) => `${c.category} (${formatCurrency(c.amount)})`).join(', ')}`,
     )
   }
-  if (monthlyExpenses !== undefined) parts.push(`Total expenses: $${monthlyExpenses.toFixed(2)}`)
-  if (monthlyIncome !== undefined) parts.push(`Total income: $${monthlyIncome.toFixed(2)}`)
+  if (monthlyExpenses !== undefined) parts.push(`Total expenses: ${formatCurrency(monthlyExpenses)}`)
+  if (monthlyIncome !== undefined) parts.push(`Total income: ${formatCurrency(monthlyIncome)}`)
   if (insights.netCashflow !== undefined) {
-    parts.push(`Net cashflow: $${insights.netCashflow.toFixed(2)}`)
+    parts.push(`Net cashflow: ${formatCurrency(insights.netCashflow)}`)
+  }
+  if (savingsRate !== undefined) {
+    parts.push(`Current savings rate: ${savingsRate.toFixed(1)}%`)
+  }
+  if (assumptions.length > 0) {
+    parts.push(`Assumptions: ${assumptions.join(' ')}`)
   }
 
   return {
@@ -67,29 +80,33 @@ export function savingsRecommendation(
     savings: monthlyIncome * 0.2,
   }
 
-  const splitLine = `50/30/20 guide: Needs $${split.needs.toFixed(0)}, Wants $${split.wants.toFixed(0)}, Savings $${split.savings.toFixed(0)}.`
+  const splitLine = `50/30/20 guide: Needs ${formatCurrency(split.needs)}, Wants ${formatCurrency(split.wants)}, Savings ${formatCurrency(split.savings)}.`
 
   const message = leftover >= targetSavings
-    ? `On $${monthlyIncome.toLocaleString()}/month with $${expenses.toLocaleString()} expenses, you have $${leftover.toLocaleString()} left — you're meeting the 20% savings target ($${targetSavings.toFixed(0)}). ${splitLine}`
-    : `On $${monthlyIncome.toLocaleString()}/month with $${expenses.toLocaleString()} expenses, aim to save $${targetSavings.toFixed(0)}/month (20%). Cut about $${gap.toFixed(0)} from spending. ${splitLine}`
+    ? `On ${formatCurrency(monthlyIncome)}/month with ${formatCurrency(expenses)} expenses, you have ${formatCurrency(leftover)} left — you're meeting the 20% savings target (${formatCurrency(targetSavings)}). ${splitLine}`
+    : `On ${formatCurrency(monthlyIncome)}/month with ${formatCurrency(expenses)} expenses, aim to save ${formatCurrency(targetSavings)}/month (20%). Reduce spending by about ${formatCurrency(gap)}. ${splitLine}`
 
   return {
     success: true,
     message,
     toolUsed: 'budget',
-    suggestions: insights.topExpenses?.slice(0, 3).map((e) => `Review ${e.label}: $${e.amount}`) ?? [],
+    suggestions: insights.topExpenses?.slice(0, 3).map((e) => `Review ${e.label}: ${formatCurrency(e.amount)}`) ?? [],
     data: { monthlyIncome, expenses, targetSavings, leftover, recommendation503020: split },
   }
 }
 
 export function budgetAnalysisToToolResult(analysis: BudgetAnalysis): ToolResult {
+  const topSuggestions = analysis.overspendingCategories
+    .sort((a, b) => b.amount - a.amount)
+    .slice(0, 3)
+
   return {
     success: true,
     message: analysis.summary,
     data: analysis,
     toolUsed: 'budget',
-    suggestions: analysis.overspendingCategories.map(
-      (c) => `Look at ${c.category} — $${c.amount.toFixed(2)}`,
+    suggestions: topSuggestions.map(
+      (c) => `Look at ${c.category} — ${formatCurrency(c.amount)}`,
     ),
   }
 }

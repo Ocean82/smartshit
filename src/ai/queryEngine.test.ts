@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { queryTopN, queryFilter } from './queryEngine'
+import { queryTopN, queryFilter, queryAggregate } from './queryEngine'
 import type { SheetData } from '@/types'
 
 const getter = (sheet: SheetData) => (row: number, col: number) => {
@@ -63,5 +63,18 @@ describe('queryFilter', () => {
     expect(rows.length).toBe(1)
     expect(rows[0].row).toBe(2)
     expect(rows[0].value).toBe(1600)
+  })
+
+  it('supports fuzzy header matching', () => {
+    const result = queryTopN(sheet, 'amount spent', 1, false, getter(sheet))
+    expect(result.success).toBe(true)
+    const rows = result.data as Array<{ value: number }>
+    expect(rows[0].value).toBe(1500)
+  })
+
+  it('returns a clear error when column is missing', () => {
+    const result = queryAggregate(sheet, 'MissingColumn', 'sum', getter(sheet))
+    expect(result.success).toBe(false)
+    expect(result.message).toMatch(/Could not find|No numeric values found/i)
   })
 })

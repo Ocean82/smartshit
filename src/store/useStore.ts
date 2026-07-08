@@ -27,6 +27,7 @@ import { processMessage } from '@/ai/brain';
 import { buildSpreadsheetContext } from '@/ai/buildContext';
 import { toolResultToChatMessage, toolResultToMessage } from '@/ai/responseBuilder';
 import { buildFilePreview } from '@/ai/filePreview';
+import { recordTelemetry } from '@/ai/telemetry';
 import { classifyMode, isLlmOnlyMode, isBudgetExplainQuery } from '@/ai/mode';
 import { analyzeBudget, budgetAnalysisToToolResult, savingsRecommendation } from '@/ai/skills/budget';
 import { applyCleaningChanges, previewCleaning } from '@/ai/skills/cleaning';
@@ -178,7 +179,7 @@ export const useStore = create<AppState>()(
     const defaultWelcome: ChatMessage = {
       id: uuid(),
       role: 'assistant',
-      content: `Welcome to **smartsh!t** — tell me what you want to track and I'll build it for you.\n\nNo formulas, no Excel skills needed. Try:\n- *"Build a monthly budget"*\n- *"Track my business expenses"*\n- *"Create an invoice"*\n- *"Explain this sheet in plain English"*\n\nI'll show you a preview before anything changes.`,
+      content: `Welcome to **smartsh!t** — your budgeting copilot.\n\nStart by importing a spreadsheet, then ask:\n- *"Explain this spreadsheet I just loaded"*\n- *"Where am I overspending?"*\n- *"What should I cut first to save more?"*\n\nI only apply changes after you review and approve them.`,
       timestamp: Date.now(),
     };
 
@@ -517,6 +518,9 @@ export const useStore = create<AppState>()(
             const val = sheet.cells[cellId]?.value;
             return val === null || val === undefined ? '' : String(val);
           });
+          if (preview.importWarnings?.length) {
+            recordTelemetry('importTruncationEvents', `Chat attach: ${file.name}`);
+          }
           set((s) => { s.attachedFilePreview = preview; });
         } catch {
           get().addMessage({
@@ -545,12 +549,33 @@ export const useStore = create<AppState>()(
 
       applyAction: (actionId) => {
         const state = get();
+        const highImpactTools = new Set([
+          'clear_sheet',
+          'clean_sheet_data',
+          'modify_column',
+        ]);
         // Find the action
         for (const msg of state.messages) {
           if (msg.actions) {
             const action = msg.actions.find((a) => a.id === actionId);
             if (action && action.status === 'pending') {
-              get().pushHistory('AI Action: ' + action.description);
+              const estimatedChanges = estimateActionChangeCount(action);
+              const requiresPreview = highImpactTools.has(action.tool) && !action.preview;
+              if (requiresPreview) {
+                recordTelemetry('previewDeniedActions', action.tool);
+                get().addMessage({
+                  id: uuid(),
+                  role: 'assistant',
+                  content: `I need to show a preview before applying **${action.tool}** because it can affect many cells. Ask me to regenerate this action with a preview.`,
+                  timestamp: Date.now(),
+                });
+                return;
+              }
+
+              const historyLabel = estimatedChanges > 0
+                ? `AI Action: ${action.description} (~${estimatedChanges} changes)`
+                : `AI Action: ${action.description}`;
+              get().pushHistory(historyLabel);
               executeAction(action, get, set);
               set((s) => {
                 for (const m of s.messages) {
@@ -823,7 +848,7 @@ export const useStore = create<AppState>()(
           s.messages.push({
             id: uuid(),
             role: 'assistant',
-            content: `Imported **${fileLabel}** — ${rowCount} rows on **${sheet?.name ?? 'Sheet 1'}**.\n\nAsk me to explain it, find overspending, or suggest savings.`,
+            content: `Imported **${fileLabel}** — ${rowCount} rows on **${sheet?.name ?? 'Sheet 1'}**.\n\nTry: **"Explain this spreadsheet"**, **"Where am I overspending?"**, or **"How much should I save monthly?"**`,
             timestamp: Date.now(),
           });
         });
@@ -863,7 +888,7 @@ function processAICommand(
     return {
       id: uuid(),
       role: 'assistant',
-      content: `Here's what I can do:\n\n**Understand your data**\n- "Explain my expenses"\n- "Where am I losing money?"\n\n**Build spreadsheets**\n- "Create a monthly budget"\n- "Make a sales tracker"\n\nImport a file, then ask me about it.`,
+      content: `Here's what I can do:\n\n**Understand your data**\n- "Explain this spreadsheet in plain English"\n- "Where am I overspending?"\n\n**Build spreadsheets**\n- "Create a monthly budget"\n- "Make a sales tracker"\n\nImport a file, then ask me about it.`,
       timestamp: Date.now(),
     };
   }
@@ -960,7 +985,7 @@ function processAICommand(
     return {
       id: uuid(),
       role: 'assistant',
-      content: `Here's everything I can do:\n\n**Templates** — budget, sales tracker, invoice, KPI dashboard\n**Understand data** — explain expenses, top-N queries, filters\n**Build** — formulas, charts, formatting\n\nImport a file via the chat paperclip, then ask about it.`,
+      content: `Here's everything I can do:\n\n**Templates** — budget, sales tracker, invoice, KPI dashboard\n**Understand data** — explain budgets, find overspending, suggest savings\n**Build** — formulas, charts, formatting\n\nImport a file via the chat paperclip, then ask about it.`,
       timestamp: Date.now(),
     };
   }
@@ -972,6 +997,24 @@ function processAICommand(
     content: `I understand you want: *"${input}"*\n\nHere are some things I can do:\n\n📊 **Create templates**: "Create a monthly budget" / "Make a sales tracker"\n🔢 **Formulas**: "Calculate totals for column B" / "Add a SUM formula"\n📈 **Charts**: "Create a bar chart" / "Make a pie chart"\n🎨 **Format**: "Bold the header row" / "Color the cells"\n✏️ **Modify data**: "Add 10% to column B" / "Clear the sheet"\n👥 **Templates**: "Create employee roster" / "Project tracker"\n\nTry one of these commands!`,
     timestamp: Date.now(),
   };
+}
+
+function estimateActionChangeCount(action: AgentAction): number {
+  const previewChanges = action.preview?.changes?.length ?? 0;
+  if (previewChanges > 0) return previewChanges;
+
+  if (action.tool === 'clean_sheet_data') {
+    const preview = action.params.preview as { changes?: unknown[]; duplicateRows?: unknown[] } | undefined;
+    const changeCount = preview?.changes?.length ?? 0;
+    const duplicateCount = preview?.duplicateRows?.length ?? 0;
+    return changeCount + duplicateCount;
+  }
+
+  if (action.tool === 'modify_column') return 50;
+  if (action.tool === 'clear_sheet') return 200;
+  if (action.tool.startsWith('create_')) return 100;
+
+  return 0;
 }
 
 // Execute AI actions

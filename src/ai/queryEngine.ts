@@ -29,14 +29,20 @@ function resolveColumnIndex(sheet: SheetData, column: string, headerRow = 0): nu
     maxCol = Math.max(maxCol, cellToRef(cellId).col)
   }
 
+  const target = column.trim().toLowerCase()
   for (let c = 0; c <= maxCol; c++) {
     const header = sheet.cells[refToCell(headerRow, c)]?.value
-    if (String(header ?? '').toLowerCase() === column.toLowerCase()) return c
+    const normalized = String(header ?? '').toLowerCase().trim()
+    if (!normalized) continue
+    if (normalized === target || normalized.includes(target) || target.includes(normalized)) return c
   }
 
   if (/^[a-z]{1,3}$/i.test(column)) return columnLetterToIndex(column)
 
-  return columnLetterToIndex(column.charAt(0))
+  const alpha = column.replace(/[^a-z]/gi, '')
+  if (alpha.length > 0) return columnLetterToIndex(alpha.charAt(0))
+
+  return -1
 }
 
 function getRowValues(
@@ -71,6 +77,9 @@ export function queryTopN(
   }
 
   const colIndex = resolveColumnIndex(sheet, column)
+  if (colIndex < 0) {
+    return { success: false, message: `Could not find a column matching "${column}".` }
+  }
   const rows: Array<{ row: number; value: number; data: string[] }> = []
 
   for (let r = 1; r <= maxRow; r++) {
@@ -103,6 +112,9 @@ export function queryAggregate(
   }
 
   const colIndex = resolveColumnIndex(sheet, column)
+  if (colIndex < 0) {
+    return { success: false, message: `Could not find a numeric column matching "${column}".` }
+  }
   const values: number[] = []
 
   for (let r = 1; r <= maxRow; r++) {
@@ -168,6 +180,9 @@ export function queryFilter(
   }
 
   const leftIndex = resolveColumnIndex(sheet, leftCol)
+  if (leftIndex < 0) {
+    return { success: false, message: `Could not find a column matching "${leftCol}".` }
+  }
   const rightIsColumn = Number.isNaN(Number(rightColOrValue.replace(/[$,\s]/g, '')))
     && resolveColumnIndex(sheet, rightColOrValue) >= 0
   const rightIndex = rightIsColumn ? resolveColumnIndex(sheet, rightColOrValue) : -1

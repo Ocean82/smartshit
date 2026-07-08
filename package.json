@@ -34,6 +34,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
+    "release:check:v1": "node scripts/v1-release-checklist.mjs",
     "model:copy": "powershell -ExecutionPolicy Bypass -File scripts/copy-model.ps1",
     "model:setup": "npm run setup-model --prefix server"
   },

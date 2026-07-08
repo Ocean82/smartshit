@@ -69,13 +69,19 @@ export function toolResultToMessage(
   result: ToolResult,
   options?: { includeSuggestionsInBody?: boolean },
 ): string {
-  const parts = [result.message]
+  const parts = ['### What I found', result.message]
   if (result.data && Array.isArray(result.data)) {
     const table = formatQueryTable(result.data)
-    if (table) parts.push(table)
+    if (table) parts.push('### Evidence\n' + table)
   }
   if (options?.includeSuggestionsInBody !== false && result.suggestions?.length) {
-    parts.push('**Suggestions:**\n' + result.suggestions.map((s) => `- ${s}`).join('\n'))
+    parts.push('### What I recommend\n' + result.suggestions.map((s) => `- ${s}`).join('\n'))
+  }
+  if (result.actions?.length) {
+    parts.push(
+      '### What will change if you apply\n'
+      + result.actions.map((a) => `- ${a.description}`).join('\n'),
+    )
   }
   return mergeToolResultContent(parts)
 }
@@ -84,16 +90,23 @@ export function toolResultToChatMessage(
   result: ToolResult,
   meta?: { id?: string; toolUsed?: string; insightsSnapshot?: Record<string, unknown> },
 ): ChatMessage {
-  const actions = (result.actions ?? []).map((action) => ({
-    id: uuid(),
-    tool: action.tool,
-    params: action.params,
-    description: action.description,
-    status: 'pending' as const,
-    preview: Array.isArray(action.params.previewChanges)
-      ? { changes: action.params.previewChanges as Array<{ cell: string; oldValue: unknown; newValue: unknown }> }
-      : undefined,
-  }))
+  const actions = (result.actions ?? []).map((action) => {
+    const previewChanges = Array.isArray(action.params.previewChanges)
+      ? action.params.previewChanges as Array<{ cell: string; oldValue: unknown; newValue: unknown }>
+      : undefined
+    const changeLabel = previewChanges?.length ? ` (about ${previewChanges.length} changes)` : ''
+
+    return {
+      id: uuid(),
+      tool: action.tool,
+      params: action.params,
+      description: `${action.description}${changeLabel}`,
+      status: 'pending' as const,
+      preview: previewChanges
+        ? { changes: previewChanges }
+        : undefined,
+    }
+  })
 
   return {
     id: meta?.id ?? uuid(),

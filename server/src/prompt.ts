@@ -76,6 +76,7 @@ export interface SpreadsheetContextInput {
   dimensions?: SheetDimensionsInput
   headers?: string[]
   sampleRows?: string[][]
+  sampleRowsTruncated?: boolean
   selectionSnapshot?: Record<string, string | number | null>
   insights?: SheetInsightsInput
   profile?: SheetProfileInput
@@ -141,6 +142,9 @@ function formatContextBlock(context?: SpreadsheetContextInput): string {
       .map((row, i) => `  Row ${i + 1}: ${row.join(' | ')}`)
       .join('\n')
     lines.push(`Data preview:\n${preview}`)
+    if (context.sampleRowsTruncated) {
+      lines.push('Data preview is truncated. Mention this limitation before giving high-confidence conclusions.')
+    }
   }
 
   if (context.deterministicSummary?.trim()) {
@@ -232,6 +236,8 @@ Rules:
 - Do NOT suggest creating a new template unless they explicitly asked to build one
 - Do NOT output JSON or tool calls
 - Keep answers concise but helpful (2-6 short paragraphs max)
+- End with a short confidence note: High / Medium / Low
+- If context is partial or ambiguous, explicitly say what is missing before recommendations
 ${adviseAddendum}
 ${intentBlock}
 ${contextBlock}`

@@ -38,4 +38,14 @@ describe('budget skill', () => {
     expect(result.success).toBe(true)
     expect(result.message).toContain('5,000')
   })
+
+  it('adds assumptions when income is missing', () => {
+    const noIncomeInsights: SheetInsights = {
+      ...insights,
+      totalIncome: undefined,
+      netCashflow: undefined,
+    }
+    const analysis = analyzeBudget(profile, noIncomeInsights)
+    expect(analysis.summary).toContain('Assumptions')
+  })
 })

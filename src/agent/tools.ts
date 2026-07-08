@@ -57,14 +57,6 @@ export const TOOL_REGISTRY: ToolDef[] = [
     ],
     examples: ['delete row 5', 'remove the Netflix row', 'delete the rent row'],
   },
-  {
-    name: 'delete_column',
-    description: 'Delete a column by letter',
-    params: [
-      { name: 'column', type: 'string', description: 'Column letter like A, B, C', required: true },
-    ],
-    examples: ['delete column D', 'remove the last column'],
-  },
   // ─── Column/Header Operations ─────────────────────────────────────────────────
   {
     name: 'rename_header',
@@ -74,16 +66,6 @@ export const TOOL_REGISTRY: ToolDef[] = [
       { name: 'newName', type: 'string', description: 'New header text', required: true },
     ],
     examples: ['rename column B to Actual Spending', 'change header C to Status'],
-  },
-  {
-    name: 'add_column',
-    description: 'Add a new column with a header',
-    params: [
-      { name: 'header', type: 'string', description: 'Header name for the new column', required: true },
-      { name: 'afterColumn', type: 'string', description: 'Insert after this column letter. Omit to append.', required: false },
-      { name: 'formula', type: 'string', description: 'Formula to fill down (uses relative refs)', required: false },
-    ],
-    examples: ['add a Difference column', 'add a Total column that sums B and C'],
   },
   // ─── Formula Operations ───────────────────────────────────────────────────────
   {
@@ -95,17 +77,6 @@ export const TOOL_REGISTRY: ToolDef[] = [
     ],
     examples: ['sum column B', 'average of C2:C20 in C21', 'add a total at the bottom'],
   },
-  {
-    name: 'fill_formula_down',
-    description: 'Apply a formula to every row in a column (relative references adjust per row)',
-    params: [
-      { name: 'column', type: 'string', description: 'Column letter to fill', required: true },
-      { name: 'formula', type: 'string', description: 'Formula with relative row refs', required: true },
-      { name: 'startRow', type: 'number', description: 'First data row (1-indexed)', required: true },
-      { name: 'endRow', type: 'number', description: 'Last data row (1-indexed)', required: true },
-    ],
-    examples: ['fill column D with =B{row}-C{row}', 'calculate profit in every row'],
-  },
   // ─── Sort & Filter ────────────────────────────────────────────────────────────
   {
     name: 'sort_sheet',
@@ -115,16 +86,6 @@ export const TOOL_REGISTRY: ToolDef[] = [
       { name: 'direction', type: 'string', description: '"asc" or "desc"', required: false },
     ],
     examples: ['sort by amount highest first', 'sort column A alphabetically', 'sort by date'],
-  },
-  {
-    name: 'filter_rows',
-    description: 'Show only rows matching a condition',
-    params: [
-      { name: 'column', type: 'string', description: 'Column to filter on', required: true },
-      { name: 'operator', type: 'string', description: 'gt, lt, eq, contains, not_empty', required: true },
-      { name: 'value', type: 'string', description: 'Value to compare against', required: true },
-    ],
-    examples: ['show only expenses over $100', 'filter where status is Complete', 'hide empty rows'],
   },
   // ─── Formatting ───────────────────────────────────────────────────────────────
   {
@@ -164,14 +125,6 @@ export const TOOL_REGISTRY: ToolDef[] = [
       { name: 'name', type: 'string', description: 'New sheet name', required: true },
     ],
     examples: ['rename this sheet to January', 'call this tab Expenses'],
-  },
-  {
-    name: 'duplicate_sheet',
-    description: 'Copy the current sheet to a new tab',
-    params: [
-      { name: 'newName', type: 'string', description: 'Name for the copy', required: false },
-    ],
-    examples: ['duplicate this sheet', 'copy to a new tab called February'],
   },
   // ─── Template Operations ──────────────────────────────────────────────────────
   {
@@ -247,15 +200,6 @@ export const TOOL_REGISTRY: ToolDef[] = [
       { name: 'column', type: 'string', description: 'Column letter', required: true },
     ],
     examples: ['smallest expense', 'lowest value in column C', 'cheapest item'],
-  },
-  {
-    name: 'compare_columns',
-    description: 'Compare two columns and summarize differences',
-    params: [
-      { name: 'columnA', type: 'string', description: 'First column', required: true },
-      { name: 'columnB', type: 'string', description: 'Second column', required: true },
-    ],
-    examples: ['compare budget vs actual', 'difference between columns B and C'],
   },
 ]
 

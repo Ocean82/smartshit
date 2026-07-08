@@ -14,6 +14,7 @@ import { StatusBar } from '@/components/StatusBar'
 import { WelcomeOverlay } from '@/components/WelcomeOverlay'
 import { SummaryCards } from '@/components/SummaryCards'
 import { TemplateGallery } from '@/components/TemplateGallery'
+import { TelemetryDebugPanel } from '@/components/TelemetryDebugPanel'
 import { Sparkles, Zap } from 'lucide-react'
 
 function App() {
@@ -68,6 +69,7 @@ function App() {
       <ChartDialog />
       <WelcomeOverlay onOpenTemplates={() => setShowTemplates(true)} />
       <TemplateGallery open={showTemplates} onClose={() => setShowTemplates(false)} />
+      {import.meta.env.DEV ? <TelemetryDebugPanel /> : null}
     </div>
   )
 }

@@ -241,6 +241,38 @@ export function executeTool(call: ParsedToolCall, ctx: ExecutionContext): Execut
       return { success: true, message: `Formatted ${cells.length} cells`, modified: cells.length }
     }
 
+    case 'conditional_format': {
+      const col = (params.column as string).toUpperCase()
+      const condition = String(params.condition ?? 'negative').toLowerCase()
+      const threshold = typeof params.value === 'number' ? params.value : 0
+      const color = typeof params.color === 'string' ? params.color : '#FEE2E2'
+      const colIdx = col.charCodeAt(0) - 65
+      ctx.pushHistory(`Conditional format ${col}`)
+
+      let count = 0
+      for (const [cellId] of Object.entries(sheet.cells)) {
+        const ref = cellToRef(cellId)
+        if (ref.col !== colIdx) continue
+        const computed = ctx.getComputedValue(ref.row, ref.col)
+        const num = Number(computed.replace(/[$,\s]/g, ''))
+        if (!Number.isFinite(num)) continue
+
+        const shouldHighlight = (
+          (condition === 'negative' && num < 0)
+          || (condition === 'positive' && num > 0)
+          || (condition === 'gt' && num > threshold)
+          || (condition === 'lt' && num < threshold)
+          || (condition === 'eq' && num === threshold)
+        )
+        if (!shouldHighlight) continue
+
+        ctx.setCellFormat(cellId, { bgColor: color })
+        count++
+      }
+
+      return { success: true, message: `Applied conditional formatting to ${count} cells in column ${col}`, modified: count }
+    }
+
     case 'clear_sheet': {
       ctx.pushHistory('Clear sheet')
       const cellIds = Object.keys(sheet.cells)

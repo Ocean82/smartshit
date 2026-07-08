@@ -8,6 +8,7 @@ import { runCleaningSkill } from '@/ai/skills/cleaning'
 import { runQueryFromIntent } from '@/ai/queryEngine'
 import { formatInsights, mergeToolResultContent, toolResultToMessage } from '@/ai/responseBuilder'
 import { chatWithAgentServerStream } from '@/ai/agentClient'
+import { recordTelemetry } from '@/ai/telemetry'
 import type { SheetInsights } from '@/ai/sheetInsights'
 import type { AttachedFilePreview, ToolResult } from '@/ai/types'
 import type { Selection, SheetData, WorkbookData } from '@/types'
@@ -81,7 +82,8 @@ function buildDeterministicSummary(
     && priorInsights.headers?.join() === currentInsights.headers?.join()) {
     parts.push('Prior turn insights still apply for follow-up questions.')
   }
-  parts.push(insightsBlock, deterministicText)
+  if (insightsBlock) parts.push(`Deterministic sheet findings:\n${insightsBlock}`)
+  if (deterministicText) parts.push(`Deterministic recommendation:\n${deterministicText}`)
   return mergeToolResultContent(parts.filter(Boolean))
 }
 
@@ -101,6 +103,7 @@ export async function processMessage(input: ProcessMessageInput): Promise<ToolRe
   const insightsBlock = isLlmOnlyMode(mode) ? formatInsights(target.context.insights) : ''
 
   if (deterministic && !isLlmOnlyMode(mode) && deterministic.actions?.length) {
+    recordTelemetry('deterministicResponses', deterministic.toolUsed ?? 'deterministic-action')
     return deterministic
   }
 
@@ -131,6 +134,12 @@ export async function processMessage(input: ProcessMessageInput): Promise<ToolRe
       llmText,
     ].filter(Boolean))
 
+    if (deterministicText.trim().length > 0 && llmText.trim().length > 0) {
+      recordTelemetry('hybridResponses', deterministic?.toolUsed ?? 'hybrid')
+    } else {
+      recordTelemetry('llmResponses', serverResult.source)
+    }
+
     return {
       success: true,
       message: combined,
@@ -144,8 +153,12 @@ export async function processMessage(input: ProcessMessageInput): Promise<ToolRe
     }
   }
 
-  if (deterministic) return deterministic
+  if (deterministic) {
+    recordTelemetry('deterministicResponses', deterministic.toolUsed ?? 'deterministic')
+    return deterministic
+  }
 
+  recordTelemetry('fallbackResponses', 'ai-server-unavailable')
   return {
     success: false,
     message: 'AI server is unavailable. Start it with `npm run dev:server` and try again.',

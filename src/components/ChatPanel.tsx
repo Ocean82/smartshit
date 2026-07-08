@@ -207,12 +207,19 @@ export function ChatPanel() {
             </div>
           </div>
         )}
+        {attachedFilePreview?.importWarnings?.length ? (
+          <div className="mb-2 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2 text-[11px] text-amber-900">
+            {attachedFilePreview.importWarnings.join(' ')}
+          </div>
+        ) : null}
         <div className="flex items-end gap-2">
           <input
             ref={fileInputRef}
             type="file"
             accept=".xlsx,.csv"
             className="hidden"
+            aria-label="Attach spreadsheet file"
+            title="Attach spreadsheet file"
             onChange={(e) => {
               const file = e.target.files?.[0]
               if (file) void attachFileForChat(file)
@@ -235,13 +242,15 @@ export function ChatPanel() {
             value={chatInput}
             onChange={(e) => setChatInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder='e.g. "Build a monthly budget" or "Explain my expenses"'
+            placeholder='e.g. "Explain this spreadsheet" or "Where am I overspending?"'
           />
           <button
             type="button"
             className="p-2.5 rounded-xl bg-gradient-to-r from-slate-800 to-blue-700 text-white hover:from-slate-900 hover:to-blue-800 disabled:opacity-50 transition-all shadow-sm"
             onClick={sendMessage}
             disabled={!chatInput.trim() || isAiProcessing}
+            title="Send message"
+            aria-label="Send message"
           >
             <Send size={16} />
           </button>

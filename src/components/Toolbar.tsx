@@ -1,6 +1,7 @@
 import { useStore } from '@/store/useStore';
 import { refToCell } from '@/engine/spreadsheet';
-import { importWorkbookFromFile, exportWorkbookToXlsx, exportSheetToCsv } from '@/io/xlsx';
+import { importWorkbookFromFileWithMeta, exportWorkbookToXlsx, exportSheetToCsv } from '@/io/xlsx';
+import { recordTelemetry } from '@/ai/telemetry';
 import {
   Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight,
   Undo2, Redo2, Paintbrush, Type, Grid3x3, BarChart3,
@@ -9,6 +10,7 @@ import {
 } from 'lucide-react';
 import { useRef } from 'react';
 import { v4 as uuid } from 'uuid';
+import './Toolbar.css';
 
 export function Toolbar() {
   const {
@@ -89,8 +91,17 @@ export function Toolbar() {
 
     if (file.name.match(/\.xlsx?$/i)) {
       pushHistory('Import Excel');
-      const imported = await importWorkbookFromFile(file);
-      useStore.getState().importWorkbook(imported, { fileName: file.name });
+      const { workbook, meta } = await importWorkbookFromFileWithMeta(file);
+      useStore.getState().importWorkbook(workbook, { fileName: file.name });
+      if (meta.warnings.length) {
+        recordTelemetry('importTruncationEvents', `Toolbar import: ${file.name}`)
+        useStore.getState().addMessage({
+          id: uuid(),
+          role: 'assistant',
+          content: `Import note: ${meta.warnings.join(' ')}`,
+          timestamp: Date.now(),
+        });
+      }
       if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
@@ -215,6 +226,8 @@ export function Toolbar() {
             className="pl-6 pr-1 py-1 text-xs bg-white border border-gray-200 rounded hover:border-gray-300 cursor-pointer appearance-none"
             value={selectedCellData?.format?.fontSize || 13}
             onChange={(e) => setRangeFormat({ fontSize: parseInt(e.target.value) })}
+            title="Font size"
+            aria-label="Font size"
           >
             {[10, 11, 12, 13, 14, 16, 18, 20, 24, 28, 32, 36].map(s => (
               <option key={s} value={s}>{s}</option>
@@ -226,12 +239,13 @@ export function Toolbar() {
         <div className="relative group">
           <ToolButton icon={<Paintbrush size={15} />} title="Cell Color" onClick={() => {}} />
           <div className="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-xl border border-gray-200 p-2 hidden group-hover:grid grid-cols-7 gap-1 z-50">
-            {colorOptions.map((color) => (
+            {colorOptions.map((color, index) => (
               <button
                 key={color}
-                className="w-5 h-5 rounded border border-gray-200 hover:scale-110 transition-transform"
-                style={{ backgroundColor: color }}
+                className={`w-5 h-5 rounded border border-gray-200 hover:scale-110 transition-transform toolbar-color-${index}`}
                 onClick={() => setRangeFormat({ bgColor: color })}
+                aria-label={`Set cell color ${color}`}
+                title={`Set cell color ${color}`}
               />
             ))}
           </div>
@@ -258,6 +272,8 @@ export function Toolbar() {
           type="file"
           accept=".csv,.xlsx,.xls"
           className="hidden"
+          aria-label="Import spreadsheet file"
+          title="Import spreadsheet file"
           onChange={handleImportFile}
         />
 

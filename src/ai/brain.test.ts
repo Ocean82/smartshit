@@ -44,6 +44,7 @@ describe('resolveAnalysisTarget', () => {
         dimensions: { rows: 4, cols: 2, populatedCells: 6 },
         headers: ['Category', 'Amount'],
         sampleRows: [],
+        sampleRowsTruncated: false,
         selectionSnapshot: {},
         insights: { headers: ['Category', 'Amount'] },
       },

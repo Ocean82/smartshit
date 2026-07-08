@@ -29,10 +29,10 @@ function inferRole(header: string, values: (string | number | null)[]): ColumnRo
 
 function detectPurpose(headers: string[]): SheetPurpose {
   const joined = headers.join(' ').toLowerCase()
-  if (/budget|expense|income|spending|savings/.test(joined)) return 'budget'
+  if (/budget|expense|income|spending|savings|variance|actual|planned/.test(joined)) return 'budget'
   if (/invoice|bill|client|subtotal|tax/.test(joined)) return 'invoice'
-  if (/inventory|stock|sku|warehouse|quantity/.test(joined)) return 'inventory'
-  if (/sales|revenue|product|profit/.test(joined)) return 'sales'
+  if (/inventory|stock|sku|warehouse|quantity|reorder/.test(joined)) return 'inventory'
+  if (/sales|revenue|product|profit|pipeline|deal/.test(joined)) return 'sales'
   return 'generic'
 }
 
@@ -65,7 +65,9 @@ export function buildSheetProfile(
   for (let c = 0; c <= maxCol; c++) {
     const cell = sheet.cells[refToCell(headerRow, c)]
     const computed = getComputedValue(headerRow, c)
-    headers.push(String(cell?.value ?? computed ?? `Column ${refToCell(0, c).replace(/\d+/, '')}`))
+    const fallback = `Column ${refToCell(0, c).replace(/\d+/, '')}`
+    const header = String(cell?.value ?? computed ?? fallback).trim() || fallback
+    headers.push(header)
   }
 
   const columns: ColumnProfile[] = []

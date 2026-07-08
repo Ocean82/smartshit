@@ -19,6 +19,7 @@ export interface SpreadsheetContextPayload {
   dimensions: SheetDimensions
   headers: string[]
   sampleRows: string[][]
+  sampleRowsTruncated: boolean
   selectionSnapshot: Record<string, string | number | null>
   insights: SheetInsights
   profile?: SheetProfile
@@ -105,6 +106,7 @@ export function buildSpreadsheetContext(
   const insights = computeSheetInsights(sheet, getComputedValue)
   const profile = buildSheetProfile(sheet, getComputedValue)
   const sampleRows = buildSampleRows(sheet, maxRow, maxCol, getComputedValue)
+  const sampleRowsTruncated = maxRow + 1 > MAX_SAMPLE_ROWS
 
   return {
     workbookName: workbook.name,
@@ -118,6 +120,7 @@ export function buildSpreadsheetContext(
     },
     headers: insights.headers,
     sampleRows,
+    sampleRowsTruncated,
     selectionSnapshot,
     insights,
     profile,

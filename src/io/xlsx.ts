@@ -1,6 +1,7 @@
 import * as XLSX from 'xlsx'
 import { v4 as uuid } from 'uuid'
 import type { WorkbookData, SheetData, CellData } from '@/types'
+import { AI_ANALYSIS_CONFIG } from '@/ai/config'
 import {
   createEmptyWorkbook,
   createEmptySheet,
@@ -8,8 +9,23 @@ import {
   cellToRef,
 } from '@/engine/spreadsheet'
 
-const MAX_ROWS = 200
-const MAX_COLS = 26
+export interface WorkbookImportMeta {
+  appliedMaxRows: number
+  appliedMaxCols: number
+  sheetLimitHits: Array<{
+    sheetName: string
+    originalRows: number
+    originalCols: number
+    importedRows: number
+    importedCols: number
+  }>
+  warnings: string[]
+}
+
+export interface WorkbookImportResult {
+  workbook: WorkbookData
+  meta: WorkbookImportMeta
+}
 
 function coerceCellValue(raw: string): string | number | null {
   const trimmed = raw.trim()
@@ -43,10 +59,22 @@ function sheetToMatrix(sheet: SheetData): (string | number | null)[][] {
   return matrix
 }
 
-function parseSheetRows(rows: (string | number | null)[][]): Record<string, CellData> {
+function parseSheetRows(
+  rows: (string | number | null)[][],
+  maxRows: number,
+  maxCols: number,
+): {
+  cells: Record<string, CellData>
+  importedRows: number
+  importedCols: number
+} {
   const cells: Record<string, CellData> = {}
-  rows.slice(0, MAX_ROWS).forEach((row, rowIndex) => {
-    row.slice(0, MAX_COLS).forEach((value, colIndex) => {
+  const importedRows = Math.min(rows.length, maxRows)
+  let importedCols = 0
+  rows.slice(0, importedRows).forEach((row, rowIndex) => {
+    const rowImportedCols = Math.min(row.length, maxCols)
+    importedCols = Math.max(importedCols, rowImportedCols)
+    row.slice(0, rowImportedCols).forEach((value, colIndex) => {
       if (value === undefined || value === null || value === '') return
       const cellId = refToCell(rowIndex, colIndex)
       const coerced = coerceCellValue(String(value))
@@ -57,13 +85,17 @@ function parseSheetRows(rows: (string | number | null)[][]): Record<string, Cell
       }
     })
   })
-  return cells
+  return { cells, importedRows, importedCols }
 }
 
-export async function importWorkbookFromFile(file: File): Promise<WorkbookData> {
+export async function importWorkbookFromFileWithMeta(file: File): Promise<WorkbookImportResult> {
   const buffer = await file.arrayBuffer()
   const book = XLSX.read(buffer, { type: 'array' })
   const baseName = file.name.replace(/\.(csv|xlsx|xls)$/i, '')
+  const maxRows = AI_ANALYSIS_CONFIG.maxImportRows
+  const maxCols = AI_ANALYSIS_CONFIG.maxImportCols
+
+  const sheetLimitHits: WorkbookImportMeta['sheetLimitHits'] = []
 
   const sheets: SheetData[] = book.SheetNames.map((name) => {
     const sheet = createEmptySheet(name.slice(0, 31))
@@ -72,22 +104,61 @@ export async function importWorkbookFromFile(file: File): Promise<WorkbookData> 
       raw: false,
       defval: null,
     })
-    sheet.cells = parseSheetRows(rows)
+    const originalRows = rows.length
+    const originalCols = rows.reduce((max, row) => Math.max(max, row.length), 0)
+    const parsed = parseSheetRows(rows, maxRows, maxCols)
+    sheet.cells = parsed.cells
+
+    if (originalRows > parsed.importedRows || originalCols > parsed.importedCols) {
+      sheetLimitHits.push({
+        sheetName: name,
+        originalRows,
+        originalCols,
+        importedRows: parsed.importedRows,
+        importedCols: parsed.importedCols,
+      })
+    }
+
     return sheet
   })
 
+  const warnings: string[] = sheetLimitHits.map((hit) => (
+    `Imported sheet "${hit.sheetName}" with limits ${hit.importedRows}/${hit.originalRows} rows and ${hit.importedCols}/${hit.originalCols} columns.`
+  ))
+
   if (!sheets.length) {
-    return createEmptyWorkbook(baseName)
+    return {
+      workbook: createEmptyWorkbook(baseName),
+      meta: {
+        appliedMaxRows: maxRows,
+        appliedMaxCols: maxCols,
+        sheetLimitHits,
+        warnings,
+      },
+    }
   }
 
   return {
-    id: uuid(),
-    name: baseName,
-    sheets,
-    activeSheetId: sheets[0].id,
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
+    workbook: {
+      id: uuid(),
+      name: baseName,
+      sheets,
+      activeSheetId: sheets[0].id,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    },
+    meta: {
+      appliedMaxRows: maxRows,
+      appliedMaxCols: maxCols,
+      sheetLimitHits,
+      warnings,
+    },
   }
+}
+
+export async function importWorkbookFromFile(file: File): Promise<WorkbookData> {
+  const result = await importWorkbookFromFileWithMeta(file)
+  return result.workbook
 }
 
 export function exportWorkbookToXlsx(workbook: WorkbookData, filename?: string): void {

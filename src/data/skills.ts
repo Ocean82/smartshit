@@ -2,6 +2,33 @@ import type { Skill } from '@/types';
 
 export const defaultSkills: Skill[] = [
   {
+    id: 'explain-loaded-sheet',
+    name: 'Explain My Sheet',
+    category: 'Finance',
+    description: 'Explain what this spreadsheet means in plain English with key totals and risks',
+    prompt: 'Explain this spreadsheet I just loaded and highlight the biggest budget risks',
+    tools: [],
+    icon: '🔎',
+  },
+  {
+    id: 'overspending-check',
+    name: 'Find Overspending',
+    category: 'Finance',
+    description: 'Detect categories that are over budget and rank them by impact',
+    prompt: 'Where am I overspending and what are the top 3 categories to fix first?',
+    tools: [],
+    icon: '🚨',
+  },
+  {
+    id: 'savings-plan',
+    name: 'Savings Plan',
+    category: 'Finance',
+    description: 'Recommend practical monthly savings targets based on my numbers',
+    prompt: 'I make $5000/month. How much should I save and where should I cut spending?',
+    tools: [],
+    icon: '🎯',
+  },
+  {
     id: 'budget-generator',
     name: 'Budget Generator',
     category: 'Finance',
@@ -45,15 +72,6 @@ export const defaultSkills: Skill[] = [
     prompt: 'Create an invoice template',
     tools: ['create_invoice'],
     icon: '🧾',
-  },
-  {
-    id: 'data-analysis',
-    name: 'Data Analyzer',
-    category: 'Data',
-    description: 'Explain your sheet data in plain English with insights',
-    prompt: 'Explain the data in my current sheet',
-    tools: [],
-    icon: '🔍',
   },
   {
     id: 'kpi-dashboard',
