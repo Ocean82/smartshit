@@ -262,10 +262,21 @@ app.post('/api/chat/stream', async (req, res) => {
     return
   }
 
+  // Set up abort controller BEFORE flushing headers
+  // Express 5 can fire 'close' during flushHeaders in some cases
+  const abortController = new AbortController()
+  const abortTimeout = setTimeout(() => abortController.abort(), 120_000)
+  req.on('close', () => {
+    clearTimeout(abortTimeout)
+    abortController.abort()
+  })
+
   res.flushHeaders()
 
-  const abortController = new AbortController()
-  req.on('close', () => abortController.abort())
+  // Use a separate signal for the LLM call — only timeout-based, not tied to req close
+  // This prevents premature abort when Express fires 'close' during SSE setup
+  const llmAbort = new AbortController()
+  const llmTimeout = setTimeout(() => llmAbort.abort(), 90_000)
 
   try {
     const result = await runLlmChat({
@@ -280,8 +291,10 @@ app.post('/api/chat/stream', async (req, res) => {
           res.write(`data: ${JSON.stringify({ type: 'token', content: chunk })}\n\n`)
         }
       },
-      signal: abortController.signal,
+      signal: llmAbort.signal,
     })
+
+    clearTimeout(llmTimeout)
 
     if (!res.writableEnded) {
       sendSseComplete(res, result)
