@@ -40,9 +40,19 @@ export function ChatPanel() {
   const [health, setHealth] = useState<ServerHealth | null>(null)
 
   useEffect(() => {
-    void fetchServerHealth().then(setHealth)
-    const id = setInterval(() => { void fetchServerHealth().then(setHealth) }, 15000)
-    return () => clearInterval(id)
+    let interval = 15000
+    let timeoutId: ReturnType<typeof setTimeout>
+
+    const poll = async () => {
+      const result = await fetchServerHealth()
+      setHealth(result)
+      // Backoff on failure: 15s → 30s → 60s; reset on success
+      interval = result?.ok ? 15000 : Math.min(interval * 2, 60000)
+      timeoutId = setTimeout(poll, interval)
+    }
+
+    void poll()
+    return () => clearTimeout(timeoutId)
   }, [])
 
   useEffect(() => {
@@ -70,7 +80,7 @@ export function ChatPanel() {
 
   const handleSkillClick = (prompt: string) => {
     setChatInput(prompt)
-    setTimeout(() => sendMessage(), 100)
+    requestAnimationFrame(() => sendMessage())
   }
 
   return (

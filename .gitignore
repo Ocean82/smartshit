@@ -31,3 +31,6 @@ server/ecosystem.config.cjs
 coverage/
 *.tsbuildinfo
 .vite/
+
+# Dev debug/test scripts (created during debugging, never ship)
+*.sh
