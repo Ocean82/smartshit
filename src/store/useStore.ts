@@ -21,6 +21,7 @@ import {
   cellToRef,
   SpreadsheetEngine,
 } from '@/engine/spreadsheet';
+import { parseMessage, executeTool, type ExecutionContext } from '@/agent';
 import { loadPersistedState } from '@/lib/persistence';
 import { processMessage } from '@/ai/brain';
 import { buildSpreadsheetContext } from '@/ai/buildContext';
@@ -418,6 +419,51 @@ export const useStore = create<AppState>()(
             state.getComputedValue,
           );
 
+          // ─── Agent Parser (instant, no LLM) ─────────────────────────────────
+          const parsed = parseMessage(input);
+          if (parsed.understood && parsed.calls.length > 0) {
+            // Build execution context from store
+            const execCtx: ExecutionContext = {
+              getActiveSheet: get().getActiveSheet,
+              getComputedValue: get().getComputedValue,
+              setCellValue: get().setCellValue,
+              setCellFormat: get().setCellFormat,
+              bulkSetCells: get().bulkSetCells,
+              deleteRow: get().deleteRow,
+              insertRow: get().insertRow,
+              addSheet: get().addSheet,
+              renameSheet: get().renameSheet,
+              pushHistory: get().pushHistory,
+            };
+
+            // Execute all tool calls in sequence
+            const results = parsed.calls.map(call => executeTool(call, execCtx));
+            const allSuccess = results.every(r => r.success);
+            const totalModified = results.reduce((sum, r) => sum + r.modified, 0);
+
+            // Build response message
+            const messages = results.map(r => r.message);
+            const explanation = parsed.explanation || messages.join('. ');
+            const responseText = allSuccess
+              ? `✓ ${explanation}${totalModified > 0 ? ` (${totalModified} cell${totalModified === 1 ? '' : 's'} modified)` : ''}`
+              : `⚠️ ${messages.join('. ')}`;
+
+            const agentMsg: ChatMessage = {
+              id: streamingMsgId,
+              role: 'assistant',
+              content: responseText,
+              timestamp: Date.now(),
+            };
+
+            set((s) => {
+              const idx = s.messages.findIndex((m) => m.id === streamingMsgId);
+              if (idx >= 0) s.messages[idx] = agentMsg;
+              s.isAiProcessing = false;
+            });
+            return;
+          }
+
+          // ─── LLM Path (server-side AI for complex/open-ended requests) ──────
           const result = await processMessage({
             message: input,
             workbook: state.workbook,
