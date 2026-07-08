@@ -58,7 +58,8 @@ export async function handleStripeWebhook(event: {
   const obj = event.data.object
 
   if (event.type === 'checkout.session.completed') {
-    const userId = (obj.client_reference_id ?? obj.metadata?.userId) as string
+    const metadata = obj.metadata as Record<string, string> | undefined
+    const userId = (obj.client_reference_id as string) ?? metadata?.userId
     if (userId) {
       // Update Clerk user metadata with subscription info
       return { userId, plan: 'pro' }
