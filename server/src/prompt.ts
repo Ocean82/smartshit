@@ -102,7 +102,7 @@ export interface ChatRequestBody {
 export interface ChatResponseBody {
   message: string
   actions: AgentActionInput[]
-  source: 'llm' | 'fallback' | 'template'
+  source: 'llm' | 'fallback' | 'template' | 'clarification'
   suggestions?: string[]
 }
 

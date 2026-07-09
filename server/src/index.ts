@@ -1,9 +1,8 @@
 import cors from 'cors'
 import express from 'express'
 import { config } from './config.js'
-import { chatWithOllama, chatWithOllamaStream, modelIsRegistered, ollamaReachable } from './ollama.js'
-import { groqAvailable, chatWithGroqStream } from './groq.js'
-import { chatWithOpenAiCompatible, chatWithOpenAiCompatibleStream, openAiCompatibleAvailable } from './openaiCompatible.js'
+import { modelIsRegistered, ollamaReachable } from './ollama.js'
+import { groqAvailable } from './groq.js'
 import {
   buildActionPrompt,
   buildExplainPrompt,
@@ -13,10 +12,16 @@ import {
 import { parseAgentResponse } from './parseResponse.js'
 import { resolveIntent, isWeakResponse } from './intent.js'
 import { classifyMode, isLlmOnlyMode } from './mode.js'
-import { parseUserIntent as keywordParseUserIntent } from './intentParser.js' // Rename old parser
-import { parseIntentWithLlm } from './llmIntentParser.js' // Import new LLM parser
+import { parseIntentWithLlm } from './llmIntentParser.js'
 import type { UserIntent } from '../../shared/intentTypes.js'
-import { getSimilarSuggestions } from './suggestions.js' // Import suggestions service
+import { getSuggestions } from './suggestions.js'
+import {
+  type ProviderName,
+  providerOrder,
+  providerIsConfigured,
+  callProvider,
+  callProviderStream,
+} from './providers.js'
 
 import { checkUsage, recordUsage, getUsageStats } from './usage.js'
 
@@ -24,98 +29,35 @@ const app = express()
 app.use(cors({ origin: config.corsOrigin }))
 app.use(express.json({ limit: '1mb' }))
 
-type ProviderName = 'openrouter' | 'huggingface' | 'groq' | 'ollama'
+// Re-export for any modules that still import from index (backwards compat)
+export { providerOrder, providerIsConfigured, callProvider, callProviderStream }
+export type { ProviderName }
 
-export function providerOrder(): ProviderName[] {
-  const allowed: ProviderName[] = ['openrouter', 'huggingface', 'groq', 'ollama']
-  return config.llmProviderOrder.filter((provider): provider is ProviderName =>
-    allowed.includes(provider as ProviderName),
-  )
+/** Human-readable labels for intent types used in clarification messages. */
+const INTENT_LABELS: Record<string, string> = {
+  read: 'view some data',
+  analyze: 'analyze your data',
+  write: 'modify cells or rows',
+  format: 'apply formatting',
+  create_chart: 'create a chart',
+  create_formula: 'create a formula',
+  summarize: 'get a summary',
+  filter: 'filter your data',
+  sort: 'sort your data',
+  clean: 'clean up the data',
+  budget: 'work with a budget',
+  report: 'generate a report',
+  compare: 'compare data',
+  find: 'find something specific',
+  calculate: 'perform a calculation',
+  export: 'export the data',
+  chat: 'have a conversation',
+  unknown: 'do something with your spreadsheet',
 }
 
-export function providerIsConfigured(provider: ProviderName): boolean {
-  if (provider === 'openrouter') {
-    return openAiCompatibleAvailable({
-      apiKey: config.openRouterApiKey,
-      model: config.openRouterModel,
-      baseUrl: config.openRouterBaseUrl,
-    })
-  }
-  if (provider === 'huggingface') {
-    return openAiCompatibleAvailable({
-      apiKey: config.huggingFaceApiKey,
-      model: config.huggingFaceModel,
-      baseUrl: config.huggingFaceBaseUrl,
-    })
-  }
-  if (provider === 'groq') return groqAvailable()
-  return true
-}
-
-export async function callProviderStream(
-  provider: ProviderName,
-  messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
-  onChunk: (chunk: string) => void,
-  signal: AbortSignal,
-): Promise<string> {
-  if (provider === 'openrouter') {
-    return chatWithOpenAiCompatibleStream(
-      {
-        apiKey: config.openRouterApiKey,
-        model: config.openRouterModel,
-        baseUrl: config.openRouterBaseUrl,
-      },
-      messages,
-      onChunk,
-      signal,
-    )
-  }
-  if (provider === 'huggingface') {
-    return chatWithOpenAiCompatibleStream(
-      {
-        apiKey: config.huggingFaceApiKey,
-        model: config.huggingFaceModel,
-        baseUrl: config.huggingFaceBaseUrl,
-      },
-      messages,
-      onChunk,
-      signal,
-    )
-  }
-  if (provider === 'groq') return chatWithGroqStream(messages, onChunk, signal)
-
-  const ollama = await ollamaReachable()
-  const modelReady = ollama ? await modelIsRegistered() : false
-  if (!ollama || !modelReady) throw new Error('Ollama is unavailable or model is not registered')
-  return chatWithOllamaStream(messages, onChunk, signal)
-}
-
-export async function callProvider(provider: ProviderName, messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>): Promise<string> {
-  if (provider === 'openrouter') {
-    return chatWithOpenAiCompatible(
-      {
-        apiKey: config.openRouterApiKey,
-        model: config.openRouterModel,
-        baseUrl: config.openRouterBaseUrl,
-      },
-      messages,
-    )
-  }
-  if (provider === 'huggingface') {
-    return chatWithOpenAiCompatible(
-      {
-        apiKey: config.huggingFaceApiKey,
-        model: config.huggingFaceModel,
-        baseUrl: config.huggingFaceBaseUrl,
-      },
-      messages,
-    )
-  }
-  if (provider === 'groq') {
-    const { chatWithGroq } = await import('./groq.js')
-    return chatWithGroq(messages)
-  }
-  return chatWithOllama(messages)
+function buildClarificationMessage(intent: UserIntent): string {
+  const label = INTENT_LABELS[intent.intentType] ?? 'do something with your spreadsheet'
+  return `I'm not quite sure what you'd like to do. Did you mean to ${label}? Could you rephrase or give me a bit more detail?`
 }
 
 function sendSseComplete(
@@ -135,9 +77,8 @@ async function runLlmChat(params: {
   stream: boolean
   onChunk?: (chunk: string) => void
   signal?: AbortSignal
-  suggestions?: string[] // Added suggestions here
 }): Promise<ChatResponseBody> {
-  const { body, userMessage, mode, intent, userIntent, stream, onChunk, signal, suggestions } = params
+  const { body, userMessage, mode, intent, userIntent, stream, onChunk, signal } = params
   const llmOnly = isLlmOnlyMode(mode) || body.forceLlm
 
   const history = (body.history ?? []).filter((m) => m.role === 'user' || m.role === 'assistant')
@@ -152,7 +93,6 @@ async function runLlmChat(params: {
   ]
 
   const availableProviders = providerOrder().filter(providerIsConfigured)
-  const providerErrors: string[] = []
   let fullText = ''
   let usedProvider: ProviderName | null = null
 
@@ -165,9 +105,8 @@ async function runLlmChat(params: {
       }
       usedProvider = provider
       break
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unknown error'
-      providerErrors.push(`${provider}: ${message}`)
+    } catch {
+      // Provider failed, try next
     }
   }
 
@@ -178,7 +117,6 @@ async function runLlmChat(params: {
         'AI is currently unavailable. Configure OPENROUTER_API_KEY, HUGGINGFACE_API_KEY, GROQ_API_KEY, or a local Ollama model.',
       actions: llmOnly ? [] : intent.actions,
       source: 'fallback',
-      suggestions: suggestions || [],
     }
   }
 
@@ -188,7 +126,6 @@ async function runLlmChat(params: {
       message: text || 'I could not generate a response. Try rephrasing your question.',
       actions: [],
       source: 'llm',
-      suggestions: suggestions || [],
     }
   }
 
@@ -204,7 +141,6 @@ async function runLlmChat(params: {
     message: parsed.message,
     actions: parsed.actions,
     source: 'llm',
-    suggestions: suggestions || [],
   }
 }
 
@@ -239,9 +175,6 @@ app.post('/api/chat/stream', async (req, res) => {
   const body = req.body as ChatRequestBody
   const userMessage = body.message?.trim()
 
-  // Generate suggestions based on the user message
-  const suggestions = await getSimilarSuggestions(userMessage || '')
-
   if (!userMessage) {
     res.status(400).json({ error: 'message is required' })
     return
@@ -251,10 +184,17 @@ app.post('/api/chat/stream', async (req, res) => {
   const history = (body.history ?? []).filter((m) => m.role === 'user' || m.role === 'assistant')
   const userIntent = await parseIntentWithLlm(userMessage, history)
 
-  // Phase 2: Clarification Dialogue and Low-Confidence Handling
+  // Generate suggestions after we have a valid message
+  const suggestions = getSuggestions(userMessage)
+
+  // Low-confidence intent — ask the user to clarify
   if (userIntent.confidence < config.intentConfidenceThreshold) {
+    res.setHeader('Content-Type', 'text/event-stream')
+    res.setHeader('Cache-Control', 'no-cache')
+    res.setHeader('Connection', 'keep-alive')
+    res.setHeader('X-Accel-Buffering', 'no')
     sendSseComplete(res, {
-      message: `I'm not sure I understand. Did you mean to ${userIntent.intentType}? Or something else? Please clarify.`,
+      message: buildClarificationMessage(userIntent),
       actions: [],
       source: 'clarification',
       suggestions,
@@ -287,15 +227,6 @@ app.post('/api/chat/stream', async (req, res) => {
     return
   }
 
-  // Set up abort controller BEFORE flushing headers
-  // Express 5 can fire 'close' during flushHeaders in some cases
-  const abortController = new AbortController()
-  const abortTimeout = setTimeout(() => abortController.abort(), 120_000)
-  req.on('close', () => {
-    clearTimeout(abortTimeout)
-    abortController.abort()
-  })
-
   // ─── Usage gate (free tier enforcement) ────────────────────────────────────
   const userId = (body as unknown as Record<string, unknown>).userId as string | undefined
   const isPro = (body as unknown as Record<string, unknown>).isPro === true
@@ -306,15 +237,21 @@ app.post('/api/chat/stream', async (req, res) => {
       message: `You've used all ${usage.limit} free AI questions for today. Upgrade to Pro for unlimited access.`,
       actions: [],
       source: 'fallback',
-      suggestions,
     })
     return
   }
 
   res.flushHeaders()
 
-  // Use a separate signal for the LLM call — only timeout-based, not tied to req close
-  // This prevents premature abort when Express fires 'close' during SSE setup
+  // Abort on client disconnect or hard timeout (120s)
+  const reqAbort = new AbortController()
+  const reqTimeout = setTimeout(() => reqAbort.abort(), 120_000)
+  req.on('close', () => {
+    clearTimeout(reqTimeout)
+    reqAbort.abort()
+  })
+
+  // Separate signal for LLM — timeout-based only, not tied to req close race condition
   const llmAbort = new AbortController()
   const llmTimeout = setTimeout(() => llmAbort.abort(), 90_000)
 
@@ -332,17 +269,23 @@ app.post('/api/chat/stream', async (req, res) => {
         }
       },
       signal: llmAbort.signal,
-      suggestions,
     })
 
     clearTimeout(llmTimeout)
+    clearTimeout(reqTimeout)
 
     // Record usage for free-tier tracking (only after successful LLM response)
     if (result.source === 'llm') {
       recordUsage(userId)
     }
 
-    if (!res.writableEnded) {\n      sendSseComplete(res, result)\n    }\n\n    console.log(\`[LOG] User: \${userMessage}\`)\n    console.log(\`[LOG] Intent: \${JSON.stringify(userIntent)}\`)\n    console.log(\`[LOG] Response: \${JSON.stringify(result)}\`)\n  } catch (err) {
+    if (!res.writableEnded) {
+      sendSseComplete(res, { ...result, suggestions })
+    }
+  } catch (err) {
+    clearTimeout(llmTimeout)
+    clearTimeout(reqTimeout)
+
     if (!res.writableEnded) {
       const message = err instanceof Error ? err.message : 'Unknown error'
       sendSseComplete(res, {
@@ -361,9 +304,6 @@ app.post('/api/chat', async (req, res) => {
   const body = req.body as ChatRequestBody
   const userMessage = body.message?.trim()
 
-  // Generate suggestions based on the user message
-  const suggestions = await getSimilarSuggestions(userMessage || '')
-
   if (!userMessage) {
     res.status(400).json({ error: 'message is required' })
     return
@@ -373,16 +313,20 @@ app.post('/api/chat', async (req, res) => {
   const history = (body.history ?? []).filter((m) => m.role === 'user' || m.role === 'assistant')
   const userIntent = await parseIntentWithLlm(userMessage, history)
 
-  // Phase 2: Clarification Dialogue and Low-Confidence Handling
+  // Generate suggestions after we have a valid message
+  const suggestions = getSuggestions(userMessage)
+
+  // Low-confidence intent — ask the user to clarify
   if (userIntent.confidence < config.intentConfidenceThreshold) {
     res.json({
-      message: `I'm not sure I understand. Did you mean to ${userIntent.intentType}? Or something else? Please clarify.`,
+      message: buildClarificationMessage(userIntent),
       actions: [],
       source: 'clarification',
       suggestions,
     })
     return
   }
+
   const intent = resolveIntent(userMessage)
   const llmOnly = isLlmOnlyMode(mode) || body.forceLlm
 
@@ -409,9 +353,9 @@ app.post('/api/chat', async (req, res) => {
       intent,
       userIntent,
       stream: false,
-      suggestions,
     })
-    res.json(result)\n\n    console.log(\`[LOG] User: \${userMessage}\`)\n    console.log(\`[LOG] Intent: \${JSON.stringify(userIntent)}\`)\n    console.log(\`[LOG] Response: \${JSON.stringify(result)}\`)\n  } catch (err) {
+    res.json({ ...result, suggestions })
+  } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error'
     res.json({
       message: `${intent.message || 'Something went wrong.'}\n\n(${message})`,
@@ -433,7 +377,6 @@ app.post('/api/usage', (req, res) => {
 // ─── Stripe Checkout ─────────────────────────────────────────────────────────
 
 app.post('/api/checkout', async (req, res) => {
-  // Only trust userId and email from client — price is always server-controlled
   const { userId, email } = req.body as { userId?: string; email?: string }
 
   if (!userId || !email) {
@@ -458,7 +401,6 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
     const { verifyWebhookSignature, handleStripeWebhook } = await import('./stripe.js')
     const signatureHeader = req.headers['stripe-signature'] as string | undefined
 
-    // Verify signature — rejects spoofed or replayed webhooks
     const event = verifyWebhookSignature(req.body, signatureHeader)
     const result = handleStripeWebhook(event)
 

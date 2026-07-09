@@ -1,102 +1,60 @@
-import { UserIntent } from '../../shared/intentTypes.js'
-// Placeholder for an embedding function. In a real scenario, this would call an external embedding service.
-async function getEmbeddings(text: string): Promise<number[]> {
-  // Simulate embedding generation
-  return text.split('').map((char) => char.charCodeAt(0) / 100)
-}
+import type { IntentType } from '../../shared/intentTypes.js'
 
-interface SuggestionItem {
+/**
+ * Suggestion engine — provides contextual follow-up suggestions based on detected intent.
+ *
+ * TODO: Replace this keyword/intent-based approach with real vector embeddings
+ * (e.g., OpenAI Embeddings, Sentence Transformers) for semantic similarity.
+ * See docs/planning/24-chat-system-improvements.md Phase 4 for the full plan.
+ */
+
+interface SuggestionEntry {
   query: string
-  intent: UserIntent
-  embeddings?: number[]
+  intentType: IntentType
+  keywords: string[]
 }
 
-// A small, hardcoded knowledge base of common actions and questions
-const KNOWLEDGE_BASE: SuggestionItem[] = [
-  {
-    query: "Analyze my data",
-    intent: {
-      intentType: 'analyze',
-      rawQuery: "Analyze my data",
-      confidence: 1.0,
-      targetColumns: [],
-      filters: {},
-      parameters: {},
-    },
-  },
-  {
-    query: "Show me the sum of the Amount column",
-    intent: {
-      intentType: 'calculate',
-      rawQuery: "Show me the sum of the Amount column",
-      confidence: 1.0,
-      targetColumns: ['Amount'],
-      filters: {},
-      parameters: { operation: 'sum' },
-    },
-  },
-  {
-    query: "Filter where Category is Food",
-    intent: {
-      intentType: 'filter',
-      rawQuery: "Filter where Category is Food",
-      confidence: 1.0,
-      targetColumns: [],
-      filters: { Category: 'Food' },
-      parameters: {},
-    },
-  },
-  {
-    query: "Create a bar chart for Sales by Region",
-    intent: {
-      intentType: 'create_chart',
-      rawQuery: "Create a bar chart for Sales by Region",
-      confidence: 1.0,
-      targetColumns: ['Sales', 'Region'],
-      filters: {},
-      parameters: { chartType: 'bar' },
-    },
-  },
-  {
-    query: "Clean my data",
-    intent: {
-      intentType: 'clean',
-      rawQuery: "Clean my data",
-      confidence: 1.0,
-      targetColumns: [],
-      filters: {},
-      parameters: {},
-    },
-  },
+const SUGGESTION_BANK: SuggestionEntry[] = [
+  { query: 'Analyze my data for patterns', intentType: 'analyze', keywords: ['analyze', 'insight', 'pattern', 'trend', 'statistics'] },
+  { query: 'Show me the sum of a column', intentType: 'calculate', keywords: ['sum', 'total', 'add', 'calculate', 'amount'] },
+  { query: 'Filter rows by condition', intentType: 'filter', keywords: ['filter', 'where', 'only', 'condition', 'greater', 'less'] },
+  { query: 'Create a chart from my data', intentType: 'create_chart', keywords: ['chart', 'graph', 'plot', 'visualize', 'bar', 'pie', 'line'] },
+  { query: 'Clean up duplicate rows', intentType: 'clean', keywords: ['clean', 'duplicate', 'remove', 'fix', 'trim'] },
+  { query: 'Sort my data', intentType: 'sort', keywords: ['sort', 'order', 'rank', 'ascending', 'descending'] },
+  { query: 'Summarize this sheet', intentType: 'summarize', keywords: ['summarize', 'summary', 'overview', 'brief'] },
+  { query: 'Compare two columns', intentType: 'compare', keywords: ['compare', 'difference', 'versus', 'vs'] },
+  { query: 'Find a specific value', intentType: 'find', keywords: ['find', 'search', 'locate', 'where is'] },
+  { query: 'Generate a budget breakdown', intentType: 'budget', keywords: ['budget', 'expense', 'income', 'spending', 'cost'] },
+  { query: 'Export my data', intentType: 'export', keywords: ['export', 'download', 'save as', 'csv'] },
+  { query: 'Create a formula column', intentType: 'create_formula', keywords: ['formula', 'calculate column', 'computed', 'vlookup'] },
 ]
 
-// In a real scenario, embeddings would be pre-calculated and stored.
-// For this example, we'll generate them on the fly.
-async function initializeKnowledgeBaseEmbeddings() {
-  for (const item of KNOWLEDGE_BASE) {
-    item.embeddings = await getEmbeddings(item.query)
-  }
-}
+/**
+ * Returns contextual suggestions based on simple keyword overlap with the user query.
+ * Excludes suggestions whose intent matches the current query's apparent intent
+ * to offer diverse follow-up actions.
+ */
+export function getSuggestions(query: string, count = 3): string[] {
+  if (!query || query.trim().length === 0) return []
 
-initializeKnowledgeBaseEmbeddings()
+  const lower = query.toLowerCase()
+  const queryWords = lower.split(/\s+/)
 
-function cosineSimilarity(vec1: number[], vec2: number[]): number {
-  const dotProduct = vec1.reduce((sum, val, i) => sum + val * vec2[i], 0)
-  const magnitude1 = Math.sqrt(vec1.reduce((sum, val) => sum + val * val, 0))
-  const magnitude2 = Math.sqrt(vec2.reduce((sum, val) => sum + val * val, 0))
-  if (magnitude1 === 0 || magnitude2 === 0) return 0
-  return dotProduct / (magnitude1 * magnitude2)
-}
+  const scored = SUGGESTION_BANK.map((entry) => {
+    let score = 0
+    for (const keyword of entry.keywords) {
+      if (lower.includes(keyword)) score += 2
+      else if (queryWords.some((w) => keyword.includes(w) || w.includes(keyword))) score += 1
+    }
+    return { entry, score }
+  })
 
-export async function getSimilarSuggestions(query: string, count = 3): Promise<string[]> {
-  const queryEmbeddings = await getEmbeddings(query)
+  // Sort by score descending, then filter out zero-score entries
+  scored.sort((a, b) => b.score - a.score)
 
-  const scoredSuggestions = KNOWLEDGE_BASE.map((item) => ({
-    item,
-    score: item.embeddings ? cosineSimilarity(queryEmbeddings, item.embeddings) : 0,
-  }))
-
-  scoredSuggestions.sort((a, b) => b.score - a.score)
-
-  return scoredSuggestions.slice(0, count).map((item) => item.item.query)
+  // Return suggestions that are at least somewhat related but not identical to what they asked
+  return scored
+    .filter((s) => s.score > 0)
+    .slice(0, count)
+    .map((s) => s.entry.query)
 }

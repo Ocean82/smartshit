@@ -54,5 +54,5 @@ export const config = {
     outlierStdThreshold: 2.5,
   },
 
-  intentConfidenceThreshold: Number(process.env.INTENT_CONFIDENCE_THRESHOLD ?? 0.6),
+  intentConfidenceThreshold: Math.max(0, Math.min(1, Number(process.env.INTENT_CONFIDENCE_THRESHOLD ?? 0.6))),
 }
