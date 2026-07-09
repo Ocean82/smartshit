@@ -13,8 +13,10 @@ import {
 import { parseAgentResponse } from './parseResponse.js'
 import { resolveIntent, isWeakResponse } from './intent.js'
 import { classifyMode, isLlmOnlyMode } from './mode.js'
-import { parseUserIntent } from './intentParser.js'
+import { parseUserIntent as keywordParseUserIntent } from './intentParser.js' // Rename old parser
+import { parseIntentWithLlm } from './llmIntentParser.js' // Import new LLM parser
 import type { UserIntent } from '../../shared/intentTypes.js'
+import { getSimilarSuggestions } from './suggestions.js' // Import suggestions service
 
 import { checkUsage, recordUsage, getUsageStats } from './usage.js'
 
@@ -24,14 +26,14 @@ app.use(express.json({ limit: '1mb' }))
 
 type ProviderName = 'openrouter' | 'huggingface' | 'groq' | 'ollama'
 
-function providerOrder(): ProviderName[] {
+export function providerOrder(): ProviderName[] {
   const allowed: ProviderName[] = ['openrouter', 'huggingface', 'groq', 'ollama']
   return config.llmProviderOrder.filter((provider): provider is ProviderName =>
     allowed.includes(provider as ProviderName),
   )
 }
 
-function providerIsConfigured(provider: ProviderName): boolean {
+export function providerIsConfigured(provider: ProviderName): boolean {
   if (provider === 'openrouter') {
     return openAiCompatibleAvailable({
       apiKey: config.openRouterApiKey,
@@ -50,7 +52,7 @@ function providerIsConfigured(provider: ProviderName): boolean {
   return true
 }
 
-async function callProviderStream(
+export async function callProviderStream(
   provider: ProviderName,
   messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
   onChunk: (chunk: string) => void,
@@ -88,7 +90,7 @@ async function callProviderStream(
   return chatWithOllamaStream(messages, onChunk, signal)
 }
 
-async function callProvider(provider: ProviderName, messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>): Promise<string> {
+export async function callProvider(provider: ProviderName, messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>): Promise<string> {
   if (provider === 'openrouter') {
     return chatWithOpenAiCompatible(
       {
@@ -133,8 +135,9 @@ async function runLlmChat(params: {
   stream: boolean
   onChunk?: (chunk: string) => void
   signal?: AbortSignal
+  suggestions?: string[] // Added suggestions here
 }): Promise<ChatResponseBody> {
-  const { body, userMessage, mode, intent, userIntent, stream, onChunk, signal } = params
+  const { body, userMessage, mode, intent, userIntent, stream, onChunk, signal, suggestions } = params
   const llmOnly = isLlmOnlyMode(mode) || body.forceLlm
 
   const history = (body.history ?? []).filter((m) => m.role === 'user' || m.role === 'assistant')
@@ -175,6 +178,7 @@ async function runLlmChat(params: {
         'AI is currently unavailable. Configure OPENROUTER_API_KEY, HUGGINGFACE_API_KEY, GROQ_API_KEY, or a local Ollama model.',
       actions: llmOnly ? [] : intent.actions,
       source: 'fallback',
+      suggestions: suggestions || [],
     }
   }
 
@@ -184,6 +188,7 @@ async function runLlmChat(params: {
       message: text || 'I could not generate a response. Try rephrasing your question.',
       actions: [],
       source: 'llm',
+      suggestions: suggestions || [],
     }
   }
 
@@ -199,6 +204,7 @@ async function runLlmChat(params: {
     message: parsed.message,
     actions: parsed.actions,
     source: 'llm',
+    suggestions: suggestions || [],
   }
 }
 
@@ -233,13 +239,29 @@ app.post('/api/chat/stream', async (req, res) => {
   const body = req.body as ChatRequestBody
   const userMessage = body.message?.trim()
 
+  // Generate suggestions based on the user message
+  const suggestions = await getSimilarSuggestions(userMessage || '')
+
   if (!userMessage) {
     res.status(400).json({ error: 'message is required' })
     return
   }
 
   const mode = classifyMode(userMessage)
-  const userIntent = parseUserIntent(userMessage)
+  const history = (body.history ?? []).filter((m) => m.role === 'user' || m.role === 'assistant')
+  const userIntent = await parseIntentWithLlm(userMessage, history)
+
+  // Phase 2: Clarification Dialogue and Low-Confidence Handling
+  if (userIntent.confidence < config.intentConfidenceThreshold) {
+    sendSseComplete(res, {
+      message: `I'm not sure I understand. Did you mean to ${userIntent.intentType}? Or something else? Please clarify.`,
+      actions: [],
+      source: 'clarification',
+      suggestions,
+    })
+    return
+  }
+
   const intent = resolveIntent(userMessage)
   const llmOnly = isLlmOnlyMode(mode) || body.forceLlm
 
@@ -250,7 +272,7 @@ app.post('/api/chat/stream', async (req, res) => {
 
   // Static help response
   if (mode === 'help' && !body.forceLlm) {
-    sendSseComplete(res, { message: intent.message, actions: [], source: 'template' })
+    sendSseComplete(res, { message: intent.message, actions: [], source: 'template', suggestions })
     return
   }
 
@@ -260,6 +282,7 @@ app.post('/api/chat/stream', async (req, res) => {
       message: intent.message,
       actions: intent.actions,
       source: 'template',
+      suggestions,
     })
     return
   }
@@ -283,6 +306,7 @@ app.post('/api/chat/stream', async (req, res) => {
       message: `You've used all ${usage.limit} free AI questions for today. Upgrade to Pro for unlimited access.`,
       actions: [],
       source: 'fallback',
+      suggestions,
     })
     return
   }
@@ -308,6 +332,7 @@ app.post('/api/chat/stream', async (req, res) => {
         }
       },
       signal: llmAbort.signal,
+      suggestions,
     })
 
     clearTimeout(llmTimeout)
@@ -317,16 +342,14 @@ app.post('/api/chat/stream', async (req, res) => {
       recordUsage(userId)
     }
 
-    if (!res.writableEnded) {
-      sendSseComplete(res, result)
-    }
-  } catch (err) {
+    if (!res.writableEnded) {\n      sendSseComplete(res, result)\n    }\n\n    console.log(\`[LOG] User: \${userMessage}\`)\n    console.log(\`[LOG] Intent: \${JSON.stringify(userIntent)}\`)\n    console.log(\`[LOG] Response: \${JSON.stringify(result)}\`)\n  } catch (err) {
     if (!res.writableEnded) {
       const message = err instanceof Error ? err.message : 'Unknown error'
       sendSseComplete(res, {
         message: `${intent.message || 'Something went wrong.'}\n\n(${message})`,
         actions: llmOnly ? [] : intent.actions,
         source: 'fallback',
+        suggestions,
       })
     }
   }
@@ -338,18 +361,33 @@ app.post('/api/chat', async (req, res) => {
   const body = req.body as ChatRequestBody
   const userMessage = body.message?.trim()
 
+  // Generate suggestions based on the user message
+  const suggestions = await getSimilarSuggestions(userMessage || '')
+
   if (!userMessage) {
     res.status(400).json({ error: 'message is required' })
     return
   }
 
   const mode = classifyMode(userMessage)
-  const userIntent = parseUserIntent(userMessage)
+  const history = (body.history ?? []).filter((m) => m.role === 'user' || m.role === 'assistant')
+  const userIntent = await parseIntentWithLlm(userMessage, history)
+
+  // Phase 2: Clarification Dialogue and Low-Confidence Handling
+  if (userIntent.confidence < config.intentConfidenceThreshold) {
+    res.json({
+      message: `I'm not sure I understand. Did you mean to ${userIntent.intentType}? Or something else? Please clarify.`,
+      actions: [],
+      source: 'clarification',
+      suggestions,
+    })
+    return
+  }
   const intent = resolveIntent(userMessage)
   const llmOnly = isLlmOnlyMode(mode) || body.forceLlm
 
   if (mode === 'help' && !body.forceLlm) {
-    res.json({ message: intent.message, actions: [], source: 'template' })
+    res.json({ message: intent.message, actions: [], source: 'template', suggestions })
     return
   }
 
@@ -358,6 +396,7 @@ app.post('/api/chat', async (req, res) => {
       message: intent.message,
       actions: intent.actions,
       source: intent.actions.length > 0 ? 'template' : 'fallback',
+      suggestions,
     })
     return
   }
@@ -370,14 +409,15 @@ app.post('/api/chat', async (req, res) => {
       intent,
       userIntent,
       stream: false,
+      suggestions,
     })
-    res.json(result)
-  } catch (err) {
+    res.json(result)\n\n    console.log(\`[LOG] User: \${userMessage}\`)\n    console.log(\`[LOG] Intent: \${JSON.stringify(userIntent)}\`)\n    console.log(\`[LOG] Response: \${JSON.stringify(result)}\`)\n  } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error'
     res.json({
       message: `${intent.message || 'Something went wrong.'}\n\n(${message})`,
       actions: llmOnly ? [] : intent.actions,
       source: 'fallback',
+      suggestions,
     })
   }
 })

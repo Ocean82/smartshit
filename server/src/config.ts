@@ -53,4 +53,6 @@ export const config = {
     maxRowsAnalysis: 10_000,
     outlierStdThreshold: 2.5,
   },
+
+  intentConfidenceThreshold: Number(process.env.INTENT_CONFIDENCE_THRESHOLD ?? 0.6),
 }
