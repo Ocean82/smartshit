@@ -2,19 +2,19 @@ import { useRef, useEffect, useState } from 'react'
 import { useStore } from '@/store/useStore'
 import { fetchServerHealth, type ServerHealth } from '@/ai/agentClient'
 import {
-  Send, Check, XCircle, Sparkles, Bot, User, Loader2, Paperclip, X, ThumbsUp, ThumbsDown,
+  Send, Check, XCircle, Sparkles, Bot, User, Loader2, Paperclip, X, ThumbsUp, ThumbsDown, Copy,
 } from 'lucide-react'
 import type { AgentAction } from '@/types'
 import { getFeedbackForMessage, recordChatFeedback, type ChatFeedbackRating } from '@/ai/chatFeedback'
 
 function healthFooterMessage(health: ServerHealth | null): string {
-  if (!health) return 'AI server offline — deterministic analysis only'
+  if (!health) return 'Instant analysis active · AI server connecting…'
   const hasCloud = !!(health.groq || health.openrouter || health.huggingface)
   if (health.ok && hasCloud) return 'Usually responds in a few seconds'
   if (health.ok || (health.ollama && health.modelRegistered)) {
     return 'First reply may take 1–2 min while the model loads'
   }
-  return 'AI server offline — deterministic analysis only'
+  return 'Instant analysis active · Skills work without AI'
 }
 
 export function ChatPanel({ isMobileOpen, onCloseMobile }: { isMobileOpen?: boolean; onCloseMobile?: () => void }) {
@@ -75,6 +75,18 @@ export function ChatPanel({ isMobileOpen, onCloseMobile }: { isMobileOpen?: bool
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
+
+  // Keyboard shortcut: Ctrl+K / Cmd+K focuses chat input
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault()
+        inputRef.current?.focus()
+      }
+    }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [])
 
   useEffect(() => {
     if (!isAiProcessing) {
@@ -176,6 +188,15 @@ export function ChatPanel({ isMobileOpen, onCloseMobile }: { isMobileOpen?: bool
               )}
               {msg.role === 'assistant' && (
                 <div className="mt-1.5 flex items-center gap-1">
+                  <button
+                    type="button"
+                    title="Copy message"
+                    aria-label="Copy message to clipboard"
+                    onClick={() => { void navigator.clipboard.writeText(msg.content) }}
+                    className="p-1 rounded hover:bg-gray-200 text-gray-400 hover:text-gray-600"
+                  >
+                    <Copy size={12} />
+                  </button>
                   <button
                     type="button"
                     title="Helpful"
@@ -304,7 +325,7 @@ export function ChatPanel({ isMobileOpen, onCloseMobile }: { isMobileOpen?: bool
             value={chatInput}
             onChange={(e) => setChatInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder='e.g. "Explain this spreadsheet" or "Where am I overspending?"'
+            placeholder='e.g. "Explain this spreadsheet" or "Where am I overspending?" (Ctrl+K)'
           />
           <button
             type="button"

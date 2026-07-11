@@ -3,7 +3,7 @@ import { refToCell } from '@/engine/spreadsheet';
 import { useMemo } from 'react';
 
 export function StatusBar() {
-  const { selection, getActiveSheet, getComputedValue } = useStore();
+  const { selection, getActiveSheet, getComputedValue, messages } = useStore();
   const sheet = getActiveSheet();
 
   const stats = useMemo(() => {
@@ -42,6 +42,29 @@ export function StatusBar() {
     };
   }, [selection, sheet.cells, getComputedValue]);
 
+  // Calculate response time from last user→assistant pair
+  const responseTime = useMemo(() => {
+    if (messages.length < 2) return null;
+    // Find the last assistant message
+    for (let i = messages.length - 1; i >= 1; i--) {
+      if (messages[i].role === 'assistant' && messages[i].content) {
+        // Find the preceding user message
+        for (let j = i - 1; j >= 0; j--) {
+          if (messages[j].role === 'user') {
+            const diff = messages[i].timestamp - messages[j].timestamp;
+            if (diff > 0 && diff < 120_000) {
+              return diff < 1000
+                ? `${diff}ms`
+                : `${(diff / 1000).toFixed(1)}s`;
+            }
+            return null;
+          }
+        }
+      }
+    }
+    return null;
+  }, [messages]);
+
   const cellCount = Object.keys(sheet.cells).filter(k => sheet.cells[k]?.value != null).length;
 
   return (
@@ -66,7 +89,13 @@ export function StatusBar() {
       )}
 
       <div className="flex-1" />
-      <span className="text-gray-400">Vibe Excel v1.0</span>
+
+      {responseTime && (
+        <span className="text-gray-400" title="Last AI response time">
+          ⚡ {responseTime}
+        </span>
+      )}
+      <span className="text-gray-400">smartsh!t v1.0</span>
     </div>
   );
 }

@@ -1025,10 +1025,18 @@ export const useStore = create<AppState>()(
           s.messages.push({
             id: uuid(),
             role: 'assistant',
-            content: `Imported **${fileLabel}** — ${rowCount} rows on **${sheet?.name ?? 'Sheet 1'}**.\n\nTry: **"Explain this spreadsheet"**, **"Where am I overspending?"**, or **"How much should I save monthly?"**`,
+            content: `Imported **${fileLabel}** — ${rowCount} rows on **${sheet?.name ?? 'Sheet 1'}**. Analyzing your data now…`,
             timestamp: Date.now(),
           });
         });
+
+        // Auto-analyze: trigger an explain message after import
+        if (rowCount > 0) {
+          setTimeout(() => {
+            set((s) => { s.chatInput = 'Explain this spreadsheet and highlight key insights'; });
+            get().sendMessage();
+          }, 300);
+        }
       },
 
       setScrollPosition: (row, col) => {
