@@ -2,6 +2,7 @@ import { useStore } from '@/store/useStore';
 import { refToCell } from '@/engine/spreadsheet';
 import { importWorkbookFromFileWithMeta, exportWorkbookToXlsx, exportSheetToCsv } from '@/io/xlsx';
 import { recordTelemetry } from '@/ai/telemetry';
+import { isBankCSV, parseBankCSV } from '@/lib/bankImport';
 import {
   Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight,
   Undo2, Redo2, Paintbrush, Type, Grid3x3, BarChart3,
@@ -142,11 +143,87 @@ export function Toolbar() {
     reader.onload = (event) => {
       const text = event.target?.result as string;
       if (!text) return;
+
+      // Try bank CSV detection first
+      if (isBankCSV(text)) {
+        const result = parseBankCSV(text);
+        if (result && result.transactions.length > 0) {
+          pushHistory('Import Bank CSV');
+          // Build a categorized spreadsheet from bank transactions
+          const cells: Record<string, { value: string | number | boolean | null }> = {};
+          // Header row
+          cells[refToCell(0, 0)] = { value: '📊 Bank Statement Import' };
+          cells[refToCell(1, 0)] = { value: `Source: ${result.bankName}` };
+          cells[refToCell(1, 2)] = { value: `${result.dateRange.start} to ${result.dateRange.end}` };
+
+          // Transaction headers
+          cells[refToCell(3, 0)] = { value: 'Date' };
+          cells[refToCell(3, 1)] = { value: 'Description' };
+          cells[refToCell(3, 2)] = { value: 'Category' };
+          cells[refToCell(3, 3)] = { value: 'Amount' };
+          cells[refToCell(3, 4)] = { value: 'Type' };
+
+          // Transaction data
+          result.transactions.forEach((t, i) => {
+            const row = 4 + i;
+            cells[refToCell(row, 0)] = { value: t.date };
+            cells[refToCell(row, 1)] = { value: t.description };
+            cells[refToCell(row, 2)] = { value: t.category };
+            cells[refToCell(row, 3)] = { value: t.type === 'debit' ? -t.amount : t.amount };
+            cells[refToCell(row, 4)] = { value: t.type === 'credit' ? 'Income' : 'Expense' };
+          });
+
+          // Summary section
+          const summaryRow = 4 + result.transactions.length + 2;
+          cells[refToCell(summaryRow, 0)] = { value: '📈 Summary' };
+          cells[refToCell(summaryRow + 1, 0)] = { value: 'Total Income' };
+          cells[refToCell(summaryRow + 1, 1)] = { value: result.totalIncome };
+          cells[refToCell(summaryRow + 2, 0)] = { value: 'Total Expenses' };
+          cells[refToCell(summaryRow + 2, 1)] = { value: -result.totalExpenses };
+          cells[refToCell(summaryRow + 3, 0)] = { value: 'Net' };
+          cells[refToCell(summaryRow + 3, 1)] = { value: result.totalIncome - result.totalExpenses };
+
+          // Category breakdown
+          const catRow = summaryRow + 5;
+          cells[refToCell(catRow, 0)] = { value: '📋 Spending by Category' };
+          cells[refToCell(catRow + 1, 0)] = { value: 'Category' };
+          cells[refToCell(catRow + 1, 1)] = { value: 'Total' };
+          cells[refToCell(catRow + 1, 2)] = { value: 'Transactions' };
+          result.categoryBreakdown.forEach((cat, i) => {
+            cells[refToCell(catRow + 2 + i, 0)] = { value: cat.category };
+            cells[refToCell(catRow + 2 + i, 1)] = { value: -cat.total };
+            cells[refToCell(catRow + 2 + i, 2)] = { value: cat.count };
+          });
+
+          useStore.getState().bulkSetCells(cells);
+
+          // Format headers
+          useStore.getState().setCellFormat(refToCell(0, 0), { bold: true, fontSize: 16, fontColor: '#1E40AF' });
+          useStore.getState().setCellFormat(refToCell(3, 0), { bold: true, bgColor: '#1E40AF', fontColor: '#FFFFFF' });
+          useStore.getState().setCellFormat(refToCell(3, 1), { bold: true, bgColor: '#1E40AF', fontColor: '#FFFFFF' });
+          useStore.getState().setCellFormat(refToCell(3, 2), { bold: true, bgColor: '#1E40AF', fontColor: '#FFFFFF' });
+          useStore.getState().setCellFormat(refToCell(3, 3), { bold: true, bgColor: '#1E40AF', fontColor: '#FFFFFF' });
+          useStore.getState().setCellFormat(refToCell(3, 4), { bold: true, bgColor: '#1E40AF', fontColor: '#FFFFFF' });
+
+          // Build summary message
+          const topCats = result.categoryBreakdown.slice(0, 5).map((c) => `• **${c.category}**: $${c.total.toLocaleString()} (${c.count} transactions)`).join('\n');
+          useStore.getState().addMessage({
+            id: uuid(),
+            role: 'assistant',
+            content: `Imported **${file.name}** from **${result.bankName}** — ${result.transactions.length} transactions auto-categorized.\n\n**Income:** $${result.totalIncome.toLocaleString()}\n**Expenses:** $${result.totalExpenses.toLocaleString()}\n**Net:** $${(result.totalIncome - result.totalExpenses).toLocaleString()}\n\n**Top spending categories:**\n${topCats}\n\nTry: **"Where am I overspending?"** or **"How can I save more?"**`,
+            timestamp: Date.now(),
+          });
+
+          if (fileInputRef.current) fileInputRef.current.value = '';
+          return;
+        }
+      }
+
+      // Fallback: generic CSV import
       pushHistory('Import CSV');
       const rows = text.split('\n').filter(Boolean);
       const cells: Record<string, { value: string | number | boolean | null }> = {};
       rows.forEach((row, r) => {
-        // Simple CSV parser
         const values = row.split(',').map(v => v.replace(/^"|"$/g, '').trim());
         values.forEach((val, c) => {
           const cellId = refToCell(r, c);
