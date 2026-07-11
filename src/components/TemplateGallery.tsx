@@ -1,7 +1,8 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef } from 'react'
 import { useStore } from '@/store/useStore'
-import { LayoutTemplate, X, Search, ChevronRight } from 'lucide-react'
+import { LayoutTemplate, X, Search, ChevronRight, Upload, Download } from 'lucide-react'
 import { templates, templateCategories, getPopularTemplates, searchTemplates, type TemplateCategory } from '@/data/templates'
+import { loadCommunityTemplates, importTemplateFromFile, exportTemplateAsPackage, removeCommunityTemplate, type CommunityTemplate } from '@/lib/communityTemplates'
 
 interface TemplateGalleryProps {
   open: boolean
@@ -11,27 +12,50 @@ interface TemplateGalleryProps {
 export function TemplateGallery({ open, onClose }: TemplateGalleryProps) {
   const { setChatInput, sendMessage } = useStore()
   const [searchQuery, setSearchQuery] = useState('')
-  const [activeCategory, setActiveCategory] = useState<TemplateCategory | 'Popular' | 'All'>('Popular')
+  const [activeCategory, setActiveCategory] = useState<TemplateCategory | 'Popular' | 'All' | 'Community'>('Popular')
+  const [communityTemplates, setCommunityTemplates] = useState<CommunityTemplate[]>(loadCommunityTemplates)
+  const importInputRef = useRef<HTMLInputElement>(null)
 
   if (!open) return null
 
+  const allTemplates = [...templates, ...communityTemplates]
+
   const displayTemplates = useMemo(() => {
     if (searchQuery) {
-      return searchTemplates(searchQuery)
+      const builtin = searchTemplates(searchQuery)
+      const community = communityTemplates.filter((t) =>
+        t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        t.description.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+      return [...builtin, ...community]
     }
     if (activeCategory === 'Popular') {
       return getPopularTemplates()
     }
     if (activeCategory === 'All') {
-      return templates
+      return allTemplates
     }
-    return templates.filter(t => t.category === activeCategory)
-  }, [searchQuery, activeCategory])
+    if (activeCategory === 'Community') {
+      return communityTemplates
+    }
+    return allTemplates.filter(t => t.category === activeCategory)
+  }, [searchQuery, activeCategory, communityTemplates])
 
   function runTemplate(prompt: string) {
     setChatInput(prompt)
     onClose()
     setTimeout(() => sendMessage(), 50)
+  }
+
+  async function handleImportTemplate(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const result = await importTemplateFromFile(file)
+    if (result) {
+      setCommunityTemplates(loadCommunityTemplates())
+      setActiveCategory('Community')
+    }
+    if (importInputRef.current) importInputRef.current.value = ''
   }
 
   return (
@@ -92,8 +116,21 @@ export function TemplateGallery({ open, onClose }: TemplateGalleryProps) {
                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               }`}
             >
-              All ({templates.length})
+              All ({allTemplates.length})
             </button>
+            {communityTemplates.length > 0 && (
+              <button
+                type="button"
+                onClick={() => { setActiveCategory('Community'); setSearchQuery(''); }}
+                className={`px-3 py-1.5 text-xs font-medium rounded-full whitespace-nowrap transition-colors ${
+                  activeCategory === 'Community'
+                    ? 'bg-violet-600 text-white'
+                    : 'bg-violet-50 text-violet-600 hover:bg-violet-100'
+                }`}
+              >
+                👥 Community ({communityTemplates.length})
+              </button>
+            )}
             {templateCategories.map((cat) => (
               <button
                 key={cat}
@@ -140,11 +177,28 @@ export function TemplateGallery({ open, onClose }: TemplateGalleryProps) {
           )}
         </div>
 
-        <div className="px-6 pb-4 pt-2 border-t border-gray-100 shrink-0">
+        <div className="px-6 pb-4 pt-2 border-t border-gray-100 shrink-0 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => importInputRef.current?.click()}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-violet-600 bg-violet-50 rounded-lg hover:bg-violet-100 transition-colors"
+              title="Install a community template (.sht.json)"
+            >
+              <Upload size={13} /> Import Template
+            </button>
+            <input
+              ref={importInputRef}
+              type="file"
+              accept=".json,.sht.json"
+              className="hidden"
+              onChange={handleImportTemplate}
+            />
+          </div>
           <button
             type="button"
             onClick={onClose}
-            className="w-full py-2.5 text-sm text-gray-500 hover:text-gray-700"
+            className="py-2 px-4 text-sm text-gray-500 hover:text-gray-700"
           >
             Start blank instead
           </button>
