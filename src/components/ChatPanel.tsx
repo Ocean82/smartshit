@@ -2,10 +2,11 @@ import { useRef, useEffect, useState } from 'react'
 import { useStore } from '@/store/useStore'
 import { fetchServerHealth, type ServerHealth } from '@/ai/agentClient'
 import {
-  Send, Check, XCircle, Sparkles, Bot, User, Loader2, Paperclip, X, ThumbsUp, ThumbsDown, Copy,
+  Send, Check, XCircle, Sparkles, Bot, User, Loader2, Paperclip, X, ThumbsUp, ThumbsDown, Copy, Download,
 } from 'lucide-react'
 import type { AgentAction } from '@/types'
 import { getFeedbackForMessage, recordChatFeedback, type ChatFeedbackRating } from '@/ai/chatFeedback'
+import { exportChatAsReport } from '@/lib/exportChat'
 
 function healthFooterMessage(health: ServerHealth | null): string {
   if (!health) return 'Instant analysis active · AI server connecting…'
@@ -31,6 +32,7 @@ export function ChatPanel({ isMobileOpen, onCloseMobile }: { isMobileOpen?: bool
     attachFileForChat,
     importAttachedFile,
     clearAttachedFile,
+    workbook,
   } = useStore()
 
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -126,15 +128,28 @@ export function ChatPanel({ isMobileOpen, onCloseMobile }: { isMobileOpen?: bool
             <p className="text-[10px] text-blue-200">Describe what you need — I handle the rest</p>
           </div>
         </div>
-        {onCloseMobile && (
-          <button
-            type="button"
-            onClick={onCloseMobile}
-            className="md:hidden p-1.5 rounded-lg text-white hover:bg-white/20"
-          >
-            ✕
-          </button>
-        )}
+        <div className="flex items-center gap-1">
+          {messages.length > 1 && (
+            <button
+              type="button"
+              onClick={() => exportChatAsReport(messages, workbook.name)}
+              className="p-1.5 rounded-lg text-blue-200 hover:bg-white/20 hover:text-white transition-colors"
+              title="Export conversation as report"
+              aria-label="Export conversation as report"
+            >
+              <Download size={15} />
+            </button>
+          )}
+          {onCloseMobile && (
+            <button
+              type="button"
+              onClick={onCloseMobile}
+              className="md:hidden p-1.5 rounded-lg text-white hover:bg-white/20"
+            >
+              ✕
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="px-3 py-2 border-b border-gray-100 overflow-x-auto scrollbar-hide">

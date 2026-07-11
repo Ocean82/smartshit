@@ -530,7 +530,10 @@ export const useStore = create<AppState>()(
           // ─── Agent Parser (instant, no LLM) ─────────────────────────────────
           const parsed = parseMessage(input);
           if (parsed.understood && parsed.calls.length > 0) {
-            // Build execution context from store
+            // Push a single undo point BEFORE the batch executes
+            get().pushHistory(`AI: ${parsed.explanation || parsed.calls.map(c => c.description).join(', ')}`);
+
+            // Build execution context — suppress per-tool pushHistory since we already saved the undo point
             const execCtx: ExecutionContext = {
               getActiveSheet: get().getActiveSheet,
               getComputedValue: get().getComputedValue,
@@ -542,7 +545,7 @@ export const useStore = create<AppState>()(
               insertRow: get().insertRow,
               addSheet: get().addSheet,
               renameSheet: get().renameSheet,
-              pushHistory: get().pushHistory,
+              pushHistory: () => {}, // no-op: single undo point already saved above
             };
 
             // Execute all tool calls in sequence
