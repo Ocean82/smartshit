@@ -457,7 +457,20 @@ export function SpreadsheetGrid() {
                         onDoubleClick={() => handleCellDoubleClick(row, col)}
                         onContextMenu={(e) => handleContextMenu(e, row, col)}
                       >
-                        {isEditing ? (
+                        {isEditing && cellData?.validation?.type === 'list' ? (
+                          <select
+                            className="absolute inset-0 w-full h-full px-1.5 text-[13px] border-0 outline-none bg-white z-20 font-sans"
+                            value={editValue}
+                            onChange={(e) => { setEditValue(e.target.value); }}
+                            onBlur={commitEdit}
+                            autoFocus
+                          >
+                            <option value="">(empty)</option>
+                            {cellData.validation.values?.map(v => (
+                              <option key={v} value={v}>{v}</option>
+                            ))}
+                          </select>
+                        ) : isEditing ? (
                           <input
                             ref={inputRef}
                             className="absolute inset-0 w-full h-full px-1.5 text-[13px] border-0 outline-none bg-white z-20 font-sans"
@@ -478,6 +491,13 @@ export function SpreadsheetGrid() {
                               {displayVal}
                             </div>
                           </div>
+                        )}
+                        {cellData?.validationError && (
+                          <div className="absolute top-0 right-0 w-0 h-0 border-t-[6px] border-t-red-500 border-l-[6px] border-l-transparent z-10"
+                            title={cellData.validationError} />
+                        )}
+                        {cellData?.validation?.type === 'list' && !isEditing && (
+                          <div className="absolute right-1 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 pointer-events-none">▾</div>
                         )}
                         {active && !isEditing && (
                           <div className="absolute bottom-0 right-0 w-2 h-2 bg-blue-500 cursor-crosshair z-20" />
