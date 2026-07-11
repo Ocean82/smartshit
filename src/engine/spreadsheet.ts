@@ -220,16 +220,16 @@ export class SpreadsheetEngine {
   }
 
   computePivotTable(
-    cells: Record<string, { value: string | number | null }>,
+    cells: Record<string, { value: string | number | boolean | null }>,
     config: PivotConfig,
     startRow: number,
     endRow: number,
     startCol: number,
     endCol: number
   ): PivotResult {
-    const sourceRows: Record<string, (string | number | null)[]>[] = [];
+    const sourceRows: Record<string, (string | number | boolean | null)[]>[] = [];
     for (let r = startRow; r <= endRow; r++) {
-      const row: Record<string, (string | number | null)[]> = {};
+      const row: Record<string, (string | number | boolean | null)[]> = {};
       for (let c = startCol; c <= endCol; c++) {
         const colLetter = colToLetter(c);
         const cellId = refToCell(r, c);
