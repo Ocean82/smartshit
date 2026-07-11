@@ -22,7 +22,7 @@ const BORDER_STYLES = [
 const FONT_SIZES = [10, 11, 12, 13, 14, 16, 18, 20, 24, 28, 32, 36];
 
 export function FormatPanel() {
-  const { showFormatPanel, setShowFormatPanel, selection, getActiveSheet, setRangeFormat } = useStore();
+  const { showFormatPanel, setShowFormatPanel, selection, getActiveSheet, setRangeFormat, applyOuterBorders } = useStore();
   const sheet = getActiveSheet();
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [borderStyle, setBorderStyle] = useState('1px solid');
@@ -38,11 +38,36 @@ export function FormatPanel() {
     setCollapsed((prev) => ({ ...prev, [section]: !prev[section] }));
   }, []);
 
+  const borderValue = borderStyle ? `${borderStyle} ${borderColor}` : '';
+
   const applyBorder = useCallback((side: 'top' | 'right' | 'bottom' | 'left') => {
     if (!hasSelection) return;
-    const borderValue = borderStyle ? `${borderStyle} ${borderColor}` : '';
     setRangeFormat({ borders: { [side]: borderValue } });
-  }, [borderStyle, borderColor, hasSelection, setRangeFormat]);
+  }, [borderValue, hasSelection, setRangeFormat]);
+
+  const applyAllBorders = useCallback(() => {
+    if (!hasSelection) return;
+    setRangeFormat({
+      borders: {
+        top: borderValue,
+        right: borderValue,
+        bottom: borderValue,
+        left: borderValue,
+      },
+    });
+  }, [borderValue, hasSelection, setRangeFormat]);
+
+  const clearBorders = useCallback(() => {
+    if (!hasSelection) return;
+    setRangeFormat({
+      borders: { top: '', right: '', bottom: '', left: '' },
+    });
+  }, [hasSelection, setRangeFormat]);
+
+  const applyOuter = useCallback(() => {
+    if (!hasSelection) return;
+    applyOuterBorders(borderValue);
+  }, [borderValue, hasSelection, applyOuterBorders]);
 
   if (!showFormatPanel) return null;
 
@@ -222,6 +247,32 @@ export function FormatPanel() {
               aria-label="Border color"
               disabled={!hasSelection}
             />
+          </div>
+          <div className="flex gap-1">
+            <button
+              type="button"
+              disabled={!hasSelection}
+              onClick={applyAllBorders}
+              className={`flex-1 h-7 rounded border text-[10px] ${controlClass}`}
+            >
+              All
+            </button>
+            <button
+              type="button"
+              disabled={!hasSelection}
+              onClick={clearBorders}
+              className={`flex-1 h-7 rounded border text-[10px] ${controlClass}`}
+            >
+              Clear
+            </button>
+            <button
+              type="button"
+              disabled={!hasSelection}
+              onClick={applyOuter}
+              className={`flex-1 h-7 rounded border text-[10px] ${controlClass}`}
+            >
+              Outer
+            </button>
           </div>
           <div className="flex justify-center">
             <div className="grid grid-cols-3 gap-1 w-32">

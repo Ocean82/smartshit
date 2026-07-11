@@ -37,8 +37,8 @@ import { AI_ANALYSIS_CONFIG } from '@/ai/config';
 import { resolveActTemplates } from '@shared/actTemplates';
 import type { SheetInsights } from '@/ai/sheetInsights';
 import type { AttachedFilePreview } from '@/ai/types';
-import { computeSortedCellUpdates } from '@/lib/sheetSort';
-import { findConditionalFormatTargets } from '@/lib/conditionalFormat';
+import { computeSortedCellUpdates, type SortPatch } from '@/lib/sheetSort';
+import { conditionToRule, attachConditionalRuleToColumn } from '@/lib/conditionalFormat';
 import { v4 as uuid } from 'uuid';
 import { defaultSkills } from '@/data/skills';
 
@@ -153,6 +153,8 @@ interface AppState {
   setSortConfig: (config: SortConfig | null) => void;
   setFilters: (filters: FilterConfig[]) => void;
   sortByColumn: (column: number, direction: 'asc' | 'desc') => void;
+  applySortPatch: (patch: SortPatch) => void;
+  applyOuterBorders: (borderValue: string) => void;
   applyConditionalFormat: (
     column: number,
     condition: string,
@@ -535,6 +537,7 @@ export const useStore = create<AppState>()(
               setCellValue: get().setCellValue,
               setCellFormat: get().setCellFormat,
               bulkSetCells: get().bulkSetCells,
+              applySortPatch: get().applySortPatch,
               deleteRow: get().deleteRow,
               insertRow: get().insertRow,
               addSheet: get().addSheet,
@@ -825,30 +828,70 @@ export const useStore = create<AppState>()(
       sortByColumn: (column, direction) => {
         const sheet = get().getActiveSheet();
         get().pushHistory(`Sort by column ${column}`);
-        const updates = computeSortedCellUpdates(
+        const patch = computeSortedCellUpdates(
           sheet,
           column,
           direction,
           (row, col) => get().getComputedValue(row, col),
         );
-        get().bulkSetCells(updates);
+        get().applySortPatch(patch);
         set((s) => { s.activeSortConfig = { column, direction }; });
+      },
+
+      applySortPatch: (patch) => {
+        const state = get();
+        set((s) => {
+          const sheet = s.workbook.sheets.find((sh) => sh.id === s.activeSheetId);
+          if (!sheet) return;
+          for (const cellId of patch.deletes) {
+            const ref = cellToRef(cellId);
+            state.engine.setCellValue(s.activeSheetId, ref.row, ref.col, null);
+            delete sheet.cells[cellId];
+          }
+          for (const [cellId, cell] of Object.entries(patch.writes)) {
+            const ref = cellToRef(cellId);
+            state.engine.setCellValue(s.activeSheetId, ref.row, ref.col, cell.formula || cell.value);
+            sheet.cells[cellId] = {
+              value: cell.value,
+              formula: cell.formula,
+              format: cell.format,
+              validation: cell.validation,
+              validationError: cell.validationError,
+              displayValue: cell.displayValue,
+            };
+          }
+          s.workbook.updatedAt = Date.now();
+        });
+      },
+
+      applyOuterBorders: (borderValue) => {
+        const sel = get().selection;
+        if (!sel) return;
+        get().pushHistory('Outer borders');
+        const minR = Math.min(sel.startRow, sel.endRow);
+        const maxR = Math.max(sel.startRow, sel.endRow);
+        const minC = Math.min(sel.startCol, sel.endCol);
+        const maxC = Math.max(sel.startCol, sel.endCol);
+        for (let r = minR; r <= maxR; r++) {
+          for (let c = minC; c <= maxC; c++) {
+            const borders: NonNullable<CellFormat['borders']> = {};
+            if (r === minR) borders.top = borderValue;
+            if (r === maxR) borders.bottom = borderValue;
+            if (c === minC) borders.left = borderValue;
+            if (c === maxC) borders.right = borderValue;
+            if (Object.keys(borders).length === 0) continue;
+            get().setCellFormat(refToCell(r, c), { borders });
+          }
+        }
       },
 
       applyConditionalFormat: (column, condition, color, threshold = 0) => {
         const sheet = get().getActiveSheet();
         get().pushHistory(`Conditional format column ${column}`);
-        const targets = findConditionalFormatTargets(
-          column,
-          condition,
-          threshold,
-          (row, col) => get().getComputedValue(row, col),
-          Object.keys(sheet.cells),
-          cellToRef,
-        );
-        for (const cellId of targets) {
-          get().setCellFormat(cellId, { bgColor: color });
-        }
+        const rule = conditionToRule(condition, color, threshold);
+        attachConditionalRuleToColumn(sheet, column, rule, (cellId, format) => {
+          get().setCellFormat(cellId, format);
+        });
       },
 
       deleteSelectedCells: () => {

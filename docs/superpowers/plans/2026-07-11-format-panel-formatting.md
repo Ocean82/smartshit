@@ -1,6 +1,8 @@
 # Phase 4: Format Panel + Full Formatting Implementation Plan
 
 > **Status: Implemented (2026-07-11).** Tasks 1–8 complete (borders, undoable range format, Format Panel, font color, tests). Follow-up polish for Sort/Filter/Conditional Format shipped in the same cycle.
+>
+> **Task status: all complete.**
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -28,7 +30,7 @@
 - Consumes: `CellFormat` type from `src/types/index.ts`
 - Produces: `formatCellValue()`, `getBorderCSS()`, `NUMBER_FORMATS` constant
 
-- [ ] **Step 1: Create formatUtils.ts**
+- [x] **Step 1: Create formatUtils.ts**
 
 ```typescript
 import type { CellFormat } from '@/types';
@@ -105,7 +107,7 @@ git commit -m "feat: add format utilities for number rendering and border CSS"
 - Consumes: `formatCellValue()` from Task 1
 - Produces: Cells display formatted values
 
-- [ ] **Step 1: Add import**
+- [x] **Step 1: Add import**
 
 In `SpreadsheetGrid.tsx`, add:
 ```typescript
@@ -147,7 +149,7 @@ git commit -m "feat: render formatted numbers in grid cells"
 - Consumes: `getBorderCSS()` from Task 1
 - Produces: Cells render border styles
 
-- [ ] **Step 1: Add import**
+- [x] **Step 1: Add import**
 
 In `SpreadsheetGrid.tsx`, add to existing import from formatUtils:
 ```typescript
@@ -196,7 +198,7 @@ git commit -m "feat: render cell borders in grid"
 - Consumes: `pushHistory()` (already exists in store)
 - Produces: Format changes become undoable
 
-- [ ] **Step 1: Add pushHistory to setCellFormat**
+- [x] **Step 1: Add pushHistory to setCellFormat**
 
 Find `setCellFormat` in the store and add `pushHistory()` at the start:
 ```typescript
@@ -245,7 +247,7 @@ git commit -m "feat: make format changes undoable via pushHistory"
 - Consumes: `setRangeFormat` from store, 14-color palette pattern (existing bg color picker)
 - Produces: Font color picker button with palette dropdown
 
-- [ ] **Step 1: Add font color state**
+- [x] **Step 1: Add font color state**
 
 Inside the `Toolbar` component, add:
 ```typescript
@@ -309,7 +311,7 @@ git commit -m "feat: add font color picker to toolbar"
 - Consumes: `useStore` (selection, getActiveSheet, setRangeFormat, showFormatPanel, setShowFormatPanel), `NUMBER_FORMATS` from formatUtils
 - Produces: A right sidebar with Text, Number, Border, Fill sections
 
-- [ ] **Step 1: Create FormatPanel.tsx**
+- [x] **Step 1: Create FormatPanel.tsx**
 
 Create `src/components/FormatPanel.tsx` with the full component. This is the largest task. The component includes:
 
@@ -517,7 +519,7 @@ git commit -m "feat: add Format Panel component with text, number, border, fill 
 - Consumes: `FormatPanel` from Task 6, `showFormatPanel`/`setShowFormatPanel` from store
 - Produces: Format Panel renders alongside main content, Toolbar has toggle button
 
-- [ ] **Step 1: Add FormatPanel import to App.tsx**
+- [x] **Step 1: Add FormatPanel import to App.tsx**
 
 ```typescript
 import { FormatPanel } from './components/FormatPanel';
@@ -569,7 +571,7 @@ git commit -m "feat: wire Format Panel into App layout and Toolbar toggle"
 **Files:**
 - No new files. Verification of the entire Phase 4 implementation.
 
-- [ ] **Step 1: Run all tests**
+- [x] **Step 1: Run all tests**
 
 Run: `npm test`
 Expected: All 14 tests pass

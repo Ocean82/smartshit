@@ -44,7 +44,9 @@ export function ConditionalFormatDialog({ isOpen, onClose }: Props) {
           <p className="text-xs text-amber-700">Select a column cell first.</p>
         ) : (
           <>
-            <p className="text-xs text-gray-500">Apply to column {colToLetter(column)}</p>
+            <p className="text-xs text-gray-500">
+              Apply to column {colToLetter(column)}. Rules re-evaluate when values change.
+            </p>
             <label className="block text-xs text-gray-600">
               Condition
               <select

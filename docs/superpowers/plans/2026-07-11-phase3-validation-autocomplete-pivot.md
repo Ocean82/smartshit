@@ -1,6 +1,8 @@
 # Phase 3: Data Validation, Formula Autocomplete, Pivot Tables
 
 > **Status: Implemented (2026-07-11).** Tasks 1–11 completed; see `.superpowers/sdd/task-*-report.md`. Historical checkboxes below are retained for audit trail.
+>
+> **Task status: all complete.**
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -33,7 +35,7 @@
 - Consumes: `DataValidation` type from `src/types/index.ts:34-41`, `CellData.validation` from `src/types/index.ts:6`
 - Produces: `setCellValidation(cellId, validation)`, `clearCellValidation(cellId)`, `getCellValidation(cellId)`, `validateCellValue(cellId, value): { valid: boolean; message?: string }`
 
-- [ ] **Step 1: Add validation actions to AppState interface**
+- [x] **Step 1: Add validation actions to AppState interface**
 
 In `src/store/useStore.ts`, add to the `AppState` interface (after the existing `setContextMenu` action around line 155):
 
@@ -149,7 +151,7 @@ Expected: All 14 tests pass
 - Consumes: `DataValidation` type, `useStore` (getCell, setCellValidation, selection)
 - Produces: A modal dialog for configuring data validation rules on selected cells
 
-- [ ] **Step 1: Create ValidationDialog component**
+- [x] **Step 1: Create ValidationDialog component**
 
 ```tsx
 import React, { useState, useEffect } from 'react';
@@ -382,7 +384,7 @@ Expected: All 14 tests pass
 - Consumes: `CellData.validation`, `CellData.validationError` from types
 - Produces: Red triangle indicator on cells with validation errors, dropdown arrow on list-validated cells
 
-- [ ] **Step 1: Add validation indicators to cell rendering**
+- [x] **Step 1: Add validation indicators to cell rendering**
 
 In `SpreadsheetGrid.tsx`, inside the cell `<div>` rendering (around line 422-471), after the display value `<div>` and before the active cell handle, add:
 
@@ -439,7 +441,7 @@ Expected: All 14 tests pass
 - Consumes: HyperFormula instance (already loaded)
 - Produces: `getFunctionList(): Array<{ name: string; description: string; category: string; syntax: string }>` and `getFunctionInfo(name: string)`
 
-- [ ] **Step 1: Add function metadata methods to SpreadsheetEngine**
+- [x] **Step 1: Add function metadata methods to SpreadsheetEngine**
 
 In `src/engine/spreadsheet.ts`, add these methods to the `SpreadsheetEngine` class:
 
@@ -535,7 +537,7 @@ Expected: All 14 tests pass
 - Consumes: `SpreadsheetEngine.getFunctionList()`, current `editValue` from store
 - Produces: A popup that appears when user types `=` in a cell, showing filtered function suggestions
 
-- [ ] **Step 1: Create FormulaAutocomplete component**
+- [x] **Step 1: Create FormulaAutocomplete component**
 
 ```tsx
 import React, { useState, useEffect, useRef, useMemo } from 'react';
@@ -648,7 +650,7 @@ Expected: All 14 tests pass
 - Consumes: `FormulaAutocomplete` component, `editValue` from store
 - Produces: Autocomplete popup appears when editing a cell that starts with `=`
 
-- [ ] **Step 1: Import and wire up FormulaAutocomplete**
+- [x] **Step 1: Import and wire up FormulaAutocomplete**
 
 At the top of `SpreadsheetGrid.tsx`, add import:
 ```typescript
@@ -722,7 +724,7 @@ Expected: All 14 tests pass
 - Consumes: Same `FormulaAutocomplete` component
 - Produces: Autocomplete popup when typing `=` in the formula bar input
 
-- [ ] **Step 1: Import and wire up FormulaAutocomplete in Toolbar**
+- [x] **Step 1: Import and wire up FormulaAutocomplete in Toolbar**
 
 In `src/components/Toolbar.tsx`, add import:
 ```typescript
@@ -800,7 +802,7 @@ Expected: All 14 tests pass
 - Consumes: `SheetData` cells, existing cell utilities
 - Produces: `PivotConfig` type, `computePivotTable(sourceCells, config): PivotResult`
 
-- [ ] **Step 1: Add pivot table types to index.ts**
+- [x] **Step 1: Add pivot table types to index.ts**
 
 In `src/types/index.ts`, add before the `SheetData` interface:
 
@@ -933,7 +935,7 @@ Expected: All 14 tests pass
 - Consumes: `PivotConfig`, `PivotField` types, `useStore` (getActiveSheet, selection, addSheet, setCellValue)
 - Produces: A dialog where users drag fields into Row/Column/Value areas to configure a pivot table
 
-- [ ] **Step 1: Create PivotDialog component**
+- [x] **Step 1: Create PivotDialog component**
 
 ```tsx
 import React, { useState, useMemo } from 'react';
@@ -1197,7 +1199,7 @@ Expected: All 14 tests pass
 - Consumes: `showPivotDialog` state from store
 - Produces: A toolbar button to create pivot tables
 
-- [ ] **Step 1: Add Pivot Table button to Toolbar**
+- [x] **Step 1: Add Pivot Table button to Toolbar**
 
 In `src/components/Toolbar.tsx`, after the existing format/style buttons, add:
 
@@ -1226,7 +1228,7 @@ Expected: All 14 tests pass
 
 ### Task 11: Full Build and Test Verification
 
-- [ ] **Step 1: Run full test suite**
+- [x] **Step 1: Run full test suite**
 
 Run: `npm test`
 Expected: All 14 tests pass (no regressions)

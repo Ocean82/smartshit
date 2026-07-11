@@ -8,8 +8,8 @@
 import type { ParsedToolCall } from './parser'
 import { refToCell, cellToRef, colToLetter } from '@/engine/spreadsheet'
 import type { SheetData, CellData } from '@/types'
-import { computeSortedCellUpdates, findHeaderRow, findLastDataRow } from '@/lib/sheetSort'
-import { findConditionalFormatTargets } from '@/lib/conditionalFormat'
+import { computeSortedCellUpdates, findHeaderRow, findLastDataRow, type SortPatch } from '@/lib/sheetSort'
+import { conditionToRule, attachConditionalRuleToColumn } from '@/lib/conditionalFormat'
 
 export interface ExecutionContext {
   getActiveSheet: () => SheetData
@@ -17,6 +17,7 @@ export interface ExecutionContext {
   setCellValue: (cellId: string, value: string | number | boolean | null, formula?: string) => void
   setCellFormat: (cellId: string, format: Record<string, unknown>) => void
   bulkSetCells: (cells: Record<string, { value: string | number | boolean | null; formula?: string }>) => void
+  applySortPatch: (patch: SortPatch) => void
   deleteRow: (row: number) => void
   insertRow: (afterRow: number) => void
   addSheet: (name?: string) => void
@@ -184,9 +185,9 @@ export function executeTool(call: ParsedToolCall, ctx: ExecutionContext): Execut
       const colIdx = col.charCodeAt(0) - 65
       ctx.pushHistory(`Sort by column ${col}`)
 
-      const updates = computeSortedCellUpdates(sheet, colIdx, direction, ctx.getComputedValue)
-      ctx.bulkSetCells(updates)
-      const count = Object.keys(updates).length
+      const patch = computeSortedCellUpdates(sheet, colIdx, direction, ctx.getComputedValue)
+      ctx.applySortPatch(patch)
+      const count = Object.keys(patch.writes).length + patch.deletes.length
 
       return { success: true, message: `Sorted rows by column ${col} (${direction})`, modified: count }
     }
@@ -215,19 +216,10 @@ export function executeTool(call: ParsedToolCall, ctx: ExecutionContext): Execut
       const colIdx = col.charCodeAt(0) - 65
       ctx.pushHistory(`Conditional format ${col}`)
 
-      const targets = findConditionalFormatTargets(
-        colIdx,
-        condition,
-        threshold,
-        ctx.getComputedValue,
-        Object.keys(sheet.cells),
-        cellToRef,
-      )
-      for (const cellId of targets) {
-        ctx.setCellFormat(cellId, { bgColor: color })
-      }
+      const rule = conditionToRule(condition, color, threshold)
+      const count = attachConditionalRuleToColumn(sheet, colIdx, rule, ctx.setCellFormat)
 
-      return { success: true, message: `Applied conditional formatting to ${targets.length} cells in column ${col}`, modified: targets.length }
+      return { success: true, message: `Applied conditional formatting to ${count} cells in column ${col}`, modified: count }
     }
 
     case 'clear_sheet': {

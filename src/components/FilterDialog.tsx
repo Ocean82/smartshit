@@ -8,6 +8,13 @@ interface Props {
   onClose: () => void
 }
 
+function conditionLabel(condition: string | undefined): string {
+  if (condition === 'contains') return 'contains'
+  if (condition === 'gt') return '>'
+  if (condition === 'lt') return '<'
+  return '='
+}
+
 export function FilterDialog({ isOpen, onClose }: Props) {
   const { selection, activeFilters, setFilters } = useStore()
   const [condition, setCondition] = useState<FilterCondition>('equals')
@@ -19,19 +26,26 @@ export function FilterDialog({ isOpen, onClose }: Props) {
     ? Math.min(selection.startCol, selection.endCol)
     : 0
 
+  const needsValue = condition !== 'equals'
+  const canApply = !!selection && (!needsValue || value !== '')
+
   const handleApply = () => {
-    if (!selection) return
-    setFilters([{
-      column,
-      condition,
-      value,
-    }])
+    if (!selection || !canApply) return
+    const next = [
+      ...activeFilters.filter((f) => f.column !== column),
+      { column, condition, value },
+    ]
+    setFilters(next)
     onClose()
   }
 
   const handleClear = () => {
     setFilters([])
     onClose()
+  }
+
+  const handleRemove = (col: number) => {
+    setFilters(activeFilters.filter((f) => f.column !== col))
   }
 
   return (
@@ -42,13 +56,40 @@ export function FilterDialog({ isOpen, onClose }: Props) {
           <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600" aria-label="Close">✕</button>
         </div>
 
+        {activeFilters.length > 0 && (
+          <div className="space-y-1.5">
+            <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">Active filters</p>
+            {activeFilters.map((f) => (
+              <div
+                key={`filter-${f.column}`}
+                className="flex items-center justify-between gap-2 text-xs bg-gray-50 rounded px-2 py-1.5"
+              >
+                <span className="text-gray-700 truncate">
+                  {colToLetter(f.column)} {conditionLabel(f.condition)}{' '}
+                  {f.value === '' || f.value == null ? '(blank)' : String(f.value)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleRemove(f.column)}
+                  className="text-gray-400 hover:text-red-600 shrink-0"
+                  aria-label={`Remove filter on column ${colToLetter(f.column)}`}
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
         {!selection ? (
           <p className="text-xs text-amber-700">Select a column cell first.</p>
         ) : (
           <>
             <p className="text-xs text-gray-500">
               Column {colToLetter(column)}
-              {activeFilters.length > 0 ? ` · ${activeFilters.length} active filter(s)` : ''}
+              {activeFilters.some((f) => f.column === column)
+                ? ' · will replace existing filter on this column'
+                : ''}
             </p>
             <label className="block text-xs text-gray-600">
               Condition
@@ -69,7 +110,7 @@ export function FilterDialog({ isOpen, onClose }: Props) {
                 value={value}
                 onChange={(e) => setValue(e.target.value)}
                 className="mt-1 w-full border border-gray-200 rounded px-2 py-1.5 text-sm"
-                placeholder="Filter value"
+                placeholder={condition === 'equals' ? 'Leave empty for blanks' : 'Filter value'}
               />
             </label>
           </>
@@ -82,7 +123,7 @@ export function FilterDialog({ isOpen, onClose }: Props) {
           <button
             type="button"
             onClick={handleApply}
-            disabled={!selection || value === ''}
+            disabled={!canApply}
             className="px-3 py-1.5 text-xs rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40"
           >
             Apply

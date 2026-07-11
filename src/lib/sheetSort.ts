@@ -22,18 +22,39 @@ export function findHeaderRow(sheet: SheetData): number {
 
 export type SortDirection = 'asc' | 'desc'
 
+export interface SortPatch {
+  writes: Record<string, CellData>
+  deletes: string[]
+}
+
+function cloneCell(cell: CellData): CellData {
+  return {
+    ...cell,
+    format: cell.format
+      ? {
+          ...cell.format,
+          borders: cell.format.borders ? { ...cell.format.borders } : undefined,
+          conditionalRules: cell.format.conditionalRules
+            ? cell.format.conditionalRules.map((r) => ({ ...r, style: { ...r.style } }))
+            : undefined,
+        }
+      : undefined,
+    validation: cell.validation ? { ...cell.validation, values: cell.validation.values ? [...cell.validation.values] : undefined } : undefined,
+  }
+}
+
 /**
- * Pure sort: returns cell updates for rewriting data rows after the header.
- * Does not mutate the sheet.
+ * Pure sort: remaps full CellData for data rows and lists IDs to clear (ghost prevention).
  */
 export function computeSortedCellUpdates(
   sheet: SheetData,
   columnIndex: number,
   direction: SortDirection,
   getComputedValue: (row: number, col: number) => string,
-): Record<string, { value: string | number | boolean | null; formula?: string }> {
+): SortPatch {
   const headerRow = findHeaderRow(sheet)
   const lastRow = findLastDataRow(sheet)
+  const oldIds: string[] = []
   const rows: Array<{ sortVal: number | string; cells: Record<string, CellData> }> = []
 
   for (let r = headerRow + 1; r <= lastRow; r++) {
@@ -43,7 +64,10 @@ export function computeSortedCellUpdates(
     const rowCells: Record<string, CellData> = {}
     for (const [cellId, cell] of Object.entries(sheet.cells)) {
       const ref = cellToRef(cellId)
-      if (ref.row === r) rowCells[cellId] = { ...cell }
+      if (ref.row === r) {
+        oldIds.push(cellId)
+        rowCells[cellId] = cloneCell(cell)
+      }
     }
     rows.push({ sortVal, cells: rowCells })
   }
@@ -57,14 +81,18 @@ export function computeSortedCellUpdates(
     return direction === 'asc' ? aStr.localeCompare(bStr) : bStr.localeCompare(aStr)
   })
 
-  const updates: Record<string, { value: string | number | boolean | null; formula?: string }> = {}
+  const writes: Record<string, CellData> = {}
   for (let i = 0; i < rows.length; i++) {
     const targetRow = headerRow + 1 + i
     for (const [cellId, cell] of Object.entries(rows[i].cells)) {
       const ref = cellToRef(cellId)
       const newCellId = refToCell(targetRow, ref.col)
-      updates[newCellId] = { value: cell.value, formula: cell.formula }
+      writes[newCellId] = cloneCell(cell)
     }
   }
-  return updates
+
+  const writeKeys = new Set(Object.keys(writes))
+  const deletes = oldIds.filter((id) => !writeKeys.has(id))
+
+  return { writes, deletes }
 }

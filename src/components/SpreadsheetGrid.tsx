@@ -6,6 +6,7 @@ import type { CellFormat } from '@/types';
 import { formatCellValue, getBorderCSS } from '@/lib/formatUtils';
 import { buildFilteredRowIndex } from '@/lib/rowFilter';
 import { findHeaderRow, findLastDataRow } from '@/lib/sheetSort';
+import { resolveCellFormat } from '@/lib/conditionalFormat';
 
 const DEFAULT_CELL_WIDTH = 100;
 const CELL_HEIGHT = 28;
@@ -429,7 +430,7 @@ export function SpreadsheetGrid() {
                         ? 'bg-blue-100 text-blue-700 border-blue-300'
                         : 'bg-gradient-to-b from-gray-50 to-gray-100 text-gray-500 hover:bg-gray-200'
                     }`}
-                    style={{ width: getColWidth(col), height: COL_HEADER_HEIGHT, position: 'absolute', left: visibleColOffsets.offsets[i - visibleRange.startCol] }}
+                    style={{ width: getColWidth(col), height: COL_HEADER_HEIGHT, position: 'absolute', left: visibleColOffsets.offsets[i] }}
                     onClick={() => handleColSelect(col)}
                   >
                     {colToLetter(col)}
@@ -495,7 +496,7 @@ export function SpreadsheetGrid() {
                           height: CELL_HEIGHT,
                           position: 'absolute',
                           left: visibleColOffsets.offsets[j],
-                          ...getCellStyle(cellData?.format),
+                          ...getCellStyle(resolveCellFormat(cellData?.format, getComputedValue(row, col))),
                         }}
                         onMouseDown={(e) => handleMouseDown(row, col, e)}
                         onMouseMove={() => handleMouseMove(row, col)}
