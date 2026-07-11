@@ -5,7 +5,10 @@ import {
   conditionToRule,
   ruleMatchesComputed,
   resolveCellFormat,
+  columnDataCellIds,
+  attachConditionalRuleToColumn,
 } from './conditionalFormat'
+import type { SheetData } from '@/types'
 
 describe('matchesConditionalFormat', () => {
   it('matches negative and positive', () => {
@@ -48,6 +51,42 @@ describe('resolveCellFormat', () => {
     expect(resolveCellFormat(format, '10')?.bold).toBe(true)
     expect(resolveCellFormat(format, '-1')?.bgColor).toBe('#FEE2E2')
     expect(resolveCellFormat(format, '-1')?.bold).toBe(true)
+  })
+})
+
+describe('columnDataCellIds / attachConditionalRuleToColumn', () => {
+  it('skips header and empty cells; clears paint-once bg', () => {
+    const sheet: SheetData = {
+      id: 's1',
+      name: 'T',
+      cells: {
+        A1: { value: 'Name' },
+        B1: { value: 'Amount' },
+        B2: { value: -10, format: { bgColor: '#old' } },
+        B3: { value: null },
+        B4: { value: 20 },
+        A4: { value: 'label' },
+      },
+      columnWidths: {},
+      rowHeights: {},
+      charts: [],
+    }
+
+    expect(columnDataCellIds(sheet, 1)).toEqual(['B2', 'B4'])
+
+    const writes: Record<string, Partial<import('@/types').CellFormat>> = {}
+    const count = attachConditionalRuleToColumn(
+      sheet,
+      1,
+      conditionToRule('negative', '#FEE2E2'),
+      (cellId, format) => { writes[cellId] = format },
+    )
+    expect(count).toBe(2)
+    expect(writes.B1).toBeUndefined()
+    expect(writes.B3).toBeUndefined()
+    expect(writes.B2?.conditionalRules).toHaveLength(1)
+    expect(writes.B2?.bgColor).toBeUndefined()
+    expect(writes.B4?.conditionalRules).toHaveLength(1)
   })
 })
 

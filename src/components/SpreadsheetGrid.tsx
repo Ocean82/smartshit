@@ -496,7 +496,7 @@ export function SpreadsheetGrid() {
                           height: CELL_HEIGHT,
                           position: 'absolute',
                           left: visibleColOffsets.offsets[j],
-                          ...getCellStyle(resolveCellFormat(cellData?.format, getComputedValue(row, col))),
+                          ...getCellStyle(resolveCellFormat(cellData?.format, computed)),
                         }}
                         onMouseDown={(e) => handleMouseDown(row, col, e)}
                         onMouseMove={() => handleMouseMove(row, col)}

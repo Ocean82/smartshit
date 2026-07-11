@@ -101,6 +101,22 @@ export function findConditionalFormatTargets(
   return matches
 }
 
+export function columnDataCellIds(sheet: SheetData, columnIndex: number): string[] {
+  const headerRow = findHeaderRow(sheet)
+  const lastRow = findLastDataRow(sheet)
+  const ids: string[] = []
+  for (let r = headerRow + 1; r <= lastRow; r++) {
+    const cellId = refToCell(r, columnIndex)
+    const cell = sheet.cells[cellId]
+    if (!cell) continue
+    const hasValue = cell.value != null && cell.value !== ''
+    const hasFormula = !!cell.formula
+    if (hasValue || hasFormula) ids.push(cellId)
+  }
+  return ids
+}
+
+/** @deprecated Prefer columnDataCellIds — kept for callers that need the full row span. */
 export function columnCellIdsInUsedRange(sheet: SheetData, columnIndex: number): string[] {
   const headerRow = findHeaderRow(sheet)
   const lastRow = findLastDataRow(sheet)
@@ -117,9 +133,10 @@ export function attachConditionalRuleToColumn(
   rule: ConditionalRule,
   setCellFormat: (cellId: string, format: Partial<CellFormat>) => void,
 ): number {
-  const ids = columnCellIdsInUsedRange(sheet, columnIndex)
+  const ids = columnDataCellIds(sheet, columnIndex)
   for (const cellId of ids) {
-    setCellFormat(cellId, { conditionalRules: [rule] })
+    // Replace rules; clear paint-once bgColor so live rules own the highlight.
+    setCellFormat(cellId, { conditionalRules: [rule], bgColor: undefined })
   }
   return ids.length
 }
