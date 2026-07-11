@@ -8,7 +8,7 @@ import {
   Download, Upload, Plus, FolderOpen, Sparkles,
   Filter, SortAsc, Scissors, Copy, ClipboardPaste,
 } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { v4 as uuid } from 'uuid';
 import { FormulaAutocomplete } from './FormulaAutocomplete';
 import './Toolbar.css';
@@ -31,6 +31,8 @@ export function Toolbar() {
     setShowChartDialog,
     showPivotDialog,
     setShowPivotDialog,
+    showFormatPanel,
+    setShowFormatPanel,
     copy,
     cut,
     paste,
@@ -43,9 +45,22 @@ export function Toolbar() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const formulaBarRef = useRef<HTMLInputElement>(null);
+  const fontColorRef = useRef<HTMLDivElement>(null);
   const [fbAutocompleteVisible, setFbAutocompleteVisible] = useState(false);
   const [fbAutocompletePos, setFbAutocompletePos] = useState({ top: 0, left: 0 });
+  const [showFontColor, setShowFontColor] = useState(false);
   const sheet = getActiveSheet();
+
+  useEffect(() => {
+    if (!showFontColor) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (fontColorRef.current && !fontColorRef.current.contains(e.target as Node)) {
+        setShowFontColor(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showFontColor]);
 
   const selectedCellId = selection ? refToCell(selection.startRow, selection.startCol) : '';
   const selectedCellData = selectedCellId ? sheet.cells[selectedCellId] : undefined;
@@ -156,6 +171,12 @@ export function Toolbar() {
     '#C4B5FD', '#F9A8D4',
   ];
 
+  const fontColorOptions = [
+    '#000000', '#434343', '#666666', '#999999', '#B7B7B7', '#CCCCCC', '#FFFFFF',
+    '#FF0000', '#FF6D00', '#FFAB00', '#FFD600', '#AEEA00', '#00C853', '#00BFA5',
+    '#2979FF', '#304FFE', '#651FFF', '#AA00FF', '#D500F9', '#F50057', '#FF1744',
+  ];
+
   return (
     <div className="bg-white border-b border-gray-200">
       {/* Top toolbar row */}
@@ -256,6 +277,51 @@ export function Toolbar() {
             ))}
           </div>
         </div>
+
+        {/* Font color */}
+        <div className="relative" ref={fontColorRef}>
+          <button
+            type="button"
+            onClick={() => setShowFontColor(!showFontColor)}
+            className="flex items-center gap-1 px-1.5 py-1.5 text-xs text-gray-600 hover:bg-gray-100 rounded transition-colors"
+            title="Text color"
+          >
+            <span className="font-bold" style={{ color: selectedCellData?.format?.fontColor || '#000' }}>A</span>
+            <div
+              className="w-4 h-1 rounded-sm"
+              style={{ backgroundColor: selectedCellData?.format?.fontColor || '#000' }}
+            />
+          </button>
+          {showFontColor && (
+            <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg p-2 z-50 grid grid-cols-7 gap-1">
+              {fontColorOptions.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  className="w-5 h-5 rounded border border-gray-200 hover:scale-110 transition-transform"
+                  style={{ backgroundColor: c }}
+                  onClick={() => {
+                    setRangeFormat({ fontColor: c });
+                    setShowFontColor(false);
+                  }}
+                  aria-label={`Set text color ${c}`}
+                  title={`Set text color ${c}`}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setShowFormatPanel(!showFormatPanel)}
+          className={`flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded transition-colors ${
+            showFormatPanel ? 'bg-blue-100 text-blue-700' : 'text-gray-700 hover:bg-gray-100'
+          }`}
+          title="Toggle format panel"
+        >
+          Format
+        </button>
         <Divider />
 
         {/* Data tools */}

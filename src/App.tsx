@@ -12,6 +12,7 @@ import { ChartDialog } from '@/components/ChartDialog'
 import { ChartOverlay } from '@/components/ChartRenderer'
 import { ValidationDialog } from '@/components/ValidationDialog'
 import { PivotDialog } from '@/components/PivotDialog'
+import { FormatPanel } from '@/components/FormatPanel'
 import { StatusBar } from '@/components/StatusBar'
 import { WelcomeOverlay } from '@/components/WelcomeOverlay'
 import { SummaryCards } from '@/components/SummaryCards'
@@ -65,6 +66,7 @@ function App() {
           </div>
           <SheetTabs />
         </div>
+        <FormatPanel />
       </div>
 
       {/* Mobile chat toggle FAB */}

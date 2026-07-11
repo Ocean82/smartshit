@@ -299,19 +299,28 @@ export const useStore = create<AppState>()(
       },
 
       setCellFormat: (cellId, format) => {
+        // Callers that batch many format writes (templates/AI) pushHistory once upstream.
         set((s) => {
           const sheet = s.workbook.sheets.find((sh) => sh.id === s.activeSheetId);
           if (!sheet) return;
           if (!sheet.cells[cellId]) {
             sheet.cells[cellId] = { value: null };
           }
-          sheet.cells[cellId].format = { ...sheet.cells[cellId].format, ...format };
+          const existing = sheet.cells[cellId].format;
+          sheet.cells[cellId].format = {
+            ...existing,
+            ...format,
+            borders: format.borders
+              ? { ...existing?.borders, ...format.borders }
+              : existing?.borders,
+          };
         });
       },
 
       setRangeFormat: (format) => {
         const sel = get().selection;
         if (!sel) return;
+        get().pushHistory('Format cells');
         set((s) => {
           const sheet = s.workbook.sheets.find((sh) => sh.id === s.activeSheetId);
           if (!sheet) return;
@@ -325,7 +334,14 @@ export const useStore = create<AppState>()(
               if (!sheet.cells[cid]) {
                 sheet.cells[cid] = { value: null };
               }
-              sheet.cells[cid].format = { ...sheet.cells[cid].format, ...format };
+              const existing = sheet.cells[cid].format;
+              sheet.cells[cid].format = {
+                ...existing,
+                ...format,
+                borders: format.borders
+                  ? { ...existing?.borders, ...format.borders }
+                  : existing?.borders,
+              };
             }
           }
         });

@@ -3,7 +3,7 @@ import { useStore } from '@/store/useStore';
 import { colToLetter, refToCell, cellToRef } from '@/engine/spreadsheet';
 import { FormulaAutocomplete } from './FormulaAutocomplete';
 import type { CellFormat } from '@/types';
-import { formatCellValue } from '@/lib/formatUtils';
+import { formatCellValue, getBorderCSS } from '@/lib/formatUtils';
 
 const DEFAULT_CELL_WIDTH = 100;
 const CELL_HEIGHT = 28;
@@ -284,6 +284,7 @@ export function SpreadsheetGrid() {
       color: format.fontColor || undefined,
       backgroundColor: format.bgColor || undefined,
       textAlign: format.textAlign || undefined,
+      ...getBorderCSS(format.borders),
     };
   }, []);
 
@@ -457,11 +458,11 @@ export function SpreadsheetGrid() {
                     const active = isActiveCell(row, col);
                     const isEditing = editingCell === cellId;
                     const computed = getComputedValue(row, col);
-                    const rawValue = computed || cellData?.value ?? null;
+                    const rawValue = (computed || cellData?.value) ?? null;
                     const hasFormula = !!cellData?.formula;
                     const colWidth = getColWidth(col);
 
-  return (
+                    return (
                       <div
                         ref={isEditing ? editContainerRef : undefined}
                         key={col}
@@ -477,8 +478,7 @@ export function SpreadsheetGrid() {
                           height: CELL_HEIGHT,
                           position: 'absolute',
                           left: visibleColOffsets.offsets[j],
-                          ...(selected && !active ? {} : getCellStyle(cellData?.format)),
-                          ...(active ? getCellStyle(cellData?.format) : {}),
+                          ...getCellStyle(cellData?.format),
                         }}
                         onMouseDown={(e) => handleMouseDown(row, col, e)}
                         onMouseMove={() => handleMouseMove(row, col)}

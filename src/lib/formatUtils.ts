@@ -39,12 +39,16 @@ export function formatCellValue(value: string | number | boolean | null, numberF
   }
 }
 
+function isActiveBorder(value?: string): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
 export function getBorderCSS(borders?: CellFormat['borders']): React.CSSProperties {
   if (!borders) return {};
   const css: React.CSSProperties = {};
-  if (borders.top) { css.borderTop = borders.top; }
-  if (borders.right) { css.borderRight = borders.right; }
-  if (borders.bottom) { css.borderBottom = borders.bottom; }
-  if (borders.left) { css.borderLeft = borders.left; }
+  if (isActiveBorder(borders.top)) css.borderTop = borders.top;
+  if (isActiveBorder(borders.right)) css.borderRight = borders.right;
+  if (isActiveBorder(borders.bottom)) css.borderBottom = borders.bottom;
+  if (isActiveBorder(borders.left)) css.borderLeft = borders.left;
   return css;
 }
