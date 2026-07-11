@@ -8,8 +8,9 @@ import {
   Download, Upload, Plus, FolderOpen, Sparkles,
   Filter, SortAsc, Scissors, Copy, ClipboardPaste,
 } from 'lucide-react';
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { v4 as uuid } from 'uuid';
+import { FormulaAutocomplete } from './FormulaAutocomplete';
 import './Toolbar.css';
 
 export function Toolbar() {
@@ -39,6 +40,9 @@ export function Toolbar() {
   } = useStore();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const formulaBarRef = useRef<HTMLInputElement>(null);
+  const [fbAutocompleteVisible, setFbAutocompleteVisible] = useState(false);
+  const [fbAutocompletePos, setFbAutocompletePos] = useState({ top: 0, left: 0 });
   const sheet = getActiveSheet();
 
   const selectedCellId = selection ? refToCell(selection.startRow, selection.startCol) : '';
@@ -287,9 +291,28 @@ export function Toolbar() {
         </div>
         <div className="text-gray-400 text-sm font-mono">ƒx</div>
         <input
+          ref={formulaBarRef}
           className="flex-1 text-sm px-2 py-0.5 border border-gray-200 rounded focus:border-blue-400 focus:ring-1 focus:ring-blue-200 outline-none font-mono"
           value={displayFormulaValue}
-          onChange={(e) => handleFormulaBarChange(e.target.value)}
+          onFocus={(e) => {
+            if (e.currentTarget.value.startsWith('=')) {
+              const rect = e.currentTarget.getBoundingClientRect();
+              setFbAutocompletePos({ top: rect.bottom + 2, left: rect.left });
+              setFbAutocompleteVisible(true);
+            }
+          }}
+          onChange={(e) => {
+            const val = e.target.value;
+            handleFormulaBarChange(val);
+            if (val.startsWith('=')) {
+              const rect = formulaBarRef.current?.getBoundingClientRect();
+              if (rect) setFbAutocompletePos({ top: rect.bottom + 2, left: rect.left });
+              setFbAutocompleteVisible(true);
+            } else {
+              setFbAutocompleteVisible(false);
+            }
+          }}
+          onBlur={() => setTimeout(() => setFbAutocompleteVisible(false), 200)}
           onKeyDown={handleFormulaBarKeyDown}
           placeholder="Enter a value or formula..."
         />
@@ -308,6 +331,19 @@ export function Toolbar() {
           Σ
         </button>
       </div>
+      <FormulaAutocomplete
+        visible={fbAutocompleteVisible}
+        editValue={displayFormulaValue}
+        onSelect={(fn) => {
+          if (fn) {
+            const currentVal = displayFormulaValue;
+            const newVal = currentVal.replace(/=[A-Za-z_]*$/, '=' + fn + '(');
+            handleFormulaBarChange(newVal);
+          }
+          setFbAutocompleteVisible(false);
+        }}
+        position={fbAutocompletePos}
+      />
     </div>
   );
 }
