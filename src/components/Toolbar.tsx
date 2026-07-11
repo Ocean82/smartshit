@@ -29,6 +29,8 @@ export function Toolbar() {
     showFileExplorer,
     showSkills,
     setShowChartDialog,
+    showPivotDialog,
+    setShowPivotDialog,
     copy,
     cut,
     paste,
@@ -262,6 +264,18 @@ export function Toolbar() {
         <ToolButton icon={<Grid3x3 size={15} />} title="Conditional Format" onClick={() => {}} />
         <ToolButton icon={<BarChart3 size={15} />} title="Insert Chart" onClick={() => setShowChartDialog(true)} />
         <Divider />
+
+        {/* Pivot Table */}
+        <div className="flex items-center gap-1 border-l border-gray-200 pl-2">
+          <button
+            onClick={() => setShowPivotDialog(true)}
+            disabled={!selection}
+            className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            title="Create pivot table from selection"
+          >
+            <span className="text-sm">📊</span> Pivot
+          </button>
+        </div>
 
         {/* Import/Export */}
         <ToolButton
