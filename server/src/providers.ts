@@ -3,7 +3,7 @@
  * Both index.ts and llmIntentParser.ts import from here.
  */
 import { config } from './config.js'
-import { chatWithOllama, chatWithOllamaStream, modelIsRegistered, ollamaReachable } from './ollama.js'
+import { chatWithOllama, chatWithOllamaStream } from './ollama.js'
 import { groqAvailable, chatWithGroqStream } from './groq.js'
 import { chatWithOpenAiCompatible, chatWithOpenAiCompatibleStream, openAiCompatibleAvailable } from './openaiCompatible.js'
 
@@ -67,9 +67,6 @@ export async function callProviderStream(
   }
   if (provider === 'groq') return chatWithGroqStream(messages, onChunk, signal)
 
-  const ollama = await ollamaReachable()
-  const modelReady = ollama ? await modelIsRegistered() : false
-  if (!ollama || !modelReady) throw new Error('Ollama is unavailable or model is not registered')
   return chatWithOllamaStream(messages, onChunk, signal)
 }
 
