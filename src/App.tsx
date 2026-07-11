@@ -18,6 +18,7 @@ import { ConditionalFormatDialog } from '@/components/ConditionalFormatDialog'
 import { StatusBar } from '@/components/StatusBar'
 import { WelcomeOverlay } from '@/components/WelcomeOverlay'
 import { SummaryCards } from '@/components/SummaryCards'
+import { InsightCharts } from '@/components/InsightCharts'
 import { TemplateGallery } from '@/components/TemplateGallery'
 import { TelemetryDebugPanel } from '@/components/TelemetryDebugPanel'
 import { Sparkles, Zap } from 'lucide-react'
@@ -73,6 +74,7 @@ function App() {
         {/* Spreadsheet + summary on the right */}
         <div className="flex-1 flex flex-col overflow-hidden min-w-0 relative">
           <SummaryCards />
+          <InsightCharts />
           <div className="flex-1 flex flex-col overflow-hidden relative">
             <SpreadsheetGrid />
             <ChartOverlay />
