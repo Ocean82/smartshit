@@ -51,6 +51,8 @@ export function ContextMenu() {
     { icon: <Trash2 size={13} />, label: 'Clear Cell', action: () => { pushHistory('Clear'); setCellValue(contextMenu.cell, null); } },
     null,
     { icon: <Shield size={13} />, label: 'Data Validation', action: () => { useStore.getState().setShowValidationDialog(true); setContextMenu(null); } },
+    null,
+    { icon: <span className="text-xs">📊</span>, label: 'Pivot Table', action: () => { useStore.getState().setShowPivotDialog(true); setContextMenu(null); } },
   ];
 
   return (

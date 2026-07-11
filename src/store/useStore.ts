@@ -62,6 +62,8 @@ interface AppState {
   showChartDialog: boolean;
   showFormatPanel: boolean;
   showValidationDialog: boolean;
+  showPivotDialog: boolean;
+  setShowPivotDialog: (show: boolean) => void;
   contextMenu: { x: number; y: number; cell: string } | null;
 
   // History
@@ -203,6 +205,8 @@ export const useStore = create<AppState>()(
       showChartDialog: false,
       showFormatPanel: false,
       showValidationDialog: false,
+      showPivotDialog: false,
+      setShowPivotDialog: (show) => set({ showPivotDialog: show }),
       contextMenu: null,
       undoStack: [],
       redoStack: [],
