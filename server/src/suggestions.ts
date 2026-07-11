@@ -1,11 +1,9 @@
 import type { IntentType } from '../../shared/intentTypes.js'
 
 /**
- * Suggestion engine — provides contextual follow-up suggestions based on detected intent.
- *
- * TODO: Replace this keyword/intent-based approach with real vector embeddings
- * (e.g., OpenAI Embeddings, Sentence Transformers) for semantic similarity.
- * See docs/planning/24-chat-system-improvements.md Phase 4 for the full plan.
+ * Suggestion engine — token-overlap scoring against a curated action bank.
+ * Optional future work: vector embeddings for semantic similarity
+ * (see docs/planning/24-chat-system-improvements.md Phase 4).
  */
 
 interface SuggestionEntry {
@@ -15,46 +13,74 @@ interface SuggestionEntry {
 }
 
 const SUGGESTION_BANK: SuggestionEntry[] = [
-  { query: 'Analyze my data for patterns', intentType: 'analyze', keywords: ['analyze', 'insight', 'pattern', 'trend', 'statistics'] },
-  { query: 'Show me the sum of a column', intentType: 'calculate', keywords: ['sum', 'total', 'add', 'calculate', 'amount'] },
+  { query: 'Analyze my data for patterns', intentType: 'analyze', keywords: ['analyze', 'insight', 'pattern', 'trend', 'statistics', 'explain'] },
+  { query: 'Show me the sum of a column', intentType: 'calculate', keywords: ['sum', 'total', 'add', 'calculate', 'amount', 'average'] },
   { query: 'Filter rows by condition', intentType: 'filter', keywords: ['filter', 'where', 'only', 'condition', 'greater', 'less'] },
   { query: 'Create a chart from my data', intentType: 'create_chart', keywords: ['chart', 'graph', 'plot', 'visualize', 'bar', 'pie', 'line'] },
-  { query: 'Clean up duplicate rows', intentType: 'clean', keywords: ['clean', 'duplicate', 'remove', 'fix', 'trim'] },
+  { query: 'Clean up duplicate rows', intentType: 'clean', keywords: ['clean', 'duplicate', 'remove', 'fix', 'trim', 'normalize'] },
   { query: 'Sort my data', intentType: 'sort', keywords: ['sort', 'order', 'rank', 'ascending', 'descending'] },
-  { query: 'Summarize this sheet', intentType: 'summarize', keywords: ['summarize', 'summary', 'overview', 'brief'] },
-  { query: 'Compare two columns', intentType: 'compare', keywords: ['compare', 'difference', 'versus', 'vs'] },
-  { query: 'Find a specific value', intentType: 'find', keywords: ['find', 'search', 'locate', 'where is'] },
-  { query: 'Generate a budget breakdown', intentType: 'budget', keywords: ['budget', 'expense', 'income', 'spending', 'cost'] },
-  { query: 'Export my data', intentType: 'export', keywords: ['export', 'download', 'save as', 'csv'] },
-  { query: 'Create a formula column', intentType: 'create_formula', keywords: ['formula', 'calculate column', 'computed', 'vlookup'] },
+  { query: 'Summarize this sheet', intentType: 'summarize', keywords: ['summarize', 'summary', 'overview', 'brief', 'report'] },
+  { query: 'Compare two columns', intentType: 'compare', keywords: ['compare', 'difference', 'versus', 'vs', 'variance'] },
+  { query: 'Find a specific value', intentType: 'find', keywords: ['find', 'search', 'locate', 'where'] },
+  { query: 'Generate a budget breakdown', intentType: 'budget', keywords: ['budget', 'expense', 'income', 'spending', 'cost', 'save', 'savings'] },
+  { query: 'Where am I overspending?', intentType: 'budget', keywords: ['overspend', 'losing', 'waste', 'cut', 'risk'] },
+  { query: 'How much should I save each month?', intentType: 'budget', keywords: ['save', 'savings', '503020', 'target', 'income'] },
+  { query: 'Export my data', intentType: 'export', keywords: ['export', 'download', 'save', 'csv', 'xlsx'] },
+  { query: 'Create a formula column', intentType: 'create_formula', keywords: ['formula', 'calculate', 'computed', 'vlookup', 'sum'] },
+  { query: 'Explain this spreadsheet I just loaded', intentType: 'analyze', keywords: ['explain', 'loaded', 'sheet', 'mean', 'what'] },
 ]
 
+const STOP_WORDS = new Set(['a', 'an', 'am', 'the', 'my', 'me', 'i', 'to', 'of', 'for', 'and', 'or', 'in', 'on', 'is', 'this', 'that', 'it'])
+
+export function tokenize(text: string): string[] {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9$\s]/g, ' ')
+    .split(/\s+/)
+    .filter((t) => t.length > 1 && !STOP_WORDS.has(t))
+}
+
+export function scoreSuggestion(queryTokens: string[], entry: SuggestionEntry): number {
+  if (queryTokens.length === 0) return 0
+  const keywordSet = new Set(entry.keywords.map((k) => k.toLowerCase()))
+  const queryTextTokens = new Set(tokenize(entry.query))
+  let score = 0
+
+  for (const token of queryTokens) {
+    if (keywordSet.has(token)) score += 3
+    else if ([...keywordSet].some((k) => k.includes(token) || token.includes(k))) score += 2
+    if (queryTextTokens.has(token)) score += 1
+  }
+
+  return score
+}
+
 /**
- * Returns contextual suggestions based on simple keyword overlap with the user query.
- * Excludes suggestions whose intent matches the current query's apparent intent
- * to offer diverse follow-up actions.
+ * Returns contextual follow-up suggestions ranked by token overlap.
  */
 export function getSuggestions(query: string, count = 3): string[] {
   if (!query || query.trim().length === 0) return []
 
-  const lower = query.toLowerCase()
-  const queryWords = lower.split(/\s+/)
+  const queryTokens = tokenize(query)
+  const scored = SUGGESTION_BANK.map((entry) => ({
+    entry,
+    score: scoreSuggestion(queryTokens, entry),
+  }))
 
-  const scored = SUGGESTION_BANK.map((entry) => {
-    let score = 0
-    for (const keyword of entry.keywords) {
-      if (lower.includes(keyword)) score += 2
-      else if (queryWords.some((w) => keyword.includes(w) || w.includes(keyword))) score += 1
-    }
-    return { entry, score }
-  })
+  scored.sort((a, b) => b.score - a.score || a.entry.query.localeCompare(b.entry.query))
 
-  // Sort by score descending, then filter out zero-score entries
-  scored.sort((a, b) => b.score - a.score)
+  const results: string[] = []
+  for (const item of scored) {
+    if (item.score <= 0) continue
+    if (item.entry.query.toLowerCase() === query.trim().toLowerCase()) continue
+    results.push(item.entry.query)
+    if (results.length >= count) break
+  }
 
-  // Return suggestions that are at least somewhat related but not identical to what they asked
-  return scored
-    .filter((s) => s.score > 0)
-    .slice(0, count)
-    .map((s) => s.entry.query)
+  // Fallback: top diverse intents if nothing scored
+  if (results.length === 0) {
+    return SUGGESTION_BANK.slice(0, count).map((e) => e.query)
+  }
+
+  return results
 }

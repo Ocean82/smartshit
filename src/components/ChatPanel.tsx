@@ -2,9 +2,10 @@ import { useRef, useEffect, useState } from 'react'
 import { useStore } from '@/store/useStore'
 import { fetchServerHealth, type ServerHealth } from '@/ai/agentClient'
 import {
-  Send, Check, XCircle, Sparkles, Bot, User, Loader2, Paperclip, X,
+  Send, Check, XCircle, Sparkles, Bot, User, Loader2, Paperclip, X, ThumbsUp, ThumbsDown,
 } from 'lucide-react'
 import type { AgentAction } from '@/types'
+import { getFeedbackForMessage, recordChatFeedback, type ChatFeedbackRating } from '@/ai/chatFeedback'
 
 function healthFooterMessage(health: ServerHealth | null): string {
   if (!health) return 'AI server offline — deterministic analysis only'
@@ -38,6 +39,22 @@ export function ChatPanel({ isMobileOpen, onCloseMobile }: { isMobileOpen?: bool
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const [waitSeconds, setWaitSeconds] = useState(0)
   const [health, setHealth] = useState<ServerHealth | null>(null)
+  const [feedbackById, setFeedbackById] = useState<Record<string, ChatFeedbackRating>>({})
+
+  useEffect(() => {
+    const map: Record<string, ChatFeedbackRating> = {}
+    for (const msg of messages) {
+      if (msg.role !== 'assistant') continue
+      const rating = getFeedbackForMessage(msg.id)
+      if (rating) map[msg.id] = rating
+    }
+    setFeedbackById(map)
+  }, [messages])
+
+  const handleFeedback = (messageId: string, rating: ChatFeedbackRating) => {
+    recordChatFeedback(messageId, rating)
+    setFeedbackById((prev) => ({ ...prev, [messageId]: rating }))
+  }
 
   useEffect(() => {
     let interval = 15000
@@ -155,6 +172,28 @@ export function ChatPanel({ isMobileOpen, onCloseMobile }: { isMobileOpen?: bool
                       {suggestion}
                     </button>
                   ))}
+                </div>
+              )}
+              {msg.role === 'assistant' && (
+                <div className="mt-1.5 flex items-center gap-1">
+                  <button
+                    type="button"
+                    title="Helpful"
+                    aria-label="Mark response helpful"
+                    onClick={() => handleFeedback(msg.id, 'up')}
+                    className={`p-1 rounded hover:bg-gray-200 ${feedbackById[msg.id] === 'up' ? 'text-green-600' : 'text-gray-400'}`}
+                  >
+                    <ThumbsUp size={12} />
+                  </button>
+                  <button
+                    type="button"
+                    title="Not helpful"
+                    aria-label="Mark response not helpful"
+                    onClick={() => handleFeedback(msg.id, 'down')}
+                    className={`p-1 rounded hover:bg-gray-200 ${feedbackById[msg.id] === 'down' ? 'text-red-600' : 'text-gray-400'}`}
+                  >
+                    <ThumbsDown size={12} />
+                  </button>
                 </div>
               )}
               {msg.actions && msg.actions.length > 0 && (

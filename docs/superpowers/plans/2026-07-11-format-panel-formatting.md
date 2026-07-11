@@ -1,5 +1,7 @@
 # Phase 4: Format Panel + Full Formatting Implementation Plan
 
+> **Status: Implemented (2026-07-11).** Tasks 1–8 complete (borders, undoable range format, Format Panel, font color, tests). Follow-up polish for Sort/Filter/Conditional Format shipped in the same cycle.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build a right-sidebar Format Panel with text formatting, number formatting, cell borders, font color picker, and undo/redo support for format changes.

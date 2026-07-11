@@ -1,5 +1,7 @@
 # Gap Analysis: Spreadsheet Brain Spec vs smartsh!t (Current)
 
+> **Superseded status (2026-07-11):** Core brain roadmap phases 0–7 landed 2026-07-07. Format Panel + toolbar Sort/Filter/Conditional Format landed 2026-07-11. Treat the tables below as historical snapshot; remaining gaps are primarily: inventory skill, optional vector embeddings, collaborative editing, and deep analyzer polish (outliers/trends).
+
 > Compares the reference architecture in [`docs/images/notes`](../images/notes) (extracted into `docs/planning/`) against the **current** smartsh!t TypeScript implementation as of the AI Brain Layer work.
 
 ## Executive summary

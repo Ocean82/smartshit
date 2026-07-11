@@ -8,6 +8,8 @@
 import type { ParsedToolCall } from './parser'
 import { refToCell, cellToRef, colToLetter } from '@/engine/spreadsheet'
 import type { SheetData, CellData } from '@/types'
+import { computeSortedCellUpdates, findHeaderRow, findLastDataRow } from '@/lib/sheetSort'
+import { findConditionalFormatTargets } from '@/lib/conditionalFormat'
 
 export interface ExecutionContext {
   getActiveSheet: () => SheetData
@@ -178,51 +180,15 @@ export function executeTool(call: ParsedToolCall, ctx: ExecutionContext): Execut
 
     case 'sort_sheet': {
       const col = (params.column as string).toUpperCase()
-      const direction = (params.direction as string) || 'asc'
+      const direction = ((params.direction as string) || 'asc') === 'desc' ? 'desc' : 'asc'
       const colIdx = col.charCodeAt(0) - 65
-      const headerRow = findHeaderRow(sheet)
       ctx.pushHistory(`Sort by column ${col}`)
 
-      // Collect data rows (after header)
-      const rows: Array<{ row: number; sortVal: number | string; cells: Record<string, CellData> }> = []
-      const lastRow = findLastDataRow(sheet)
+      const updates = computeSortedCellUpdates(sheet, colIdx, direction, ctx.getComputedValue)
+      ctx.bulkSetCells(updates)
+      const count = Object.keys(updates).length
 
-      for (let r = headerRow + 1; r <= lastRow; r++) {
-        const computed = ctx.getComputedValue(r, colIdx)
-        const num = parseFloat(computed.replace(/[$,]/g, ''))
-        const sortVal = isNaN(num) ? computed.toLowerCase() : num
-        const rowCells: Record<string, CellData> = {}
-        for (const [cellId, cell] of Object.entries(sheet.cells)) {
-          const ref = cellToRef(cellId)
-          if (ref.row === r) rowCells[cellId] = { ...cell }
-        }
-        rows.push({ row: r, sortVal, cells: rowCells })
-      }
-
-      // Sort
-      rows.sort((a, b) => {
-        if (typeof a.sortVal === 'number' && typeof b.sortVal === 'number') {
-          return direction === 'asc' ? a.sortVal - b.sortVal : b.sortVal - a.sortVal
-        }
-        const aStr = String(a.sortVal)
-        const bStr = String(b.sortVal)
-        return direction === 'asc' ? aStr.localeCompare(bStr) : bStr.localeCompare(aStr)
-      })
-
-      // Rewrite cells in sorted order
-      let count = 0
-      for (let i = 0; i < rows.length; i++) {
-        const targetRow = headerRow + 1 + i
-        const srcCells = rows[i].cells
-        for (const [cellId, cell] of Object.entries(srcCells)) {
-          const ref = cellToRef(cellId)
-          const newCellId = refToCell(targetRow, ref.col)
-          ctx.setCellValue(newCellId, cell.value, cell.formula)
-          count++
-        }
-      }
-
-      return { success: true, message: `Sorted ${rows.length} rows by column ${col} (${direction})`, modified: count }
+      return { success: true, message: `Sorted rows by column ${col} (${direction})`, modified: count }
     }
 
     case 'format_range': {
@@ -249,28 +215,19 @@ export function executeTool(call: ParsedToolCall, ctx: ExecutionContext): Execut
       const colIdx = col.charCodeAt(0) - 65
       ctx.pushHistory(`Conditional format ${col}`)
 
-      let count = 0
-      for (const [cellId] of Object.entries(sheet.cells)) {
-        const ref = cellToRef(cellId)
-        if (ref.col !== colIdx) continue
-        const computed = ctx.getComputedValue(ref.row, ref.col)
-        const num = Number(computed.replace(/[$,\s]/g, ''))
-        if (!Number.isFinite(num)) continue
-
-        const shouldHighlight = (
-          (condition === 'negative' && num < 0)
-          || (condition === 'positive' && num > 0)
-          || (condition === 'gt' && num > threshold)
-          || (condition === 'lt' && num < threshold)
-          || (condition === 'eq' && num === threshold)
-        )
-        if (!shouldHighlight) continue
-
+      const targets = findConditionalFormatTargets(
+        colIdx,
+        condition,
+        threshold,
+        ctx.getComputedValue,
+        Object.keys(sheet.cells),
+        cellToRef,
+      )
+      for (const cellId of targets) {
         ctx.setCellFormat(cellId, { bgColor: color })
-        count++
       }
 
-      return { success: true, message: `Applied conditional formatting to ${count} cells in column ${col}`, modified: count }
+      return { success: true, message: `Applied conditional formatting to ${targets.length} cells in column ${col}`, modified: targets.length }
     }
 
     case 'clear_sheet': {
@@ -336,15 +293,6 @@ export function executeTool(call: ParsedToolCall, ctx: ExecutionContext): Execut
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function findLastDataRow(sheet: SheetData): number {
-  let max = 0
-  for (const cellId of Object.keys(sheet.cells)) {
-    const ref = cellToRef(cellId)
-    if (ref.row > max) max = ref.row
-  }
-  return max
-}
-
 function findLastDataRowInCol(sheet: SheetData, colIdx: number): number {
   let max = 0
   for (const cellId of Object.keys(sheet.cells)) {
@@ -352,19 +300,6 @@ function findLastDataRowInCol(sheet: SheetData, colIdx: number): number {
     if (ref.col === colIdx && ref.row > max) max = ref.row
   }
   return max
-}
-
-function findHeaderRow(sheet: SheetData): number {
-  // Usually row 0 or the first row that has multiple cells
-  for (let r = 0; r < 5; r++) {
-    let count = 0
-    for (const cellId of Object.keys(sheet.cells)) {
-      const ref = cellToRef(cellId)
-      if (ref.row === r) count++
-    }
-    if (count >= 2) return r
-  }
-  return 0
 }
 
 function findRowByContent(sheet: SheetData, text: string): number {

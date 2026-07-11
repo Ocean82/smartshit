@@ -165,14 +165,62 @@ See **[CONTRIBUTING.md](CONTRIBUTING.md)** for setup and PR guidelines.
 
 ---
 
+## Deploy guide
+
+The UI builds to a single static HTML file; the Express API in `server/` handles LLM routing.
+
+### 1. Build the frontend
+
+```bash
+npm install
+npm run build
+```
+
+Output: `dist/index.html` (single-file bundle).
+
+### 2. Configure and run the API
+
+```bash
+npm install --prefix server
+cd server
+# Optional cloud providers (any one is enough; local Ollama also works)
+# GROQ_API_KEY=...
+# OPENROUTER_API_KEY=...
+# HUGGINGFACE_API_KEY=...
+# INTENT_CONFIDENCE_THRESHOLD=0.6
+npm start
+```
+
+Default API port is `8787` (override with `PORT`). Point the frontend at the API via your existing Vite proxy in development, or serve the built `dist/` behind a reverse proxy that forwards `/api` to the Node process.
+
+### 3. Reverse proxy sketch (Caddy)
+
+```caddyfile
+smartsht.example.com {
+  root * /var/www/smartshit/dist
+  file_server
+  reverse_proxy /api/* localhost:8787
+}
+```
+
+Nginx equivalent: `location /api/` → `proxy_pass http://127.0.0.1:8787;` and static files for `/`.
+
+### 4. Notes
+
+- Enable CORS only if the UI origin differs from the API origin.
+- Keep API keys on the server; never bake them into the static bundle.
+- For local-only deploys, skip cloud keys and run Ollama on the same host.
+
+---
+
 ## Roadmap
 
 - [x] Streaming chat responses
 - [x] Faster local model (Qwen2.5-Coder-1.5B)
+- [x] Optional cloud model providers (Groq / OpenRouter / Hugging Face)
+- [x] Deploy guide (static frontend + API VM)
 - [ ] More expense/inventory templates
-- [ ] Deploy guide (static frontend + API VM)
-- [ ] Optional cloud model providers
-- [ ] Collaborative editing
+- [ ] Collaborative editing — deferred (needs real-time sync such as Yjs; out of current scope)
 
 ---
 

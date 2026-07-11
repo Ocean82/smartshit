@@ -1,5 +1,13 @@
 # Chat System Improvements: Phased Implementation Plan
 
+> **Status (2026-07-11):**
+> - Phase 1 (LLM intent parsing): **Done** (`server/src/llmIntentParser.ts`)
+> - Phase 2 (clarification on low confidence): **Done** (`intentConfidenceThreshold`)
+> - Phase 3 (conversation history context): **Partial** (`insightsSnapshot` / prior insights)
+> - Phase 4 (vector embeddings): **Deferred** — token-overlap suggestion scoring shipped in `server/src/suggestions.ts` (embeddings optional later)
+> - Phase 5 (feedback loop): **Lite done** — thumbs up/down in chat + localStorage + telemetry counters
+> - Phase 6 (ELK / fine-tuning / Zod hardening): **Deferred**
+
 This document outlines a phased approach to enhance the chat system's reliability for open-ended questions by integrating advanced AI capabilities.
 
 ## Phase 1: LLM-Powered Intent Parsing

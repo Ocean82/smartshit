@@ -33,6 +33,11 @@ export function Toolbar() {
     setShowPivotDialog,
     showFormatPanel,
     setShowFormatPanel,
+    activeFilters,
+    activeSortConfig,
+    sortByColumn,
+    setShowFilterDialog,
+    setShowConditionalFormatDialog,
     copy,
     cut,
     paste,
@@ -325,9 +330,27 @@ export function Toolbar() {
         <Divider />
 
         {/* Data tools */}
-        <ToolButton icon={<Filter size={15} />} title="Filter" onClick={() => {}} />
-        <ToolButton icon={<SortAsc size={15} />} title="Sort" onClick={() => {}} />
-        <ToolButton icon={<Grid3x3 size={15} />} title="Conditional Format" onClick={() => {}} />
+        <ToolButton
+          icon={<Filter size={15} />}
+          title="Filter"
+          active={activeFilters.length > 0}
+          onClick={() => setShowFilterDialog(true)}
+        />
+        <ToolButton
+          icon={<SortAsc size={15} />}
+          title="Sort by column"
+          onClick={() => {
+            if (!selection) return;
+            const col = Math.min(selection.startCol, selection.endCol);
+            const nextDir = activeSortConfig?.column === col && activeSortConfig.direction === 'asc' ? 'desc' : 'asc';
+            sortByColumn(col, nextDir);
+          }}
+        />
+        <ToolButton
+          icon={<Grid3x3 size={15} />}
+          title="Conditional Format"
+          onClick={() => setShowConditionalFormatDialog(true)}
+        />
         <ToolButton icon={<BarChart3 size={15} />} title="Insert Chart" onClick={() => setShowChartDialog(true)} />
         <Divider />
 

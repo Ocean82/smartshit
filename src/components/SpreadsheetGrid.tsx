@@ -4,6 +4,8 @@ import { colToLetter, refToCell, cellToRef } from '@/engine/spreadsheet';
 import { FormulaAutocomplete } from './FormulaAutocomplete';
 import type { CellFormat } from '@/types';
 import { formatCellValue, getBorderCSS } from '@/lib/formatUtils';
+import { buildFilteredRowIndex } from '@/lib/rowFilter';
+import { findHeaderRow, findLastDataRow } from '@/lib/sheetSort';
 
 const DEFAULT_CELL_WIDTH = 100;
 const CELL_HEIGHT = 28;
@@ -27,8 +29,23 @@ export function SpreadsheetGrid() {
     getActiveSheet,
     getComputedValue,
     setContextMenu,
+    activeFilters,
   } = useStore();
 
+  const sheet = getActiveSheet();
+
+  const filteredRows = useMemo(() => {
+    if (!activeFilters.length) return null;
+    const last = Math.max(findLastDataRow(sheet), findHeaderRow(sheet));
+    return buildFilteredRowIndex(
+      last + 1,
+      activeFilters,
+      (row, col) => getComputedValue(row, col),
+      findHeaderRow(sheet),
+    );
+  }, [activeFilters, getComputedValue, sheet]);
+
+  const displayRowCount = filteredRows ? filteredRows.length : TOTAL_ROWS;
   const gridRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const editContainerRef = useRef<HTMLDivElement>(null);
@@ -38,8 +55,6 @@ export function SpreadsheetGrid() {
   const [resizingCol, setResizingCol] = useState<number | null>(null);
   const [resizeStartX, setResizeStartX] = useState(0);
   const [resizeStartWidth, setResizeStartWidth] = useState(0);
-
-  const sheet = getActiveSheet();
 
   const getColWidth = useCallback((col: number) => {
     return columnWidths[col] || sheet.columnWidths[col] || DEFAULT_CELL_WIDTH;
@@ -307,11 +322,11 @@ export function SpreadsheetGrid() {
     setScrollState({ scrollTop, scrollLeft, viewportHeight: clientHeight, viewportWidth: clientWidth });
   }, []);
 
-  // Calculate visible range
+  // Calculate visible range (display indices when filtered)
   const visibleRange = useMemo(() => {
     const { scrollTop, scrollLeft, viewportHeight, viewportWidth } = scrollState;
     const startRow = Math.max(0, Math.floor(scrollTop / CELL_HEIGHT) - BUFFER_ROWS);
-    const endRow = Math.min(TOTAL_ROWS - 1, Math.ceil((scrollTop + viewportHeight) / CELL_HEIGHT) + BUFFER_ROWS);
+    const endRow = Math.min(displayRowCount - 1, Math.ceil((scrollTop + viewportHeight) / CELL_HEIGHT) + BUFFER_ROWS);
     
     let colStart = 0;
     let accWidth = 0;
@@ -335,7 +350,7 @@ export function SpreadsheetGrid() {
     }
     
     return { startRow, endRow, startCol: colStart, endCol: colEnd };
-  }, [scrollState, getColWidth]);
+  }, [scrollState, getColWidth, displayRowCount]);
 
   // Calculate total dimensions
   const totalWidth = useMemo(() => {
@@ -346,7 +361,7 @@ export function SpreadsheetGrid() {
     return width;
   }, [getColWidth]);
 
-  const totalHeight = TOTAL_ROWS * CELL_HEIGHT;
+  const totalHeight = displayRowCount * CELL_HEIGHT;
 
   // Offset for visible rows
   const rowOffset = visibleRange.startRow * CELL_HEIGHT;
@@ -431,13 +446,15 @@ export function SpreadsheetGrid() {
 
         {/* Rows - virtualized */}
         <div className="relative" style={{ top: rowOffset }}>
-          {Array.from({ length: visibleRange.endRow - visibleRange.startRow + 1 }, (_, i) => {
-            const row = visibleRange.startRow + i;
+          {Array.from({ length: Math.max(0, visibleRange.endRow - visibleRange.startRow + 1) }, (_, i) => {
+            const displayIndex = visibleRange.startRow + i;
+            const row = filteredRows ? filteredRows[displayIndex] : displayIndex;
+            if (row == null) return null;
             const isRowSelected = selection &&
               row >= Math.min(selection.startRow, selection.endRow) &&
               row <= Math.max(selection.startRow, selection.endRow);
             return (
-              <div key={row} className="flex absolute" style={{ height: CELL_HEIGHT, top: row * CELL_HEIGHT }}>
+              <div key={`${displayIndex}-${row}`} className="flex absolute" style={{ height: CELL_HEIGHT, top: displayIndex * CELL_HEIGHT }}>
                 <div
                   className={`border-b border-r border-gray-300 flex items-center justify-center text-[11px] font-medium shrink-0 sticky left-0 z-10 cursor-pointer transition-colors ${
                     isRowSelected

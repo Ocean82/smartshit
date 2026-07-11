@@ -37,6 +37,8 @@ import { AI_ANALYSIS_CONFIG } from '@/ai/config';
 import { resolveActTemplates } from '@shared/actTemplates';
 import type { SheetInsights } from '@/ai/sheetInsights';
 import type { AttachedFilePreview } from '@/ai/types';
+import { computeSortedCellUpdates } from '@/lib/sheetSort';
+import { findConditionalFormatTargets } from '@/lib/conditionalFormat';
 import { v4 as uuid } from 'uuid';
 import { defaultSkills } from '@/data/skills';
 
@@ -150,6 +152,17 @@ interface AppState {
   removeChart: (chartId: string) => void;
   setSortConfig: (config: SortConfig | null) => void;
   setFilters: (filters: FilterConfig[]) => void;
+  sortByColumn: (column: number, direction: 'asc' | 'desc') => void;
+  applyConditionalFormat: (
+    column: number,
+    condition: string,
+    color: string,
+    threshold?: number,
+  ) => void;
+  showFilterDialog: boolean;
+  setShowFilterDialog: (v: boolean) => void;
+  showConditionalFormatDialog: boolean;
+  setShowConditionalFormatDialog: (v: boolean) => void;
   deleteSelectedCells: () => void;
   insertRow: (afterRow: number) => void;
   insertColumn: (afterCol: number) => void;
@@ -207,6 +220,10 @@ export const useStore = create<AppState>()(
       showValidationDialog: false,
       showPivotDialog: false,
       setShowPivotDialog: (show) => set({ showPivotDialog: show }),
+      showFilterDialog: false,
+      setShowFilterDialog: (v) => set({ showFilterDialog: v }),
+      showConditionalFormatDialog: false,
+      setShowConditionalFormatDialog: (v) => set({ showConditionalFormatDialog: v }),
       contextMenu: null,
       undoStack: [],
       redoStack: [],
@@ -803,6 +820,35 @@ export const useStore = create<AppState>()(
 
       setFilters: (filters) => {
         set((s) => { s.activeFilters = filters; });
+      },
+
+      sortByColumn: (column, direction) => {
+        const sheet = get().getActiveSheet();
+        get().pushHistory(`Sort by column ${column}`);
+        const updates = computeSortedCellUpdates(
+          sheet,
+          column,
+          direction,
+          (row, col) => get().getComputedValue(row, col),
+        );
+        get().bulkSetCells(updates);
+        set((s) => { s.activeSortConfig = { column, direction }; });
+      },
+
+      applyConditionalFormat: (column, condition, color, threshold = 0) => {
+        const sheet = get().getActiveSheet();
+        get().pushHistory(`Conditional format column ${column}`);
+        const targets = findConditionalFormatTargets(
+          column,
+          condition,
+          threshold,
+          (row, col) => get().getComputedValue(row, col),
+          Object.keys(sheet.cells),
+          cellToRef,
+        );
+        for (const cellId of targets) {
+          get().setCellFormat(cellId, { bgColor: color });
+        }
       },
 
       deleteSelectedCells: () => {

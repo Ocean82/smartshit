@@ -5,6 +5,8 @@ type TelemetryCounterKey =
   | 'llmResponses'
   | 'hybridResponses'
   | 'fallbackResponses'
+  | 'feedbackUp'
+  | 'feedbackDown'
 
 export interface TelemetryCounters {
   importTruncationEvents: number
@@ -13,6 +15,8 @@ export interface TelemetryCounters {
   llmResponses: number
   hybridResponses: number
   fallbackResponses: number
+  feedbackUp: number
+  feedbackDown: number
 }
 
 export interface TelemetrySnapshot {
@@ -36,6 +40,8 @@ function emptyCounters(): TelemetryCounters {
     llmResponses: 0,
     hybridResponses: 0,
     fallbackResponses: 0,
+    feedbackUp: 0,
+    feedbackDown: 0,
   }
 }
 

@@ -79,8 +79,12 @@ export interface SheetData {
 
 export interface FilterConfig {
   column: number;
+  /** Allow-list of values (legacy / multi-select). */
   values?: (string | number)[];
-  condition?: string;
+  /** Comparison operator for dialog-driven filters. */
+  condition?: 'equals' | 'contains' | 'gt' | 'lt' | string;
+  /** Single comparison value for equals/contains/gt/lt. */
+  value?: string | number;
 }
 
 export interface SortConfig {

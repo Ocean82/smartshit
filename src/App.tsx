@@ -13,6 +13,8 @@ import { ChartOverlay } from '@/components/ChartRenderer'
 import { ValidationDialog } from '@/components/ValidationDialog'
 import { PivotDialog } from '@/components/PivotDialog'
 import { FormatPanel } from '@/components/FormatPanel'
+import { FilterDialog } from '@/components/FilterDialog'
+import { ConditionalFormatDialog } from '@/components/ConditionalFormatDialog'
 import { StatusBar } from '@/components/StatusBar'
 import { WelcomeOverlay } from '@/components/WelcomeOverlay'
 import { SummaryCards } from '@/components/SummaryCards'
@@ -21,7 +23,18 @@ import { TelemetryDebugPanel } from '@/components/TelemetryDebugPanel'
 import { Sparkles, Zap } from 'lucide-react'
 
 function App() {
-  const { workbook, engine, showValidationDialog, setShowValidationDialog, showPivotDialog, setShowPivotDialog } = useStore()
+  const {
+    workbook,
+    engine,
+    showValidationDialog,
+    setShowValidationDialog,
+    showPivotDialog,
+    setShowPivotDialog,
+    showFilterDialog,
+    setShowFilterDialog,
+    showConditionalFormatDialog,
+    setShowConditionalFormatDialog,
+  } = useStore()
   const [isLoaded, setIsLoaded] = useState(false)
   const [showTemplates, setShowTemplates] = useState(false)
   const [isMobileChatOpen, setIsMobileChatOpen] = useState(false)
@@ -84,6 +97,8 @@ function App() {
       <ChartDialog />
       <ValidationDialog isOpen={showValidationDialog} onClose={() => setShowValidationDialog(false)} />
       <PivotDialog isOpen={showPivotDialog} onClose={() => setShowPivotDialog(false)} />
+      <FilterDialog isOpen={showFilterDialog} onClose={() => setShowFilterDialog(false)} />
+      <ConditionalFormatDialog isOpen={showConditionalFormatDialog} onClose={() => setShowConditionalFormatDialog(false)} />
       <WelcomeOverlay onOpenTemplates={() => setShowTemplates(true)} />
       <TemplateGallery open={showTemplates} onClose={() => setShowTemplates(false)} />
       {import.meta.env.DEV ? <TelemetryDebugPanel /> : null}
