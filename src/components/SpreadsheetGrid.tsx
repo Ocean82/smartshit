@@ -1,6 +1,7 @@
 import React, { useCallback, useRef, useEffect, useState, useMemo } from 'react';
 import { useStore } from '@/store/useStore';
 import { colToLetter, refToCell, cellToRef } from '@/engine/spreadsheet';
+import { FormulaAutocomplete } from './FormulaAutocomplete';
 import type { CellFormat } from '@/types';
 
 const DEFAULT_CELL_WIDTH = 100;
@@ -29,7 +30,9 @@ export function SpreadsheetGrid() {
 
   const gridRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const editContainerRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [autocompletePos, setAutocompletePos] = useState({ top: 0, left: 0 });
   const [columnWidths, setColumnWidths] = useState<Record<number, number>>({});
   const [resizingCol, setResizingCol] = useState<number | null>(null);
   const [resizeStartX, setResizeStartX] = useState(0);
@@ -104,6 +107,12 @@ export function SpreadsheetGrid() {
     setEditingCell(cellId);
     setEditValue(cellData?.formula || String(cellData?.value ?? ''));
     setSelection({ startRow: row, startCol: col, endRow: row, endCol: col });
+    requestAnimationFrame(() => {
+      if (editContainerRef.current) {
+        const rect = editContainerRef.current.getBoundingClientRect();
+        setAutocompletePos({ top: rect.bottom + 2, left: rect.left });
+      }
+    });
   }, [sheet.cells, setEditingCell, setEditValue, setSelection]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
@@ -164,6 +173,12 @@ export function SpreadsheetGrid() {
         setEditingCell(cellId);
         const cellData = sheet.cells[cellId];
         setEditValue(cellData?.formula || String(cellData?.value ?? ''));
+        requestAnimationFrame(() => {
+          if (editContainerRef.current) {
+            const rect = editContainerRef.current.getBoundingClientRect();
+            setAutocompletePos({ top: rect.bottom + 2, left: rect.left });
+          }
+        });
         break;
       }
       default:
@@ -171,6 +186,12 @@ export function SpreadsheetGrid() {
           const cellId = refToCell(r, c);
           setEditingCell(cellId);
           setEditValue(e.key);
+          requestAnimationFrame(() => {
+            if (editContainerRef.current) {
+              const rect = editContainerRef.current.getBoundingClientRect();
+              setAutocompletePos({ top: rect.bottom + 2, left: rect.left });
+            }
+          });
         }
         // Ctrl/Cmd shortcuts
         if (e.ctrlKey || e.metaKey) {
@@ -434,8 +455,14 @@ export function SpreadsheetGrid() {
                     const hasFormula = !!cellData?.formula;
                     const colWidth = getColWidth(col);
 
-                    return (
+  const handleAutocompleteSelect = useCallback((functionName: string) => {
+    if (!functionName) return;
+    setEditValue('=' + functionName + '(');
+  }, [setEditValue]);
+
+  return (
                       <div
+                        ref={isEditing ? editContainerRef : undefined}
                         key={col}
                         className={`border-b border-r shrink-0 relative transition-shadow ${
                           active
@@ -511,6 +538,12 @@ export function SpreadsheetGrid() {
           })}
         </div>
       </div>
+      <FormulaAutocomplete
+        visible={!!editingCell && editValue.startsWith('=')}
+        editValue={editValue}
+        onSelect={handleAutocompleteSelect}
+        position={autocompletePos}
+      />
     </div>
   );
 }
