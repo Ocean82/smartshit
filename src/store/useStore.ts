@@ -13,6 +13,7 @@ import type {
   ChartConfig,
   FilterConfig,
   SortConfig,
+  DataValidation,
 } from '@/types';
 import {
   createEmptyWorkbook,
@@ -108,6 +109,10 @@ interface AppState {
   setShowChartDialog: (v: boolean) => void;
   setShowFormatPanel: (v: boolean) => void;
   setContextMenu: (menu: { x: number; y: number; cell: string } | null) => void;
+
+  // Validation
+  setCellValidation: (cellId: string, validation: DataValidation | null) => void;
+  validateCellValue: (cellId: string, value: string | number | null) => { valid: boolean; message?: string };
 
   // History
   pushHistory: (desc: string) => void;
@@ -328,6 +333,65 @@ export const useStore = create<AppState>()(
       setShowChartDialog: (v) => set((s) => { s.showChartDialog = v; }),
       setShowFormatPanel: (v) => set((s) => { s.showFormatPanel = v; }),
       setContextMenu: (menu) => set((s) => { s.contextMenu = menu; }),
+
+      setCellValidation: (cellId, validation) => {
+        set((s) => {
+          const sheet = s.workbook.sheets.find((sh) => sh.id === s.activeSheetId);
+          if (!sheet) return;
+          if (!sheet.cells[cellId]) {
+            sheet.cells[cellId] = { value: null };
+          }
+          sheet.cells[cellId].validation = validation || undefined;
+        });
+      },
+
+      validateCellValue: (cellId, value) => {
+        const sheet = get().getActiveSheet();
+        const cell = sheet.cells[cellId];
+        if (!cell?.validation) return { valid: true };
+        const v = cell.validation;
+        const strVal = value == null ? '' : String(value);
+
+        switch (v.type) {
+          case 'number': {
+            const num = Number(strVal);
+            if (strVal !== '' && isNaN(num)) return { valid: false, message: v.message || 'Must be a number' };
+            if (v.min != null && num < v.min) return { valid: false, message: v.message || `Must be ≥ ${v.min}` };
+            if (v.max != null && num > v.max) return { valid: false, message: v.message || `Must be ≤ ${v.max}` };
+            return { valid: true };
+          }
+          case 'list': {
+            if (strVal !== '' && v.values && !v.values.includes(strVal))
+              return { valid: false, message: v.message || `Must be one of: ${v.values.join(', ')}` };
+            return { valid: true };
+          }
+          case 'text': {
+            if (v.criteria === 'length' && v.min != null && strVal.length < v.min)
+              return { valid: false, message: v.message || `Must be at least ${v.min} characters` };
+            if (v.criteria === 'length' && v.max != null && strVal.length > v.max)
+              return { valid: false, message: v.message || `Must be at most ${v.max} characters` };
+            if (v.criteria === 'contains' && v.criteria && !strVal.includes(v.criteria))
+              return { valid: false, message: v.message || `Must contain "${v.criteria}"` };
+            return { valid: true };
+          }
+          case 'date': {
+            if (strVal !== '' && isNaN(Date.parse(strVal)))
+              return { valid: false, message: v.message || 'Must be a valid date' };
+            return { valid: true };
+          }
+          case 'custom': {
+            if (!v.criteria) return { valid: true };
+            try {
+              const fn = new Function('value', `return ${v.criteria}`);
+              return fn(value) ? { valid: true } : { valid: false, message: v.message || 'Custom validation failed' };
+            } catch {
+              return { valid: true };
+            }
+          }
+          default:
+            return { valid: true };
+        }
+      },
 
       pushHistory: (desc) => {
         const snap = JSON.stringify(get().workbook);

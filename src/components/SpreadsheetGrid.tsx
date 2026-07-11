@@ -64,6 +64,20 @@ export function SpreadsheetGrid() {
         setCellValue(editingCell, val || null);
       }
     }
+    // Validate cell value
+    const { validateCellValue, setCellValidation } = useStore.getState();
+    const sheet = useStore.getState().getActiveSheet();
+    const cell = sheet.cells[editingCell];
+    const cellVal = val.startsWith('=') ? null : (val !== '' && !isNaN(Number(val)) ? Number(val) : (val || null));
+    const result = validateCellValue(editingCell, cellVal);
+    if (!result.valid) {
+      if (cell) cell.validationError = result.message;
+    } else {
+      if (cell) delete cell.validationError;
+    }
+    // Trigger re-render
+    useStore.setState({ workbook: { ...useStore.getState().workbook } });
+
     setEditingCell(null);
     setEditValue('');
   }, [editingCell, editValue, pushHistory, setCellValue, setEditingCell, setEditValue]);

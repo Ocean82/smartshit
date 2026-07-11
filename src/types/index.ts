@@ -4,6 +4,7 @@ export interface CellData {
   displayValue?: string;
   format?: CellFormat;
   validation?: DataValidation;
+  validationError?: string;
 }
 
 export interface CellFormat {
