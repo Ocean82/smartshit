@@ -3,6 +3,7 @@ import { useStore } from '@/store/useStore';
 import { colToLetter, refToCell, cellToRef } from '@/engine/spreadsheet';
 import { FormulaAutocomplete } from './FormulaAutocomplete';
 import type { CellFormat } from '@/types';
+import { formatCellValue } from '@/lib/formatUtils';
 
 const DEFAULT_CELL_WIDTH = 100;
 const CELL_HEIGHT = 28;
@@ -456,7 +457,7 @@ export function SpreadsheetGrid() {
                     const active = isActiveCell(row, col);
                     const isEditing = editingCell === cellId;
                     const computed = getComputedValue(row, col);
-                    const displayVal = computed || (cellData?.value != null ? String(cellData.value) : '');
+                    const rawValue = computed || cellData?.value ?? null;
                     const hasFormula = !!cellData?.formula;
                     const colWidth = getColWidth(col);
 
@@ -513,9 +514,9 @@ export function SpreadsheetGrid() {
                                   ? 'text-right'
                                   : ''
                               }`}
-                              title={hasFormula ? `${cellData?.formula} = ${displayVal}` : displayVal}
+                              title={hasFormula ? `${cellData?.formula} = ${formatCellValue(rawValue, cellData?.format?.numberFormat)}` : formatCellValue(rawValue, cellData?.format?.numberFormat)}
                             >
-                              {displayVal}
+                              {formatCellValue(rawValue, cellData?.format?.numberFormat)}
                             </div>
                           </div>
                         )}
