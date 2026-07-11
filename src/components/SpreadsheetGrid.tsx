@@ -65,18 +65,19 @@ export function SpreadsheetGrid() {
       }
     }
     // Validate cell value
-    const { validateCellValue, setCellValidation } = useStore.getState();
-    const sheet = useStore.getState().getActiveSheet();
-    const cell = sheet.cells[editingCell];
+    const { validateCellValue } = useStore.getState();
     const cellVal = val.startsWith('=') ? null : (val !== '' && !isNaN(Number(val)) ? Number(val) : (val || null));
     const result = validateCellValue(editingCell, cellVal);
-    if (!result.valid) {
-      if (cell) cell.validationError = result.message;
-    } else {
-      if (cell) delete cell.validationError;
-    }
-    // Trigger re-render
-    useStore.setState({ workbook: { ...useStore.getState().workbook } });
+    useStore.setState((state) => {
+      const cell = state.getActiveSheet().cells[editingCell];
+      if (cell) {
+        if (!result.valid) {
+          cell.validationError = result.message;
+        } else {
+          delete cell.validationError;
+        }
+      }
+    });
 
     setEditingCell(null);
     setEditValue('');
