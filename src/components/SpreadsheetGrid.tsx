@@ -208,6 +208,11 @@ export function SpreadsheetGrid() {
     }
   }, [editingCell, selection, sheet.cells, commitEdit, pushHistory, setCellValue, setSelection, setEditingCell, setEditValue]);
 
+  const handleAutocompleteSelect = useCallback((functionName: string) => {
+    if (!functionName) return;
+    setEditValue('=' + functionName + '(');
+  }, [setEditValue]);
+
   const handleMouseDown = useCallback((row: number, col: number, e: React.MouseEvent) => {
     if (e.button !== 0) return;
     setIsDragging(true);
@@ -454,11 +459,6 @@ export function SpreadsheetGrid() {
                     const displayVal = computed || (cellData?.value != null ? String(cellData.value) : '');
                     const hasFormula = !!cellData?.formula;
                     const colWidth = getColWidth(col);
-
-  const handleAutocompleteSelect = useCallback((functionName: string) => {
-    if (!functionName) return;
-    setEditValue('=' + functionName + '(');
-  }, [setEditValue]);
 
   return (
                       <div
