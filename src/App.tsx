@@ -21,6 +21,7 @@ function App() {
   const { workbook, engine } = useStore()
   const [isLoaded, setIsLoaded] = useState(false)
   const [showTemplates, setShowTemplates] = useState(false)
+  const [isMobileChatOpen, setIsMobileChatOpen] = useState(false)
 
   useEffect(() => {
     engine.loadWorkbook(workbook)
@@ -51,7 +52,7 @@ function App() {
         <SkillsPanel />
 
         {/* Chat-first: assistant on the left */}
-        <ChatPanel />
+        <ChatPanel isMobileOpen={isMobileChatOpen} onCloseMobile={() => setIsMobileChatOpen(false)} />
 
         {/* Spreadsheet + summary on the right */}
         <div className="flex-1 flex flex-col overflow-hidden min-w-0 relative">
@@ -63,6 +64,16 @@ function App() {
           <SheetTabs />
         </div>
       </div>
+
+      {/* Mobile chat toggle FAB */}
+      <button
+        type="button"
+        onClick={() => setIsMobileChatOpen(true)}
+        className="md:hidden fixed bottom-6 right-6 z-30 p-4 rounded-full bg-gradient-to-r from-slate-800 to-blue-700 text-white shadow-lg hover:from-slate-900 hover:to-blue-800 transition-all"
+        aria-label="Open chat"
+      >
+        <Sparkles size={24} />
+      </button>
 
       <StatusBar />
       <ContextMenu />

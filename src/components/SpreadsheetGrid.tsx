@@ -7,8 +7,10 @@ const DEFAULT_CELL_WIDTH = 100;
 const CELL_HEIGHT = 28;
 const ROW_HEADER_WIDTH = 46;
 const COL_HEADER_HEIGHT = 26;
-const VISIBLE_ROWS = 60;
-const VISIBLE_COLS = 26;
+const TOTAL_ROWS = 1000;
+const TOTAL_COLS = 100;
+const BUFFER_ROWS = 5;
+const BUFFER_COLS = 3;
 
 export function SpreadsheetGrid() {
   const {
@@ -38,15 +40,6 @@ export function SpreadsheetGrid() {
   const getColWidth = useCallback((col: number) => {
     return columnWidths[col] || sheet.columnWidths[col] || DEFAULT_CELL_WIDTH;
   }, [columnWidths, sheet.columnWidths]);
-
-  // Determine column offsets for positioning
-  const colOffsets = useMemo(() => {
-    const offsets: number[] = [0];
-    for (let i = 0; i < VISIBLE_COLS; i++) {
-      offsets.push(offsets[i] + getColWidth(i));
-    }
-    return offsets;
-  }, [getColWidth]);
 
   useEffect(() => {
     if (editingCell && inputRef.current) {
@@ -254,13 +247,95 @@ export function SpreadsheetGrid() {
 
   // Select all cells in a row
   const handleRowSelect = useCallback((row: number) => {
-    setSelection({ startRow: row, startCol: 0, endRow: row, endCol: VISIBLE_COLS - 1 });
+    setSelection({ startRow: row, startCol: 0, endRow: row, endCol: TOTAL_COLS - 1 });
   }, [setSelection]);
 
   // Select all cells in a column
   const handleColSelect = useCallback((col: number) => {
-    setSelection({ startRow: 0, startCol: col, endRow: VISIBLE_ROWS - 1, endCol: col });
+    setSelection({ startRow: 0, startCol: col, endRow: TOTAL_ROWS - 1, endCol: col });
   }, [setSelection]);
+
+  // Virtual scrolling state
+  const [scrollState, setScrollState] = useState({ scrollTop: 0, scrollLeft: 0, viewportHeight: 600, viewportWidth: 800 });
+
+  const handleScroll = useCallback(() => {
+    if (!gridRef.current) return;
+    const { scrollTop, scrollLeft, clientHeight, clientWidth } = gridRef.current;
+    setScrollState({ scrollTop, scrollLeft, viewportHeight: clientHeight, viewportWidth: clientWidth });
+  }, []);
+
+  // Calculate visible range
+  const visibleRange = useMemo(() => {
+    const { scrollTop, scrollLeft, viewportHeight, viewportWidth } = scrollState;
+    const startRow = Math.max(0, Math.floor(scrollTop / CELL_HEIGHT) - BUFFER_ROWS);
+    const endRow = Math.min(TOTAL_ROWS - 1, Math.ceil((scrollTop + viewportHeight) / CELL_HEIGHT) + BUFFER_ROWS);
+    
+    let colStart = 0;
+    let accWidth = 0;
+    for (let i = 0; i < TOTAL_COLS; i++) {
+      if (accWidth + getColWidth(i) >= scrollLeft) {
+        colStart = Math.max(0, i - BUFFER_COLS);
+        break;
+      }
+      accWidth += getColWidth(i);
+    }
+    
+    let colEnd = colStart;
+    accWidth = 0;
+    for (let i = colStart; i < TOTAL_COLS; i++) {
+      accWidth += getColWidth(i);
+      if (accWidth > viewportWidth) {
+        colEnd = Math.min(TOTAL_COLS - 1, i + BUFFER_COLS);
+        break;
+      }
+      colEnd = i;
+    }
+    
+    return { startRow, endRow, startCol: colStart, endCol: colEnd };
+  }, [scrollState, getColWidth]);
+
+  // Calculate total dimensions
+  const totalWidth = useMemo(() => {
+    let width = 0;
+    for (let i = 0; i < TOTAL_COLS; i++) {
+      width += getColWidth(i);
+    }
+    return width;
+  }, [getColWidth]);
+
+  const totalHeight = TOTAL_ROWS * CELL_HEIGHT;
+
+  // Offset for visible rows
+  const rowOffset = visibleRange.startRow * CELL_HEIGHT;
+
+  // Column offsets for visible columns
+  const visibleColOffsets = useMemo(() => {
+    const offsets: number[] = [0];
+    let accWidth = 0;
+    for (let i = 0; i < visibleRange.startCol; i++) {
+      accWidth += getColWidth(i);
+    }
+    for (let i = visibleRange.startCol; i <= visibleRange.endCol; i++) {
+      offsets.push(offsets[offsets.length - 1] + getColWidth(i));
+    }
+    return { offsets, baseOffset: accWidth };
+  }, [visibleRange.startCol, visibleRange.endCol, getColWidth]);
+
+  useEffect(() => {
+    if (editingCell && inputRef.current) {
+      inputRef.current.focus();
+      const len = inputRef.current.value.length;
+      inputRef.current.setSelectionRange(len, len);
+    }
+  }, [editingCell]);
+
+  useEffect(() => {
+    const el = gridRef.current;
+    if (!el) return;
+    el.addEventListener('scroll', handleScroll, { passive: true });
+    handleScroll();
+    return () => el.removeEventListener('scroll', handleScroll);
+  }, [handleScroll]);
 
   return (
     <div
@@ -271,125 +346,135 @@ export function SpreadsheetGrid() {
       onMouseUp={handleMouseUp}
       style={{ outline: 'none', userSelect: 'none' }}
     >
-      <div style={{ minWidth: ROW_HEADER_WIDTH + colOffsets[VISIBLE_COLS] + 20 }}>
-        {/* Column headers */}
-        <div className="flex sticky top-0 z-20">
+      <div style={{ minWidth: ROW_HEADER_WIDTH + totalWidth + 20, height: totalHeight + COL_HEADER_HEIGHT }}>
+        {/* Column headers - sticky */}
+        <div className="flex sticky top-0 z-20" style={{ height: COL_HEADER_HEIGHT }}>
           <div
             className="bg-gradient-to-b from-gray-100 to-gray-150 border-b border-r border-gray-300 flex items-center justify-center text-[10px] text-gray-400 font-medium shrink-0 sticky left-0 z-30"
             style={{ width: ROW_HEADER_WIDTH, height: COL_HEADER_HEIGHT }}
-            onClick={() => setSelection({ startRow: 0, startCol: 0, endRow: VISIBLE_ROWS - 1, endCol: VISIBLE_COLS - 1 })}
+            onClick={() => setSelection({ startRow: 0, startCol: 0, endRow: TOTAL_ROWS - 1, endCol: TOTAL_COLS - 1 })}
           >
             ▾
           </div>
-          {Array.from({ length: VISIBLE_COLS }, (_, i) => {
-            const isColSelected = selection &&
-              i >= Math.min(selection.startCol, selection.endCol) &&
-              i <= Math.max(selection.startCol, selection.endCol);
-            return (
-              <div
-                key={i}
-                className={`border-b border-r border-gray-300 flex items-center justify-center text-[11px] font-medium shrink-0 relative group cursor-pointer transition-colors ${
-                  isColSelected
-                    ? 'bg-blue-100 text-blue-700 border-blue-300'
-                    : 'bg-gradient-to-b from-gray-50 to-gray-100 text-gray-500 hover:bg-gray-200'
-                }`}
-                style={{ width: getColWidth(i), height: COL_HEADER_HEIGHT }}
-                onClick={() => handleColSelect(i)}
-              >
-                {colToLetter(i)}
-                <div
-                  className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-400 opacity-0 group-hover:opacity-100 z-10"
-                  onMouseDown={(e) => handleResizeStart(i, e)}
-                />
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Rows */}
-        {Array.from({ length: VISIBLE_ROWS }, (_, rowIdx) => {
-          const row = rowIdx;
-          const isRowSelected = selection &&
-            row >= Math.min(selection.startRow, selection.endRow) &&
-            row <= Math.max(selection.startRow, selection.endRow);
-          return (
-            <div key={row} className="flex" style={{ height: CELL_HEIGHT }}>
-              <div
-                className={`border-b border-r border-gray-300 flex items-center justify-center text-[11px] font-medium shrink-0 sticky left-0 z-10 cursor-pointer transition-colors ${
-                  isRowSelected
-                    ? 'bg-blue-100 text-blue-700 border-blue-300'
-                    : 'bg-gradient-to-r from-gray-50 to-gray-100 text-gray-500 hover:bg-gray-200'
-                }`}
-                style={{ width: ROW_HEADER_WIDTH, height: CELL_HEIGHT }}
-                onClick={() => handleRowSelect(row)}
-              >
-                {row + 1}
-              </div>
-              {Array.from({ length: VISIBLE_COLS }, (_, colIdx) => {
-                const col = colIdx;
-                const cellId = refToCell(row, col);
-                const cellData = sheet.cells[cellId];
-                const selected = isSelected(row, col);
-                const active = isActiveCell(row, col);
-                const isEditing = editingCell === cellId;
-                const computed = getComputedValue(row, col);
-                const displayVal = computed || (cellData?.value != null ? String(cellData.value) : '');
-                const hasFormula = !!cellData?.formula;
-                const colWidth = getColWidth(col);
-
+          <div className="relative" style={{ width: totalWidth, height: COL_HEADER_HEIGHT }}>
+            <div className="absolute" style={{ left: visibleColOffsets.baseOffset, top: 0 }}>
+              {Array.from({ length: visibleRange.endCol - visibleRange.startCol + 1 }, (_, i) => {
+                const col = visibleRange.startCol + i;
+                const isColSelected = selection &&
+                  col >= Math.min(selection.startCol, selection.endCol) &&
+                  col <= Math.max(selection.startCol, selection.endCol);
                 return (
                   <div
                     key={col}
-                    className={`border-b border-r shrink-0 relative transition-shadow ${
-                      active
-                        ? 'ring-2 ring-blue-500 ring-inset z-10 bg-white'
-                        : selected
-                          ? 'bg-blue-50/60 border-blue-200'
-                          : 'border-gray-200 hover:bg-blue-50/20'
+                    className={`border-b border-r border-gray-300 flex items-center justify-center text-[11px] font-medium shrink-0 relative group cursor-pointer transition-colors ${
+                      isColSelected
+                        ? 'bg-blue-100 text-blue-700 border-blue-300'
+                        : 'bg-gradient-to-b from-gray-50 to-gray-100 text-gray-500 hover:bg-gray-200'
                     }`}
-                    style={{
-                      width: colWidth,
-                      height: CELL_HEIGHT,
-                      ...(selected && !active ? {} : getCellStyle(cellData?.format)),
-                      ...(active ? getCellStyle(cellData?.format) : {}),
-                    }}
-                    onMouseDown={(e) => handleMouseDown(row, col, e)}
-                    onMouseMove={() => handleMouseMove(row, col)}
-                    onDoubleClick={() => handleCellDoubleClick(row, col)}
-                    onContextMenu={(e) => handleContextMenu(e, row, col)}
+                    style={{ width: getColWidth(col), height: COL_HEADER_HEIGHT, position: 'absolute', left: visibleColOffsets.offsets[i - visibleRange.startCol] }}
+                    onClick={() => handleColSelect(col)}
                   >
-                    {isEditing ? (
-                      <input
-                        ref={inputRef}
-                        className="absolute inset-0 w-full h-full px-1.5 text-[13px] border-0 outline-none bg-white z-20 font-sans"
-                        value={editValue}
-                        onChange={(e) => setEditValue(e.target.value)}
-                        onBlur={commitEdit}
-                      />
-                    ) : (
-                      <div className="flex items-center h-full">
-                        <div
-                          className={`px-1.5 truncate text-[13px] w-full ${
-                            typeof cellData?.value === 'number' || (computed && !isNaN(Number(computed)) && computed !== '')
-                              ? 'text-right'
-                              : ''
-                          }`}
-                          title={hasFormula ? `${cellData?.formula} = ${displayVal}` : displayVal}
-                        >
-                          {displayVal}
-                        </div>
-                      </div>
-                    )}
-                    {/* Active cell resize handle */}
-                    {active && !isEditing && (
-                      <div className="absolute bottom-0 right-0 w-2 h-2 bg-blue-500 cursor-crosshair z-20" />
-                    )}
+                    {colToLetter(col)}
+                    <div
+                      className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-400 opacity-0 group-hover:opacity-100 z-10"
+                      onMouseDown={(e) => handleResizeStart(col, e)}
+                    />
                   </div>
                 );
               })}
             </div>
-          );
-        })}
+          </div>
+        </div>
+
+        {/* Rows - virtualized */}
+        <div className="relative" style={{ top: rowOffset }}>
+          {Array.from({ length: visibleRange.endRow - visibleRange.startRow + 1 }, (_, i) => {
+            const row = visibleRange.startRow + i;
+            const isRowSelected = selection &&
+              row >= Math.min(selection.startRow, selection.endRow) &&
+              row <= Math.max(selection.startRow, selection.endRow);
+            return (
+              <div key={row} className="flex absolute" style={{ height: CELL_HEIGHT, top: row * CELL_HEIGHT }}>
+                <div
+                  className={`border-b border-r border-gray-300 flex items-center justify-center text-[11px] font-medium shrink-0 sticky left-0 z-10 cursor-pointer transition-colors ${
+                    isRowSelected
+                      ? 'bg-blue-100 text-blue-700 border-blue-300'
+                      : 'bg-gradient-to-r from-gray-50 to-gray-100 text-gray-500 hover:bg-gray-200'
+                  }`}
+                  style={{ width: ROW_HEADER_WIDTH, height: CELL_HEIGHT }}
+                  onClick={() => handleRowSelect(row)}
+                >
+                  {row + 1}
+                </div>
+                <div className="relative" style={{ width: totalWidth, height: CELL_HEIGHT }}>
+                  {Array.from({ length: visibleRange.endCol - visibleRange.startCol + 1 }, (_, j) => {
+                    const col = visibleRange.startCol + j;
+                    const cellId = refToCell(row, col);
+                    const cellData = sheet.cells[cellId];
+                    const selected = isSelected(row, col);
+                    const active = isActiveCell(row, col);
+                    const isEditing = editingCell === cellId;
+                    const computed = getComputedValue(row, col);
+                    const displayVal = computed || (cellData?.value != null ? String(cellData.value) : '');
+                    const hasFormula = !!cellData?.formula;
+                    const colWidth = getColWidth(col);
+
+                    return (
+                      <div
+                        key={col}
+                        className={`border-b border-r shrink-0 relative transition-shadow ${
+                          active
+                            ? 'ring-2 ring-blue-500 ring-inset z-10 bg-white'
+                            : selected
+                              ? 'bg-blue-50/60 border-blue-200'
+                              : 'border-gray-200 hover:bg-blue-50/20'
+                        }`}
+                        style={{
+                          width: colWidth,
+                          height: CELL_HEIGHT,
+                          position: 'absolute',
+                          left: visibleColOffsets.offsets[j],
+                          ...(selected && !active ? {} : getCellStyle(cellData?.format)),
+                          ...(active ? getCellStyle(cellData?.format) : {}),
+                        }}
+                        onMouseDown={(e) => handleMouseDown(row, col, e)}
+                        onMouseMove={() => handleMouseMove(row, col)}
+                        onDoubleClick={() => handleCellDoubleClick(row, col)}
+                        onContextMenu={(e) => handleContextMenu(e, row, col)}
+                      >
+                        {isEditing ? (
+                          <input
+                            ref={inputRef}
+                            className="absolute inset-0 w-full h-full px-1.5 text-[13px] border-0 outline-none bg-white z-20 font-sans"
+                            value={editValue}
+                            onChange={(e) => setEditValue(e.target.value)}
+                            onBlur={commitEdit}
+                          />
+                        ) : (
+                          <div className="flex items-center h-full">
+                            <div
+                              className={`px-1.5 truncate text-[13px] w-full ${
+                                typeof cellData?.value === 'number' || (computed && !isNaN(Number(computed)) && computed !== '')
+                                  ? 'text-right'
+                                  : ''
+                              }`}
+                              title={hasFormula ? `${cellData?.formula} = ${displayVal}` : displayVal}
+                            >
+                              {displayVal}
+                            </div>
+                          </div>
+                        )}
+                        {active && !isEditing && (
+                          <div className="absolute bottom-0 right-0 w-2 h-2 bg-blue-500 cursor-crosshair z-20" />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

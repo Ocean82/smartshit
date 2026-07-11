@@ -19,6 +19,15 @@
   background: #a1a1a1;
 }
 
+/* Hide scrollbar for mobile skill pills */
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
 /* Prevent text selection in grid */
 .select-none {
   -webkit-user-select: none;

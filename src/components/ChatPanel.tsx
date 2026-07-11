@@ -16,7 +16,7 @@ function healthFooterMessage(health: ServerHealth | null): string {
   return 'AI server offline — deterministic analysis only'
 }
 
-export function ChatPanel() {
+export function ChatPanel({ isMobileOpen, onCloseMobile }: { isMobileOpen?: boolean; onCloseMobile?: () => void }) {
   const {
     messages,
     chatInput,
@@ -84,7 +84,11 @@ export function ChatPanel() {
   }
 
   return (
-    <div className="w-[min(440px,42%)] min-w-[320px] border-r border-gray-200 flex flex-col bg-white shrink-0">
+    <div className={`
+      flex flex-col bg-white shrink-0 border-r border-gray-200
+      w-full md:w-[min(440px,42%)] md:min-w-[320px]
+      ${isMobileOpen ? 'fixed inset-0 z-40' : 'hidden md:flex'}
+    `}>
       <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between bg-gradient-to-r from-slate-800 to-blue-800">
         <div className="flex items-center gap-2">
           <Sparkles size={18} className="text-amber-300" />
@@ -93,15 +97,24 @@ export function ChatPanel() {
             <p className="text-[10px] text-blue-200">Describe what you need — I handle the rest</p>
           </div>
         </div>
+        {onCloseMobile && (
+          <button
+            type="button"
+            onClick={onCloseMobile}
+            className="md:hidden p-1.5 rounded-lg text-white hover:bg-white/20"
+          >
+            ✕
+          </button>
+        )}
       </div>
 
-      <div className="px-3 py-2 border-b border-gray-100 overflow-x-auto">
-        <div className="flex gap-1.5">
+      <div className="px-3 py-2 border-b border-gray-100 overflow-x-auto scrollbar-hide">
+        <div className="flex gap-1.5 md:flex-wrap">
           {skills.slice(0, 6).map((skill) => (
             <button
               key={skill.id}
               type="button"
-              className="flex items-center gap-1 px-2.5 py-1 text-xs bg-gray-50 rounded-full border border-gray-200 hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700 transition-colors whitespace-nowrap"
+              className="flex items-center gap-1 px-2.5 py-1 text-xs bg-gray-50 rounded-full border border-gray-200 hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700 transition-colors whitespace-nowrap shrink-0"
               onClick={() => handleSkillClick(skill.prompt)}
               title={skill.description}
             >
@@ -238,7 +251,7 @@ export function ChatPanel() {
           />
           <button
             type="button"
-            className="p-2.5 rounded-xl border border-gray-300 bg-white text-gray-600 hover:bg-gray-100 disabled:opacity-50"
+            className="p-2.5 rounded-xl border border-gray-300 bg-white text-gray-600 hover:bg-gray-100 disabled:opacity-50 shrink-0"
             onClick={() => fileInputRef.current?.click()}
             disabled={isAiProcessing}
             title="Attach spreadsheet file"
@@ -247,8 +260,8 @@ export function ChatPanel() {
           </button>
           <textarea
             ref={inputRef}
-            className="flex-1 resize-none rounded-xl border border-gray-300 px-3.5 py-2.5 text-sm focus:border-blue-400 focus:ring-1 focus:ring-blue-200 outline-none bg-white"
-            rows={3}
+            className="flex-1 resize-none rounded-xl border border-gray-300 px-3.5 py-2.5 text-sm focus:border-blue-400 focus:ring-1 focus:ring-blue-200 outline-none bg-white min-h-[44px] max-h-[120px] md:min-h-[80px]"
+            rows={2}
             value={chatInput}
             onChange={(e) => setChatInput(e.target.value)}
             onKeyDown={handleKeyDown}
@@ -256,7 +269,7 @@ export function ChatPanel() {
           />
           <button
             type="button"
-            className="p-2.5 rounded-xl bg-gradient-to-r from-slate-800 to-blue-700 text-white hover:from-slate-900 hover:to-blue-800 disabled:opacity-50 transition-all shadow-sm"
+            className="p-2.5 rounded-xl bg-gradient-to-r from-slate-800 to-blue-700 text-white hover:from-slate-900 hover:to-blue-800 disabled:opacity-50 transition-all shadow-sm shrink-0"
             onClick={sendMessage}
             disabled={!chatInput.trim() || isAiProcessing}
             title="Send message"
