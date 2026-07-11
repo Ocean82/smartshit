@@ -41,6 +41,26 @@ export interface DataValidation {
   message?: string;
 }
 
+export interface PivotField {
+  sourceColumn: string;
+  aggregation: 'sum' | 'count' | 'average' | 'min' | 'max' | 'distinctCount';
+  label?: string;
+}
+
+export interface PivotConfig {
+  sourceSheetId: string;
+  sourceRange: { startRow: number; endRow: number; startCol: number; endCol: number };
+  rows: PivotField[];
+  columns: PivotField[];
+  values: PivotField[];
+}
+
+export interface PivotResult {
+  headers: string[];
+  rows: Array<(string | number)[]>;
+  grandTotals: (string | number)[];
+}
+
 export interface SheetData {
   id: string;
   name: string;
@@ -53,6 +73,8 @@ export interface SheetData {
   sortConfig?: SortConfig;
   charts?: ChartConfig[];
   mergedCells?: string[];
+  pivotConfig?: PivotConfig;
+  pivotResult?: PivotResult;
 }
 
 export interface FilterConfig {

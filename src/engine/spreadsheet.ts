@@ -1,5 +1,5 @@
 import HyperFormula from 'hyperformula';
-import type { SheetData, WorkbookData } from '@/types';
+import type { SheetData, WorkbookData, PivotConfig, PivotResult } from '@/types';
 import { v4 as uuid } from 'uuid';
 
 export function colToLetter(col: number): string {
@@ -217,6 +217,81 @@ export class SpreadsheetEngine {
       { name: 'AVERAGEIF', description: 'Returns average of cells meeting criteria', category: 'Statistical', syntax: 'AVERAGEIF(range, criteria, [average_range])' },
       { name: 'SUMPRODUCT', description: 'Returns sum of products', category: 'Math', syntax: 'SUMPRODUCT(array1, [array2], ...)' },
     ];
+  }
+
+  computePivotTable(
+    cells: Record<string, { value: string | number | null }>,
+    config: PivotConfig,
+    startRow: number,
+    endRow: number,
+    startCol: number,
+    endCol: number
+  ): PivotResult {
+    const sourceRows: Record<string, (string | number | null)[]>[] = [];
+    for (let r = startRow; r <= endRow; r++) {
+      const row: Record<string, (string | number | null)[]> = {};
+      for (let c = startCol; c <= endCol; c++) {
+        const colLetter = colToLetter(c);
+        const cellId = refToCell(r, c);
+        row[colLetter] = [cells[cellId]?.value ?? null];
+      }
+      sourceRows.push(row);
+    }
+
+    const rowKeyMap = new Map<string, (string | number)[]>();
+    const colKeyMap = new Map<string, (string | number)[]>();
+    const valueAggMap = new Map<string, number[]>();
+
+    for (const sourceRow of sourceRows) {
+      const rowKeyParts = config.rows.map(f => String(sourceRow[f.sourceColumn]?.[0] ?? ''));
+      const rowKey = rowKeyParts.join('||');
+      if (!rowKeyMap.has(rowKey)) rowKeyMap.set(rowKey, rowKeyParts);
+
+      const colKeyParts = config.columns.map(f => String(sourceRow[f.sourceColumn]?.[0] ?? ''));
+      const colKey = colKeyParts.join('||');
+      if (!colKeyMap.has(colKey)) colKeyMap.set(colKey, colKeyParts);
+
+      const aggKey = `${rowKey}||${colKey}`;
+      const existing = valueAggMap.get(aggKey) || [];
+
+      for (const vf of config.values) {
+        const rawVal = sourceRow[vf.sourceColumn]?.[0];
+        const numVal = typeof rawVal === 'number' ? rawVal : parseFloat(String(rawVal));
+        if (!isNaN(numVal)) existing.push(numVal);
+      }
+      valueAggMap.set(aggKey, existing);
+    }
+
+    const rowFieldLabels = config.rows.map(f => f.label || f.sourceColumn);
+    const colFieldLabels = config.columns.map(f => f.label || f.sourceColumn);
+    const valueLabels = config.values.map(f => f.label || `${f.aggregation}(${f.sourceColumn})`);
+
+    const colKeys = Array.from(colKeyMap.keys());
+    const headers = [...rowFieldLabels, ...colKeys.flatMap(ck => {
+      const parts = colKeyMap.get(ck)!;
+      return valueLabels.map(vl => [...parts, vl].join(' '));
+    })];
+
+    const resultRows: (string | number)[][] = [];
+    for (const [rowKey, rowParts] of rowKeyMap) {
+      const row: (string | number)[] = [...rowParts];
+      for (const colKey of colKeys) {
+        const values = valueAggMap.get(`${rowKey}||${colKey}`) || [];
+        for (const vf of config.values) {
+          switch (vf.aggregation) {
+            case 'sum': row.push(values.reduce((a, b) => a + b, 0)); break;
+            case 'average': row.push(values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0); break;
+            case 'count': row.push(values.length); break;
+            case 'min': row.push(values.length ? Math.min(...values) : 0); break;
+            case 'max': row.push(values.length ? Math.max(...values) : 0); break;
+            case 'distinctCount': row.push(new Set(values).size); break;
+          }
+        }
+      }
+      resultRows.push(row);
+    }
+
+    return { headers, rows: resultRows, grandTotals: [] };
   }
 
   destroy(): void {
