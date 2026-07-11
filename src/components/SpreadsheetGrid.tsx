@@ -2,6 +2,7 @@ import React, { useCallback, useRef, useEffect, useState, useMemo } from 'react'
 import { useStore } from '@/store/useStore';
 import { colToLetter, refToCell, cellToRef } from '@/engine/spreadsheet';
 import { FormulaAutocomplete } from './FormulaAutocomplete';
+import { FindReplaceDialog } from './FindReplaceDialog';
 import type { CellFormat } from '@/types';
 import { formatCellValue, getBorderCSS } from '@/lib/formatUtils';
 import { buildFilteredRowIndex } from '@/lib/rowFilter';
@@ -31,6 +32,7 @@ export function SpreadsheetGrid() {
     getComputedValue,
     setContextMenu,
     activeFilters,
+    activeSortConfig,
   } = useStore();
 
   const sheet = getActiveSheet();
@@ -56,6 +58,7 @@ export function SpreadsheetGrid() {
   const [resizingCol, setResizingCol] = useState<number | null>(null);
   const [resizeStartX, setResizeStartX] = useState(0);
   const [resizeStartWidth, setResizeStartWidth] = useState(0);
+  const [showFindReplace, setShowFindReplace] = useState(false);
 
   const getColWidth = useCallback((col: number) => {
     return columnWidths[col] || sheet.columnWidths[col] || DEFAULT_CELL_WIDTH;
@@ -218,8 +221,22 @@ export function SpreadsheetGrid() {
             case 'c': e.preventDefault(); useStore.getState().copy(); break;
             case 'x': e.preventDefault(); useStore.getState().cut(); break;
             case 'v': e.preventDefault(); useStore.getState().paste(); break;
-            case 'b': e.preventDefault(); useStore.getState().setRangeFormat({ bold: true }); break;
-            case 'i': e.preventDefault(); useStore.getState().setRangeFormat({ italic: true }); break;
+            case 'a': e.preventDefault(); setSelection({ startRow: 0, startCol: 0, endRow: TOTAL_ROWS - 1, endCol: TOTAL_COLS - 1 }); break;
+            case 'f': case 'h': e.preventDefault(); setShowFindReplace(true); break;
+            case 'b': {
+              e.preventDefault();
+              const cellId = refToCell(r, c);
+              const currentBold = sheet.cells[cellId]?.format?.bold ?? false;
+              useStore.getState().setRangeFormat({ bold: !currentBold });
+              break;
+            }
+            case 'i': {
+              e.preventDefault();
+              const cellId2 = refToCell(r, c);
+              const currentItalic = sheet.cells[cellId2]?.format?.italic ?? false;
+              useStore.getState().setRangeFormat({ italic: !currentItalic });
+              break;
+            }
           }
         }
     }
@@ -434,6 +451,12 @@ export function SpreadsheetGrid() {
                     onClick={() => handleColSelect(col)}
                   >
                     {colToLetter(col)}
+                    {activeSortConfig?.column === col && (
+                      <span className="ml-0.5 text-blue-500 text-[9px]">{activeSortConfig.direction === 'asc' ? '▲' : '▼'}</span>
+                    )}
+                    {activeFilters.some((f) => f.column === col) && (
+                      <span className="ml-0.5 text-amber-500 text-[9px]">⏷</span>
+                    )}
                     <div
                       className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-400 opacity-0 group-hover:opacity-100 z-10"
                       onMouseDown={(e) => handleResizeStart(col, e)}
@@ -563,6 +586,7 @@ export function SpreadsheetGrid() {
         onSelect={handleAutocompleteSelect}
         position={autocompletePos}
       />
+      <FindReplaceDialog isOpen={showFindReplace} onClose={() => setShowFindReplace(false)} />
     </div>
   );
 }
