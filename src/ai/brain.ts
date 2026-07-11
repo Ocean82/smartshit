@@ -9,6 +9,7 @@ import { runQueryFromIntent } from '@/ai/queryEngine'
 import { formatInsights, mergeToolResultContent, toolResultToMessage } from '@/ai/responseBuilder'
 import { chatWithAgentServerStream } from '@/ai/agentClient'
 import { recordTelemetry } from '@/ai/telemetry'
+import { runAudit, formatAuditForContext } from '@/auditor'
 import type { SheetInsights } from '@/ai/sheetInsights'
 import type { AttachedFilePreview, ToolResult } from '@/ai/types'
 import type { Selection, SheetData, WorkbookData } from '@/types'
@@ -74,6 +75,7 @@ function runDeterministicSkills(
 function buildDeterministicSummary(
   insightsBlock: string,
   deterministicText: string,
+  auditBlock: string,
   priorInsights?: SheetInsights | null,
   currentInsights?: SheetInsights,
 ): string {
@@ -84,6 +86,7 @@ function buildDeterministicSummary(
   }
   if (insightsBlock) parts.push(`Deterministic sheet findings:\n${insightsBlock}`)
   if (deterministicText) parts.push(`Deterministic recommendation:\n${deterministicText}`)
+  if (auditBlock) parts.push(auditBlock)
   return mergeToolResultContent(parts.filter(Boolean))
 }
 
@@ -102,6 +105,17 @@ export async function processMessage(input: ProcessMessageInput): Promise<ToolRe
   const deterministicText = deterministic ? toolResultToMessage(deterministic, { includeSuggestionsInBody: false }) : ''
   const insightsBlock = isLlmOnlyMode(mode) ? formatInsights(target.context.insights) : ''
 
+  // Run the auditor for context (only on explain/advise modes where it's useful)
+  let auditBlock = ''
+  if (isLlmOnlyMode(mode) || mode === 'advise') {
+    try {
+      const auditResult = runAudit(input.sheet, input.getComputedValue)
+      auditBlock = formatAuditForContext(auditResult)
+    } catch {
+      // Audit failure is non-fatal — continue without it
+    }
+  }
+
   if (deterministic && !isLlmOnlyMode(mode) && deterministic.actions?.length) {
     recordTelemetry('deterministicResponses', deterministic.toolUsed ?? 'deterministic-action')
     return deterministic
@@ -118,6 +132,7 @@ export async function processMessage(input: ProcessMessageInput): Promise<ToolRe
       deterministicSummary: buildDeterministicSummary(
         insightsBlock,
         deterministicText,
+        auditBlock,
         input.priorInsights,
         target.context.insights,
       ),
