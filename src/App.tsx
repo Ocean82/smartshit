@@ -10,6 +10,7 @@ import { SkillsPanel } from '@/components/SkillsPanel'
 import { ContextMenu } from '@/components/ContextMenu'
 import { ChartDialog } from '@/components/ChartDialog'
 import { ChartOverlay } from '@/components/ChartRenderer'
+import { ValidationDialog } from '@/components/ValidationDialog'
 import { StatusBar } from '@/components/StatusBar'
 import { WelcomeOverlay } from '@/components/WelcomeOverlay'
 import { SummaryCards } from '@/components/SummaryCards'
@@ -18,7 +19,7 @@ import { TelemetryDebugPanel } from '@/components/TelemetryDebugPanel'
 import { Sparkles, Zap } from 'lucide-react'
 
 function App() {
-  const { workbook, engine } = useStore()
+  const { workbook, engine, showValidationDialog, setShowValidationDialog } = useStore()
   const [isLoaded, setIsLoaded] = useState(false)
   const [showTemplates, setShowTemplates] = useState(false)
   const [isMobileChatOpen, setIsMobileChatOpen] = useState(false)
@@ -78,6 +79,7 @@ function App() {
       <StatusBar />
       <ContextMenu />
       <ChartDialog />
+      <ValidationDialog isOpen={showValidationDialog} onClose={() => setShowValidationDialog(false)} />
       <WelcomeOverlay onOpenTemplates={() => setShowTemplates(true)} />
       <TemplateGallery open={showTemplates} onClose={() => setShowTemplates(false)} />
       {import.meta.env.DEV ? <TelemetryDebugPanel /> : null}

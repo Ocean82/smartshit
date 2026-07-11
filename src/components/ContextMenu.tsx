@@ -3,7 +3,7 @@ import { useStore } from '@/store/useStore';
 import { cellToRef } from '@/engine/spreadsheet';
 import {
   Copy, Scissors, ClipboardPaste, Trash2, Plus,
-  ArrowDown, ArrowRight, Bold, Italic,
+  ArrowDown, ArrowRight, Bold, Italic, Shield,
 } from 'lucide-react';
 
 export function ContextMenu() {
@@ -49,6 +49,8 @@ export function ContextMenu() {
     { icon: <Italic size={13} />, label: 'Italic', shortcut: 'Ctrl+I', action: () => { setRangeFormat({ italic: true }); } },
     null,
     { icon: <Trash2 size={13} />, label: 'Clear Cell', action: () => { pushHistory('Clear'); setCellValue(contextMenu.cell, null); } },
+    null,
+    { icon: <Shield size={13} />, label: 'Data Validation', action: () => { useStore.getState().setShowValidationDialog(true); setContextMenu(null); } },
   ];
 
   return (

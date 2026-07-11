@@ -61,6 +61,7 @@ interface AppState {
   showSkills: boolean;
   showChartDialog: boolean;
   showFormatPanel: boolean;
+  showValidationDialog: boolean;
   contextMenu: { x: number; y: number; cell: string } | null;
 
   // History
@@ -108,6 +109,7 @@ interface AppState {
   toggleSkills: () => void;
   setShowChartDialog: (v: boolean) => void;
   setShowFormatPanel: (v: boolean) => void;
+  setShowValidationDialog: (show: boolean) => void;
   setContextMenu: (menu: { x: number; y: number; cell: string } | null) => void;
 
   // Validation
@@ -200,6 +202,7 @@ export const useStore = create<AppState>()(
       showSkills: false,
       showChartDialog: false,
       showFormatPanel: false,
+      showValidationDialog: false,
       contextMenu: null,
       undoStack: [],
       redoStack: [],
@@ -332,6 +335,7 @@ export const useStore = create<AppState>()(
       toggleSkills: () => set((s) => { s.showSkills = !s.showSkills; }),
       setShowChartDialog: (v) => set((s) => { s.showChartDialog = v; }),
       setShowFormatPanel: (v) => set((s) => { s.showFormatPanel = v; }),
+      setShowValidationDialog: (show) => set((s) => { s.showValidationDialog = show; }),
       setContextMenu: (menu) => set((s) => { s.contextMenu = menu; }),
 
       setCellValidation: (cellId, validation) => {
