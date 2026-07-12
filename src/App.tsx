@@ -20,6 +20,7 @@ import { WelcomeOverlay } from '@/components/WelcomeOverlay'
 import { SummaryCards } from '@/components/SummaryCards'
 import { InsightCharts } from '@/components/InsightCharts'
 import { TemplateGallery } from '@/components/TemplateGallery'
+import { MenuBar } from '@/components/MenuBar'
 import { TelemetryDebugPanel } from '@/components/TelemetryDebugPanel'
 import { Sparkles, Zap } from 'lucide-react'
 
@@ -61,7 +62,7 @@ function App() {
   return (
     <div className="h-screen w-screen flex flex-col bg-white overflow-hidden">
       <TitleBar onOpenTemplates={() => setShowTemplates(true)} />
-
+      <MenuBar />
       <Toolbar />
 
       <div className="flex-1 flex overflow-hidden min-h-0">

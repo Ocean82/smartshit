@@ -23,6 +23,7 @@ docs/images/notes
 
 # Editor / agent local state
 .cursor/
+.kiro/
 
 # PM2 ecosystem config (contains server secrets)
 server/ecosystem.config.cjs
