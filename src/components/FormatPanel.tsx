@@ -2,13 +2,8 @@ import React, { useState, useCallback } from 'react';
 import { useStore } from '@/store/useStore';
 import { refToCell } from '@/engine/spreadsheet';
 import { NUMBER_FORMATS } from '@/lib/formatUtils';
+import { FULL_COLORS as COLORS } from '@/data/colors';
 import type { CellFormat } from '@/types';
-
-const COLORS = [
-  '#000000', '#434343', '#666666', '#999999', '#B7B7B7', '#CCCCCC', '#FFFFFF',
-  '#FF0000', '#FF6D00', '#FFAB00', '#FFD600', '#AEEA00', '#00C853', '#00BFA5',
-  '#2979FF', '#304FFE', '#651FFF', '#AA00FF', '#D500F9', '#F50057', '#FF1744',
-];
 
 const BORDER_STYLES = [
   { value: '', label: 'None' },

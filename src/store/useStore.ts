@@ -2331,26 +2331,6 @@ function executeAction(
     // SMALL BUSINESS TEMPLATES
     // ═══════════════════════════════════════════════════════════════════════════════
 
-    case 'create_sales_tracker': {
-      const cells: Record<string, { value: string | number | boolean | null; formula?: string }> = {
-        'A1': { value: 'Sales Tracker' },
-        'A3': { value: 'Date' }, 'B3': { value: 'Product' }, 'C3': { value: 'Qty Sold' }, 'D3': { value: 'Unit Price' }, 'E3': { value: 'Revenue' }, 'F3': { value: 'Cost' }, 'G3': { value: 'Profit' },
-        'A4': { value: '2024-01-05' }, 'B4': { value: 'Widget A' }, 'C4': { value: 25 }, 'D4': { value: 20 }, 'E4': { value: null, formula: '=C4*D4' }, 'F4': { value: 12 }, 'G4': { value: null, formula: '=E4-(C4*F4)' },
-        'A5': { value: '2024-01-05' }, 'B5': { value: 'Widget B' }, 'C5': { value: 10 }, 'D5': { value: 50 }, 'E5': { value: null, formula: '=C5*D5' }, 'F5': { value: 30 }, 'G5': { value: null, formula: '=E5-(C5*F5)' },
-        'A6': { value: '2024-01-06' }, 'B6': { value: 'Widget A' }, 'C6': { value: 30 }, 'D6': { value: 20 }, 'E6': { value: null, formula: '=C6*D6' }, 'F6': { value: 12 }, 'G6': { value: null, formula: '=E6-(C6*F6)' },
-        'A7': { value: '2024-01-07' }, 'B7': { value: 'Service X' }, 'C7': { value: 5 }, 'D7': { value: 200 }, 'E7': { value: null, formula: '=C7*D7' }, 'F7': { value: 80 }, 'G7': { value: null, formula: '=E7-(C7*F7)' },
-        'A9': { value: 'TOTALS' },
-        'E9': { value: null, formula: '=SUM(E4:E7)' }, 'G9': { value: null, formula: '=SUM(G4:G7)' },
-      };
-      state.bulkSetCells(cells);
-      const hdr = { bold: true, bgColor: '#7C3AED', fontColor: '#FFFFFF', textAlign: 'center' as const };
-      ['A3','B3','C3','D3','E3','F3','G3'].forEach((c) => state.setCellFormat(c, hdr));
-      state.setCellFormat('A1', { bold: true, fontSize: 16, fontColor: '#7C3AED' });
-      state.setCellFormat('A9', { bold: true });
-      ['E9','G9'].forEach((c) => state.setCellFormat(c, { bold: true, bgColor: '#EDE9FE' }));
-      break;
-    }
-
     case 'create_pnl_statement': {
       const cells: Record<string, { value: string | number | boolean | null; formula?: string }> = {
         'A1': { value: 'Profit & Loss Statement' },

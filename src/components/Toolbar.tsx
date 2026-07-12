@@ -9,6 +9,7 @@ import {
   Download, Upload, Plus, FolderOpen, Sparkles,
   Filter, SortAsc, Scissors, Copy, ClipboardPaste,
 } from 'lucide-react';
+import { BG_COLORS, FULL_COLORS } from '@/data/colors';
 import { useRef, useState, useEffect } from 'react';
 import { v4 as uuid } from 'uuid';
 import { FormulaAutocomplete } from './FormulaAutocomplete';
@@ -247,17 +248,9 @@ export function Toolbar() {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  const colorOptions = [
-    '#FFFFFF', '#FEE2E2', '#FEF3C7', '#D1FAE5', '#DBEAFE', '#EDE9FE',
-    '#FCE7F3', '#F3F4F6', '#FCA5A5', '#FCD34D', '#6EE7B7', '#93C5FD',
-    '#C4B5FD', '#F9A8D4',
-  ];
+  const colorOptions = BG_COLORS;
 
-  const fontColorOptions = [
-    '#000000', '#434343', '#666666', '#999999', '#B7B7B7', '#CCCCCC', '#FFFFFF',
-    '#FF0000', '#FF6D00', '#FFAB00', '#FFD600', '#AEEA00', '#00C853', '#00BFA5',
-    '#2979FF', '#304FFE', '#651FFF', '#AA00FF', '#D500F9', '#F50057', '#FF1744',
-  ];
+  const fontColorOptions = FULL_COLORS;
 
   return (
     <div className="bg-white border-b border-gray-200">
