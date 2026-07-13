@@ -35,7 +35,7 @@ export interface TemplatePackage {
   }
 }
 
-const STORAGE_KEY = 'smartshit-community-templates'
+const STORAGE_KEY = 'smartsht-community-templates'
 
 // ─── Load/Save from localStorage ─────────────────────────────────────────────
 

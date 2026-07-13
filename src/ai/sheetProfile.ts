@@ -1,5 +1,5 @@
 import type { SheetData } from '@/types'
-import { cellToRef, refToCell } from '@/engine/spreadsheet'
+import { cellToRef, colToLetter, refToCell } from '@/engine/spreadsheet'
 import type { ColumnProfile, ColumnRole, SheetProfile, SheetPurpose } from '@/ai/types'
 
 function parseNumeric(value: string | number | boolean | null | undefined): number | null {
@@ -92,7 +92,7 @@ export function buildSheetProfile(
       if (num !== null) numericValues.push(num)
     }
 
-    const header = headers[c] ?? `Column ${c + 1}`
+    const header = headers[c] ?? `Column ${colToLetter(c)}`
     const colLetter = refToCell(0, c).replace(/\d+/, '')
     const profile: ColumnProfile = {
       name: header,

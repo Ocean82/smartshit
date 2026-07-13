@@ -9,16 +9,24 @@
     "build": "tsc",
     "test": "vitest run",
     "test:watch": "vitest",
-    "setup-model": "node scripts/setup-model.mjs"
+    "setup-model": "node scripts/setup-model.mjs",
+    "migrate": "node scripts/run-migration.mjs"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1085.0",
+    "@aws-sdk/s3-request-presigner": "^3.1085.0",
+    "@clerk/backend": "^3.11.4",
+    "@clerk/express": "^2.1.40",
     "cors": "^2.8.5",
-    "express": "^5.1.0"
+    "dotenv": "^17.4.2",
+    "express": "^5.1.0",
+    "pg": "^8.22.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
     "@types/node": "^22.19.17",
+    "@types/pg": "^8.20.0",
     "tsx": "^4.20.5",
     "typescript": "^5.9.3",
     "vitest": "^3.2.4"

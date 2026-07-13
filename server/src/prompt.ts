@@ -72,6 +72,14 @@ export interface SpreadsheetContextInput {
   workbookName: string
   activeSheet: string
   sheetNames: string[]
+  sheetSummaries?: Array<{
+    name: string
+    rows: number
+    cols: number
+    headers: string[]
+    populatedCells: number
+    isActive: boolean
+  }>
   selectedCells: string[]
   dimensions?: SheetDimensionsInput
   headers?: string[]
@@ -109,11 +117,24 @@ export interface ChatResponseBody {
 function formatContextBlock(context?: SpreadsheetContextInput): string {
   if (!context) return '\nNo spreadsheet data loaded yet.'
 
+  const sheetNames = context.sheetNames ?? []
+  const selectedCells = context.selectedCells ?? []
+  const headers = context.headers ?? []
+
   const lines: string[] = [
-    `\nWorkbook: "${context.workbookName}"`,
-    `Active sheet: "${context.activeSheet}"`,
-    `Sheets: ${context.sheetNames.join(', ')}`,
+    `\nWorkbook: "${context.workbookName ?? 'Untitled'}"`,
+    `Active sheet: "${context.activeSheet ?? 'Sheet1'}"`,
+    `Sheets: ${sheetNames.join(', ') || '(none)'}`,
   ]
+
+  if (context.sheetSummaries?.length) {
+    const summaryLines = context.sheetSummaries.map((s) => {
+      const mark = s.isActive ? ' (active)' : ''
+      const hdrs = (s.headers ?? []).slice(0, 8).join(', ')
+      return `  - "${s.name}"${mark}: ${s.rows} rows × ${s.cols} cols${hdrs ? `; headers: ${hdrs}` : ''}`
+    })
+    lines.push(`Sheet overview:\n${summaryLines.join('\n')}`)
+  }
 
   if (context.dimensions) {
     lines.push(
@@ -121,12 +142,12 @@ function formatContextBlock(context?: SpreadsheetContextInput): string {
     )
   }
 
-  if (context.headers?.length) {
-    lines.push(`Headers: ${context.headers.join(' | ')}`)
+  if (headers.length) {
+    lines.push(`Headers: ${headers.join(' | ')}`)
   }
 
-  if (context.selectedCells?.length) {
-    lines.push(`Selected: ${context.selectedCells.join(', ')}`)
+  if (selectedCells.length) {
+    lines.push(`Selected: ${selectedCells.join(', ')}`)
   }
 
   if (context.selectionSnapshot && Object.keys(context.selectionSnapshot).length > 0) {
@@ -139,7 +160,7 @@ function formatContextBlock(context?: SpreadsheetContextInput): string {
   if (context.sampleRows?.length) {
     const preview = context.sampleRows
       .slice(0, 15)
-      .map((row, i) => `  Row ${i + 1}: ${row.join(' | ')}`)
+      .map((row, i) => `  Row ${i + 1}: ${(row ?? []).join(' | ')}`)
       .join('\n')
     lines.push(`Data preview:\n${preview}`)
     if (context.sampleRowsTruncated) {
@@ -156,7 +177,7 @@ function formatContextBlock(context?: SpreadsheetContextInput): string {
     lines.push(
       `Sheet profile: ${p.name} (${p.detectedPurpose}), ${p.rowCount}x${p.colCount}`,
     )
-    if (p.columns.length) {
+    if (p.columns?.length) {
       lines.push(
         `Columns: ${p.columns.slice(0, 8).map((c) => `${c.name}(${c.role})`).join(', ')}`,
       )
@@ -242,7 +263,9 @@ PERSONALITY: Direct, confident, honest, practical. Every sentence earns its plac
 FORMATTING RULES:
 - Use markdown: headers, bold, code blocks, tables, bullet lists
 - Formulas always in code blocks: \`=SUMIF(A:A, "Q1", B:B)\`
-- Cell references always uppercase: A1, B12:B20
+- Cell references ALWAYS use Excel A1 notation with column letters: A1, B12, C9:C20 — never "column 3" or "row 9 column 5"
+- When a header name exists, you may say "Amount (column C)" or "**C9** (Amount)" — letter first
+- If the workbook has multiple sheets, name the sheet when talking about non-active tabs
 - Numbers with context: "$2,400 (up 12% from last month)" not just "2400"
 - Lead with the answer, then explain. Never "First let me explain X, then..."
 - Short paragraphs: 2-3 sentences max before a line break

@@ -1,6 +1,6 @@
 import type { WorkbookData, FileItem, ChatMessage } from '@/types'
 
-const STORAGE_KEY = 'smartshit-state-v1'
+const STORAGE_KEY = 'smartsht-state-v1'
 
 export interface PersistedState {
   workbook: WorkbookData

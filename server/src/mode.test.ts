@@ -29,6 +29,11 @@ describe('classifyMode', () => {
     expect(classifyMode('thanks!')).toBe('chat')
     expect(classifyMode('hello')).toBe('chat')
   })
+
+  it('classifies unusual-value follow-ups as explain', () => {
+    expect(classifyMode('what makes those values unusual')).toBe('explain')
+    expect(classifyMode('why are these unusual')).toBe('explain')
+  })
 })
 
 describe('isLlmOnlyMode', () => {

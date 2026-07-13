@@ -1,7 +1,7 @@
 import type { SheetData } from '@/types'
-import { cellToRef, refToCell } from '@/engine/spreadsheet'
+import { cellToRef, colToLetter, refToCell } from '@/engine/spreadsheet'
 import { AI_ANALYSIS_CONFIG } from '@/ai/config'
-import { detectOutliers } from '@/ai/outliers'
+import { detectOutliers, type OutlierItem } from '@/ai/outliers'
 
 export interface ColumnStat {
   column: string
@@ -38,7 +38,7 @@ export interface SheetInsights {
   categoryTotals?: CategoryTotal[]
   topExpenses?: ExpenseItem[]
   negativeVariances?: VarianceItem[]
-  outliers?: Array<{ column: string; row: number; value: number }>
+  outliers?: OutlierItem[]
   totalIncome?: number
   totalExpenses?: number
   netCashflow?: number
@@ -246,15 +246,16 @@ export function computeSheetInsights(
     insights.netCashflow = (insights.totalIncome ?? 0) - (insights.totalExpenses ?? 0)
   }
 
-  const allOutliers: Array<{ column: string; row: number; value: number }> = []
+  const allOutliers: OutlierItem[] = []
   for (let c = 0; c <= maxCol; c++) {
-    const label = headers[c] || `Column ${c + 1}`
+    const letter = colToLetter(c)
+    const label = headers[c] || `Column ${letter}`
     const values: Array<{ row: number; value: number }> = []
     for (let r = headerRow + 1; r <= effectiveMaxRow; r++) {
       const num = parseNumeric(matrix[r]?.[c] ?? null)
       if (num !== null) values.push({ row: r + 1, value: num })
     }
-    allOutliers.push(...detectOutliers(values, label))
+    allOutliers.push(...detectOutliers(values, label, letter))
   }
   if (allOutliers.length > 0) insights.outliers = allOutliers.slice(0, 10)
 

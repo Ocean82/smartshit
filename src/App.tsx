@@ -22,12 +22,25 @@ import { InsightCharts } from '@/components/InsightCharts'
 import { TemplateGallery } from '@/components/TemplateGallery'
 import { MenuBar } from '@/components/MenuBar'
 import { TelemetryDebugPanel } from '@/components/TelemetryDebugPanel'
-import { Sparkles, Zap } from 'lucide-react'
+import { WorkbookPicker } from '@/components/WorkbookPicker'
+import { VersionHistoryPanel } from '@/components/VersionHistoryPanel'
+import { ShareDialog } from '@/components/ShareDialog'
+import { Sparkles, Zap, Cloud, CloudOff, Loader2, Share2, PanelLeftOpen, MessageSquare } from 'lucide-react'
+import { UserNav } from '@/auth'
+import {
+  getSyncStatus,
+  onSyncStatusChange,
+  scheduleSave,
+  isCloudConfigured,
+  type SyncStatus,
+} from '@/lib/cloudSync'
 
 function App() {
   const {
     workbook,
     engine,
+    showChat,
+    toggleChat,
     showValidationDialog,
     setShowValidationDialog,
     showPivotDialog,
@@ -39,12 +52,28 @@ function App() {
   } = useStore()
   const [isLoaded, setIsLoaded] = useState(false)
   const [showTemplates, setShowTemplates] = useState(false)
+  const [showWorkbookPicker, setShowWorkbookPicker] = useState(false)
+  const [showShareDialog, setShowShareDialog] = useState(false)
   const [isMobileChatOpen, setIsMobileChatOpen] = useState(false)
 
   useEffect(() => {
     engine.loadWorkbook(workbook)
     setIsLoaded(true)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Cloud sync: schedule a save whenever workbook updates
+  useEffect(() => {
+    if (isLoaded && isCloudConfigured()) {
+      scheduleSave(workbook)
+    }
+  }, [workbook.updatedAt, isLoaded]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Listen for share dialog open event from MenuBar
+  useEffect(() => {
+    const handler = () => setShowShareDialog(true)
+    document.addEventListener('smartsht:open-share', handler)
+    return () => document.removeEventListener('smartsht:open-share', handler)
+  }, [])
 
   if (!isLoaded) {
     return (
@@ -61,7 +90,11 @@ function App() {
 
   return (
     <div className="h-screen w-screen flex flex-col bg-white overflow-hidden">
-      <TitleBar onOpenTemplates={() => setShowTemplates(true)} />
+      <TitleBar
+        onOpenTemplates={() => setShowTemplates(true)}
+        onOpenCloudPicker={() => setShowWorkbookPicker(true)}
+        onOpenShare={() => setShowShareDialog(true)}
+      />
       <MenuBar />
       <Toolbar />
 
@@ -69,8 +102,24 @@ function App() {
         <FileExplorer />
         <SkillsPanel />
 
-        {/* Chat-first: assistant on the left */}
-        <ChatPanel isMobileOpen={isMobileChatOpen} onCloseMobile={() => setIsMobileChatOpen(false)} />
+        {/* Chat drawer — hideable for full spreadsheet view */}
+        {(showChat || isMobileChatOpen) && (
+          <ChatPanel isMobileOpen={isMobileChatOpen} onCloseMobile={() => setIsMobileChatOpen(false)} />
+        )}
+        {!showChat && (
+          <button
+            type="button"
+            onClick={() => toggleChat()}
+            className="hidden md:flex shrink-0 w-9 flex-col items-center justify-center gap-2 border-r border-gray-200 bg-gradient-to-b from-slate-800 to-blue-800 text-white hover:from-slate-900 hover:to-blue-900 transition-colors"
+            title="Show assistant"
+            aria-label="Show assistant"
+          >
+            <PanelLeftOpen size={16} />
+            <span className="text-[10px] font-semibold tracking-wide" style={{ writingMode: 'vertical-rl' }}>
+              Assistant
+            </span>
+          </button>
+        )}
 
         {/* Spreadsheet + summary on the right */}
         <div className="flex-1 flex flex-col overflow-hidden min-w-0 relative">
@@ -83,16 +132,20 @@ function App() {
           <SheetTabs />
         </div>
         <FormatPanel />
+        <VersionHistoryPanel />
       </div>
 
       {/* Mobile chat toggle FAB */}
       <button
         type="button"
-        onClick={() => setIsMobileChatOpen(true)}
+        onClick={() => {
+          if (!showChat) toggleChat()
+          setIsMobileChatOpen(true)
+        }}
         className="md:hidden fixed bottom-6 right-6 z-30 p-4 rounded-full bg-gradient-to-r from-slate-800 to-blue-700 text-white shadow-lg hover:from-slate-900 hover:to-blue-800 transition-all"
         aria-label="Open chat"
       >
-        <Sparkles size={24} />
+        <MessageSquare size={24} />
       </button>
 
       <StatusBar />
@@ -104,14 +157,17 @@ function App() {
       <ConditionalFormatDialog isOpen={showConditionalFormatDialog} onClose={() => setShowConditionalFormatDialog(false)} />
       <WelcomeOverlay onOpenTemplates={() => setShowTemplates(true)} />
       <TemplateGallery open={showTemplates} onClose={() => setShowTemplates(false)} />
+      <WorkbookPicker open={showWorkbookPicker} onClose={() => setShowWorkbookPicker(false)} />
+      <ShareDialog open={showShareDialog} onClose={() => setShowShareDialog(false)} />
       {import.meta.env.DEV ? <TelemetryDebugPanel /> : null}
     </div>
   )
 }
 
-function TitleBar({ onOpenTemplates }: { onOpenTemplates: () => void }) {
+function TitleBar({ onOpenTemplates, onOpenCloudPicker, onOpenShare }: { onOpenTemplates: () => void; onOpenCloudPicker: () => void; onOpenShare: () => void }) {
   const { workbook } = useStore()
   const [health, setHealth] = useState<ServerHealth | null>(null)
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>(getSyncStatus())
 
   useEffect(() => {
     void fetchServerHealth().then(setHealth)
@@ -119,8 +175,61 @@ function TitleBar({ onOpenTemplates }: { onOpenTemplates: () => void }) {
     return () => clearInterval(id)
   }, [])
 
+  useEffect(() => {
+    return onSyncStatusChange(setSyncStatus)
+  }, [])
+
   const aiLabel = health?.ok ? 'AI online' : health?.ollama ? 'Model loading' : 'AI offline'
   const aiClass = health?.ok ? 'text-green-400' : 'text-amber-400'
+
+  // Cloud sync badge
+  const syncBadge = (() => {
+    if (!isCloudConfigured()) {
+      return (
+        <div className="flex items-center gap-1 px-2 py-0.5 bg-slate-700/50 rounded-full">
+          <Zap size={10} className="text-green-400" />
+          <span>Autosaved</span>
+        </div>
+      )
+    }
+    switch (syncStatus) {
+      case 'syncing':
+        return (
+          <div className="flex items-center gap-1 px-2 py-0.5 bg-slate-700/50 rounded-full">
+            <Loader2 size={10} className="text-blue-400 animate-spin" />
+            <span className="text-blue-300">Syncing...</span>
+          </div>
+        )
+      case 'saved':
+        return (
+          <div className="flex items-center gap-1 px-2 py-0.5 bg-slate-700/50 rounded-full">
+            <Cloud size={10} className="text-green-400" />
+            <span className="text-green-300">Saved</span>
+          </div>
+        )
+      case 'error':
+        return (
+          <div className="flex items-center gap-1 px-2 py-0.5 bg-slate-700/50 rounded-full">
+            <CloudOff size={10} className="text-red-400" />
+            <span className="text-red-300">Sync error</span>
+          </div>
+        )
+      case 'offline':
+        return (
+          <div className="flex items-center gap-1 px-2 py-0.5 bg-slate-700/50 rounded-full">
+            <CloudOff size={10} className="text-amber-400" />
+            <span className="text-amber-300">Offline</span>
+          </div>
+        )
+      default:
+        return (
+          <div className="flex items-center gap-1 px-2 py-0.5 bg-slate-700/50 rounded-full">
+            <Cloud size={10} className="text-slate-400" />
+            <span>Cloud</span>
+          </div>
+        )
+    }
+  })()
 
   return (
     <div className="h-10 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 flex items-center px-4 gap-3 shrink-0">
@@ -143,6 +252,24 @@ function TitleBar({ onOpenTemplates }: { onOpenTemplates: () => void }) {
         Templates
       </button>
 
+      <button
+        type="button"
+        onClick={onOpenCloudPicker}
+        className="text-[10px] px-2 py-0.5 rounded-full bg-slate-700/60 text-slate-300 hover:bg-slate-600 hover:text-white transition-colors flex items-center gap-1"
+      >
+        <Cloud size={10} />
+        Cloud
+      </button>
+
+      <button
+        type="button"
+        onClick={onOpenShare}
+        className="text-[10px] px-2 py-0.5 rounded-full bg-slate-700/60 text-slate-300 hover:bg-slate-600 hover:text-white transition-colors flex items-center gap-1"
+      >
+        <Share2 size={10} />
+        Share
+      </button>
+
       <div className="flex-1" />
 
       <div className="flex items-center gap-2 text-slate-400 text-[10px]">
@@ -150,13 +277,11 @@ function TitleBar({ onOpenTemplates }: { onOpenTemplates: () => void }) {
           <Sparkles size={10} className="text-amber-400" />
           <span className={aiClass}>{aiLabel}</span>
         </div>
-        <div className="flex items-center gap-1 px-2 py-0.5 bg-slate-700/50 rounded-full">
-          <Zap size={10} className="text-green-400" />
-          <span>Autosaved</span>
-        </div>
+        {syncBadge}
         <span className="text-slate-500 hidden sm:inline">
           {new Date(workbook.updatedAt).toLocaleTimeString()}
         </span>
+        <UserNav />
       </div>
     </div>
   )

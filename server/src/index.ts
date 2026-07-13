@@ -1,5 +1,6 @@
 import cors from 'cors'
 import express from 'express'
+import { clerkMiddleware } from '@clerk/express'
 import { config } from './config.js'
 import { modelIsRegistered, ollamaReachable } from './ollama.js'
 import { groqAvailable } from './groq.js'
@@ -24,10 +25,64 @@ import {
 } from './providers.js'
 
 import { checkUsage, recordUsage, getUsageStats } from './usage.js'
+import { dbHealthCheck, closePool } from './db.js'
+import { s3HealthCheck } from './s3.js'
+import { workbooksRouter } from './routes/workbooks.js'
+import { versionsRouter } from './routes/versions.js'
+import { sharesRouter } from './routes/shares.js'
+import { templatesRouter } from './routes/templates.js'
+import { requireAuth, getRequestUserId, getClerkClient, planFromPublicMetadata } from './auth/clerk.js'
+
+async function resolveIsPro(userId: string | null): Promise<boolean> {
+  if (!userId || !config.clerkSecretKey) return false
+  try {
+    const user = await getClerkClient().users.getUser(userId)
+    return planFromPublicMetadata(user.publicMetadata as Record<string, unknown>) === 'pro'
+  } catch {
+    return false
+  }
+}
 
 const app = express()
 app.use(cors({ origin: config.corsOrigin }))
+
+// Stripe webhook needs raw body — register BEFORE express.json()
+app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+  try {
+    const { verifyWebhookSignature, handleStripeWebhook } = await import('./stripe.js')
+    const signatureHeader = req.headers['stripe-signature'] as string | undefined
+
+    const event = verifyWebhookSignature(req.body, signatureHeader)
+    const result = handleStripeWebhook(event)
+
+    if (result) {
+      const client = getClerkClient()
+      await client.users.updateUser(result.userId, {
+        publicMetadata: {
+          plan: result.plan,
+          stripeSubscriptionId: result.stripeSubscriptionId ?? null,
+        },
+      })
+      console.log(`Stripe webhook: user ${result.userId} -> plan ${result.plan}`)
+    }
+
+    res.json({ received: true })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Webhook error'
+    console.error('Stripe webhook error:', message)
+    res.status(400).json({ error: message })
+  }
+})
+
+app.use(clerkMiddleware())
 app.use(express.json({ limit: '1mb' }))
+
+// ─── Cloud workbook routes (Clerk JWT required) ──────────────────────────────
+app.use('/api/workbooks', requireAuth, workbooksRouter)
+app.use('/api/workbooks', requireAuth, versionsRouter)
+app.use('/api/workbooks', requireAuth, sharesRouter)
+app.use('/api', sharesRouter)  // Public GET /api/shared/:token; mutating routes check auth in-handler
+app.use('/api/community-templates', templatesRouter)
 
 // Re-export for any modules that still import from index (backwards compat)
 export { providerOrder, providerIsConfigured, callProvider, callProviderStream }
@@ -106,6 +161,7 @@ async function runLlmChat(params: {
   const availableProviders = providerOrder().filter(providerIsConfigured)
   let fullText = ''
   let usedProvider: ProviderName | null = null
+  const providerErrors: string[] = []
 
   for (const provider of availableProviders) {
     try {
@@ -116,16 +172,26 @@ async function runLlmChat(params: {
       }
       usedProvider = provider
       break
-    } catch {
-      // Provider failed, try next
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      providerErrors.push(`${provider}: ${msg}`)
+      console.warn(`[llm] provider ${provider} failed:`, msg)
     }
   }
 
   if (!usedProvider) {
+    if (providerErrors.length) {
+      console.warn('[llm] all providers failed:', providerErrors.join(' | '))
+    }
+    // When the client already showed local sheet analysis, stay quiet — do not
+    // append a "AI unavailable" disclaimer that makes the product look broken.
+    const hasDeterministic = Boolean(
+      body.context && typeof body.context === 'object'
+      && 'deterministicSummary' in body.context
+      && String((body.context as { deterministicSummary?: string }).deterministicSummary ?? '').trim(),
+    )
     return {
-      message:
-        intent.message ||
-        'AI is currently unavailable. Configure OPENROUTER_API_KEY, HUGGINGFACE_API_KEY, GROQ_API_KEY, or a local Ollama model.',
+      message: intent.message || (hasDeterministic ? '' : 'I couldn\'t generate a response just now. Please try again in a moment.'),
       actions: llmOnly ? [] : intent.actions,
       source: 'fallback',
     }
@@ -165,6 +231,9 @@ app.get('/health', async (_req, res) => {
   const huggingface = providerIsConfigured('huggingface')
   const order = providerOrder()
 
+  // Cloud infrastructure checks
+  const [db, s3] = await Promise.all([dbHealthCheck(), s3HealthCheck()])
+
   res.json({
     ok: groq || openrouter || huggingface || (ollama && modelReady),
     service: 'smartshit-server',
@@ -177,12 +246,16 @@ app.get('/health', async (_req, res) => {
     modelRegistered: modelReady,
     modelName: config.modelName,
     port: config.port,
+    cloud: {
+      database: db,
+      s3: s3,
+    },
   })
 })
 
 // ─── Streaming SSE endpoint (primary) ────────────────────────────────────────
 
-app.post('/api/chat/stream', async (req, res) => {
+app.post('/api/chat/stream', requireAuth, async (req, res) => {
   const body = req.body as ChatRequestBody
   const userMessage = body.message?.trim()
 
@@ -198,8 +271,12 @@ app.post('/api/chat/stream', async (req, res) => {
   // Generate suggestions after we have a valid message
   const suggestions = getSuggestions(userMessage)
 
-  // Low-confidence intent — ask the user to clarify
-  if (userIntent.confidence < config.intentConfidenceThreshold) {
+  // Low-confidence intent — clarify only for action requests (avoid blocking explain/advise Q&A)
+  if (
+    userIntent.confidence < config.intentConfidenceThreshold
+    && !isLlmOnlyMode(mode)
+    && mode !== 'help'
+  ) {
     res.setHeader('Content-Type', 'text/event-stream')
     res.setHeader('Cache-Control', 'no-cache')
     res.setHeader('Connection', 'keep-alive')
@@ -239,8 +316,8 @@ app.post('/api/chat/stream', async (req, res) => {
   }
 
   // ─── Usage gate (free tier enforcement) ────────────────────────────────────
-  const userId = (body as unknown as Record<string, unknown>).userId as string | undefined
-  const isPro = (body as unknown as Record<string, unknown>).isPro === true
+  const userId = getRequestUserId(req) ?? undefined
+  const isPro = await resolveIsPro(userId ?? null)
   const usage = checkUsage(userId, isPro)
 
   if (!usage.allowed) {
@@ -311,7 +388,7 @@ app.post('/api/chat/stream', async (req, res) => {
 
 // ─── Classic JSON endpoint (non-streaming, kept for compatibility) ────────────
 
-app.post('/api/chat', async (req, res) => {
+app.post('/api/chat', requireAuth, async (req, res) => {
   const body = req.body as ChatRequestBody
   const userMessage = body.message?.trim()
 
@@ -327,8 +404,12 @@ app.post('/api/chat', async (req, res) => {
   // Generate suggestions after we have a valid message
   const suggestions = getSuggestions(userMessage)
 
-  // Low-confidence intent — ask the user to clarify
-  if (userIntent.confidence < config.intentConfidenceThreshold) {
+  // Low-confidence intent — clarify only for action requests (avoid blocking explain/advise Q&A)
+  if (
+    userIntent.confidence < config.intentConfidenceThreshold
+    && !isLlmOnlyMode(mode)
+    && mode !== 'help'
+  ) {
     res.json({
       message: buildClarificationMessage(userIntent),
       actions: [],
@@ -379,19 +460,33 @@ app.post('/api/chat', async (req, res) => {
 
 // ─── Usage check endpoint ────────────────────────────────────────────────────
 
-app.post('/api/usage', (req, res) => {
-  const { userId, isPro } = req.body as { userId?: string; isPro?: boolean }
-  const stats = getUsageStats(userId, isPro === true)
+app.post('/api/usage', requireAuth, async (req, res) => {
+  const userId = getRequestUserId(req)
+  const isPro = await resolveIsPro(userId)
+  const stats = getUsageStats(userId ?? undefined, isPro)
   res.json(stats)
 })
 
 // ─── Stripe Checkout ─────────────────────────────────────────────────────────
 
-app.post('/api/checkout', async (req, res) => {
-  const { userId, email } = req.body as { userId?: string; email?: string }
+app.post('/api/checkout', requireAuth, async (req, res) => {
+  const userId = getRequestUserId(req)
+  if (!userId) {
+    res.status(401).json({ error: 'Authentication required' })
+    return
+  }
 
-  if (!userId || !email) {
-    res.status(400).json({ error: 'userId and email are required' })
+  const bodyEmail = (req.body as { email?: string }).email
+  let email = bodyEmail ?? ''
+  try {
+    const user = await getClerkClient().users.getUser(userId)
+    email = email || user.emailAddresses[0]?.emailAddress || ''
+  } catch {
+    // fall through with body email
+  }
+
+  if (!email) {
+    res.status(400).json({ error: 'email is required' })
     return
   }
 
@@ -405,29 +500,6 @@ app.post('/api/checkout', async (req, res) => {
   }
 })
 
-// ─── Stripe Webhook ──────────────────────────────────────────────────────────
-
-app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
-  try {
-    const { verifyWebhookSignature, handleStripeWebhook } = await import('./stripe.js')
-    const signatureHeader = req.headers['stripe-signature'] as string | undefined
-
-    const event = verifyWebhookSignature(req.body, signatureHeader)
-    const result = handleStripeWebhook(event)
-
-    if (result) {
-      // In production, update Clerk user metadata here via Clerk Backend API
-      console.log(`Stripe webhook: user ${result.userId} -> plan ${result.plan}`)
-    }
-
-    res.json({ received: true })
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Webhook error'
-    console.error('Stripe webhook error:', message)
-    res.status(400).json({ error: message })
-  }
-})
-
 // ─── Start ───────────────────────────────────────────────────────────────────
 
 app.listen(config.port, config.host, () => {
@@ -438,4 +510,20 @@ app.listen(config.port, config.host, () => {
   console.log(`Groq: ${groqAvailable() ? `✓ (${config.groqModel})` : '✗ (no API key)'}`)
   console.log(`Ollama: ${config.ollamaBaseUrl} (model: ${config.modelName})`)
   console.log(`Stripe: ${config.stripeSecretKey ? '✓' : '✗ (no secret key)'}`)
+  console.log(`Clerk: ${config.clerkSecretKey ? '✓ (SmartSht secret configured)' : '✗'}`)
+  console.log(`Database: ${config.databaseUrl ? '✓ (configured)' : '✗ (no DATABASE_URL)'}`)
+  console.log(`S3: ${config.awsAccessKeyId ? `✓ (${config.s3Bucket})` : '✗ (no AWS credentials)'}`)
+})
+
+// Graceful shutdown
+process.on('SIGTERM', async () => {
+  console.log('SIGTERM received — closing connections...')
+  await closePool()
+  process.exit(0)
+})
+
+process.on('SIGINT', async () => {
+  console.log('SIGINT received — closing connections...')
+  await closePool()
+  process.exit(0)
 })

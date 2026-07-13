@@ -1,6 +1,7 @@
 import { v4 as uuid } from 'uuid'
 import type { AgentAction, ChatMessage } from '@/types'
 import type { SpreadsheetContextPayload } from '@/ai/buildContext'
+import { getAuthHeaders } from '@/lib/cloudSync'
 
 const API_BASE = import.meta.env.VITE_AI_API_URL ?? ''
 
@@ -46,9 +47,10 @@ export async function chatWithAgentServer(
   history: Array<{ role: 'user' | 'assistant'; content: string }>,
 ): Promise<ServerChatResponse | null> {
   try {
+    const headers = await getAuthHeaders()
     const res = await fetch(`${API_BASE}/api/chat`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ message, context, history }),
       signal: AbortSignal.timeout(120_000),
     })
@@ -72,9 +74,10 @@ export async function chatWithAgentServerStream(
   signal?: AbortSignal,
 ): Promise<ServerChatResponse | null> {
   try {
+    const headers = await getAuthHeaders()
     const res = await fetch(`${API_BASE}/api/chat/stream`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ message, context, history }),
       signal: signal ?? AbortSignal.timeout(120_000),
     })

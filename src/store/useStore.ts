@@ -59,10 +59,12 @@ interface AppState {
   editingCell: string | null;
   editValue: string;
   showChat: boolean;
+  chatWidth: number;
   showFileExplorer: boolean;
   showSkills: boolean;
   showChartDialog: boolean;
   showFormatPanel: boolean;
+  showVersionHistory: boolean;
   showValidationDialog: boolean;
   showPivotDialog: boolean;
   setShowPivotDialog: (show: boolean) => void;
@@ -109,10 +111,13 @@ interface AppState {
   setEditingCell: (cellId: string | null) => void;
   setEditValue: (val: string) => void;
   toggleChat: () => void;
+  setShowChat: (v: boolean) => void;
+  setChatWidth: (w: number) => void;
   toggleFileExplorer: () => void;
   toggleSkills: () => void;
   setShowChartDialog: (v: boolean) => void;
   setShowFormatPanel: (v: boolean) => void;
+  setShowVersionHistory: (v: boolean) => void;
   setShowValidationDialog: (show: boolean) => void;
   setContextMenu: (menu: { x: number; y: number; cell: string } | null) => void;
 
@@ -174,6 +179,7 @@ interface AppState {
   // Bulk operations (for AI)
   bulkSetCells: (cells: Record<string, { value: string | number | boolean | null; formula?: string }>) => void;
   importWorkbook: (workbook: WorkbookData, meta?: { fileName?: string }) => void;
+  loadWorkbookData: (workbook: WorkbookData) => void;
 
   // Scroll
   setScrollPosition: (row: number, col: number) => void;
@@ -207,6 +213,14 @@ export const useStore = create<AppState>()(
       timestamp: Date.now(),
     };
 
+    const storage = typeof localStorage !== 'undefined' ? localStorage : null
+    const storedChatWidth = Number(storage?.getItem('smartsht-chat-width') || 380)
+    const initialChatWidth = Number.isFinite(storedChatWidth)
+      ? Math.min(720, Math.max(280, storedChatWidth))
+      : 380
+    const storedShowChat = storage?.getItem('smartsht-show-chat') ?? null
+    const initialShowChat = storedShowChat === null ? true : storedShowChat !== '0'
+
     return {
       workbook: initialWorkbook,
       engine,
@@ -214,11 +228,13 @@ export const useStore = create<AppState>()(
       selection: null,
       editingCell: null,
       editValue: '',
-      showChat: true,
+      showChat: initialShowChat,
+      chatWidth: initialChatWidth,
       showFileExplorer: false,
       showSkills: false,
       showChartDialog: false,
       showFormatPanel: false,
+      showVersionHistory: false,
       showValidationDialog: false,
       showPivotDialog: false,
       setShowPivotDialog: (show) => set({ showPivotDialog: show }),
@@ -369,11 +385,24 @@ export const useStore = create<AppState>()(
       setSelection: (sel) => set((s) => { s.selection = sel; }),
       setEditingCell: (cellId) => set((s) => { s.editingCell = cellId; }),
       setEditValue: (val) => set((s) => { s.editValue = val; }),
-      toggleChat: () => set((s) => { s.showChat = !s.showChat; }),
+      toggleChat: () => set((s) => {
+        s.showChat = !s.showChat
+        try { localStorage.setItem('smartsht-show-chat', s.showChat ? '1' : '0') } catch { /* ignore */ }
+      }),
+      setShowChat: (v) => set((s) => {
+        s.showChat = v
+        try { localStorage.setItem('smartsht-show-chat', v ? '1' : '0') } catch { /* ignore */ }
+      }),
+      setChatWidth: (w) => set((s) => {
+        const clamped = Math.min(720, Math.max(280, Math.round(w)))
+        s.chatWidth = clamped
+        try { localStorage.setItem('smartsht-chat-width', String(clamped)) } catch { /* ignore */ }
+      }),
       toggleFileExplorer: () => set((s) => { s.showFileExplorer = !s.showFileExplorer; }),
       toggleSkills: () => set((s) => { s.showSkills = !s.showSkills; }),
       setShowChartDialog: (v) => set((s) => { s.showChartDialog = v; }),
       setShowFormatPanel: (v) => set((s) => { s.showFormatPanel = v; }),
+      setShowVersionHistory: (v) => set((s) => { s.showVersionHistory = v; }),
       setShowValidationDialog: (show) => set((s) => { s.showValidationDialog = show; }),
       setContextMenu: (menu) => set((s) => { s.contextMenu = menu; }),
 
@@ -1011,11 +1040,23 @@ export const useStore = create<AppState>()(
         const eng = get().engine;
         eng.loadWorkbook(workbook);
         const sheet = workbook.sheets.find((s) => s.id === workbook.activeSheetId) ?? workbook.sheets[0];
-        const rowCount = sheet
-          ? Object.keys(sheet.cells).length > 0
-            ? Math.max(...Object.keys(sheet.cells).map((id) => cellToRef(id).row)) + 1
-            : 0
-          : 0;
+
+        const sheetLines = workbook.sheets.map((s) => {
+          const keys = Object.keys(s.cells);
+          const rows = keys.length === 0
+            ? 0
+            : Math.max(...keys.map((id) => cellToRef(id).row)) + 1;
+          return { name: s.name, rows };
+        });
+        const activeRows = sheetLines.find((s) => s.name === sheet?.name)?.rows ?? 0;
+        const fileLabel = meta?.fileName ?? 'your file';
+        const multi = workbook.sheets.length > 1;
+        const sheetList = sheetLines
+          .map((s) => `**${s.name}** (${s.rows} row${s.rows === 1 ? '' : 's'})`)
+          .join(', ');
+        const importMessage = multi
+          ? `Imported **${fileLabel}** with **${workbook.sheets.length} sheets**: ${sheetList}.\n\nYou're on **${sheet?.name ?? 'Sheet1'}**. Use the sheet tabs at the bottom to switch — I analyze the active sheet.`
+          : `Imported **${fileLabel}** — ${activeRows} rows on **${sheet?.name ?? 'Sheet 1'}**. Analyzing your data now…`;
 
         set((s) => {
           s.workbook = workbook;
@@ -1023,23 +1064,40 @@ export const useStore = create<AppState>()(
           s.undoStack = [];
           s.redoStack = [];
           s.workbook.updatedAt = Date.now();
-
-          const fileLabel = meta?.fileName ?? 'your file';
           s.messages.push({
             id: uuid(),
             role: 'assistant',
-            content: `Imported **${fileLabel}** — ${rowCount} rows on **${sheet?.name ?? 'Sheet 1'}**. Analyzing your data now…`,
+            content: importMessage,
             timestamp: Date.now(),
+            suggestions: multi
+              ? sheetLines.slice(0, 4).map((s) => `Explain the "${s.name}" sheet`)
+              : undefined,
           });
         });
 
         // Auto-analyze: trigger an explain message after import
-        if (rowCount > 0) {
+        if (activeRows > 0) {
           setTimeout(() => {
-            set((s) => { s.chatInput = 'Explain this spreadsheet and highlight key insights'; });
+            set((s) => {
+              s.chatInput = multi
+                ? `Explain the "${sheet?.name ?? 'active'}" sheet and highlight key insights. Mention the other sheets briefly.`
+                : 'Explain this spreadsheet and highlight key insights';
+            });
             get().sendMessage();
           }, 300);
         }
+      },
+
+      loadWorkbookData: (workbook) => {
+        const eng = get().engine;
+        eng.loadWorkbook(workbook);
+
+        set((s) => {
+          s.workbook = workbook;
+          s.activeSheetId = workbook.activeSheetId;
+          s.undoStack = [];
+          s.redoStack = [];
+        });
       },
 
       setScrollPosition: (row, col) => {

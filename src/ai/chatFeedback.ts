@@ -8,7 +8,7 @@ export interface ChatFeedbackEntry {
   timestamp: string
 }
 
-const STORAGE_KEY = 'smartshit-v1-chat-feedback'
+const STORAGE_KEY = 'smartsht-v1-chat-feedback'
 
 export function loadChatFeedback(): ChatFeedbackEntry[] {
   try {

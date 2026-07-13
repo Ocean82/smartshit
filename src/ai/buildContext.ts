@@ -1,5 +1,5 @@
 import type { WorkbookData, SheetData, Selection } from '@/types'
-import { refToCell, cellToRef } from '@/engine/spreadsheet'
+import { refToCell, cellToRef, colToLetter } from '@/engine/spreadsheet'
 import { computeSheetInsights, type SheetInsights } from '@/ai/sheetInsights'
 import { buildSheetProfile } from '@/ai/sheetProfile'
 import type { SheetProfile } from '@/ai/types'
@@ -11,10 +11,21 @@ export interface SheetDimensions {
   populatedCells: number
 }
 
+export interface SheetSummary {
+  name: string
+  rows: number
+  cols: number
+  headers: string[]
+  populatedCells: number
+  isActive: boolean
+}
+
 export interface SpreadsheetContextPayload {
   workbookName: string
   activeSheet: string
   sheetNames: string[]
+  /** Lightweight overview of every sheet in the workbook */
+  sheetSummaries: SheetSummary[]
   selectedCells: string[]
   dimensions: SheetDimensions
   headers: string[]
@@ -78,6 +89,30 @@ function buildSampleRows(
   return rows
 }
 
+/** Cheap per-sheet overview so the model knows about other tabs. */
+export function summarizeSheet(sheet: SheetData, isActive: boolean): SheetSummary {
+  const { maxRow, maxCol } = getSheetBounds(sheet)
+  const headers: string[] = []
+  const headerLimit = Math.min(maxCol, 11)
+  for (let c = 0; c <= headerLimit; c++) {
+    const cell = sheet.cells[refToCell(0, c)]
+    const letter = colToLetter(c)
+    const raw = cell?.value
+    const label = raw !== null && raw !== undefined && String(raw).trim() !== ''
+      ? String(raw).trim()
+      : `Column ${letter}`
+    headers.push(label)
+  }
+  return {
+    name: sheet.name,
+    rows: Object.keys(sheet.cells).length === 0 ? 0 : maxRow + 1,
+    cols: Object.keys(sheet.cells).length === 0 ? 0 : maxCol + 1,
+    headers,
+    populatedCells: Object.keys(sheet.cells).length,
+    isActive,
+  }
+}
+
 export function buildSpreadsheetContext(
   workbook: WorkbookData,
   sheet: SheetData,
@@ -107,11 +142,13 @@ export function buildSpreadsheetContext(
   const profile = buildSheetProfile(sheet, getComputedValue)
   const sampleRows = buildSampleRows(sheet, maxRow, maxCol, getComputedValue)
   const sampleRowsTruncated = maxRow + 1 > MAX_SAMPLE_ROWS
+  const sheetSummaries = workbook.sheets.map((s) => summarizeSheet(s, s.id === sheet.id))
 
   return {
     workbookName: workbook.name,
     activeSheet: sheet.name,
     sheetNames: workbook.sheets.map((s) => s.name),
+    sheetSummaries,
     selectedCells,
     dimensions: {
       rows: maxRow + 1,

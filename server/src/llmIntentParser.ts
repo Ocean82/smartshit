@@ -43,10 +43,13 @@ export async function parseIntentWithLlm(
     return keywordResult
   }
 
-  // Step 2: Keyword confidence is low — escalate to LLM for better understanding
-  const availableProviders = providerOrder().filter(providerIsConfigured)
-  if (availableProviders.length === 0) {
-    // No LLM available, return keyword result as-is
+  // Step 2: Keyword confidence is low — escalate to a *cloud* LLM for better understanding.
+  // Skip local Ollama here: intent parsing needs reliable JSON, and burning Ollama on this
+  // delays (or starves) the actual answer generation that users are waiting for.
+  const cloudProviders = providerOrder()
+    .filter(providerIsConfigured)
+    .filter((p) => p !== 'ollama')
+  if (cloudProviders.length === 0) {
     return keywordResult
   }
 
@@ -64,14 +67,13 @@ export async function parseIntentWithLlm(
   let usedProvider: string | null = null
 
   try {
-    for (const provider of availableProviders) {
+    for (const provider of cloudProviders) {
       if (abortController.signal.aborted) break
       try {
         llmResponse = await callProvider(provider, messages)
         usedProvider = provider
         break
-      } catch (error) {
-        if (abortController.signal.aborted) break
+      } catch {
         // Continue to next provider
       }
     }

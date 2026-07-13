@@ -1,12 +1,14 @@
-import { useRef, useEffect, useState } from 'react'
+import { useRef, useEffect, useState, useCallback } from 'react'
 import { useStore } from '@/store/useStore'
 import { fetchServerHealth, type ServerHealth } from '@/ai/agentClient'
 import {
   Send, Check, XCircle, Sparkles, Bot, User, Loader2, Paperclip, X, ThumbsUp, ThumbsDown, Copy, Download,
+  PanelLeftClose,
 } from 'lucide-react'
 import type { AgentAction } from '@/types'
 import { getFeedbackForMessage, recordChatFeedback, type ChatFeedbackRating } from '@/ai/chatFeedback'
 import { exportChatAsReport } from '@/lib/exportChat'
+import { useUsage, UpgradePrompt } from '@/auth'
 
 function healthFooterMessage(health: ServerHealth | null): string {
   if (!health) return 'Instant analysis active · AI server connecting…'
@@ -33,9 +35,16 @@ export function ChatPanel({ isMobileOpen, onCloseMobile }: { isMobileOpen?: bool
     importAttachedFile,
     clearAttachedFile,
     workbook,
+    chatWidth,
+    setChatWidth,
+    toggleChat,
+    showChat,
   } = useStore()
 
+  const { canAsk, remaining, dailyLimit, recordUsage, isPro } = useUsage()
+
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const resizingRef = useRef(false)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -102,33 +111,66 @@ export function ChatPanel({ isMobileOpen, onCloseMobile }: { isMobileOpen?: bool
     return () => clearInterval(id)
   }, [isAiProcessing])
 
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    resizingRef.current = true
+    const startX = e.clientX
+    const startWidth = chatWidth
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+
+    const onMove = (ev: MouseEvent) => {
+      if (!resizingRef.current) return
+      setChatWidth(startWidth + (ev.clientX - startX))
+    }
+    const onUp = () => {
+      resizingRef.current = false
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+    }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+  }, [chatWidth, setChatWidth])
+
+  const handleSend = () => {
+    if (!canAsk) return
+    recordUsage()
+    sendMessage()
+  }
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
-      sendMessage()
+      handleSend()
     }
   }
 
   const handleSkillClick = (prompt: string) => {
+    if (!canAsk) return
     setChatInput(prompt)
-    requestAnimationFrame(() => sendMessage())
+    requestAnimationFrame(() => handleSend())
   }
 
   return (
-    <div className={`
-      flex flex-col bg-white shrink-0 border-r border-gray-200
-      w-full md:w-[min(440px,42%)] md:min-w-[320px]
-      ${isMobileOpen ? 'fixed inset-0 z-40' : 'hidden md:flex'}
-    `}>
+    <div
+      className={`
+        relative flex flex-col bg-white shrink-0 border-r border-gray-200
+        w-full
+        ${isMobileOpen ? 'fixed inset-0 z-40' : showChat ? 'hidden md:flex' : 'hidden'}
+      `}
+      style={isMobileOpen || !showChat ? undefined : { width: chatWidth, minWidth: 280, maxWidth: 720 }}
+    >
       <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between bg-gradient-to-r from-slate-800 to-blue-800">
-        <div className="flex items-center gap-2">
-          <Sparkles size={18} className="text-amber-300" />
-          <div>
-            <h2 className="text-sm font-bold text-white">smartsh!t assistant</h2>
-            <p className="text-[10px] text-blue-200">Describe what you need — I handle the rest</p>
+        <div className="flex items-center gap-2 min-w-0">
+          <Sparkles size={18} className="text-amber-300 shrink-0" />
+          <div className="min-w-0">
+            <h2 className="text-sm font-bold text-white truncate">smartsh!t assistant</h2>
+            <p className="text-[10px] text-blue-200 truncate">Describe what you need — I handle the rest</p>
           </div>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 shrink-0">
           {messages.length > 1 && (
             <button
               type="button"
@@ -140,6 +182,15 @@ export function ChatPanel({ isMobileOpen, onCloseMobile }: { isMobileOpen?: bool
               <Download size={15} />
             </button>
           )}
+          <button
+            type="button"
+            onClick={() => toggleChat()}
+            className="hidden md:inline-flex p-1.5 rounded-lg text-blue-200 hover:bg-white/20 hover:text-white transition-colors"
+            title="Hide assistant (full spreadsheet view)"
+            aria-label="Hide assistant"
+          >
+            <PanelLeftClose size={15} />
+          </button>
           {onCloseMobile && (
             <button
               type="button"
@@ -279,6 +330,7 @@ export function ChatPanel({ isMobileOpen, onCloseMobile }: { isMobileOpen?: bool
       </div>
 
       <div className="px-3 py-3 border-t border-gray-200 bg-gray-50">
+        {!isPro && <UpgradePrompt remaining={remaining} dailyLimit={dailyLimit} />}
         {attachedFilePreview && (
           <div className="mb-2 flex items-center justify-between gap-2 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-2 text-xs">
             <div className="flex items-center gap-2 min-w-0">
@@ -345,8 +397,8 @@ export function ChatPanel({ isMobileOpen, onCloseMobile }: { isMobileOpen?: bool
           <button
             type="button"
             className="p-2.5 rounded-xl bg-gradient-to-r from-slate-800 to-blue-700 text-white hover:from-slate-900 hover:to-blue-800 disabled:opacity-50 transition-all shadow-sm shrink-0"
-            onClick={sendMessage}
-            disabled={!chatInput.trim() || isAiProcessing}
+            onClick={handleSend}
+            disabled={!chatInput.trim() || isAiProcessing || !canAsk}
             title="Send message"
             aria-label="Send message"
           >
@@ -356,6 +408,18 @@ export function ChatPanel({ isMobileOpen, onCloseMobile }: { isMobileOpen?: bool
         <p className="text-[10px] text-gray-400 mt-1.5 text-center">
           {healthFooterMessage(health)}
         </p>
+      </div>
+
+      {/* Desktop drag handle to resize chat width */}
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize assistant panel"
+        title="Drag to resize"
+        onMouseDown={handleResizeStart}
+        className="hidden md:block absolute top-0 right-0 w-1.5 h-full cursor-col-resize z-10 group hover:bg-blue-400/40 active:bg-blue-500/50"
+      >
+        <div className="absolute top-1/2 right-0 -translate-y-1/2 w-1 h-8 rounded-full bg-gray-300 group-hover:bg-blue-500 transition-colors" />
       </div>
     </div>
   )

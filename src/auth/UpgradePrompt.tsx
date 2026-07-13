@@ -1,4 +1,5 @@
 import { useAuth } from '@clerk/react'
+import { getAuthHeaders } from '@/lib/cloudSync'
 
 const CLERK_PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ?? ''
 const API_BASE = import.meta.env.VITE_AI_API_URL ?? ''
@@ -27,17 +28,17 @@ export function UpgradePrompt({ remaining, dailyLimit }: UpgradePromptProps) {
 
 /** Separated so useAuth is only called when Clerk is definitely configured */
 function UpgradeCard() {
-  const { userId, sessionClaims } = useAuth()
-  const email = (sessionClaims as Record<string, unknown>)?.email as string | undefined
+  const { isSignedIn } = useAuth()
 
   const handleUpgrade = async () => {
-    if (!userId) return
+    if (!isSignedIn) return
 
     try {
+      const headers = await getAuthHeaders()
       const res = await fetch(`${API_BASE}/api/checkout`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, email: email ?? '' }),
+        headers,
+        body: JSON.stringify({ email: '' }),
       })
 
       if (res.ok) {

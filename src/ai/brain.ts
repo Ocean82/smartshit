@@ -6,11 +6,12 @@ import { analyzeBudget, budgetAnalysisToToolResult, savingsRecommendation } from
 import { generateReport } from '@/ai/skills/reporting'
 import { runCleaningSkill } from '@/ai/skills/cleaning'
 import { runQueryFromIntent } from '@/ai/queryEngine'
-import { formatInsights, mergeToolResultContent, toolResultToMessage } from '@/ai/responseBuilder'
+import { formatInsights, explainOutliers, mergeToolResultContent, toolResultToMessage } from '@/ai/responseBuilder'
 import { chatWithAgentServerStream } from '@/ai/agentClient'
 import { recordTelemetry } from '@/ai/telemetry'
 import { runAudit, formatAuditForContext } from '@/auditor'
 import type { SheetInsights } from '@/ai/sheetInsights'
+import { isOutlierFollowUp } from '@/ai/outliers'
 import type { AttachedFilePreview, ToolResult } from '@/ai/types'
 import type { Selection, SheetData, WorkbookData } from '@/types'
 
@@ -30,15 +31,41 @@ function withTool(result: ToolResult, toolUsed: string): ToolResult {
   return { ...result, toolUsed }
 }
 
+function resolveOutliersForFollowUp(
+  current: SheetInsights,
+  prior?: SheetInsights | null,
+): NonNullable<SheetInsights['outliers']> {
+  if (current.outliers?.length) return current.outliers
+  if (prior?.outliers?.length) return prior.outliers
+  return []
+}
+
 function runDeterministicSkills(
   target: AnalysisTarget,
   workbookName: string,
   message: string,
   mode: ReturnType<typeof classifyMode>,
   intent: ReturnType<typeof parseUserIntent>,
+  priorInsights?: SheetInsights | null,
 ): ToolResult | null {
   const profile = buildSheetProfile(target.sheet, target.getComputedValue)
   const insights = target.context.insights
+
+  // Follow-ups about "unusual values" — answer from stats, no LLM required
+  if (isOutlierFollowUp(message)) {
+    const outliers = resolveOutliersForFollowUp(insights, priorInsights)
+    return withTool({
+      success: true,
+      message: explainOutliers(outliers),
+      suggestions: outliers.length
+        ? [
+            'Check those rows for typos or missing decimals',
+            'Filter to only the flagged rows',
+            'Explain this spreadsheet I just loaded',
+          ]
+        : ['Analyze my data for patterns', 'Explain this spreadsheet I just loaded'],
+    }, 'outlier-explain')
+  }
 
   if (intent.intentType === 'clean') {
     return withTool(runCleaningSkill(target.sheet), 'cleaning')
@@ -101,9 +128,22 @@ export async function processMessage(input: ProcessMessageInput): Promise<ToolRe
     input.message,
     mode,
     intent,
+    input.priorInsights,
   )
   const deterministicText = deterministic ? toolResultToMessage(deterministic, { includeSuggestionsInBody: false }) : ''
-  const insightsBlock = isLlmOnlyMode(mode) ? formatInsights(target.context.insights) : ''
+
+  // Outlier follow-ups are fully answered locally — skip LLM to avoid clarification loops
+  if (deterministic?.toolUsed === 'outlier-explain') {
+    recordTelemetry('deterministicResponses', 'outlier-explain')
+    if (input.onToken) input.onToken(deterministicText)
+    return deterministic
+  }
+
+  // Only dump the full insights block on first-pass explain/advise, not every follow-up
+  const isFollowUp = Boolean(input.priorInsights)
+  const insightsBlock = isLlmOnlyMode(mode) && !isFollowUp
+    ? formatInsights(target.context.insights)
+    : ''
 
   // Run the auditor for context (only on explain/advise modes where it's useful)
   let auditBlock = ''
@@ -142,7 +182,11 @@ export async function processMessage(input: ProcessMessageInput): Promise<ToolRe
   )
 
   if (serverResult) {
-    const llmText = serverResult.message
+    // Never append fallback disclaimers on top of real sheet findings — that reads as "AI is broken"
+    const llmText = serverResult.source === 'fallback'
+      && (deterministicText.trim() || insightsBlock.trim())
+      ? ''
+      : serverResult.message
     const combined = mergeToolResultContent([
       deterministicText,
       insightsBlock && !deterministicText.includes('Sheet insights') ? insightsBlock : '',
@@ -151,14 +195,16 @@ export async function processMessage(input: ProcessMessageInput): Promise<ToolRe
 
     if (deterministicText.trim().length > 0 && llmText.trim().length > 0) {
       recordTelemetry('hybridResponses', deterministic?.toolUsed ?? 'hybrid')
-    } else {
+    } else if (llmText.trim().length > 0) {
       recordTelemetry('llmResponses', serverResult.source)
+    } else {
+      recordTelemetry('deterministicResponses', deterministic?.toolUsed ?? 'local-insights')
     }
 
     return {
       success: true,
-      message: combined,
-      toolUsed: deterministic?.toolUsed ?? 'llm',
+      message: combined || 'I looked at your sheet but didn\'t find enough to go on. Try selecting a range or asking a more specific question.',
+      toolUsed: deterministic?.toolUsed ?? (llmText ? 'llm' : 'insights'),
       suggestions: deterministic?.suggestions ?? serverResult.suggestions,
       actions: serverResult.actions.map((a) => ({
         tool: a.tool,
@@ -173,11 +219,25 @@ export async function processMessage(input: ProcessMessageInput): Promise<ToolRe
     return deterministic
   }
 
+  // Local insights still useful when the AI server is down — no scary "AI broken" footer
+  if (insightsBlock) {
+    recordTelemetry('fallbackResponses', 'insights-without-llm')
+    return {
+      success: true,
+      message: insightsBlock,
+      toolUsed: 'insights',
+      suggestions: [
+        'What makes those values unusual?',
+        'Analyze my data for patterns',
+      ],
+    }
+  }
+
   recordTelemetry('fallbackResponses', 'ai-server-unavailable')
   return {
     success: false,
-    message: 'AI server is unavailable. Start it with `npm run dev:server` and try again.',
+    message: 'I couldn\'t reach the AI service just now. Please try again in a moment.',
     toolUsed: 'fallback',
-    suggestions: ['Check that a cloud API key or local Ollama model is configured.'],
+    suggestions: ['Try your question again', 'Explain this spreadsheet I just loaded'],
   }
 }

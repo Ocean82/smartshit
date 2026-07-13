@@ -1,5 +1,8 @@
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { loadEnv } from './loadEnv.js'
+
+loadEnv()
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const projectRoot = path.resolve(__dirname, '../..')
@@ -39,6 +42,19 @@ export const config = {
   /** Max tokens to generate per response */
   numPredict: Number(process.env.NUM_PREDICT ?? 512),
   corsOrigin: process.env.CORS_ORIGIN ?? '*',
+
+  // Cloud Storage (RDS + S3)
+  databaseUrl: process.env.DATABASE_URL ?? '',
+  s3Bucket: process.env.S3_BUCKET ?? 'burntbeatz2-storage',
+  s3Region: process.env.S3_REGION ?? 'us-east-1',
+  s3Prefix: process.env.S3_SMARTSHT_PREFIX ?? 'smartsht',
+  awsAccessKeyId: process.env.AWS_ACCESS_KEY_ID ?? '',
+  awsSecretAccessKey: process.env.AWS_SECRET_ACCESS_KEY ?? '',
+
+  // Clerk (SmartSht — https://clerk.smartsht.com)
+  clerkSecretKey: process.env.CLERK_SECRET_KEY ?? '',
+  clerkPublishableKey:
+    process.env.CLERK_PUBLISHABLE_KEY ?? process.env.VITE_CLERK_PUBLISHABLE_KEY ?? '',
 
   // Stripe
   stripeSecretKey: process.env.STRIPE_SECRET_KEY ?? '',

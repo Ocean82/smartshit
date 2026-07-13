@@ -2,7 +2,7 @@ import type { IntentType, UserIntent } from './intentTypes.js'
 
 const INTENT_KEYWORDS: Record<IntentType, string[]> = {
   read: ['read', 'open', 'load', 'show', 'display', 'view', 'see', "what's in", 'look at', 'preview'],
-  analyze: ['analyze', 'analysis', 'insights', 'patterns', 'statistics', 'stats', 'breakdown', 'understand', 'examine', 'evaluate', 'trend', 'overview'],
+  analyze: ['analyze', 'analysis', 'insights', 'patterns', 'statistics', 'stats', 'breakdown', 'understand', 'examine', 'evaluate', 'trend', 'overview', 'unusual', 'outlier', 'outliers', 'anomal'],
   write: ['write', 'add', 'insert', 'update', 'change', 'modify', 'set', 'put', 'enter', 'edit', 'replace'],
   format: ['format', 'style', 'bold', 'color', 'highlight', 'font', 'border', 'align', 'width', 'merge'],
   create_chart: ['chart', 'graph', 'plot', 'visualize', 'visualization', 'pie chart', 'bar chart', 'line chart'],
