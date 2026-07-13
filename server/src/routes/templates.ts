@@ -111,7 +111,7 @@ templatesRouter.get('/categories', async (_req, res) => {
 // ─── POST /api/community-templates — Publish a template ──────────────────────
 
 templatesRouter.post('/', async (req, res) => {
-  const userId = getUserId(req as never)
+  const userId = getUserId(req)
   if (!userId) {
     res.status(401).json({ error: 'Authentication required' })
     return
@@ -224,7 +224,7 @@ templatesRouter.post('/:id/install', async (req, res) => {
 // ─── POST /api/community-templates/:id/rate — Rate a template ────────────────
 
 templatesRouter.post('/:id/rate', async (req, res) => {
-  const userId = getUserId(req as never)
+  const userId = getUserId(req)
   if (!userId) {
     res.status(401).json({ error: 'Authentication required' })
     return
@@ -263,7 +263,7 @@ templatesRouter.post('/:id/rate', async (req, res) => {
 // ─── DELETE /api/community-templates/:id — Unpublish a template ──────────────
 
 templatesRouter.delete('/:id', async (req, res) => {
-  const userId = getUserId(req as never)
+  const userId = getUserId(req)
   if (!userId) {
     res.status(401).json({ error: 'Authentication required' })
     return

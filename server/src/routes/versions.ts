@@ -13,7 +13,7 @@ function getUserId(req: Request): string | null {
 // ─── GET /api/workbooks/:id/versions — List version history ──────────────────
 
 versionsRouter.get('/:id/versions', async (req, res) => {
-  const userId = getUserId(req as never)
+  const userId = getUserId(req)
   if (!userId) {
     res.status(401).json({ error: 'Authentication required' })
     return
@@ -57,7 +57,7 @@ versionsRouter.get('/:id/versions', async (req, res) => {
 // ─── GET /api/workbooks/:id/versions/:versionId — Download a specific version
 
 versionsRouter.get('/:id/versions/:versionId', async (req, res) => {
-  const userId = getUserId(req as never)
+  const userId = getUserId(req)
   if (!userId) {
     res.status(401).json({ error: 'Authentication required' })
     return
@@ -105,7 +105,7 @@ versionsRouter.get('/:id/versions/:versionId', async (req, res) => {
 // ─── POST /api/workbooks/:id/versions — Create a named snapshot ──────────────
 
 versionsRouter.post('/:id/versions', async (req, res) => {
-  const userId = getUserId(req as never)
+  const userId = getUserId(req)
   if (!userId) {
     res.status(401).json({ error: 'Authentication required' })
     return

@@ -13,7 +13,7 @@ function getUserId(req: Request): string | null {
 // ─── POST /api/workbooks/:id/share — Create a share link ─────────────────────
 
 sharesRouter.post('/:id/share', async (req, res) => {
-  const userId = getUserId(req as never)
+  const userId = getUserId(req)
   if (!userId) {
     res.status(401).json({ error: 'Authentication required' })
     return
@@ -83,7 +83,7 @@ sharesRouter.post('/:id/share', async (req, res) => {
 // ─── GET /api/workbooks/:id/shares — List active shares for a workbook ───────
 
 sharesRouter.get('/:id/shares', async (req, res) => {
-  const userId = getUserId(req as never)
+  const userId = getUserId(req)
   if (!userId) {
     res.status(401).json({ error: 'Authentication required' })
     return
@@ -126,7 +126,7 @@ sharesRouter.get('/:id/shares', async (req, res) => {
 // ─── DELETE /api/shares/:token — Revoke a share link ─────────────────────────
 
 sharesRouter.delete('/shares/:token', async (req, res) => {
-  const userId = getUserId(req as never)
+  const userId = getUserId(req)
   if (!userId) {
     res.status(401).json({ error: 'Authentication required' })
     return

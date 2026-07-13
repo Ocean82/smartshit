@@ -13,7 +13,7 @@ function getUserId(req: Request): string | null {
 // ─── GET /api/workbooks — List user's workbooks ──────────────────────────────
 
 workbooksRouter.get('/', async (req, res) => {
-  const userId = getUserId(req as never)
+  const userId = getUserId(req)
   if (!userId) {
     res.status(401).json({ error: 'Authentication required' })
     return
@@ -38,7 +38,7 @@ workbooksRouter.get('/', async (req, res) => {
 // ─── POST /api/workbooks — Create/save a new workbook ────────────────────────
 
 workbooksRouter.post('/', async (req, res) => {
-  const userId = getUserId(req as never)
+  const userId = getUserId(req)
   if (!userId) {
     res.status(401).json({ error: 'Authentication required' })
     return
@@ -108,7 +108,7 @@ workbooksRouter.post('/', async (req, res) => {
 // ─── GET /api/workbooks/:id — Download a workbook ────────────────────────────
 
 workbooksRouter.get('/:id', async (req, res) => {
-  const userId = getUserId(req as never)
+  const userId = getUserId(req)
   if (!userId) {
     res.status(401).json({ error: 'Authentication required' })
     return
@@ -145,7 +145,7 @@ workbooksRouter.get('/:id', async (req, res) => {
 // ─── PUT /api/workbooks/:id — Update (save) a workbook ──────────────────────
 
 workbooksRouter.put('/:id', async (req, res) => {
-  const userId = getUserId(req as never)
+  const userId = getUserId(req)
   if (!userId) {
     res.status(401).json({ error: 'Authentication required' })
     return
@@ -241,7 +241,7 @@ workbooksRouter.put('/:id', async (req, res) => {
 // ─── DELETE /api/workbooks/:id — Soft-delete a workbook ──────────────────────
 
 workbooksRouter.delete('/:id', async (req, res) => {
-  const userId = getUserId(req as never)
+  const userId = getUserId(req)
   if (!userId) {
     res.status(401).json({ error: 'Authentication required' })
     return
