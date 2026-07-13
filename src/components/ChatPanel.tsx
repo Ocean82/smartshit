@@ -8,6 +8,7 @@ import {
 import type { AgentAction } from '@/types'
 import { getFeedbackForMessage, recordChatFeedback, type ChatFeedbackRating } from '@/ai/chatFeedback'
 import { exportChatAsReport } from '@/lib/exportChat'
+import { useUsage, UpgradePrompt } from '@/auth'
 
 function healthFooterMessage(health: ServerHealth | null): string {
   if (!health) return 'Instant analysis active · AI server connecting…'
@@ -39,6 +40,8 @@ export function ChatPanel({ isMobileOpen, onCloseMobile }: { isMobileOpen?: bool
     toggleChat,
     showChat,
   } = useStore()
+
+  const { canAsk, remaining, dailyLimit, recordUsage, isPro } = useUsage()
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const resizingRef = useRef(false)
@@ -131,16 +134,23 @@ export function ChatPanel({ isMobileOpen, onCloseMobile }: { isMobileOpen?: bool
     document.addEventListener('mouseup', onUp)
   }, [chatWidth, setChatWidth])
 
+  const handleSend = () => {
+    if (!canAsk) return
+    recordUsage()
+    sendMessage()
+  }
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
-      sendMessage()
+      handleSend()
     }
   }
 
   const handleSkillClick = (prompt: string) => {
+    if (!canAsk) return
     setChatInput(prompt)
-    requestAnimationFrame(() => sendMessage())
+    requestAnimationFrame(() => handleSend())
   }
 
   return (
@@ -320,6 +330,7 @@ export function ChatPanel({ isMobileOpen, onCloseMobile }: { isMobileOpen?: bool
       </div>
 
       <div className="px-3 py-3 border-t border-gray-200 bg-gray-50">
+        {!isPro && <UpgradePrompt remaining={remaining} dailyLimit={dailyLimit} />}
         {attachedFilePreview && (
           <div className="mb-2 flex items-center justify-between gap-2 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-2 text-xs">
             <div className="flex items-center gap-2 min-w-0">
@@ -386,8 +397,8 @@ export function ChatPanel({ isMobileOpen, onCloseMobile }: { isMobileOpen?: bool
           <button
             type="button"
             className="p-2.5 rounded-xl bg-gradient-to-r from-slate-800 to-blue-700 text-white hover:from-slate-900 hover:to-blue-800 disabled:opacity-50 transition-all shadow-sm shrink-0"
-            onClick={sendMessage}
-            disabled={!chatInput.trim() || isAiProcessing}
+            onClick={handleSend}
+            disabled={!chatInput.trim() || isAiProcessing || !canAsk}
             title="Send message"
             aria-label="Send message"
           >

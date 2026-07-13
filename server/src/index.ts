@@ -31,7 +31,17 @@ import { workbooksRouter } from './routes/workbooks.js'
 import { versionsRouter } from './routes/versions.js'
 import { sharesRouter } from './routes/shares.js'
 import { templatesRouter } from './routes/templates.js'
-import { requireAuth } from './auth/clerk.js'
+import { requireAuth, getRequestUserId, getClerkClient, planFromPublicMetadata } from './auth/clerk.js'
+
+async function resolveIsPro(userId: string | null): Promise<boolean> {
+  if (!userId || !config.clerkSecretKey) return false
+  try {
+    const user = await getClerkClient().users.getUser(userId)
+    return planFromPublicMetadata(user.publicMetadata as Record<string, unknown>) === 'pro'
+  } catch {
+    return false
+  }
+}
 
 const app = express()
 app.use(cors({ origin: config.corsOrigin }))
@@ -46,7 +56,13 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
     const result = handleStripeWebhook(event)
 
     if (result) {
-      // In production, update Clerk user metadata here via Clerk Backend API
+      const client = getClerkClient()
+      await client.users.updateUser(result.userId, {
+        publicMetadata: {
+          plan: result.plan,
+          stripeSubscriptionId: result.stripeSubscriptionId ?? null,
+        },
+      })
       console.log(`Stripe webhook: user ${result.userId} -> plan ${result.plan}`)
     }
 
@@ -239,7 +255,7 @@ app.get('/health', async (_req, res) => {
 
 // ─── Streaming SSE endpoint (primary) ────────────────────────────────────────
 
-app.post('/api/chat/stream', async (req, res) => {
+app.post('/api/chat/stream', requireAuth, async (req, res) => {
   const body = req.body as ChatRequestBody
   const userMessage = body.message?.trim()
 
@@ -300,8 +316,8 @@ app.post('/api/chat/stream', async (req, res) => {
   }
 
   // ─── Usage gate (free tier enforcement) ────────────────────────────────────
-  const userId = (body as unknown as Record<string, unknown>).userId as string | undefined
-  const isPro = (body as unknown as Record<string, unknown>).isPro === true
+  const userId = getRequestUserId(req) ?? undefined
+  const isPro = await resolveIsPro(userId ?? null)
   const usage = checkUsage(userId, isPro)
 
   if (!usage.allowed) {
@@ -372,7 +388,7 @@ app.post('/api/chat/stream', async (req, res) => {
 
 // ─── Classic JSON endpoint (non-streaming, kept for compatibility) ────────────
 
-app.post('/api/chat', async (req, res) => {
+app.post('/api/chat', requireAuth, async (req, res) => {
   const body = req.body as ChatRequestBody
   const userMessage = body.message?.trim()
 
@@ -444,19 +460,33 @@ app.post('/api/chat', async (req, res) => {
 
 // ─── Usage check endpoint ────────────────────────────────────────────────────
 
-app.post('/api/usage', (req, res) => {
-  const { userId, isPro } = req.body as { userId?: string; isPro?: boolean }
-  const stats = getUsageStats(userId, isPro === true)
+app.post('/api/usage', requireAuth, async (req, res) => {
+  const userId = getRequestUserId(req)
+  const isPro = await resolveIsPro(userId)
+  const stats = getUsageStats(userId ?? undefined, isPro)
   res.json(stats)
 })
 
 // ─── Stripe Checkout ─────────────────────────────────────────────────────────
 
-app.post('/api/checkout', async (req, res) => {
-  const { userId, email } = req.body as { userId?: string; email?: string }
+app.post('/api/checkout', requireAuth, async (req, res) => {
+  const userId = getRequestUserId(req)
+  if (!userId) {
+    res.status(401).json({ error: 'Authentication required' })
+    return
+  }
 
-  if (!userId || !email) {
-    res.status(400).json({ error: 'userId and email are required' })
+  const bodyEmail = (req.body as { email?: string }).email
+  let email = bodyEmail ?? ''
+  try {
+    const user = await getClerkClient().users.getUser(userId)
+    email = email || user.emailAddresses[0]?.emailAddress || ''
+  } catch {
+    // fall through with body email
+  }
+
+  if (!email) {
+    res.status(400).json({ error: 'email is required' })
     return
   }
 

@@ -26,6 +26,7 @@ import { WorkbookPicker } from '@/components/WorkbookPicker'
 import { VersionHistoryPanel } from '@/components/VersionHistoryPanel'
 import { ShareDialog } from '@/components/ShareDialog'
 import { Sparkles, Zap, Cloud, CloudOff, Loader2, Share2, PanelLeftOpen, MessageSquare } from 'lucide-react'
+import { UserNav } from '@/auth'
 import {
   getSyncStatus,
   onSyncStatusChange,
@@ -280,6 +281,7 @@ function TitleBar({ onOpenTemplates, onOpenCloudPicker, onOpenShare }: { onOpenT
         <span className="text-slate-500 hidden sm:inline">
           {new Date(workbook.updatedAt).toLocaleTimeString()}
         </span>
+        <UserNav />
       </div>
     </div>
   )

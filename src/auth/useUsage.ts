@@ -50,7 +50,8 @@ function useTrackedUsage() {
   const [usage, setUsage] = useState<UsageData>(getStoredUsage)
 
   // Check plan from Clerk session claims (set via webhook -> Clerk Backend API)
-  const metadata = sessionClaims?.metadata as Record<string, unknown> | undefined
+  const claims = sessionClaims as Record<string, unknown> | undefined
+  const metadata = (claims?.metadata ?? claims?.publicMetadata) as Record<string, unknown> | undefined
   const isPro = Boolean(
     metadata?.plan === 'pro' ||
     metadata?.stripeSubscriptionId
