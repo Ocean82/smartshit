@@ -213,11 +213,12 @@ export const useStore = create<AppState>()(
       timestamp: Date.now(),
     };
 
-    const storedChatWidth = Number(localStorage.getItem('smartsht-chat-width') || 380)
+    const storage = typeof localStorage !== 'undefined' ? localStorage : null
+    const storedChatWidth = Number(storage?.getItem('smartsht-chat-width') || 380)
     const initialChatWidth = Number.isFinite(storedChatWidth)
       ? Math.min(720, Math.max(280, storedChatWidth))
       : 380
-    const storedShowChat = localStorage.getItem('smartsht-show-chat')
+    const storedShowChat = storage?.getItem('smartsht-show-chat') ?? null
     const initialShowChat = storedShowChat === null ? true : storedShowChat !== '0'
 
     return {
