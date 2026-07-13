@@ -117,8 +117,9 @@ export function Toolbar() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.name.match(/\.xlsx?$/i)) {
-      pushHistory('Import Excel');
+  // Also route CSV through SheetJS so multi-sheet-capable paths stay consistent
+  if (file.name.match(/\.(xlsx?|csv)$/i)) {
+      pushHistory('Import file');
       const { workbook, meta } = await importWorkbookFromFileWithMeta(file);
       useStore.getState().importWorkbook(workbook, { fileName: file.name });
       if (meta.warnings.length) {

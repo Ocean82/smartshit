@@ -20,6 +20,7 @@ const EXPLAIN_SIGNALS = [
   'explain',
   'what does',
   'what do',
+  'what makes',
   'describe',
   'summarize',
   'summary',
@@ -31,6 +32,10 @@ const EXPLAIN_SIGNALS = [
   'how much',
   'why is',
   'why are',
+  'why these',
+  'why those',
+  'unusual',
+  'outlier',
   'what does this mean',
   'make sense of',
 ]

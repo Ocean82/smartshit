@@ -40,6 +40,14 @@ export const config = {
   numPredict: Number(process.env.NUM_PREDICT ?? 512),
   corsOrigin: process.env.CORS_ORIGIN ?? '*',
 
+  // Cloud Storage (RDS + S3)
+  databaseUrl: process.env.DATABASE_URL ?? '',
+  s3Bucket: process.env.S3_BUCKET ?? 'burntbeatz2-storage',
+  s3Region: process.env.S3_REGION ?? 'us-east-1',
+  s3Prefix: process.env.S3_SMARTSHT_PREFIX ?? 'smartsht',
+  awsAccessKeyId: process.env.AWS_ACCESS_KEY_ID ?? '',
+  awsSecretAccessKey: process.env.AWS_SECRET_ACCESS_KEY ?? '',
+
   // Stripe
   stripeSecretKey: process.env.STRIPE_SECRET_KEY ?? '',
   stripePriceId: process.env.STRIPE_PRICE_ID ?? 'price_1TqYGCP38C54URjEZIBJEXDU',

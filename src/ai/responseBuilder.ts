@@ -2,18 +2,69 @@ import { v4 as uuid } from 'uuid'
 import type { ChatMessage } from '@/types'
 import type { SheetInsights } from '@/ai/sheetInsights'
 import type { SheetProfile, ToolResult } from '@/ai/types'
+import { AI_ANALYSIS_CONFIG } from '@/ai/config'
+import type { OutlierItem } from '@/ai/outliers'
+
+function formatMoney(n: number): string {
+  return `$${n.toFixed(2)}`
+}
+
+function formatOutlierLine(o: OutlierItem, includeReason: boolean): string {
+  const cell = o.cellRef || `${o.columnLetter || '?'}${o.row}`
+  const colName = o.column && !/^Column [A-Z]+$/i.test(o.column) ? ` (${o.column})` : ''
+  const label = `- **${cell}**${colName}: ${formatMoney(o.value)}`
+  if (!includeReason || o.zScore === undefined || o.mean === undefined) return label
+
+  const absZ = Math.abs(o.zScore).toFixed(1)
+  const side = o.direction === 'high' ? 'above' : 'below'
+  const typicalLow = o.mean - AI_ANALYSIS_CONFIG.outlierStdThreshold * o.std
+  const typicalHigh = o.mean + AI_ANALYSIS_CONFIG.outlierStdThreshold * o.std
+  return (
+    `${label} — ${absZ}σ ${side} the column ${o.columnLetter || ''} average `
+    + `(avg ${formatMoney(o.mean)}; most values fall near ${formatMoney(typicalLow)}–${formatMoney(typicalHigh)})`
+  )
+}
+
+/** Plain-English explanation of why flagged values are statistical outliers. */
+export function explainOutliers(
+  outliers: OutlierItem[],
+  options?: { threshold?: number },
+): string {
+  if (!outliers.length) {
+    return 'I don\'t currently see statistical outliers in the numeric columns. Unusual flags appear when a value is far from its column average.'
+  }
+
+  const threshold = options?.threshold ?? AI_ANALYSIS_CONFIG.outlierStdThreshold
+  const lines: string[] = [
+    '### Why these values look unusual',
+    '',
+    `These cells stand out because they are more than **${threshold} standard deviations** from their column average (a common outlier rule). That usually means they are much higher or lower than typical values in the same column — worth verifying, not automatically wrong.`,
+    '',
+  ]
+
+  for (const o of outliers.slice(0, 8)) {
+    lines.push(formatOutlierLine(o, true))
+  }
+
+  lines.push(
+    '',
+    '**What to do next:** check for typos, missing decimals, one-time events, or a different unit in those rows. If the values are correct, they may simply be legitimate extremes.',
+  )
+
+  return lines.join('\n')
+}
 
 export function formatInsights(insights: SheetInsights): string {
   const lines: string[] = ['### Sheet insights']
 
-  if (insights.totalIncome !== undefined) lines.push(`- **Income:** $${insights.totalIncome.toFixed(2)}`)
-  if (insights.totalExpenses !== undefined) lines.push(`- **Expenses:** $${insights.totalExpenses.toFixed(2)}`)
-  if (insights.netCashflow !== undefined) lines.push(`- **Net cashflow:** $${insights.netCashflow.toFixed(2)}`)
+  if (insights.totalIncome !== undefined) lines.push(`- **Income:** ${formatMoney(insights.totalIncome)}`)
+  if (insights.totalExpenses !== undefined) lines.push(`- **Expenses:** ${formatMoney(insights.totalExpenses)}`)
+  if (insights.netCashflow !== undefined) lines.push(`- **Net cashflow:** ${formatMoney(insights.netCashflow)}`)
 
   if (insights.topExpenses?.length) {
     lines.push('\n**Top expenses:**')
     for (const e of insights.topExpenses.slice(0, 5)) {
-      lines.push(`- ${e.label}: $${e.amount.toFixed(2)}${e.row ? ` (row ${e.row})` : ''}`)
+      lines.push(`- ${e.label}: ${formatMoney(e.amount)}${e.row ? ` (row ${e.row})` : ''}`)
     }
   }
 
@@ -25,9 +76,11 @@ export function formatInsights(insights: SheetInsights): string {
   }
 
   if (insights.outliers?.length) {
-    lines.push('\n**Unusual values:**')
+    lines.push(
+      `\n**Unusual values** (>${AI_ANALYSIS_CONFIG.outlierStdThreshold}σ from column average):`,
+    )
     for (const o of insights.outliers.slice(0, 5)) {
-      lines.push(`- ${o.column} row ${o.row}: $${o.value.toFixed(2)}`)
+      lines.push(formatOutlierLine(o, true))
     }
   }
 
