@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App'
 import { SharedView } from '@/components/SharedView'
-import { AuthProvider, AuthGate } from '@/auth'
+import { AuthProvider, AuthGate, ClerkUserSync } from '@/auth'
 import { useStore } from '@/store/useStore'
 import { savePersistedState } from '@/lib/persistence'
 
@@ -46,6 +46,7 @@ createRoot(document.getElementById('root')!).render(
     ) : (
       <AuthProvider>
         <AuthGate>
+          <ClerkUserSync />
           <App />
         </AuthGate>
       </AuthProvider>

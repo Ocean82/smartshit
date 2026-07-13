@@ -11,7 +11,7 @@ import {
   Lock,
   Clock,
 } from 'lucide-react'
-import { getCloudWorkbookId, isCloudConfigured } from '@/lib/cloudSync'
+import { getCloudWorkbookId, isCloudConfigured, getAuthHeaders } from '@/lib/cloudSync'
 
 const API_BASE = import.meta.env.VITE_AI_API_URL ?? ''
 
@@ -37,14 +37,16 @@ export function ShareDialog({ open, onClose }: ShareDialogProps) {
   const [expiresIn, setExpiresIn] = useState<'24h' | '7d' | '30d' | 'never'>('never')
 
   const cloudId = getCloudWorkbookId()
-  const userId = localStorage.getItem('smartsht-user-id')
+  const canShare = isCloudConfigured() && Boolean(cloudId)
 
   const fetchShares = useCallback(async () => {
-    if (!cloudId || !userId) return
+    if (!cloudId || !isCloudConfigured()) return
     setLoading(true)
     try {
+      const headers = await getAuthHeaders()
+      if (!headers.Authorization) return
       const res = await fetch(`${API_BASE}/api/workbooks/${cloudId}/shares`, {
-        headers: { 'x-user-id': userId, 'Content-Type': 'application/json' },
+        headers,
         signal: AbortSignal.timeout(10_000),
       })
       if (res.ok) {
@@ -55,7 +57,7 @@ export function ShareDialog({ open, onClose }: ShareDialogProps) {
       // ignore
     }
     setLoading(false)
-  }, [cloudId, userId])
+  }, [cloudId])
 
   useEffect(() => {
     if (open) fetchShares()
@@ -64,12 +66,14 @@ export function ShareDialog({ open, onClose }: ShareDialogProps) {
   if (!open) return null
 
   const handleCreate = async () => {
-    if (!cloudId || !userId) return
+    if (!cloudId || !canShare) return
     setCreating(true)
     try {
+      const headers = await getAuthHeaders()
+      if (!headers.Authorization) return
       const res = await fetch(`${API_BASE}/api/workbooks/${cloudId}/share`, {
         method: 'POST',
-        headers: { 'x-user-id': userId, 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ permission, expiresIn }),
         signal: AbortSignal.timeout(10_000),
       })
@@ -83,12 +87,14 @@ export function ShareDialog({ open, onClose }: ShareDialogProps) {
   }
 
   const handleRevoke = async (token: string) => {
-    if (!userId) return
+    if (!isCloudConfigured()) return
     if (!confirm('Revoke this share link? Anyone with it will lose access.')) return
     try {
+      const headers = await getAuthHeaders()
+      if (!headers.Authorization) return
       await fetch(`${API_BASE}/api/shares/${token}`, {
         method: 'DELETE',
-        headers: { 'x-user-id': userId, 'Content-Type': 'application/json' },
+        headers,
         signal: AbortSignal.timeout(10_000),
       })
       setShares((prev) => prev.filter((s) => s.share_token !== token))

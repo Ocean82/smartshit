@@ -68,7 +68,8 @@ export function setCloudWorkbookId(id: string | null): void {
 }
 
 // Restore from localStorage on load
-const storedCloudId = localStorage.getItem('smartsht-cloud-workbook-id')
+const storedCloudId =
+  typeof localStorage !== 'undefined' ? localStorage.getItem('smartsht-cloud-workbook-id') : null
 if (storedCloudId) _currentCloudId = storedCloudId
 
 export function onSyncStatusChange(listener: (status: SyncStatus) => void): () => void {
@@ -85,22 +86,28 @@ function setSyncStatus(status: SyncStatus): void {
 
 // ─── Auth helper ─────────────────────────────────────────────────────────────
 
-function getAuthHeaders(): Record<string, string> {
-  // In a real Clerk integration, this would be:
-  // const token = await getToken()
-  // return { Authorization: `Bearer ${token}` }
-  //
-  // For now we pass the userId from Clerk's useAuth() via a header
-  const userId = localStorage.getItem('smartsht-user-id')
-  if (!userId) return {}
-  return { 'x-user-id': userId }
+type TokenProvider = () => Promise<string | null>
+let _tokenProvider: TokenProvider | null = null
+
+export function setAuthTokenProvider(provider: TokenProvider): void {
+  _tokenProvider = provider
 }
 
-export function setUserId(userId: string): void {
-  localStorage.setItem('smartsht-user-id', userId)
+export async function getAuthHeaders(): Promise<Record<string, string>> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  const token = _tokenProvider ? await _tokenProvider() : null
+  if (token) headers.Authorization = `Bearer ${token}`
+  return headers
+}
+
+export function setUserId(userId: string | null): void {
+  if (typeof localStorage === 'undefined') return
+  if (userId) localStorage.setItem('smartsht-user-id', userId)
+  else localStorage.removeItem('smartsht-user-id')
 }
 
 export function getUserId(): string | null {
+  if (typeof localStorage === 'undefined') return null
   return localStorage.getItem('smartsht-user-id')
 }
 
@@ -114,12 +121,14 @@ export function isCloudConfigured(): boolean {
  * List all cloud workbooks for the current user.
  */
 export async function listCloudWorkbooks(): Promise<CloudWorkbook[]> {
-  const headers = getAuthHeaders()
-  if (!headers['x-user-id']) return []
+  if (!isCloudConfigured()) return []
 
   try {
+    const headers = await getAuthHeaders()
+    if (!headers.Authorization) return []
+
     const res = await fetch(`${API_BASE}/api/workbooks`, {
-      headers: { ...headers, 'Content-Type': 'application/json' },
+      headers,
       signal: AbortSignal.timeout(10_000),
     })
 
@@ -135,12 +144,14 @@ export async function listCloudWorkbooks(): Promise<CloudWorkbook[]> {
  * Load a workbook from the cloud by ID.
  */
 export async function loadFromCloud(workbookId: string): Promise<WorkbookData | null> {
-  const headers = getAuthHeaders()
-  if (!headers['x-user-id']) return null
+  if (!isCloudConfigured()) return null
 
   try {
+    const headers = await getAuthHeaders()
+    if (!headers.Authorization) return null
+
     const res = await fetch(`${API_BASE}/api/workbooks/${workbookId}`, {
-      headers: { ...headers, 'Content-Type': 'application/json' },
+      headers,
       signal: AbortSignal.timeout(15_000),
     })
 
@@ -157,15 +168,20 @@ export async function loadFromCloud(workbookId: string): Promise<WorkbookData | 
  * Save (create new) a workbook to the cloud.
  */
 export async function createInCloud(workbook: WorkbookData): Promise<CreateResult | null> {
-  const headers = getAuthHeaders()
-  if (!headers['x-user-id']) return null
+  if (!isCloudConfigured()) return null
 
   setSyncStatus('syncing')
 
   try {
+    const headers = await getAuthHeaders()
+    if (!headers.Authorization) {
+      setSyncStatus('error')
+      return null
+    }
+
     const res = await fetch(`${API_BASE}/api/workbooks`, {
       method: 'POST',
-      headers: { ...headers, 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({
         name: workbook.name,
         data: JSON.stringify(workbook),
@@ -194,17 +210,20 @@ export async function createInCloud(workbook: WorkbookData): Promise<CreateResul
  */
 export async function saveToCloud(workbook: WorkbookData): Promise<SaveResult | null> {
   const cloudId = _currentCloudId
-  if (!cloudId) return null
-
-  const headers = getAuthHeaders()
-  if (!headers['x-user-id']) return null
+  if (!cloudId || !isCloudConfigured()) return null
 
   setSyncStatus('syncing')
 
   try {
+    const headers = await getAuthHeaders()
+    if (!headers.Authorization) {
+      setSyncStatus('error')
+      return null
+    }
+
     const res = await fetch(`${API_BASE}/api/workbooks/${cloudId}`, {
       method: 'PUT',
-      headers: { ...headers, 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({
         name: workbook.name,
         data: JSON.stringify(workbook),
@@ -231,13 +250,15 @@ export async function saveToCloud(workbook: WorkbookData): Promise<SaveResult | 
  * Delete a cloud workbook (soft-delete).
  */
 export async function deleteFromCloud(workbookId: string): Promise<boolean> {
-  const headers = getAuthHeaders()
-  if (!headers['x-user-id']) return false
+  if (!isCloudConfigured()) return false
 
   try {
+    const headers = await getAuthHeaders()
+    if (!headers.Authorization) return false
+
     const res = await fetch(`${API_BASE}/api/workbooks/${workbookId}`, {
       method: 'DELETE',
-      headers: { ...headers, 'Content-Type': 'application/json' },
+      headers,
       signal: AbortSignal.timeout(10_000),
     })
 
@@ -255,12 +276,14 @@ export async function deleteFromCloud(workbookId: string): Promise<boolean> {
  * Fetch version history for a workbook.
  */
 export async function listVersions(workbookId: string): Promise<VersionEntry[]> {
-  const headers = getAuthHeaders()
-  if (!headers['x-user-id']) return []
+  if (!isCloudConfigured()) return []
 
   try {
+    const headers = await getAuthHeaders()
+    if (!headers.Authorization) return []
+
     const res = await fetch(`${API_BASE}/api/workbooks/${workbookId}/versions`, {
-      headers: { ...headers, 'Content-Type': 'application/json' },
+      headers,
       signal: AbortSignal.timeout(10_000),
     })
 
@@ -279,14 +302,16 @@ export async function loadVersion(
   workbookId: string,
   versionId: string,
 ): Promise<WorkbookData | null> {
-  const headers = getAuthHeaders()
-  if (!headers['x-user-id']) return null
+  if (!isCloudConfigured()) return null
 
   try {
+    const headers = await getAuthHeaders()
+    if (!headers.Authorization) return null
+
     const res = await fetch(
       `${API_BASE}/api/workbooks/${workbookId}/versions/${versionId}`,
       {
-        headers: { ...headers, 'Content-Type': 'application/json' },
+        headers,
         signal: AbortSignal.timeout(15_000),
       },
     )

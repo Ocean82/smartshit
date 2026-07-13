@@ -3,6 +3,7 @@ import { useStore } from '@/store/useStore'
 import { LayoutTemplate, X, Search, ChevronRight, Upload, Download, Star, Globe, Loader2, Send } from 'lucide-react'
 import { templates, templateCategories, getPopularTemplates, searchTemplates, type TemplateCategory } from '@/data/templates'
 import { loadCommunityTemplates, importTemplateFromFile, installTemplate, type CommunityTemplate, type TemplatePackage } from '@/lib/communityTemplates'
+import { getAuthHeaders, isCloudConfigured } from '@/lib/cloudSync'
 
 const API_BASE = import.meta.env.VITE_AI_API_URL ?? ''
 
@@ -335,7 +336,7 @@ function PublishDialog({ templates, onClose, onPublished }: {
   const [description, setDescription] = useState('')
   const [category, setCategory] = useState('Personal Finance')
 
-  const userId = localStorage.getItem('smartsht-user-id')
+  const userId = isCloudConfigured()
   const selectedTemplate = templates.find((t) => t.id === selectedId)
 
   useEffect(() => {
@@ -350,9 +351,11 @@ function PublishDialog({ templates, onClose, onPublished }: {
     if (!userId || !name) return
     setPublishing(true)
     try {
+      const headers = await getAuthHeaders()
+      if (!headers.Authorization) return
       const res = await fetch(`${API_BASE}/api/community-templates`, {
         method: 'POST',
-        headers: { 'x-user-id': userId, 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           name,
           description,
