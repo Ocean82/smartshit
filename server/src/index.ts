@@ -1,5 +1,6 @@
 import cors from 'cors'
 import express from 'express'
+import { clerkMiddleware } from '@clerk/express'
 import { config } from './config.js'
 import { modelIsRegistered, ollamaReachable } from './ollama.js'
 import { groqAvailable } from './groq.js'
@@ -30,16 +31,41 @@ import { workbooksRouter } from './routes/workbooks.js'
 import { versionsRouter } from './routes/versions.js'
 import { sharesRouter } from './routes/shares.js'
 import { templatesRouter } from './routes/templates.js'
+import { requireAuth } from './auth/clerk.js'
 
 const app = express()
 app.use(cors({ origin: config.corsOrigin }))
+
+// Stripe webhook needs raw body — register BEFORE express.json()
+app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+  try {
+    const { verifyWebhookSignature, handleStripeWebhook } = await import('./stripe.js')
+    const signatureHeader = req.headers['stripe-signature'] as string | undefined
+
+    const event = verifyWebhookSignature(req.body, signatureHeader)
+    const result = handleStripeWebhook(event)
+
+    if (result) {
+      // In production, update Clerk user metadata here via Clerk Backend API
+      console.log(`Stripe webhook: user ${result.userId} -> plan ${result.plan}`)
+    }
+
+    res.json({ received: true })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Webhook error'
+    console.error('Stripe webhook error:', message)
+    res.status(400).json({ error: message })
+  }
+})
+
+app.use(clerkMiddleware())
 app.use(express.json({ limit: '1mb' }))
 
-// ─── Cloud workbook routes ───────────────────────────────────────────────────
-app.use('/api/workbooks', workbooksRouter)
-app.use('/api/workbooks', versionsRouter)
-app.use('/api/workbooks', sharesRouter)
-app.use('/api', sharesRouter)  // For /api/shares/:token and /api/shared/:token
+// ─── Cloud workbook routes (Clerk JWT required) ──────────────────────────────
+app.use('/api/workbooks', requireAuth, workbooksRouter)
+app.use('/api/workbooks', requireAuth, versionsRouter)
+app.use('/api/workbooks', requireAuth, sharesRouter)
+app.use('/api', sharesRouter)  // Public GET /api/shared/:token; mutating routes check auth in-handler
 app.use('/api/community-templates', templatesRouter)
 
 // Re-export for any modules that still import from index (backwards compat)
@@ -444,29 +470,6 @@ app.post('/api/checkout', async (req, res) => {
   }
 })
 
-// ─── Stripe Webhook ──────────────────────────────────────────────────────────
-
-app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
-  try {
-    const { verifyWebhookSignature, handleStripeWebhook } = await import('./stripe.js')
-    const signatureHeader = req.headers['stripe-signature'] as string | undefined
-
-    const event = verifyWebhookSignature(req.body, signatureHeader)
-    const result = handleStripeWebhook(event)
-
-    if (result) {
-      // In production, update Clerk user metadata here via Clerk Backend API
-      console.log(`Stripe webhook: user ${result.userId} -> plan ${result.plan}`)
-    }
-
-    res.json({ received: true })
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Webhook error'
-    console.error('Stripe webhook error:', message)
-    res.status(400).json({ error: message })
-  }
-})
-
 // ─── Start ───────────────────────────────────────────────────────────────────
 
 app.listen(config.port, config.host, () => {
@@ -477,6 +480,7 @@ app.listen(config.port, config.host, () => {
   console.log(`Groq: ${groqAvailable() ? `✓ (${config.groqModel})` : '✗ (no API key)'}`)
   console.log(`Ollama: ${config.ollamaBaseUrl} (model: ${config.modelName})`)
   console.log(`Stripe: ${config.stripeSecretKey ? '✓' : '✗ (no secret key)'}`)
+  console.log(`Clerk: ${config.clerkSecretKey ? '✓ (SmartSht secret configured)' : '✗'}`)
   console.log(`Database: ${config.databaseUrl ? '✓ (configured)' : '✗ (no DATABASE_URL)'}`)
   console.log(`S3: ${config.awsAccessKeyId ? `✓ (${config.s3Bucket})` : '✗ (no AWS credentials)'}`)
 })
