@@ -6,6 +6,9 @@ import { SharedView } from '@/components/SharedView'
 import { AuthProvider, AuthGate, ClerkUserSync } from '@/auth'
 import { useStore } from '@/store/useStore'
 import { savePersistedState } from '@/lib/persistence'
+import { migrateLegacyStorageKeys } from '@/lib/storageKeys'
+
+migrateLegacyStorageKeys()
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null
 

@@ -29,7 +29,7 @@ export interface TelemetrySnapshot {
   updatedAt: string
 }
 
-const STORAGE_KEY = 'smartshit-v1-telemetry'
+const STORAGE_KEY = 'smartsht-v1-telemetry'
 const MAX_EVENT_HISTORY = 100
 
 function emptyCounters(): TelemetryCounters {

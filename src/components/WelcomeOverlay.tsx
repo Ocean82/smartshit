@@ -9,7 +9,7 @@ interface WelcomeOverlayProps {
 export function WelcomeOverlay({ onOpenTemplates }: WelcomeOverlayProps) {
   const [isVisible, setIsVisible] = useState(() => {
     try {
-      return !localStorage.getItem('smartshit-welcome-dismissed')
+      return !localStorage.getItem('smartsht-welcome-dismissed')
     } catch {
       return true
     }
@@ -49,7 +49,7 @@ export function WelcomeOverlay({ onOpenTemplates }: WelcomeOverlayProps) {
 
   function dismiss() {
     try {
-      localStorage.setItem('smartshit-welcome-dismissed', '1')
+      localStorage.setItem('smartsht-welcome-dismissed', '1')
     } catch {
       // ignore
     }
