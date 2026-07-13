@@ -48,6 +48,11 @@ export const config = {
   awsAccessKeyId: process.env.AWS_ACCESS_KEY_ID ?? '',
   awsSecretAccessKey: process.env.AWS_SECRET_ACCESS_KEY ?? '',
 
+  // Clerk (SmartSht — https://clerk.smartsht.com)
+  clerkSecretKey: process.env.CLERK_SECRET_KEY ?? '',
+  clerkPublishableKey:
+    process.env.CLERK_PUBLISHABLE_KEY ?? process.env.VITE_CLERK_PUBLISHABLE_KEY ?? '',
+
   // Stripe
   stripeSecretKey: process.env.STRIPE_SECRET_KEY ?? '',
   stripePriceId: process.env.STRIPE_PRICE_ID ?? 'price_1TqYGCP38C54URjEZIBJEXDU',
