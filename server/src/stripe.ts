@@ -105,14 +105,16 @@ export function verifyWebhookSignature(
 export function handleStripeWebhook(event: {
   type: string
   data: { object: Record<string, unknown> }
-}): { userId: string; plan: string } | null {
+}): { userId: string; plan: 'pro' | 'free'; stripeSubscriptionId?: string | null } | null {
   const obj = event.data.object
 
   if (event.type === 'checkout.session.completed') {
     const metadata = obj.metadata as Record<string, string> | undefined
     const userId = (obj.client_reference_id as string) ?? metadata?.userId
+    const stripeSubscriptionId =
+      typeof obj.subscription === 'string' ? obj.subscription : metadata?.stripeSubscriptionId
     if (userId) {
-      return { userId, plan: 'pro' }
+      return { userId, plan: 'pro', stripeSubscriptionId: stripeSubscriptionId ?? null }
     }
   }
 
@@ -120,7 +122,7 @@ export function handleStripeWebhook(event: {
     const metadata = obj.metadata as Record<string, string> | undefined
     const userId = metadata?.userId
     if (userId) {
-      return { userId, plan: 'free' }
+      return { userId, plan: 'free', stripeSubscriptionId: null }
     }
   }
 
