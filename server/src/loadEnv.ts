@@ -6,5 +6,5 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const serverRoot = path.resolve(__dirname, '..')
 
 export function loadEnv(): void {
-  dotenv.config({ path: path.join(serverRoot, '.env') })
+  dotenv.config({ path: path.join(serverRoot, '.env'), override: true })
 }
