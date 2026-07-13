@@ -1,15 +1,12 @@
-import { Router } from 'express'
+import { Router, type Request } from 'express'
 import { query } from '../db.js'
 import { uploadTemplate, downloadObject } from '../s3.js'
+import { getRequestUserId } from '../auth/clerk.js'
 
 export const templatesRouter = Router()
 
-function getUserId(req: { headers: Record<string, unknown>; body?: Record<string, unknown> }): string | null {
-  return (
-    (req.headers['x-user-id'] as string) ??
-    (req.body as Record<string, unknown>)?.userId as string ??
-    null
-  )
+function getUserId(req: Request): string | null {
+  return getRequestUserId(req)
 }
 
 // ─── GET /api/community-templates — Browse community templates ───────────────

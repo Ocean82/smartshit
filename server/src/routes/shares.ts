@@ -1,16 +1,13 @@
-import { Router } from 'express'
+import { Router, type Request } from 'express'
 import { randomUUID } from 'node:crypto'
 import { query } from '../db.js'
 import { downloadObject } from '../s3.js'
+import { getRequestUserId } from '../auth/clerk.js'
 
 export const sharesRouter = Router()
 
-function getUserId(req: { headers: Record<string, unknown>; body?: Record<string, unknown> }): string | null {
-  return (
-    (req.headers['x-user-id'] as string) ??
-    (req.body as Record<string, unknown>)?.userId as string ??
-    null
-  )
+function getUserId(req: Request): string | null {
+  return getRequestUserId(req)
 }
 
 // ─── POST /api/workbooks/:id/share — Create a share link ─────────────────────

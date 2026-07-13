@@ -1,19 +1,13 @@
-import { Router } from 'express'
+import { Router, type Request } from 'express'
 import { query } from '../db.js'
 import { uploadWorkbook, downloadObject, deleteObject } from '../s3.js'
 import { config } from '../config.js'
+import { getRequestUserId } from '../auth/clerk.js'
 
 export const workbooksRouter = Router()
 
-// ─── Middleware: extract userId from request ─────────────────────────────────
-// In production this comes from Clerk JWT validation.
-// For now we accept it as a header or body param.
-function getUserId(req: { headers: Record<string, unknown>; body?: Record<string, unknown> }): string | null {
-  return (
-    (req.headers['x-user-id'] as string) ??
-    (req.body as Record<string, unknown>)?.userId as string ??
-    null
-  )
+function getUserId(req: Request): string | null {
+  return getRequestUserId(req)
 }
 
 // ─── GET /api/workbooks — List user's workbooks ──────────────────────────────
