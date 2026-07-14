@@ -105,6 +105,11 @@ export function classifyMode(message: string): AgentMode {
   if (hasAdvise) return 'advise'
   if (hasExplain) return 'explain'
 
+  // Question-phrased messages should never trigger actions directly
+  const isQuestion = /^(how|can i|what|why|when|where|should|is it|do i|does)\b/i.test(lower)
+    || lower.endsWith('?')
+  if (isQuestion && hasAct) return 'chat'
+
   // Action keywords only win when no question/advice signals present
   if (hasAct) return 'act'
 

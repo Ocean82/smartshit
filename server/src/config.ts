@@ -34,6 +34,8 @@ export const config = {
   // Ollama (fallback — local CPU inference)
   ollamaBaseUrl: process.env.OLLAMA_BASE_URL ?? 'http://127.0.0.1:11434',
   modelName: process.env.SMARTSHIT_MODEL ?? 'smartshit',
+  /** Excel-assist finetuned model (structured JSON output, better tool routing) */
+  assistModelName: process.env.SMARTSHT_ASSIST_MODEL ?? 'smartsht-assist',
   modelPath: path.join(projectRoot, 'models', 'qwen2.5-coder-1.5b-q8_0.gguf'),
   modelfilePath: path.join(projectRoot, 'server', 'Modelfile'),
 

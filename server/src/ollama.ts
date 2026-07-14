@@ -55,6 +55,47 @@ export async function chatWithOllama(messages: ChatMessageInput[]): Promise<stri
 }
 
 /**
+ * Check if the excel-assist finetuned model is available.
+ * This model produces structured JSON output and is preferred for tool routing.
+ */
+export async function assistModelAvailable(): Promise<boolean> {
+  if (!config.assistModelName) return false
+  return modelIsRegistered(config.assistModelName)
+}
+
+/**
+ * Chat with the excel-assist finetuned model (structured JSON output).
+ * Lower temperature (0.1) for more deterministic tool routing.
+ */
+export async function chatWithAssistModel(messages: ChatMessageInput[]): Promise<string> {
+  const model = config.assistModelName
+  const res = await fetch(`${config.ollamaBaseUrl}/api/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model,
+      messages,
+      stream: false,
+      options: {
+        num_ctx: config.numCtx,
+        num_predict: config.numPredict,
+        temperature: 0.1,
+      },
+    }),
+    signal: AbortSignal.timeout(60_000),
+  })
+
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`Ollama assist model failed (${res.status}): ${text}`)
+  }
+
+  const data = (await res.json()) as OllamaChatResponse
+  if (data.error) throw new Error(data.error)
+  return data.message?.content?.trim() ?? ''
+}
+
+/**
  * Streaming chat — yields text chunks as they arrive from Ollama.
  * Calls `onChunk` for each token and returns the full accumulated text.
  */

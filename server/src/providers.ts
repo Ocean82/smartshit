@@ -3,7 +3,7 @@
  * Both index.ts and llmIntentParser.ts import from here.
  */
 import { config } from './config.js'
-import { chatWithOllama, chatWithOllamaStream } from './ollama.js'
+import { chatWithOllama, chatWithOllamaStream, assistModelAvailable, chatWithAssistModel } from './ollama.js'
 import { groqAvailable, chatWithGroqStream } from './groq.js'
 import { chatWithOpenAiCompatible, chatWithOpenAiCompatibleStream, openAiCompatibleAvailable } from './openaiCompatible.js'
 
@@ -97,6 +97,10 @@ export async function callProvider(
   if (provider === 'groq') {
     const { chatWithGroq } = await import('./groq.js')
     return chatWithGroq(messages)
+  }
+  // Prefer the finetuned assist model for structured JSON output when available
+  if (await assistModelAvailable()) {
+    return chatWithAssistModel(messages)
   }
   return chatWithOllama(messages)
 }

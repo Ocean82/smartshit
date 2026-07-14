@@ -1,5 +1,5 @@
 {
-  "name": "smartshit-server",
+  "name": "smartsht-server",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -10,6 +10,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "setup-model": "node scripts/setup-model.mjs",
+    "setup-assist": "powershell -ExecutionPolicy Bypass -File ../scripts/setup-assist-model.ps1",
     "migrate": "node scripts/run-migration.mjs"
   },
   "dependencies": {

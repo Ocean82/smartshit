@@ -5,6 +5,7 @@ dist/
 *.log
 .DS_Store
 Thumbs.db
+temp/
 
 # Large model weights — copy locally or mount on server
 models/*.gguf
@@ -32,7 +33,6 @@ server/ecosystem.config.cjs
 coverage/
 *.tsbuildinfo
 .vite/
-
 # Dev debug/test scripts (created during debugging, never ship)
 *.sh
 

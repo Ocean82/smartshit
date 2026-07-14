@@ -3,6 +3,7 @@ import express from 'express'
 import { clerkMiddleware } from '@clerk/express'
 import { config } from './config.js'
 import { modelIsRegistered, ollamaReachable } from './ollama.js'
+import { assistModelAvailable } from './ollama.js'
 import { groqAvailable } from './groq.js'
 import {
   buildActionPrompt,
@@ -13,7 +14,7 @@ import {
 import { parseAgentResponse } from './parseResponse.js'
 import { resolveIntent, isWeakResponse } from './intent.js'
 import { classifyMode, isLlmOnlyMode } from './mode.js'
-import { parseIntentWithLlm } from './llmIntentParser.js'
+import { parseUserIntent as parseIntentWithKeyword } from './intentParser.js'
 import type { UserIntent } from '../../shared/intentTypes.js'
 import { getSuggestions } from './suggestions.js'
 import {
@@ -33,13 +34,26 @@ import { sharesRouter } from './routes/shares.js'
 import { templatesRouter } from './routes/templates.js'
 import { requireAuth, getRequestUserId, getClerkClient, planFromPublicMetadata } from './auth/clerk.js'
 
+// ─── Pro plan cache (avoids hitting Clerk API on every chat message) ─────────
+const PRO_CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
+const proCache = new Map<string, { isPro: boolean; expiresAt: number }>()
+
 async function resolveIsPro(userId: string | null): Promise<boolean> {
   if (!userId || !config.clerkSecretKey) return false
+
+  const cached = proCache.get(userId)
+  if (cached && Date.now() < cached.expiresAt) {
+    return cached.isPro
+  }
+
   try {
     const user = await getClerkClient().users.getUser(userId)
-    return planFromPublicMetadata(user.publicMetadata as Record<string, unknown>) === 'pro'
+    const isPro = planFromPublicMetadata(user.publicMetadata as Record<string, unknown>) === 'pro'
+    proCache.set(userId, { isPro, expiresAt: Date.now() + PRO_CACHE_TTL_MS })
+    return isPro
   } catch {
-    return false
+    // On error, return cached value if available (even if expired), otherwise false
+    return cached?.isPro ?? false
   }
 }
 
@@ -63,6 +77,8 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
           stripeSubscriptionId: result.stripeSubscriptionId ?? null,
         },
       })
+      // Invalidate pro cache so the user sees the change immediately
+      proCache.delete(result.userId)
       console.log(`Stripe webhook: user ${result.userId} -> plan ${result.plan}`)
     }
 
@@ -226,6 +242,7 @@ async function runLlmChat(params: {
 app.get('/health', async (_req, res) => {
   const ollama = await ollamaReachable()
   const modelReady = ollama ? await modelIsRegistered() : false
+  const assistReady = ollama ? await assistModelAvailable() : false
   const groq = groqAvailable()
   const openrouter = providerIsConfigured('openrouter')
   const huggingface = providerIsConfigured('huggingface')
@@ -236,7 +253,7 @@ app.get('/health', async (_req, res) => {
 
   res.json({
     ok: groq || openrouter || huggingface || (ollama && modelReady),
-    service: 'smartshit-server',
+    service: 'smartsht-server',
     groq,
     openrouter,
     huggingface,
@@ -244,7 +261,9 @@ app.get('/health', async (_req, res) => {
     groqModel: groq ? config.groqModel : null,
     ollama,
     modelRegistered: modelReady,
+    assistModelRegistered: assistReady,
     modelName: config.modelName,
+    assistModelName: config.assistModelName,
     port: config.port,
     cloud: {
       database: db,
@@ -266,7 +285,7 @@ app.post('/api/chat/stream', requireAuth, async (req, res) => {
 
   const mode = classifyMode(userMessage)
   const history = (body.history ?? []).filter((m) => m.role === 'user' || m.role === 'assistant')
-  const userIntent = await parseIntentWithLlm(userMessage, history)
+  const userIntent = parseIntentWithKeyword(userMessage)
 
   // Generate suggestions after we have a valid message
   const suggestions = getSuggestions(userMessage)
@@ -399,7 +418,7 @@ app.post('/api/chat', requireAuth, async (req, res) => {
 
   const mode = classifyMode(userMessage)
   const history = (body.history ?? []).filter((m) => m.role === 'user' || m.role === 'assistant')
-  const userIntent = await parseIntentWithLlm(userMessage, history)
+  const userIntent = parseIntentWithKeyword(userMessage)
 
   // Generate suggestions after we have a valid message
   const suggestions = getSuggestions(userMessage)

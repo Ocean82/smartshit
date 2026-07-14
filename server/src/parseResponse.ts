@@ -20,6 +20,14 @@ const ALLOWED_TOOLS = new Set([
   'create_chart',
   'modify_column',
   'clear_sheet',
+  // Tools from the excel-assist finetuned model
+  'sort_sheet',
+  'filter',
+  'find_duplicates',
+  'aggregate',
+  'top_n',
+  'summary',
+  'analyze_data',
 ])
 
 function extractJsonObject(text: string): string | null {
