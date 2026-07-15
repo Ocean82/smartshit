@@ -114,6 +114,22 @@ These are end-goal features (see `outline.md`). Don't touch until Phase 4 revenu
 - ❌ Real-time collaboration (Yjs)
 - ❌ WebSocket streaming mutations
 
+### Note on Async Task Queuing
+
+The current architecture is already non-blocking for our scale:
+- Express + Node.js async I/O handles concurrent requests without thread blocking
+- LLM calls (Ollama/cloud) are `fetch()`-based and run in parallel
+- Cell sync to Postgres fires asynchronously after the HTTP response is sent
+- SSE streaming means users see immediate feedback ("thinking..." → tokens appear)
+
+**When to add a formal task queue (BullMQ + Redis):**
+- When a single agent action modifies 1000+ cells and DB writes exceed 5 seconds
+- When concurrent Ollama users exceed what a single model instance can handle
+- When we add Level 3 workflow automation (triggers that fire bulk mutations)
+
+This is a half-day addition when the time comes — not a gap in the current architecture.
+The BYOK feature further reduces server load since most inference goes to the user's own cloud endpoint.
+
 ---
 
 ## Technical Decisions (Keep It Simple)

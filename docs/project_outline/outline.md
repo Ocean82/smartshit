@@ -172,6 +172,28 @@ Since you built this from scratch, do not rely on standard JavaScript evaluation
 If an agent writes a formula into cell A1 that impacts 5,000 downstream cells, your backend should process that computation deterministically using a lightning-fast graph engine before updating the UI grid.
 
 
+------------------------------
+## 5. Asynchronous Task Queuing
+
+If a user asks for a structural alteration, don't let the model process it directly inside the main request thread.
+
+**The Strategy:** Offload heavy model execution and bulk mutations to a background worker queue (BullMQ + Redis for Node.js, or AWS Lambda for serverless bursts).
+
+**The Payoff:** The API remains snappy and immediately tells the user "Processing...", while the worker handles model inference and bulk DB writes at its own pace without dropping network requests.
+
+**Implementation path:**
+- v1 (current): Node.js async I/O + SSE streaming is sufficient. LLM calls are non-blocking `fetch()`. Cell sync fires after response. No queue needed yet.
+- v2 (scale trigger: 1000+ cell mutations per request): Add BullMQ (Redis-backed) on the same EC2. Heavy mutation arrays get queued; completion pushes via WebSocket.
+- v3 (scale trigger: 50+ concurrent agent sessions): Move inference to Lambda or dedicated GPU workers. Main API becomes a thin routing layer.
+
+**Current architecture is non-blocking because:**
+- Express + Node event loop handles concurrent requests without thread blocking
+- All LLM calls (Ollama, cloud BYOK) are async network I/O
+- Cell sync to Postgres is fire-and-forget after HTTP response
+- SSE streaming gives users immediate feedback during inference
+
+------------------------------
+
 we can then look at a fast node-based execution layout for handling those streaming cell mutations, and the best UX design patterns for showing agent errors inside a spreadsheet grid.
 
 

@@ -6,12 +6,15 @@ dist/
 .DS_Store
 Thumbs.db
 temp/
+.idea/
 
 # Large model weights — copy locally or mount on server
 models/*.gguf
 models/*.onnx
 models/*.onnx.data
 models/*.onnx_data*
+models/*/
+!models/README.md
 
 server/node_modules/
 server/dist/
@@ -25,6 +28,7 @@ docs/images/notes
 # Editor / agent local state
 .cursor/
 .kiro/
+.junie
 
 # PM2 ecosystem config (contains server secrets)
 server/ecosystem.config.cjs
