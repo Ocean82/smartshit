@@ -1,5 +1,5 @@
 export const AI_ANALYSIS_CONFIG = {
-  maxRowsPreview: 25,
+  maxRowsPreview: 60,
   maxRowsAnalysis: 10_000,
   maxImportRows: 5_000,
   maxImportCols: 200,

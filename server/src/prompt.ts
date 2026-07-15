@@ -15,6 +15,13 @@ export const SPREADSHEET_AGENT_TOOLS = [
   'create_chart',
   'modify_column',
   'clear_sheet',
+  'sort_sheet',
+  'filter',
+  'find_duplicates',
+  'aggregate',
+  'top_n',
+  'summary',
+  'analyze_data',
 ] as const
 
 export type SpreadsheetTool = (typeof SPREADSHEET_AGENT_TOOLS)[number]
@@ -159,7 +166,7 @@ function formatContextBlock(context?: SpreadsheetContextInput): string {
 
   if (context.sampleRows?.length) {
     const preview = context.sampleRows
-      .slice(0, 15)
+      .slice(0, 50)
       .map((row, i) => `  Row ${i + 1}: ${(row ?? []).join(' | ')}`)
       .join('\n')
     lines.push(`Data preview:\n${preview}`)
@@ -298,19 +305,39 @@ ${contextBlock}`
  * JSON tool-calling assistant for act mode.
  */
 export function buildActionPrompt(context?: SpreadsheetContextInput): string {
-  const tools = SPREADSHEET_AGENT_TOOLS.join(', ')
   const contextBlock = formatContextBlock(context)
 
   return `You are smartsh!t, a spreadsheet AI assistant. Respond ONLY with valid JSON.
 
 Format: {"message":"explanation","actions":[{"tool":"name","params":{},"description":"label"}]}
 
-Tools: ${tools}
+Available tools and their params:
+- create_budget_template: {} — Build a monthly budget with income, expenses, totals
+- create_sales_tracker: {} — Create a sales tracking spreadsheet
+- create_invoice: {} — Generate a professional invoice template
+- create_project_tracker: {} — Create a project/task tracker
+- create_employee_roster: {} — Build an employee directory
+- create_kpi_dashboard: {} — Create a KPI metrics dashboard
+- create_expense_report: {} — Generate an expense report template
+- clean_sheet_data: {} — Clean whitespace, normalize headers, trim data
+- apply_formula: {column, formula} — Apply a formula (SUM, AVERAGE, COUNT, MAX, MIN)
+- format_cells: {range, bold, bgColor, fontColor, condition} — Format cells. Use "condition" to target cells by value (e.g. {condition: {contains: "7"}, fontColor: "#0000FF"} or {condition: {operator: "lt", value: 0}, fontColor: "#FF0000"})
+- create_chart: {type, dataRange} — Create a chart (bar, pie, line, scatter)
+- modify_column: {column, operation, factor} — Apply math to a column (multiply, add, subtract)
+- clear_sheet: {} — Clear all data from the current sheet
+- sort_sheet: {column, direction} — Sort by a column (asc/desc)
+- filter: {column, condition, value} — Filter rows by condition (gt, lt, eq, contains, not_empty)
+- find_duplicates: {columns} — Find duplicate rows by specified columns
+- aggregate: {column, agg} — Aggregate a column (sum, mean, count, min, max)
+- top_n: {column, n, ascending} — Get top/bottom N rows by column
+- summary: {} — Summarize the current sheet data
+- analyze_data: {} — Analyze data patterns and provide insights
 
 Rules:
-- message: plain English, friendly, short
+- message: plain English, friendly, short. Describe what you will do.
 - actions: array of tool calls (empty array if no sheet changes needed)
-- No markdown fences, no extra text outside JSON
+- For conditional formatting (color cells by value), use format_cells with a condition param
+- No markdown fences, no extra text outside JSON. Start with { end with }
 ${contextBlock}`
 }
 

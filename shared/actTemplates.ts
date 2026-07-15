@@ -152,9 +152,19 @@ export function resolveActTemplates(message: string): ActTemplateResult {
   }
 
   if (lower.includes('bold') || lower.includes('format') || lower.includes('highlight') || lower.includes('color')) {
+    // Conditional formatting requests (targeting cells by value) should be handled by the LLM
+    // Only handle simple "make it bold" / "highlight the selection" here
+    const isConditional = /\b(with|contain|has|have|equal|where|if|that)\b/.test(lower)
+      || /\b\d+\b/.test(lower) // mentions a specific number
+      || lower.includes('negative') || lower.includes('positive')
+    if (isConditional) {
+      // Let the LLM handle complex conditional formatting
+      return { message: '', actions: [] }
+    }
+
     return {
       message: 'I will format the selected cells. Click Apply to confirm.',
-      actions: [{ tool: 'format_cells', params: { bold: lower.includes('bold'), bgColor: lower.includes('highlight') || lower.includes('color') ? '#FFF9C4' : undefined }, description: 'Format selected cells' }],
+      actions: [{ tool: 'format_cells', params: { bold: lower.includes('bold'), bgColor: lower.includes('highlight') ? '#FFF9C4' : undefined }, description: 'Format selected cells' }],
     }
   }
 

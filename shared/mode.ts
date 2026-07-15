@@ -85,6 +85,16 @@ const ACT_SIGNALS = [
   'bold ',
   'chart',
   'graph',
+  'sort ',
+  'filter ',
+  'turn ',
+  'change ',
+  ' to red',
+  ' to blue',
+  ' to green',
+  'text color',
+  'font color',
+  'highlight',
 ]
 
 function matchesAny(text: string, signals: string[]): boolean {

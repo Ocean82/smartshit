@@ -36,6 +36,7 @@ export function TemplateGallery({ open, onClose }: TemplateGalleryProps) {
   // Marketplace state
   const [cloudTemplates, setCloudTemplates] = useState<CloudTemplate[]>([])
   const [cloudLoading, setCloudLoading] = useState(false)
+  const [cloudError, setCloudError] = useState<string | null>(null)
   const [cloudSort, setCloudSort] = useState<'popular' | 'recent' | 'rating'>('popular')
   const [installingId, setInstallingId] = useState<string | null>(null)
   const [showPublish, setShowPublish] = useState(false)
@@ -48,6 +49,7 @@ export function TemplateGallery({ open, onClose }: TemplateGalleryProps) {
 
   async function fetchCloudTemplates() {
     setCloudLoading(true)
+    setCloudError(null)
     try {
       const params = new URLSearchParams({ sort: cloudSort, limit: '50' })
       if (searchQuery) params.set('search', searchQuery)
@@ -57,14 +59,17 @@ export function TemplateGallery({ open, onClose }: TemplateGalleryProps) {
       if (res.ok) {
         const json = (await res.json()) as { templates: CloudTemplate[]; total: number }
         setCloudTemplates(json.templates)
+        setCloudError(null)
+      } else {
+        setCloudError('Could not load marketplace. Showing built-in templates instead.')
       }
-    } catch { /* offline */ }
+    } catch {
+      setCloudError('Marketplace unavailable offline. Showing built-in templates instead.')
+    }
     setCloudLoading(false)
   }
 
-  if (!open) return null
-
-  const allTemplates = [...templates, ...communityTemplates]
+  const allTemplates = useMemo(() => [...templates, ...communityTemplates], [communityTemplates])
 
   const displayTemplates = useMemo(() => {
     if (activeCategory === 'Marketplace') return []
@@ -80,7 +85,9 @@ export function TemplateGallery({ open, onClose }: TemplateGalleryProps) {
     if (activeCategory === 'All') return allTemplates
     if (activeCategory === 'Community') return communityTemplates
     return allTemplates.filter(t => t.category === activeCategory)
-  }, [searchQuery, activeCategory, communityTemplates])
+  }, [searchQuery, activeCategory, communityTemplates, allTemplates])
+
+  if (!open) return null
 
   function runTemplate(prompt: string) {
     setChatInput(prompt)
@@ -174,11 +181,13 @@ export function TemplateGallery({ open, onClose }: TemplateGalleryProps) {
             <MarketplaceGrid
               templates={cloudTemplates}
               loading={cloudLoading}
+              error={cloudError}
               sort={cloudSort}
               onSortChange={setCloudSort}
               installingId={installingId}
               onInstall={handleInstallCloud}
               onUse={runTemplate}
+              fallbackTemplates={allTemplates}
             />
           ) : displayTemplates.length === 0 ? (
             <div className="text-center py-12 text-gray-400">
@@ -251,16 +260,42 @@ function TabButton({ active, onClick, variant, children }: {
 
 // ─── Marketplace Grid ────────────────────────────────────────────────────────
 
-function MarketplaceGrid({ templates, loading, sort, onSortChange, installingId, onInstall, onUse }: {
-  templates: CloudTemplate[]; loading: boolean; sort: 'popular' | 'recent' | 'rating'
+function MarketplaceGrid({ templates, loading, error, sort, onSortChange, installingId, onInstall, onUse, fallbackTemplates }: {
+  templates: CloudTemplate[]; loading: boolean; error: string | null; sort: 'popular' | 'recent' | 'rating'
   onSortChange: (s: 'popular' | 'recent' | 'rating') => void
   installingId: string | null; onInstall: (t: CloudTemplate) => void; onUse: (prompt: string) => void
+  fallbackTemplates: Array<{ id: string; name: string; description: string; icon: string; category: string; prompt: string }>
 }) {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12 gap-2 text-gray-400">
         <Loader2 size={16} className="animate-spin" />
         <span className="text-sm">Loading marketplace...</span>
+      </div>
+    )
+  }
+
+  // Show fallback built-in templates when cloud is unavailable
+  if (error && templates.length === 0) {
+    return (
+      <div>
+        <div className="mb-4 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700">
+          {error}
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {fallbackTemplates.map((template) => (
+            <button key={template.id} type="button" onClick={() => onUse(template.prompt)}
+              className="text-left rounded-xl border border-gray-200 p-4 hover:border-blue-300 hover:bg-blue-50/50 hover:shadow-sm transition-all group">
+              <div className="flex items-start justify-between">
+                <span className="text-2xl">{template.icon}</span>
+                <ChevronRight size={14} className="text-gray-300 group-hover:text-blue-400 transition-colors mt-1" />
+              </div>
+              <p className="mt-2 font-semibold text-gray-900 text-sm">{template.name}</p>
+              <p className="mt-1 text-xs text-gray-500 leading-relaxed line-clamp-2">{template.description}</p>
+              <p className="mt-2 text-[10px] text-blue-600 font-medium">{template.category}</p>
+            </button>
+          ))}
+        </div>
       </div>
     )
   }

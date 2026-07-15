@@ -1,10 +1,41 @@
 import { useStore } from '@/store/useStore';
 import { refToCell } from '@/engine/spreadsheet';
-import { useMemo } from 'react';
+import { useMemo, useState, useCallback } from 'react';
+import { Minus, Plus } from 'lucide-react';
+
+const ZOOM_LEVELS = [50, 75, 85, 100, 125, 150, 175, 200];
 
 export function StatusBar() {
   const { selection, getActiveSheet, getComputedValue, messages } = useStore();
   const sheet = getActiveSheet();
+  const [zoom, setZoom] = useState(100);
+
+  const handleZoomChange = useCallback((newZoom: number) => {
+    const clamped = Math.max(50, Math.min(200, newZoom));
+    setZoom(clamped);
+    // Apply zoom to the spreadsheet grid container via CSS custom property
+    const gridEl = document.querySelector('[data-spreadsheet-grid]') as HTMLElement | null;
+    if (gridEl) {
+      gridEl.style.setProperty('--grid-zoom', String(clamped / 100));
+      gridEl.style.transform = `scale(${clamped / 100})`;
+      gridEl.style.transformOrigin = 'top left';
+      // Adjust the parent container to account for scaled size
+      const parent = gridEl.parentElement;
+      if (parent) {
+        parent.style.overflow = 'auto';
+      }
+    }
+  }, []);
+
+  const zoomIn = useCallback(() => {
+    const next = ZOOM_LEVELS.find((z) => z > zoom) ?? 200;
+    handleZoomChange(next);
+  }, [zoom, handleZoomChange]);
+
+  const zoomOut = useCallback(() => {
+    const prev = [...ZOOM_LEVELS].reverse().find((z) => z < zoom) ?? 50;
+    handleZoomChange(prev);
+  }, [zoom, handleZoomChange]);
 
   const stats = useMemo(() => {
     if (!selection) return null;
@@ -95,6 +126,39 @@ export function StatusBar() {
           ⚡ {responseTime}
         </span>
       )}
+
+      {/* Zoom controls */}
+      <div className="flex items-center gap-1 border-l border-gray-200 pl-3 ml-2">
+        <button
+          type="button"
+          onClick={zoomOut}
+          disabled={zoom <= 50}
+          className="p-0.5 rounded hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed"
+          title="Zoom out"
+        >
+          <Minus size={11} />
+        </button>
+        <select
+          value={zoom}
+          onChange={(e) => handleZoomChange(Number(e.target.value))}
+          className="text-[10px] bg-transparent border-none cursor-pointer text-gray-600 font-medium w-[42px] text-center appearance-none"
+          title="Zoom level"
+        >
+          {ZOOM_LEVELS.map((z) => (
+            <option key={z} value={z}>{z}%</option>
+          ))}
+        </select>
+        <button
+          type="button"
+          onClick={zoomIn}
+          disabled={zoom >= 200}
+          className="p-0.5 rounded hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed"
+          title="Zoom in"
+        >
+          <Plus size={11} />
+        </button>
+      </div>
+
       <span className="text-gray-400">smartsh!t v1.0</span>
     </div>
   );

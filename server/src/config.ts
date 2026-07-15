@@ -67,7 +67,7 @@ export const config = {
   appUrl: process.env.APP_URL ?? 'https://smartsht.com',
 
   analysis: {
-    maxRowsPreview: 25,
+    maxRowsPreview: 60,
     maxRowsAnalysis: 10_000,
     outlierStdThreshold: 2.5,
   },

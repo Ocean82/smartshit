@@ -13,8 +13,10 @@ const DEFAULT_CELL_WIDTH = 100;
 const CELL_HEIGHT = 28;
 const ROW_HEADER_WIDTH = 46;
 const COL_HEADER_HEIGHT = 26;
-const TOTAL_ROWS = 1000;
-const TOTAL_COLS = 100;
+const MAX_ROWS = 10000;
+const MAX_COLS = 100;
+const EMPTY_ROWS_BUFFER = 50; // Extra empty rows shown below data
+const EMPTY_COLS_BUFFER = 10; // Extra empty cols shown beyond data
 const BUFFER_ROWS = 5;
 const BUFFER_COLS = 3;
 
@@ -47,6 +49,19 @@ export function SpreadsheetGrid() {
       findHeaderRow(sheet),
     );
   }, [activeFilters, getComputedValue, sheet]);
+
+  // Dynamic grid bounds: show only enough rows/cols to contain data + buffer
+  const { TOTAL_ROWS, TOTAL_COLS } = useMemo(() => {
+    const lastDataRow = findLastDataRow(sheet);
+    const lastDataCol = Object.keys(sheet.cells).reduce((max, cellId) => {
+      const ref = cellToRef(cellId);
+      return ref ? Math.max(max, ref.col) : max;
+    }, 0);
+    return {
+      TOTAL_ROWS: Math.min(MAX_ROWS, Math.max(100, lastDataRow + EMPTY_ROWS_BUFFER + 1)),
+      TOTAL_COLS: Math.min(MAX_COLS, Math.max(26, lastDataCol + EMPTY_COLS_BUFFER + 1)),
+    };
+  }, [sheet]);
 
   const displayRowCount = filteredRows ? filteredRows.length : TOTAL_ROWS;
   const gridRef = useRef<HTMLDivElement>(null);
@@ -223,6 +238,31 @@ export function SpreadsheetGrid() {
             case 'v': e.preventDefault(); useStore.getState().paste(); break;
             case 'a': e.preventDefault(); setSelection({ startRow: 0, startCol: 0, endRow: TOTAL_ROWS - 1, endCol: TOTAL_COLS - 1 }); break;
             case 'f': case 'h': e.preventDefault(); setShowFindReplace(true); break;
+            case 'End': {
+              // Ctrl+End: jump to last cell with data (like Excel)
+              e.preventDefault();
+              const lastRow = findLastDataRow(sheet);
+              const lastCol = Object.keys(sheet.cells).reduce((max, cid) => {
+                const ref = cellToRef(cid);
+                return ref ? Math.max(max, ref.col) : max;
+              }, 0);
+              setSelection({ startRow: lastRow, startCol: lastCol, endRow: lastRow, endCol: lastCol });
+              // Scroll to the last data cell
+              if (gridRef.current) {
+                gridRef.current.scrollTop = Math.max(0, lastRow * CELL_HEIGHT - gridRef.current.clientHeight / 2);
+              }
+              break;
+            }
+            case 'Home': {
+              // Ctrl+Home: jump to A1
+              e.preventDefault();
+              setSelection({ startRow: 0, startCol: 0, endRow: 0, endCol: 0 });
+              if (gridRef.current) {
+                gridRef.current.scrollTop = 0;
+                gridRef.current.scrollLeft = 0;
+              }
+              break;
+            }
             case 'b': {
               e.preventDefault();
               const cellId = refToCell(r, c);
@@ -416,6 +456,7 @@ export function SpreadsheetGrid() {
   return (
     <div
       ref={gridRef}
+      data-spreadsheet-grid
       className="flex-1 overflow-auto relative"
       tabIndex={0}
       onKeyDown={handleKeyDown}
