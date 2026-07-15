@@ -2,6 +2,7 @@ import { v4 as uuid } from 'uuid'
 import type { AgentAction, ChatMessage } from '@/types'
 import type { SpreadsheetContextPayload } from '@/ai/buildContext'
 import { getAuthHeaders } from '@/lib/cloudSync'
+import { getByokPayload } from '@/lib/userApiKey'
 
 const API_BASE = import.meta.env.VITE_AI_API_URL ?? ''
 
@@ -48,10 +49,11 @@ export async function chatWithAgentServer(
 ): Promise<ServerChatResponse | null> {
   try {
     const headers = await getAuthHeaders()
+    const byok = getByokPayload()
     const res = await fetch(`${API_BASE}/api/chat`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ message, context, history }),
+      body: JSON.stringify({ message, context, history, byok }),
       signal: AbortSignal.timeout(120_000),
     })
     if (!res.ok) return null
@@ -75,10 +77,11 @@ export async function chatWithAgentServerStream(
 ): Promise<ServerChatResponse | null> {
   try {
     const headers = await getAuthHeaders()
+    const byok = getByokPayload()
     const res = await fetch(`${API_BASE}/api/chat/stream`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ message, context, history }),
+      body: JSON.stringify({ message, context, history, byok }),
       signal: signal ?? AbortSignal.timeout(120_000),
     })
 

@@ -9,6 +9,7 @@ import type { AgentAction } from '@/types'
 import { getFeedbackForMessage, recordChatFeedback, type ChatFeedbackRating } from '@/ai/chatFeedback'
 import { exportChatAsReport } from '@/lib/exportChat'
 import { useUsage, UpgradePrompt } from '@/auth'
+import { ApiKeySettings } from './ApiKeySettings'
 
 function healthFooterMessage(health: ServerHealth | null): string {
   if (!health) return 'Instant analysis active · AI server connecting…'
@@ -408,6 +409,7 @@ export function ChatPanel({ isMobileOpen, onCloseMobile }: { isMobileOpen?: bool
         <p className="text-[10px] text-gray-400 mt-1.5 text-center">
           {healthFooterMessage(health)}
         </p>
+        <ApiKeySettings />
       </div>
 
       {/* Desktop drag handle to resize chat width */}

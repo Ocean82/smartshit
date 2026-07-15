@@ -3,6 +3,7 @@ import { query } from '../db.js'
 import { uploadWorkbook, downloadObject, deleteObject } from '../s3.js'
 import { config } from '../config.js'
 import { getRequestUserId } from '../auth/clerk.js'
+import { syncWorkbookCells } from '../cellStore.js'
 
 export const workbooksRouter = Router()
 
@@ -99,6 +100,16 @@ workbooksRouter.post('/', async (req, res) => {
       sizeBytes,
       version: 1,
     })
+
+    // Async cell sync (don't block the response)
+    try {
+      const workbookData = JSON.parse(data) as { sheets?: Array<{ name: string; cells: Record<string, { value?: string | number | boolean | null; formula?: string }> }> }
+      if (workbookData.sheets?.length) {
+        void syncWorkbookCells(workbookId, workbookData.sheets).catch((err) =>
+          console.warn('[cellStore] sync failed on create:', err instanceof Error ? err.message : err),
+        )
+      }
+    } catch { /* non-critical */ }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error'
     res.status(500).json({ error: message })
@@ -232,6 +243,16 @@ workbooksRouter.put('/:id', async (req, res) => {
       version: nextVersion,
       sizeBytes,
     })
+
+    // Async cell sync (don't block the response)
+    try {
+      const workbookData = JSON.parse(data) as { sheets?: Array<{ name: string; cells: Record<string, { value?: string | number | boolean | null; formula?: string }> }> }
+      if (workbookData.sheets?.length) {
+        void syncWorkbookCells(id, workbookData.sheets).catch((err) =>
+          console.warn('[cellStore] sync failed on save:', err instanceof Error ? err.message : err),
+        )
+      }
+    } catch { /* non-critical */ }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error'
     res.status(500).json({ error: message })

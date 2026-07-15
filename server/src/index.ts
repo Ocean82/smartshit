@@ -174,24 +174,46 @@ async function runLlmChat(params: {
     { role: 'user' as const, content: userMessage },
   ]
 
+  // If user provided their own API key (BYOK), use it as the primary provider
+  const byok = body.byok
   const availableProviders = providerOrder().filter(providerIsConfigured)
   let fullText = ''
   let usedProvider: ProviderName | null = null
   const providerErrors: string[] = []
 
-  for (const provider of availableProviders) {
+  if (byok?.apiKey && byok?.baseUrl) {
     try {
+      const { chatWithOpenAiCompatibleStream, chatWithOpenAiCompatible } = await import('./openaiCompatible.js')
+      const byokParams = { apiKey: byok.apiKey, model: byok.model, baseUrl: byok.baseUrl }
       if (stream && onChunk && signal) {
-        fullText = await callProviderStream(provider, messages, onChunk, signal)
+        fullText = await chatWithOpenAiCompatibleStream(byokParams, messages, onChunk, signal)
       } else {
-        fullText = await callProvider(provider, messages)
+        fullText = await chatWithOpenAiCompatible(byokParams, messages)
       }
-      usedProvider = provider
-      break
+      usedProvider = 'openrouter' // label it generically
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
-      providerErrors.push(`${provider}: ${msg}`)
-      console.warn(`[llm] provider ${provider} failed:`, msg)
+      providerErrors.push(`byok(${byok.provider}): ${msg}`)
+      console.warn(`[llm] BYOK provider failed:`, msg)
+      // Fall through to server-configured providers
+    }
+  }
+
+  if (!usedProvider) {
+    for (const provider of availableProviders) {
+      try {
+        if (stream && onChunk && signal) {
+          fullText = await callProviderStream(provider, messages, onChunk, signal)
+        } else {
+          fullText = await callProvider(provider, messages)
+        }
+        usedProvider = provider
+        break
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        providerErrors.push(`${provider}: ${msg}`)
+        console.warn(`[llm] provider ${provider} failed:`, msg)
+      }
     }
   }
 

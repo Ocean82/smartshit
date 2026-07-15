@@ -112,6 +112,13 @@ export interface ChatRequestBody {
   context?: SpreadsheetContextInput
   /** Skip instant template routing and force LLM (slower) */
   forceLlm?: boolean
+  /** User-provided API key (Bring Your Own Key) */
+  byok?: {
+    provider: string
+    apiKey: string
+    model: string
+    baseUrl: string
+  }
 }
 
 export interface ChatResponseBody {
