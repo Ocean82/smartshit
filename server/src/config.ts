@@ -7,13 +7,62 @@ loadEnv()
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const projectRoot = path.resolve(__dirname, '../..')
 
+// ─── Validation constants ────────────────────────────────────────────────────
+
+/** Known Groq-supported model identifiers. Update when Groq adds new models. */
+const KNOWN_GROQ_MODELS = new Set([
+  'llama-3.3-70b-versatile',
+  'llama-3.3-70b-specdec',
+  'llama-3.1-8b-instant',
+  'llama-3.1-70b-versatile',
+  'llama-3.2-1b-preview',
+  'llama-3.2-3b-preview',
+  'llama-3.2-11b-vision-preview',
+  'llama-3.2-90b-vision-preview',
+  'gemma2-9b-it',
+  'mixtral-8x7b-32768',
+  'qwen-qwq-32b',
+  'deepseek-r1-distill-llama-70b',
+])
+
+/** Canonical list of supported LLM provider identifiers. */
+const ALLOWED_PROVIDERS = ['openrouter', 'huggingface', 'groq', 'ollama'] as const
+type AllowedProvider = (typeof ALLOWED_PROVIDERS)[number]
+
+// ─── Parse and validate provider order ───────────────────────────────────────
+
+const rawProviderOrder = (process.env.LLM_PROVIDER_ORDER ?? 'groq,ollama')
+  .split(',')
+  .map((p) => p.trim().toLowerCase())
+  .filter(Boolean)
+
+const allowedSet = new Set<string>(ALLOWED_PROVIDERS)
+const invalidProviders = rawProviderOrder.filter((p) => !allowedSet.has(p))
+if (invalidProviders.length > 0) {
+  console.warn(
+    `[config] LLM_PROVIDER_ORDER contains unknown providers: ${invalidProviders.join(', ')}. ` +
+    `Allowed: ${ALLOWED_PROVIDERS.join(', ')}. Unknown entries will be ignored.`,
+  )
+}
+const validatedProviderOrder = rawProviderOrder.filter((p): p is AllowedProvider => allowedSet.has(p))
+
+// ─── Validate Groq model ────────────────────────────────────────────────────
+
+const groqModel = process.env.GROQ_MODEL ?? 'llama-3.3-70b-versatile'
+if (groqModel && !KNOWN_GROQ_MODELS.has(groqModel)) {
+  console.warn(
+    `[config] GROQ_MODEL="${groqModel}" is not in the known models list. ` +
+    `This may be a typo or a newly released model. Known models: ${[...KNOWN_GROQ_MODELS].join(', ')}`,
+  )
+}
+
 export const config = {
   port: Number(process.env.PORT ?? 8787),
   host: process.env.HOST ?? '127.0.0.1',
 
   // Groq (primary — fast cloud inference)
   groqApiKey: process.env.GROQ_API_KEY ?? '',
-  groqModel: process.env.GROQ_MODEL ?? 'llama-3.3-70b-versatile',
+  groqModel,
 
   // OpenRouter (optional primary)
   openRouterApiKey: process.env.OPENROUTER_API_KEY ?? '',
@@ -25,11 +74,8 @@ export const config = {
   huggingFaceModel: process.env.HUGGINGFACE_MODEL ?? 'Qwen/Qwen3-32B',
   huggingFaceBaseUrl: process.env.HUGGINGFACE_BASE_URL ?? 'https://router.huggingface.co/v1',
 
-  // Provider failover priority
-  llmProviderOrder: (process.env.LLM_PROVIDER_ORDER ?? 'groq,ollama')
-    .split(',')
-    .map((provider) => provider.trim().toLowerCase())
-    .filter(Boolean),
+  // Provider failover priority (validated above)
+  llmProviderOrder: validatedProviderOrder,
 
   // Ollama (fallback — local CPU inference)
   ollamaBaseUrl: process.env.OLLAMA_BASE_URL ?? 'http://127.0.0.1:11434',
