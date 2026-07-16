@@ -8,6 +8,7 @@ import { formatCellValue, getBorderCSS } from '@/lib/formatUtils';
 import { buildFilteredRowIndex } from '@/lib/rowFilter';
 import { findHeaderRow, findLastDataRow } from '@/lib/sheetSort';
 import { resolveCellFormat } from '@/lib/conditionalFormat';
+import { useTouch } from '@/hooks/useTouch';
 
 const DEFAULT_CELL_WIDTH = 100;
 const CELL_HEIGHT = 28;
@@ -334,6 +335,42 @@ export function SpreadsheetGrid() {
     };
   }, [resizingCol, resizeStartX, resizeStartWidth]);
 
+  // Touch support for mobile
+  const getScrollOffset = useCallback(() => {
+    if (!gridRef.current) return { scrollTop: 0, scrollLeft: 0 };
+    return { scrollTop: gridRef.current.scrollTop, scrollLeft: gridRef.current.scrollLeft };
+  }, []);
+
+  const handleTouchTap = useCallback((row: number, col: number) => {
+    setSelection({ startRow: row, startCol: col, endRow: row, endCol: col });
+    if (editingCell) commitEdit();
+    setEditingCell(null);
+  }, [setSelection, editingCell, commitEdit, setEditingCell]);
+
+  const handleTouchDoubleTap = useCallback((row: number, col: number) => {
+    handleCellDoubleClick(row, col);
+  }, [handleCellDoubleClick]);
+
+  const handleTouchLongPress = useCallback((row: number, col: number, x: number, y: number) => {
+    // Select cell and show context menu
+    setSelection({ startRow: row, startCol: col, endRow: row, endCol: col });
+    setContextMenu({ x, y, cell: refToCell(row, col) });
+  }, [setSelection, setContextMenu]);
+
+  const handleTouchDragSelect = useCallback((row: number, col: number) => {
+    if (!selection) return;
+    setSelection({
+      startRow: selection.startRow,
+      startCol: selection.startCol,
+      endRow: row,
+      endCol: col,
+    });
+  }, [selection, setSelection]);
+
+  const handleTouchDragEnd = useCallback(() => {
+    // Nothing needed for now; selection is already set
+  }, []);
+
   const isSelected = useCallback((row: number, col: number) => {
     if (!selection) return false;
     const minR = Math.min(selection.startRow, selection.endRow);
@@ -453,15 +490,52 @@ export function SpreadsheetGrid() {
     return () => el.removeEventListener('scroll', handleScroll);
   }, [handleScroll]);
 
+  // Touch hook for mobile interactions
+  const { handleTouchStart, handleTouchMove, handleTouchEnd } = useTouch({
+    onTap: handleTouchTap,
+    onDoubleTap: handleTouchDoubleTap,
+    onLongPress: handleTouchLongPress,
+    onDragSelect: handleTouchDragSelect,
+    onDragEnd: handleTouchDragEnd,
+    cellHeight: CELL_HEIGHT,
+    rowHeaderWidth: ROW_HEADER_WIDTH,
+    colHeaderHeight: COL_HEADER_HEIGHT,
+    getColWidth,
+    getScrollOffset,
+    visibleRange,
+    colOffsets: visibleColOffsets,
+  });
+
+  const onGridTouchStart = useCallback((e: React.TouchEvent) => {
+    const rect = gridRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    handleTouchStart(e, rect);
+  }, [handleTouchStart]);
+
+  const onGridTouchMove = useCallback((e: React.TouchEvent) => {
+    const rect = gridRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    handleTouchMove(e, rect);
+  }, [handleTouchMove]);
+
+  const onGridTouchEnd = useCallback((e: React.TouchEvent) => {
+    const rect = gridRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    handleTouchEnd(e, rect);
+  }, [handleTouchEnd]);
+
   return (
     <div
       ref={gridRef}
       data-spreadsheet-grid
-      className="flex-1 overflow-auto relative"
+      className="flex-1 overflow-auto relative touch-pan-x touch-pan-y"
       tabIndex={0}
       onKeyDown={handleKeyDown}
       onMouseUp={handleMouseUp}
-      style={{ outline: 'none', userSelect: 'none' }}
+      onTouchStart={onGridTouchStart}
+      onTouchMove={onGridTouchMove}
+      onTouchEnd={onGridTouchEnd}
+      style={{ outline: 'none', userSelect: 'none', WebkitOverflowScrolling: 'touch' }}
     >
       <div style={{ minWidth: ROW_HEADER_WIDTH + totalWidth + 20, height: totalHeight + COL_HEADER_HEIGHT }}>
         {/* Column headers - sticky */}

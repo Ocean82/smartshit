@@ -21,6 +21,8 @@ import { SummaryCards } from '@/components/SummaryCards'
 import { InsightCharts } from '@/components/InsightCharts'
 import { TemplateGallery } from '@/components/TemplateGallery'
 import { MenuBar } from '@/components/MenuBar'
+import { MobileToolbar } from '@/components/MobileToolbar'
+import { MobileMenu } from '@/components/MobileMenu'
 import { TelemetryDebugPanel } from '@/components/TelemetryDebugPanel'
 import { WorkbookPicker } from '@/components/WorkbookPicker'
 import { VersionHistoryPanel } from '@/components/VersionHistoryPanel'
@@ -95,8 +97,11 @@ function App() {
         onOpenCloudPicker={() => setShowWorkbookPicker(true)}
         onOpenShare={() => setShowShareDialog(true)}
       />
-      <MenuBar />
-      <Toolbar />
+      {/* Desktop-only: traditional menu and toolbar */}
+      <div className="hidden md:block">
+        <MenuBar />
+        <Toolbar />
+      </div>
 
       <div className="flex-1 flex overflow-hidden min-h-0">
         <FileExplorer />
@@ -125,7 +130,7 @@ function App() {
         <div className="flex-1 flex flex-col overflow-hidden min-w-0 relative">
           <SummaryCards />
           <InsightCharts />
-          <div className="flex-1 flex flex-col overflow-hidden relative">
+          <div className="flex-1 flex flex-col overflow-hidden relative pb-[52px] md:pb-0">
             <SpreadsheetGrid />
             <ChartOverlay />
           </div>
@@ -135,17 +140,20 @@ function App() {
         <VersionHistoryPanel />
       </div>
 
-      {/* Mobile chat toggle FAB */}
+      {/* Mobile bottom toolbar */}
+      <MobileToolbar />
+
+      {/* Mobile chat toggle FAB — positioned above mobile toolbar */}
       <button
         type="button"
         onClick={() => {
           if (!showChat) toggleChat()
           setIsMobileChatOpen(true)
         }}
-        className="md:hidden fixed bottom-6 right-6 z-30 p-4 rounded-full bg-gradient-to-r from-slate-800 to-blue-700 text-white shadow-lg hover:from-slate-900 hover:to-blue-800 transition-all"
+        className="md:hidden fixed bottom-16 right-4 z-30 p-3.5 rounded-full bg-gradient-to-r from-slate-800 to-blue-700 text-white shadow-lg hover:from-slate-900 hover:to-blue-800 transition-all active:scale-95"
         aria-label="Open chat"
       >
-        <MessageSquare size={24} />
+        <MessageSquare size={22} />
       </button>
 
       <StatusBar />
@@ -232,22 +240,25 @@ function TitleBar({ onOpenTemplates, onOpenCloudPicker, onOpenShare }: { onOpenT
   })()
 
   return (
-    <div className="h-10 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 flex items-center px-4 gap-3 shrink-0">
+    <div className="h-10 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 flex items-center px-2 md:px-4 gap-2 md:gap-3 shrink-0">
+      {/* Mobile hamburger menu */}
+      <MobileMenu />
+
       <div className="flex items-center gap-2">
         <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-blue-500 to-violet-600 flex items-center justify-center">
           <span className="text-white font-black text-[10px]">s!</span>
         </div>
-        <span className="text-sm font-bold text-white tracking-tight">smartsh!t</span>
+        <span className="text-sm font-bold text-white tracking-tight hidden sm:inline">smartsh!t</span>
       </div>
 
-      <div className="w-px h-5 bg-slate-600" />
+      <div className="w-px h-5 bg-slate-600 hidden md:block" />
 
-      <span className="text-xs text-slate-300 truncate max-w-[200px]">{workbook.name}</span>
+      <span className="text-xs text-slate-300 truncate max-w-[120px] md:max-w-[200px]">{workbook.name}</span>
 
       <button
         type="button"
         onClick={onOpenTemplates}
-        className="text-[10px] px-2 py-0.5 rounded-full bg-slate-700/60 text-slate-300 hover:bg-slate-600 hover:text-white transition-colors"
+        className="hidden md:inline-flex text-[10px] px-2 py-0.5 rounded-full bg-slate-700/60 text-slate-300 hover:bg-slate-600 hover:text-white transition-colors"
       >
         Templates
       </button>
@@ -255,7 +266,7 @@ function TitleBar({ onOpenTemplates, onOpenCloudPicker, onOpenShare }: { onOpenT
       <button
         type="button"
         onClick={onOpenCloudPicker}
-        className="text-[10px] px-2 py-0.5 rounded-full bg-slate-700/60 text-slate-300 hover:bg-slate-600 hover:text-white transition-colors flex items-center gap-1"
+        className="hidden md:inline-flex text-[10px] px-2 py-0.5 rounded-full bg-slate-700/60 text-slate-300 hover:bg-slate-600 hover:text-white transition-colors items-center gap-1"
       >
         <Cloud size={10} />
         Cloud
@@ -264,7 +275,7 @@ function TitleBar({ onOpenTemplates, onOpenCloudPicker, onOpenShare }: { onOpenT
       <button
         type="button"
         onClick={onOpenShare}
-        className="text-[10px] px-2 py-0.5 rounded-full bg-slate-700/60 text-slate-300 hover:bg-slate-600 hover:text-white transition-colors flex items-center gap-1"
+        className="hidden md:inline-flex text-[10px] px-2 py-0.5 rounded-full bg-slate-700/60 text-slate-300 hover:bg-slate-600 hover:text-white transition-colors items-center gap-1"
       >
         <Share2 size={10} />
         Share
@@ -272,12 +283,13 @@ function TitleBar({ onOpenTemplates, onOpenCloudPicker, onOpenShare }: { onOpenT
 
       <div className="flex-1" />
 
-      <div className="flex items-center gap-2 text-slate-400 text-[10px]">
-        <div className="flex items-center gap-1 px-2 py-0.5 bg-slate-700/50 rounded-full">
+      <div className="flex items-center gap-1.5 md:gap-2 text-slate-400 text-[10px]">
+        <div className="flex items-center gap-1 px-1.5 md:px-2 py-0.5 bg-slate-700/50 rounded-full">
           <Sparkles size={10} className="text-amber-400" />
-          <span className={aiClass}>{aiLabel}</span>
+          <span className={`${aiClass} hidden sm:inline`}>{aiLabel}</span>
+          <span className={`${aiClass} sm:hidden`}>{health?.ok ? '●' : '○'}</span>
         </div>
-        {syncBadge}
+        <span className="hidden md:inline">{syncBadge}</span>
         <span className="text-slate-500 hidden sm:inline">
           {new Date(workbook.updatedAt).toLocaleTimeString()}
         </span>
