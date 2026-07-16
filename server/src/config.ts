@@ -13,7 +13,7 @@ export const config = {
 
   // Groq (primary — fast cloud inference)
   groqApiKey: process.env.GROQ_API_KEY ?? '',
-  groqModel: process.env.GROQ_MODEL ?? 'llama-3.1-8b-instant',
+  groqModel: process.env.GROQ_MODEL ?? 'llama-3.3-70b-versatile',
 
   // OpenRouter (optional primary)
   openRouterApiKey: process.env.OPENROUTER_API_KEY ?? '',
@@ -26,7 +26,7 @@ export const config = {
   huggingFaceBaseUrl: process.env.HUGGINGFACE_BASE_URL ?? 'https://router.huggingface.co/v1',
 
   // Provider failover priority
-  llmProviderOrder: (process.env.LLM_PROVIDER_ORDER ?? 'openrouter,huggingface,groq,ollama')
+  llmProviderOrder: (process.env.LLM_PROVIDER_ORDER ?? 'groq,ollama')
     .split(',')
     .map((provider) => provider.trim().toLowerCase())
     .filter(Boolean),
