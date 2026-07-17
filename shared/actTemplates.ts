@@ -1,30 +1,5 @@
 import type { ActTemplateResult } from './intentTypes.js'
-
-const FONT_COLOR_HEX: Record<string, string> = {
-  red: '#FF0000',
-  blue: '#0000FF',
-  green: '#008000',
-  yellow: '#EAB308',
-  orange: '#F97316',
-  purple: '#800080',
-  pink: '#EC4899',
-  black: '#000000',
-  white: '#FFFFFF',
-  gray: '#6B7280',
-  grey: '#6B7280',
-}
-
-const HIGHLIGHT_BG_HEX: Record<string, string> = {
-  red: '#FEE2E2',
-  blue: '#DBEAFE',
-  green: '#DCFCE7',
-  yellow: '#FFF9C4',
-  orange: '#FFEDD5',
-  purple: '#F3E8FF',
-  pink: '#FCE7F3',
-  gray: '#F3F4F6',
-  grey: '#F3F4F6',
-}
+import { FONT_COLOR_HEX, HIGHLIGHT_BG_HEX } from './colorMaps.js'
 
 export function resolveActTemplates(message: string): ActTemplateResult {
   const lower = message.toLowerCase().trim()

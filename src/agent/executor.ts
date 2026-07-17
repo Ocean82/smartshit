@@ -319,8 +319,14 @@ function resolveColumnIndex(
 ): number | null {
   if (/^[A-Z]{1,3}$/i.test(column)) return letterToCol(column.toUpperCase())
   const headerRow = findHeaderRow(sheet)
+  // Derive actual last column from sheet data instead of a magic constant
+  let maxCol = 0
+  for (const cellId of Object.keys(sheet.cells)) {
+    const ref = cellToRef(cellId)
+    if (ref.col > maxCol) maxCol = ref.col
+  }
   const lowered = column.toLowerCase()
-  for (let c = 0; c < 60; c++) {
+  for (let c = 0; c <= maxCol; c++) {
     if (getComputedValue(headerRow, c).toLowerCase() === lowered) return c
   }
   return null

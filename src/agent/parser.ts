@@ -3,6 +3,8 @@
  * No LLM needed. Handles 80%+ of common spreadsheet operations instantly.
  */
 
+import { FONT_COLOR_HEX, HIGHLIGHT_BG_HEX } from '../../shared/colorMaps'
+
 export interface ParsedToolCall {
   tool: string
   params: Record<string, unknown>
@@ -20,34 +22,6 @@ const COL_REF = /\bcolumn\s+([A-Z])\b/i
 const RANGE_REF = /\b([A-Z]\d{1,3}):([A-Z]\d{1,3})\b/i
 const NUMBER = /\$?([\d,]+(?:\.\d+)?)/
 const PERCENT = /(\d+)\s*%/
-
-/** Vivid hexes for font colors */
-const FONT_COLOR_HEX: Record<string, string> = {
-  red: '#FF0000',
-  blue: '#0000FF',
-  green: '#008000',
-  yellow: '#EAB308',
-  orange: '#F97316',
-  purple: '#800080',
-  pink: '#EC4899',
-  black: '#000000',
-  white: '#FFFFFF',
-  gray: '#6B7280',
-  grey: '#6B7280',
-}
-
-/** Soft hexes for cell highlight backgrounds */
-const HIGHLIGHT_BG_HEX: Record<string, string> = {
-  red: '#FEE2E2',
-  blue: '#DBEAFE',
-  green: '#DCFCE7',
-  yellow: '#FFF9C4',
-  orange: '#FFEDD5',
-  purple: '#F3E8FF',
-  pink: '#FCE7F3',
-  gray: '#F3F4F6',
-  grey: '#F3F4F6',
-}
 
 const COLOR_WORD_RE = /\b(red|blue|green|yellow|orange|purple|pink|black|white|gray|grey)\b/
 
