@@ -8,6 +8,7 @@ import {
   refToCell,
   cellToRef,
 } from '@/engine/spreadsheet'
+import { cellScalar } from '@/lib/formatUtils'
 
 export interface WorkbookImportMeta {
   appliedMaxRows: number
@@ -53,7 +54,7 @@ function sheetToMatrix(sheet: SheetData): (string | number | null)[][] {
   for (const [cellId, cell] of Object.entries(sheet.cells)) {
     const ref = cellToRef(cellId)
     const display = cell.formula ?? cell.value
-    matrix[ref.row][ref.col] = display
+    matrix[ref.row][ref.col] = cellScalar(display)
   }
 
   return matrix

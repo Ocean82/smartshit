@@ -1,8 +1,8 @@
 import type { CellFormat, ConditionalRule, SheetData } from '@/types'
-import { refToCell } from '@/engine/spreadsheet'
+import { refToCell, cellToRef } from '@/engine/spreadsheet'
 import { findHeaderRow, findLastDataRow } from '@/lib/sheetSort'
 
-export type ConditionalFormatCondition = 'negative' | 'positive' | 'gt' | 'lt' | 'eq'
+export type ConditionalFormatCondition = 'negative' | 'positive' | 'gt' | 'lt' | 'eq' | 'dataBar'
 
 export function matchesConditionalFormat(
   numericValue: number,
@@ -16,6 +16,7 @@ export function matchesConditionalFormat(
   if (c === 'gt') return numericValue > threshold
   if (c === 'lt') return numericValue < threshold
   if (c === 'eq') return numericValue === threshold
+  if (c === 'databar') return true
   return false
 }
 
@@ -30,6 +31,9 @@ export function conditionToRule(
 ): ConditionalRule {
   const c = String(condition).toLowerCase()
   const style: Partial<CellFormat> = { bgColor: color }
+  if (c === 'databar') {
+    return { type: 'dataBar', value: 0, style: {}, dataBarColor: color }
+  }
   if (c === 'negative') return { type: 'lessThan', value: 0, style }
   if (c === 'positive') return { type: 'greaterThan', value: 0, style }
   if (c === 'gt') return { type: 'greaterThan', value: threshold, style }
@@ -41,6 +45,9 @@ export function conditionToRule(
 export function ruleMatchesComputed(rule: ConditionalRule, computed: string): boolean {
   if (rule.type === 'text') {
     return computed.toLowerCase().includes(String(rule.value).toLowerCase())
+  }
+  if (rule.type === 'dataBar') {
+    return Number.isFinite(parseNumericDisplay(computed))
   }
   const num = parseNumericDisplay(computed)
   if (!Number.isFinite(num)) return false
@@ -60,7 +67,7 @@ export function ruleMatchesComputed(rule: ConditionalRule, computed: string): bo
   }
 }
 
-/** Merge base format with styles from matching conditional rules. */
+/** Merge base format with styles from matching conditional rules (data bars paint separately). */
 export function resolveCellFormat(
   format: CellFormat | undefined,
   computedValue: string,
@@ -71,6 +78,7 @@ export function resolveCellFormat(
 
   let merged: CellFormat = { ...format }
   for (const rule of rules) {
+    if (rule.type === 'dataBar') continue
     if (!ruleMatchesComputed(rule, computedValue)) continue
     merged = {
       ...merged,
@@ -81,6 +89,47 @@ export function resolveCellFormat(
     }
   }
   return merged
+}
+
+/** Active data-bar rule on a cell, if the computed value is numeric. */
+export function getDataBarRule(
+  format: CellFormat | undefined,
+  computedValue: string,
+): ConditionalRule | null {
+  const rule = format?.conditionalRules?.find((r) => r.type === 'dataBar')
+  if (!rule) return null
+  if (!ruleMatchesComputed(rule, computedValue)) return null
+  return rule
+}
+
+/**
+ * Proportional fill 0–100 for a numeric value among peer column values.
+ * Uses the peer min as the floor (Excel-like relative bars).
+ */
+export function dataBarWidthPercent(computed: string, peerValues: number[]): number | null {
+  const num = parseNumericDisplay(computed)
+  if (!Number.isFinite(num) || peerValues.length === 0) return null
+  const min = Math.min(...peerValues)
+  const max = Math.max(...peerValues)
+  if (max === min) return max === 0 ? 0 : 100
+  return Math.max(0, Math.min(100, ((num - min) / (max - min)) * 100))
+}
+
+/** Collect finite numeric values for cells that carry a dataBar rule in a column. */
+export function columnDataBarPeerValues(
+  sheet: SheetData,
+  columnIndex: number,
+  getComputedValue: (row: number, col: number) => string,
+): number[] {
+  const values: number[] = []
+  for (const cellId of columnDataCellIds(sheet, columnIndex)) {
+    const cell = sheet.cells[cellId]
+    if (!cell?.format?.conditionalRules?.some((r) => r.type === 'dataBar')) continue
+    const parsed = cellToRef(cellId)
+    const num = parseNumericDisplay(getComputedValue(parsed.row, parsed.col))
+    if (Number.isFinite(num)) values.push(num)
+  }
+  return values
 }
 
 export function findConditionalFormatTargets(

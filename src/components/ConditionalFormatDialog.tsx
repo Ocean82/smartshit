@@ -59,6 +59,7 @@ export function ConditionalFormatDialog({ isOpen, onClose }: Props) {
                 <option value="gt">Greater than</option>
                 <option value="lt">Less than</option>
                 <option value="eq">Equals</option>
+                <option value="dataBar">Data bars</option>
               </select>
             </label>
             {(condition === 'gt' || condition === 'lt' || condition === 'eq') && (
@@ -73,7 +74,7 @@ export function ConditionalFormatDialog({ isOpen, onClose }: Props) {
               </label>
             )}
             <label className="block text-xs text-gray-600">
-              Highlight color
+              {condition === 'dataBar' ? 'Bar color' : 'Highlight color'}
               <input
                 type="color"
                 value={color}

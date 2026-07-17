@@ -40,13 +40,14 @@ describe('resolveAnalysisTarget', () => {
         workbookName: attached.workbook.name,
         activeSheet: attached.sheet.name,
         sheetNames: [attached.sheet.name],
+        sheetSummaries: [],
         selectedCells: [],
         dimensions: { rows: 4, cols: 2, populatedCells: 6 },
         headers: ['Category', 'Amount'],
         sampleRows: [],
         sampleRowsTruncated: false,
         selectionSnapshot: {},
-        insights: { headers: ['Category', 'Amount'] },
+        insights: { headerRow: 0, headers: ['Category', 'Amount'], columnStats: [] },
       },
     }
 

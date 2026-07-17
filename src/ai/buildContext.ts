@@ -1,5 +1,6 @@
 import type { WorkbookData, SheetData, Selection } from '@/types'
 import { refToCell, cellToRef, colToLetter } from '@/engine/spreadsheet'
+import { cellScalar } from '@/lib/formatUtils'
 import { computeSheetInsights, type SheetInsights } from '@/ai/sheetInsights'
 import { buildSheetProfile } from '@/ai/sheetProfile'
 import type { SheetProfile } from '@/ai/types'
@@ -61,7 +62,7 @@ function cellDisplayValue(
   const cellId = refToCell(row, col)
   const cell = sheet.cells[cellId]
   if (cell?.formula) return cell.formula
-  if (cell?.value !== null && cell?.value !== undefined && cell?.value !== '') return cell.value
+  if (cell?.value !== null && cell?.value !== undefined && cell?.value !== '') return cellScalar(cell.value)
   const computed = getComputedValue(row, col)
   if (!computed) return null
   const num = Number(computed)
