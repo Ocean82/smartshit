@@ -349,6 +349,16 @@ export const templates: Template[] = [
     popular: true,
   },
   {
+    id: 'saas-financial-model',
+    name: 'SaaS Financial Model',
+    category: 'Small Business',
+    description: 'Multi-year ARR, logos, opex, and EBITDA margins for a SaaS business',
+    prompt: 'Create a SaaS financial model',
+    tools: ['create_saas_financial_model'],
+    icon: '🚀',
+    popular: true,
+  },
+  {
     id: 'pnl-statement',
     name: 'Profit & Loss Statement',
     category: 'Small Business',
