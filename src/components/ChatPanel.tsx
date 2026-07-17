@@ -88,16 +88,11 @@ export function ChatPanel({ isMobileOpen, onCloseMobile }: { isMobileOpen?: bool
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  // Keyboard shortcut: Ctrl+K / Cmd+K focuses chat input
+  // Ctrl+K is owned by the command palette (App). Focus via smartsht:focus-chat.
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault()
-        inputRef.current?.focus()
-      }
-    }
-    document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
+    const handler = () => inputRef.current?.focus()
+    document.addEventListener('smartsht:focus-chat', handler)
+    return () => document.removeEventListener('smartsht:focus-chat', handler)
   }, [])
 
   useEffect(() => {
@@ -393,7 +388,7 @@ export function ChatPanel({ isMobileOpen, onCloseMobile }: { isMobileOpen?: bool
             value={chatInput}
             onChange={(e) => setChatInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder='e.g. "Explain this spreadsheet" or "Where am I overspending?" (Ctrl+K)'
+            placeholder='e.g. "Explain this spreadsheet" or "Where am I overspending?" (Ctrl+K for commands)'
           />
           <button
             type="button"

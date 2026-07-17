@@ -21,9 +21,11 @@ describe('buildSheetProfile', () => {
         B2: { value: 1500 },
         C2: { value: 1600 },
       },
+      columnWidths: {},
+      rowHeights: {},
       charts: [],
       filters: [],
-      sortConfig: null,
+      sortConfig: undefined,
     }
 
     const profile = buildSheetProfile(sheet, getter(sheet))
@@ -43,9 +45,11 @@ describe('buildSheetProfile', () => {
         A3: { value: 'Total' },
         B3: { value: 10 },
       },
+      columnWidths: {},
+      rowHeights: {},
       charts: [],
       filters: [],
-      sortConfig: null,
+      sortConfig: undefined,
     }
 
     const profile = buildSheetProfile(sheet, getter(sheet))

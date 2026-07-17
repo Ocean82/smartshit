@@ -21,9 +21,11 @@ const sheet: SheetData = {
     A4: { value: 'Travel' },
     B4: { value: 200 },
   },
+  columnWidths: {},
+  rowHeights: {},
   charts: [],
   filters: [],
-  sortConfig: null,
+  sortConfig: undefined,
 }
 
 describe('queryTopN', () => {
@@ -50,9 +52,11 @@ const varianceSheet: SheetData = {
     B3: { value: 400 },
     C3: { value: 350 },
   },
+  columnWidths: {},
+  rowHeights: {},
   charts: [],
   filters: [],
-  sortConfig: null,
+  sortConfig: undefined,
 }
 
 describe('queryFilter', () => {

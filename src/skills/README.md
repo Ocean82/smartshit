@@ -1,5 +1,10 @@
 # Vibe Excel Skills System
 
+> **Status: aspirational — not implemented.** No JSON workflow engine exists yet.
+> The Skills panel presets actually live in `src/data/chatPresets.ts` (they inject
+> a prompt into chat), and the deterministic analysis modules live in
+> `src/ai/analysis/`. Canonical AI tool definitions live in `shared/toolRegistry.ts`.
+
 Skills are reusable "prompt + tool workflows" that the AI can discover, suggest, and execute.
 
 ## Structure
@@ -43,7 +48,7 @@ Skills are reusable "prompt + tool workflows" that the AI can discover, suggest,
 
 ## Usage
 
-- Skills are loaded from `/src/data/skills.ts`
+- Skill presets are loaded from `/src/data/chatPresets.ts`
 - The AI agent can discover and suggest skills based on context
 - Users can create custom skills via the Skills panel
 - Skills can be shared and imported

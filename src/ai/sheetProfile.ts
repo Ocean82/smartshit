@@ -1,5 +1,6 @@
 import type { SheetData } from '@/types'
 import { cellToRef, colToLetter, refToCell } from '@/engine/spreadsheet'
+import { cellScalar } from '@/lib/formatUtils'
 import type { ColumnProfile, ColumnRole, SheetProfile, SheetPurpose } from '@/ai/types'
 
 function parseNumeric(value: string | number | boolean | null | undefined): number | null {
@@ -86,7 +87,7 @@ export function buildSheetProfile(
         nullCount++
         continue
       }
-      values.push(raw)
+      values.push(cellScalar(raw))
       uniques.add(String(raw))
       const num = parseNumeric(raw)
       if (num !== null) numericValues.push(num)

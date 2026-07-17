@@ -39,6 +39,24 @@ describe('conditionToRule / ruleMatchesComputed', () => {
     expect(ruleMatchesComputed(rule, '150')).toBe(true)
     expect(ruleMatchesComputed(rule, '50')).toBe(false)
   })
+  it('maps dataBar and matches numeric cells', () => {
+    const rule = conditionToRule('dataBar', '#93C5FD')
+    expect(rule.type).toBe('dataBar')
+    expect(rule.dataBarColor).toBe('#93C5FD')
+    expect(ruleMatchesComputed(rule, '42')).toBe(true)
+    expect(ruleMatchesComputed(rule, 'abc')).toBe(false)
+    // data bars do not paint via resolveCellFormat bgColor
+    expect(resolveCellFormat({ conditionalRules: [rule] }, '42')?.bgColor).toBeUndefined()
+  })
+})
+
+describe('dataBarWidthPercent', () => {
+  it('scales relative to peer min/max', async () => {
+    const { dataBarWidthPercent } = await import('./conditionalFormat')
+    expect(dataBarWidthPercent('50', [0, 50, 100])).toBe(50)
+    expect(dataBarWidthPercent('100', [0, 50, 100])).toBe(100)
+    expect(dataBarWidthPercent('0', [0, 50, 100])).toBe(0)
+  })
 })
 
 describe('resolveCellFormat', () => {

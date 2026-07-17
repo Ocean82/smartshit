@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useStore } from '@/store/useStore'
 import { fetchServerHealth, type ServerHealth } from '@/ai/agentClient'
 import { Toolbar } from '@/components/Toolbar'
@@ -20,6 +20,7 @@ import { WelcomeOverlay } from '@/components/WelcomeOverlay'
 import { SummaryCards } from '@/components/SummaryCards'
 import { InsightCharts } from '@/components/InsightCharts'
 import { TemplateGallery } from '@/components/TemplateGallery'
+import { CommandPalette } from '@/components/CommandPalette'
 import { MenuBar } from '@/components/MenuBar'
 import { MobileToolbar } from '@/components/MobileToolbar'
 import { MobileMenu } from '@/components/MobileMenu'
@@ -36,6 +37,7 @@ import {
   isCloudConfigured,
   type SyncStatus,
 } from '@/lib/cloudSync'
+import { exportWorkbookToJson, importWorkbookFromJsonFile, normalizeImportedWorkbook } from '@/io/workbookJson'
 
 function App() {
   const {
@@ -43,6 +45,7 @@ function App() {
     engine,
     showChat,
     toggleChat,
+    setShowChat,
     showValidationDialog,
     setShowValidationDialog,
     showPivotDialog,
@@ -54,9 +57,11 @@ function App() {
   } = useStore()
   const [isLoaded, setIsLoaded] = useState(false)
   const [showTemplates, setShowTemplates] = useState(false)
+  const [showCommandPalette, setShowCommandPalette] = useState(false)
   const [showWorkbookPicker, setShowWorkbookPicker] = useState(false)
   const [showShareDialog, setShowShareDialog] = useState(false)
   const [isMobileChatOpen, setIsMobileChatOpen] = useState(false)
+  const jsonRestoreInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     engine.loadWorkbook(workbook)
@@ -75,6 +80,18 @@ function App() {
     const handler = () => setShowShareDialog(true)
     document.addEventListener('smartsht:open-share', handler)
     return () => document.removeEventListener('smartsht:open-share', handler)
+  }, [])
+
+  // Ctrl/Cmd+K opens the command palette
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setShowCommandPalette(true)
+      }
+    }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
   }, [])
 
   if (!isLoaded) {
@@ -165,6 +182,38 @@ function App() {
       <ConditionalFormatDialog isOpen={showConditionalFormatDialog} onClose={() => setShowConditionalFormatDialog(false)} />
       <WelcomeOverlay onOpenTemplates={() => setShowTemplates(true)} />
       <TemplateGallery open={showTemplates} onClose={() => setShowTemplates(false)} />
+      <CommandPalette
+        open={showCommandPalette}
+        onClose={() => setShowCommandPalette(false)}
+        onOpenTemplates={() => setShowTemplates(true)}
+        onFocusChat={() => {
+          setShowChat(true)
+          setIsMobileChatOpen(true)
+          window.setTimeout(() => {
+            document.dispatchEvent(new Event('smartsht:focus-chat'))
+          }, 50)
+        }}
+        onExportJson={() => exportWorkbookToJson(workbook)}
+        onImportJson={() => jsonRestoreInputRef.current?.click()}
+      />
+      <input
+        ref={jsonRestoreInputRef}
+        type="file"
+        accept=".json,.smartsht.json"
+        className="hidden"
+        onChange={async (e) => {
+          const file = e.target.files?.[0]
+          if (!file) return
+          try {
+            const wb = normalizeImportedWorkbook(await importWorkbookFromJsonFile(file))
+            useStore.getState().pushHistory('Restore JSON backup')
+            useStore.getState().loadWorkbookData(wb)
+          } catch {
+            /* ignore — user can retry from File menu for messaging */
+          }
+          e.target.value = ''
+        }}
+      />
       <WorkbookPicker open={showWorkbookPicker} onClose={() => setShowWorkbookPicker(false)} />
       <ShareDialog open={showShareDialog} onClose={() => setShowShareDialog(false)} />
       {import.meta.env.DEV ? <TelemetryDebugPanel /> : null}
