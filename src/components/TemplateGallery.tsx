@@ -2,6 +2,7 @@ import { useState, useMemo, useRef, useEffect } from 'react'
 import { useStore } from '@/store/useStore'
 import { LayoutTemplate, X, Search, ChevronRight, Upload, Download, Star, Globe, Loader2, Send } from 'lucide-react'
 import { templates, templateCategories, getPopularTemplates, searchTemplates, type TemplateCategory } from '@/data/templates'
+import { hasTemplateSpec } from '@/templates'
 import { loadCommunityTemplates, importTemplateFromFile, installTemplate, type CommunityTemplate, type TemplatePackage } from '@/lib/communityTemplates'
 import { getAuthHeaders, isCloudConfigured } from '@/lib/cloudSync'
 
@@ -27,7 +28,7 @@ interface TemplateGalleryProps {
 }
 
 export function TemplateGallery({ open, onClose }: TemplateGalleryProps) {
-  const { setChatInput, sendMessage } = useStore()
+  const { setChatInput, sendMessage, runTemplateTool } = useStore()
   const [searchQuery, setSearchQuery] = useState('')
   const [activeCategory, setActiveCategory] = useState<TemplateCategory | 'Popular' | 'All' | 'Community' | 'Marketplace'>('Popular')
   const [communityTemplates, setCommunityTemplates] = useState<CommunityTemplate[]>(loadCommunityTemplates)
@@ -89,7 +90,14 @@ export function TemplateGallery({ open, onClose }: TemplateGalleryProps) {
 
   if (!open) return null
 
-  function runTemplate(prompt: string) {
+  function runTemplate(prompt: string, tools?: string[]) {
+    // Templates with a registered spec build instantly — no parser/LLM round-trip
+    const directTool = tools?.find((t) => hasTemplateSpec(t))
+    if (directTool) {
+      onClose()
+      runTemplateTool(directTool)
+      return
+    }
     setChatInput(prompt)
     onClose()
     setTimeout(() => sendMessage(), 50)
@@ -197,7 +205,7 @@ export function TemplateGallery({ open, onClose }: TemplateGalleryProps) {
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {displayTemplates.map((template) => (
-                <button key={template.id} type="button" onClick={() => runTemplate(template.prompt)}
+                <button key={template.id} type="button" onClick={() => runTemplate(template.prompt, template.tools)}
                   className="text-left rounded-xl border border-gray-200 p-4 hover:border-blue-300 hover:bg-blue-50/50 hover:shadow-sm transition-all group">
                   <div className="flex items-start justify-between">
                     <span className="text-2xl">{template.icon}</span>
