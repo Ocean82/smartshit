@@ -36,6 +36,7 @@ import { analyzeBudget, budgetAnalysisToToolResult, savingsRecommendation } from
 import { parseUserIntent } from '@/ai/intentParser';
 import { AI_ANALYSIS_CONFIG } from '@/ai/config';
 import { resolveActTemplates } from '@shared/actTemplates';
+import { buildActionPreview } from '@/lib/previewBuilders';
 import type { SheetInsights } from '@/ai/sheetInsights';
 import type { AttachedFilePreview } from '@/ai/types';
 import { computeSortedCellUpdates, findHeaderRow, findLastDataRow, type SortPatch } from '@/lib/sheetSort';
@@ -658,6 +659,10 @@ export const useStore = create<AppState>()(
           let finalMsg = toolResultToChatMessage(result, {
             id: streamingMsgId,
             insightsSnapshot: context.insights as unknown as Record<string, unknown>,
+            previewContext: {
+              sheet,
+              getComputedValue: state.getComputedValue,
+            },
           });
 
           if (!result.success && !isLlmOnlyMode(classifyMode(input))) {
@@ -1268,18 +1273,28 @@ function processAICommand(
 
     const template = resolveActTemplates(input);
     if (template.actions.length > 0 || template.message) {
+      const sheet = get().getActiveSheet();
       return {
         id: uuid(),
         role: 'assistant',
         content: template.message,
         timestamp: Date.now(),
-        actions: template.actions.map((action) => ({
-          id: uuid(),
-          tool: action.tool,
-          params: action.params,
-          description: action.description,
-          status: 'pending' as const,
-        })),
+        actions: template.actions.map((action) => {
+          const preview = buildActionPreview(
+            action.tool,
+            action.params,
+            sheet,
+            get().getComputedValue,
+          );
+          return {
+            id: uuid(),
+            tool: action.tool,
+            params: action.params,
+            description: action.description,
+            status: 'pending' as const,
+            preview,
+          };
+        }),
       };
     }
   }

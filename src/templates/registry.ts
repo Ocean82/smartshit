@@ -6,6 +6,7 @@ import { realEstateTemplates } from './real-estate';
 import { smallBusinessTemplates } from './small-business';
 import { educationTemplates } from './education';
 import { healthTemplates } from './health';
+import { saasDemoTemplates } from './saas-demo';
 
 export const ALL_TEMPLATE_SPECS: TemplateSpec[] = [
   ...coreTemplates,
@@ -15,6 +16,7 @@ export const ALL_TEMPLATE_SPECS: TemplateSpec[] = [
   ...smallBusinessTemplates,
   ...educationTemplates,
   ...healthTemplates,
+  ...saasDemoTemplates,
 ];
 
 /** Declarative template specs keyed by tool name. */

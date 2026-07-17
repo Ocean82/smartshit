@@ -222,6 +222,11 @@ exports[`template registry > per-template structure summary (regression snapshot
     "formatSteps": 3,
     "formattedCells": 16,
   },
+  "create_saas_financial_model": {
+    "cells": 74,
+    "formatSteps": 6,
+    "formattedCells": 23,
+  },
   "create_sales_tracker": {
     "cells": 53,
     "formatSteps": 3,

@@ -4,6 +4,7 @@ import type { SheetInsights } from '@/ai/sheetInsights'
 import type { SheetProfile, ToolResult } from '@/ai/types'
 import { AI_ANALYSIS_CONFIG } from '@/ai/config'
 import type { OutlierItem } from '@/ai/outliers'
+import { buildActionPreview } from '@/lib/previewBuilders'
 
 function formatMoney(n: number): string {
   return `$${n.toFixed(2)}`
@@ -141,13 +142,33 @@ export function toolResultToMessage(
 
 export function toolResultToChatMessage(
   result: ToolResult,
-  meta?: { id?: string; toolUsed?: string; insightsSnapshot?: Record<string, unknown> },
+  meta?: {
+    id?: string
+    toolUsed?: string
+    insightsSnapshot?: Record<string, unknown>
+    /** When provided, attach cell-level previews for supported mutate tools */
+    previewContext?: {
+      sheet: import('@/types').SheetData
+      getComputedValue: (row: number, col: number) => string
+    }
+  },
 ): ChatMessage {
   const actions = (result.actions ?? []).map((action) => {
     const previewChanges = Array.isArray(action.params.previewChanges)
       ? action.params.previewChanges as CellChange[]
       : undefined
-    const changeLabel = previewChanges?.length ? ` (about ${previewChanges.length} changes)` : ''
+    const built = !previewChanges && meta?.previewContext
+      ? buildActionPreview(
+        action.tool,
+        action.params,
+        meta.previewContext.sheet,
+        meta.previewContext.getComputedValue,
+      )
+      : undefined
+    const preview = previewChanges
+      ? { changes: previewChanges }
+      : built
+    const changeLabel = preview?.changes.length ? ` (about ${preview.changes.length} changes)` : ''
 
     return {
       id: uuid(),
@@ -155,9 +176,7 @@ export function toolResultToChatMessage(
       params: action.params,
       description: `${action.description}${changeLabel}`,
       status: 'pending' as const,
-      preview: previewChanges
-        ? { changes: previewChanges }
-        : undefined,
+      preview,
     }
   })
 

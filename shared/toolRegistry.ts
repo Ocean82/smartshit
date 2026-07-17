@@ -64,6 +64,7 @@ const NICHE_TEMPLATES: Array<[string, string]> = [
   ['create_weight_tracker', 'Track weight over time with daily or weekly measurements'],
   ['create_habit_tracker', 'Track daily habits with streaks and completion rates'],
   ['create_medical_expenses', 'Track healthcare costs including insurance, prescriptions, and visits'],
+  ['create_saas_financial_model', 'Multi-year SaaS financial model with ARR, opex, and EBITDA margins'],
 ]
 
 export const TOOL_REGISTRY: ToolDefinition[] = [

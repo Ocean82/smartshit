@@ -1,4 +1,5 @@
 import React, { useCallback, useRef, useEffect, useState, useMemo } from 'react';
+import { Check, XCircle } from 'lucide-react';
 import { useStore } from '@/store/useStore';
 import { colToLetter, refToCell, cellToRef } from '@/engine/spreadsheet';
 import { FormulaAutocomplete } from './FormulaAutocomplete';
@@ -7,7 +8,8 @@ import type { CellFormat } from '@/types';
 import { formatCellValue, getBorderCSS } from '@/lib/formatUtils';
 import { buildFilteredRowIndex } from '@/lib/rowFilter';
 import { findHeaderRow, findLastDataRow } from '@/lib/sheetSort';
-import { resolveCellFormat } from '@/lib/conditionalFormat';
+import { resolveCellFormat, getDataBarRule, dataBarWidthPercent, columnDataBarPeerValues } from '@/lib/conditionalFormat';
+import { findActivePendingPreview } from '@/lib/pendingActionPreview';
 import { useTouch } from '@/hooks/useTouch';
 
 const DEFAULT_CELL_WIDTH = 100;
@@ -36,9 +38,32 @@ export function SpreadsheetGrid() {
     setContextMenu,
     activeFilters,
     activeSortConfig,
+    messages,
+    applyAction,
+    rejectAction,
   } = useStore();
 
   const sheet = getActiveSheet();
+
+  const pendingPreview = useMemo(
+    () => findActivePendingPreview(messages),
+    [messages],
+  );
+
+  // Cache data-bar peer values per column for proportional fills
+  const dataBarPeersByCol = useMemo(() => {
+    const map = new Map<number, number[]>()
+    const cols = new Set<number>()
+    for (const cellId of Object.keys(sheet.cells)) {
+      const cell = sheet.cells[cellId]
+      if (!cell?.format?.conditionalRules?.some((r) => r.type === 'dataBar')) continue
+      cols.add(cellToRef(cellId).col)
+    }
+    for (const col of cols) {
+      map.set(col, columnDataBarPeerValues(sheet, col, getComputedValue))
+    }
+    return map
+  }, [sheet, getComputedValue]);
 
   const filteredRows = useMemo(() => {
     if (!activeFilters.length) return null;
@@ -490,6 +515,23 @@ export function SpreadsheetGrid() {
     return () => el.removeEventListener('scroll', handleScroll);
   }, [handleScroll]);
 
+  // Scroll first pending preview cell into view when a new preview appears
+  useEffect(() => {
+    if (!pendingPreview?.changes.length || !gridRef.current) return;
+    const first = pendingPreview.changes[0]?.cell;
+    if (!first) return;
+    const ref = cellToRef(first);
+    if (!ref) return;
+    const top = ref.row * CELL_HEIGHT;
+    let left = 0;
+    for (let c = 0; c < ref.col; c++) left += getColWidth(c);
+    gridRef.current.scrollTo({
+      top: Math.max(0, top - CELL_HEIGHT * 2),
+      left: Math.max(0, left - DEFAULT_CELL_WIDTH),
+      behavior: 'smooth',
+    });
+  }, [pendingPreview?.action.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Touch hook for mobile interactions
   const { handleTouchStart, handleTouchMove, handleTouchEnd } = useTouch({
     onTap: handleTouchTap,
@@ -617,17 +659,24 @@ export function SpreadsheetGrid() {
                     const rawValue = (computed || cellData?.value) ?? null;
                     const hasFormula = !!cellData?.formula;
                     const colWidth = getColWidth(col);
+                    const pendingChange = pendingPreview?.changeByCell.get(cellId) ?? null;
+                    const dataBarRule = getDataBarRule(cellData?.format, computed);
+                    const dataBarPct = dataBarRule
+                      ? dataBarWidthPercent(computed, dataBarPeersByCol.get(col) ?? [])
+                      : null;
 
                     return (
                       <div
                         ref={isEditing ? editContainerRef : undefined}
                         key={col}
-                        className={`border-b border-r shrink-0 relative transition-shadow ${
-                          active
-                            ? 'ring-2 ring-blue-500 ring-inset z-10 bg-white'
-                            : selected
-                              ? 'bg-blue-50/60 border-blue-200'
-                              : 'border-gray-200 hover:bg-blue-50/20'
+                        className={`border-b border-r shrink-0 relative transition-shadow group/cell ${
+                          pendingChange
+                            ? 'ring-2 ring-emerald-400 ring-inset z-10 bg-emerald-50/80'
+                            : active
+                              ? 'ring-2 ring-blue-500 ring-inset z-10 bg-white'
+                              : selected
+                                ? 'bg-blue-50/60 border-blue-200'
+                                : 'border-gray-200 hover:bg-blue-50/20'
                         }`}
                         style={{
                           width: colWidth,
@@ -635,12 +684,22 @@ export function SpreadsheetGrid() {
                           position: 'absolute',
                           left: visibleColOffsets.offsets[j],
                           ...getCellStyle(resolveCellFormat(cellData?.format, computed)),
+                          ...(pendingChange ? { backgroundColor: undefined } : {}),
                         }}
                         onMouseDown={(e) => handleMouseDown(row, col, e)}
                         onMouseMove={() => handleMouseMove(row, col)}
                         onDoubleClick={() => handleCellDoubleClick(row, col)}
                         onContextMenu={(e) => handleContextMenu(e, row, col)}
                       >
+                        {dataBarPct != null && dataBarRule && !pendingChange && (
+                          <div
+                            className="absolute inset-y-1 left-0 rounded-sm pointer-events-none opacity-50"
+                            style={{
+                              width: `${dataBarPct}%`,
+                              backgroundColor: dataBarRule.dataBarColor || '#93C5FD',
+                            }}
+                          />
+                        )}
                         {isEditing && cellData?.validation?.type === 'list' ? (
                           <select
                             className="absolute inset-0 w-full h-full px-1.5 text-[13px] border-0 outline-none bg-white z-20 font-sans"
@@ -672,9 +731,27 @@ export function SpreadsheetGrid() {
                               }`}
                               title={hasFormula ? `${cellData?.formula} = ${formatCellValue(rawValue, cellData?.format?.numberFormat)}` : formatCellValue(rawValue, cellData?.format?.numberFormat)}
                             >
-                              {formatCellValue(rawValue, cellData?.format?.numberFormat)}
+                              {pendingChange
+                                ? formatCellValue(pendingChange.newValue ?? pendingChange.newFormula ?? '', cellData?.format?.numberFormat)
+                                : formatCellValue(rawValue, cellData?.format?.numberFormat)}
                             </div>
                           </div>
+                        )}
+                        {pendingChange && !isEditing && (
+                          <>
+                            <span className="absolute top-0.5 right-0.5 text-[8px] leading-none bg-emerald-500 text-white font-bold px-0.5 rounded z-20">
+                              AI
+                            </span>
+                            <div className="absolute bottom-full right-0 mb-1 hidden group-hover/cell:block bg-gray-900 text-white p-2 rounded-lg shadow-xl border border-emerald-400 w-48 text-[10px] z-50 pointer-events-none">
+                              <div className="font-semibold text-emerald-300 mb-1">Proposed change</div>
+                              <div className="text-gray-400 line-through truncate">
+                                Old: {String(pendingChange.oldValue ?? pendingChange.oldFormula ?? '(empty)')}
+                              </div>
+                              <div className="text-emerald-200 font-mono mt-0.5 truncate">
+                                → {String(pendingChange.newValue ?? pendingChange.newFormula ?? '')}
+                              </div>
+                            </div>
+                          </>
                         )}
                         {cellData?.validationError && (
                           <div className="absolute top-0 right-0 w-0 h-0 border-t-[6px] border-t-red-500 border-l-[6px] border-l-transparent z-10"
@@ -702,6 +779,38 @@ export function SpreadsheetGrid() {
         position={autocompletePos}
       />
       <FindReplaceDialog isOpen={showFindReplace} onClose={() => setShowFindReplace(false)} />
+
+      {pendingPreview && (
+        <div className="sticky bottom-0 left-0 right-0 z-40 flex items-center justify-between gap-3 px-3 py-2 bg-emerald-700 text-white shadow-lg border-t border-emerald-500">
+          <div className="min-w-0 text-xs">
+            <span className="font-bold tracking-wide">AI action staged: </span>
+            <span className="font-medium text-emerald-100 truncate">
+              {pendingPreview.action.description}
+            </span>
+            <span className="ml-2 text-emerald-200">
+              ({pendingPreview.changes.length} cell{pendingPreview.changes.length === 1 ? '' : 's'})
+            </span>
+          </div>
+          <div className="flex gap-2 shrink-0">
+            <button
+              type="button"
+              className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold bg-white text-emerald-800 rounded-lg hover:bg-emerald-50 transition-colors"
+              onClick={() => applyAction(pendingPreview.action.id)}
+            >
+              <Check size={12} />
+              Apply
+            </button>
+            <button
+              type="button"
+              className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold bg-emerald-900/40 text-white rounded-lg border border-emerald-400/50 hover:bg-emerald-900/60 transition-colors"
+              onClick={() => rejectAction(pendingPreview.action.id)}
+            >
+              <XCircle size={12} />
+              Reject
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

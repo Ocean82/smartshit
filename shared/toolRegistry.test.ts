@@ -88,7 +88,7 @@ describe('shared toolRegistry', () => {
 
   it('hidden niche templates are registered but excluded from the LLM prompt', () => {
     const hidden = TOOL_REGISTRY.filter((t) => t.hidden)
-    expect(hidden.length).toBe(48)
+    expect(hidden.length).toBe(49)
     for (const tool of hidden) {
       expect(tool.category, tool.name).toBe('template')
       expect(TEMPLATE_TOOL_NAMES, tool.name).toContain(tool.name)

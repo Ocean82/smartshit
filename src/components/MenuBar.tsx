@@ -7,6 +7,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useStore } from '@/store/useStore'
 import { createEmptyWorkbook, refToCell } from '@/engine/spreadsheet'
 import { exportWorkbookToXlsx, exportSheetToCsv, importWorkbookFromFileWithMeta } from '@/io/xlsx'
+import { exportWorkbookToJson, importWorkbookFromJsonFile, normalizeImportedWorkbook } from '@/io/workbookJson'
 import { v4 as uuid } from 'uuid'
 
 type MenuId = 'file' | 'edit' | 'view' | 'insert' | 'format' | 'data' | null
@@ -23,6 +24,7 @@ export function MenuBar() {
   const [openMenu, setOpenMenu] = useState<MenuId>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const jsonInputRef = useRef<HTMLInputElement>(null)
 
   const {
     workbook,
@@ -119,6 +121,40 @@ export function MenuBar() {
     setOpenMenu(null)
   }
 
+  const handleBackupJson = () => {
+    exportWorkbookToJson(workbook)
+    setOpenMenu(null)
+  }
+
+  const handleRestoreJson = () => {
+    jsonInputRef.current?.click()
+    setOpenMenu(null)
+  }
+
+  const handleImportJsonFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    try {
+      pushHistory('Restore JSON backup')
+      const wb = normalizeImportedWorkbook(await importWorkbookFromJsonFile(file))
+      useStore.getState().loadWorkbookData(wb)
+      addMessage({
+        id: uuid(),
+        role: 'assistant',
+        content: `Restored workbook from **${file.name}**.`,
+        timestamp: Date.now(),
+      })
+    } catch (err) {
+      addMessage({
+        id: uuid(),
+        role: 'assistant',
+        content: `Could not restore **${file.name}**: ${err instanceof Error ? err.message : 'invalid backup'}.`,
+        timestamp: Date.now(),
+      })
+    }
+    if (jsonInputRef.current) jsonInputRef.current.value = ''
+  }
+
   const handleRename = () => {
     const name = prompt('Workbook name:', workbook.name)
     if (name && name.trim()) {
@@ -138,7 +174,9 @@ export function MenuBar() {
         { label: 'Open...', shortcut: 'Ctrl+O', action: handleOpen, dividerAfter: true },
         { label: 'Rename', action: handleRename },
         { label: 'Save as Excel', shortcut: 'Ctrl+S', action: handleSave },
-        { label: 'Save as CSV', action: handleSaveAsCSV, dividerAfter: true },
+        { label: 'Save as CSV', action: handleSaveAsCSV },
+        { label: 'Backup as JSON…', action: handleBackupJson },
+        { label: 'Restore from JSON…', action: handleRestoreJson, dividerAfter: true },
         { label: 'Version History', action: () => { setShowVersionHistory(!showVersionHistory); setOpenMenu(null) } },
         { label: 'Share...', action: () => { document.dispatchEvent(new CustomEvent('smartsht:open-share')); setOpenMenu(null) }, dividerAfter: true },
         { label: 'Print', shortcut: 'Ctrl+P', action: () => { window.print(); setOpenMenu(null) } },
@@ -242,6 +280,13 @@ export function MenuBar() {
         accept=".csv,.xlsx,.xls"
         className="hidden"
         onChange={handleImportFile}
+      />
+      <input
+        ref={jsonInputRef}
+        type="file"
+        accept=".json,.smartsht.json"
+        className="hidden"
+        onChange={handleImportJsonFile}
       />
     </div>
   )
