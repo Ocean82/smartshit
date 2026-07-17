@@ -9,10 +9,12 @@ import { chatWithOpenAiCompatible, chatWithOpenAiCompatibleStream, openAiCompati
 
 export type ProviderName = 'openrouter' | 'huggingface' | 'groq' | 'ollama'
 
+/** Canonical list of supported LLM provider identifiers. */
+export const ALLOWED_PROVIDERS: readonly ProviderName[] = ['openrouter', 'huggingface', 'groq', 'ollama'] as const
+
 export function providerOrder(): ProviderName[] {
-  const allowed: ProviderName[] = ['openrouter', 'huggingface', 'groq', 'ollama']
   return config.llmProviderOrder.filter((provider): provider is ProviderName =>
-    allowed.includes(provider as ProviderName),
+    ALLOWED_PROVIDERS.includes(provider as ProviderName),
   )
 }
 
