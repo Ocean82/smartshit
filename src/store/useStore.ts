@@ -23,6 +23,7 @@ import {
   SpreadsheetEngine,
 } from '@/engine/spreadsheet';
 import { parseMessage, executeTool, type ExecutionContext } from '@/agent';
+import { MUTATION_TOOL_NAMES } from '@shared/toolRegistry';
 import { loadPersistedState } from '@/lib/persistence';
 import { processMessage } from '@/ai/brain';
 import { buildSpreadsheetContext } from '@/ai/buildContext';
@@ -30,17 +31,17 @@ import { toolResultToChatMessage, toolResultToMessage } from '@/ai/responseBuild
 import { buildFilePreview } from '@/ai/filePreview';
 import { recordTelemetry } from '@/ai/telemetry';
 import { classifyMode, isLlmOnlyMode, isBudgetExplainQuery } from '@/ai/mode';
-import { analyzeBudget, budgetAnalysisToToolResult, savingsRecommendation } from '@/ai/skills/budget';
-import { applyCleaningChanges, previewCleaning } from '@/ai/skills/cleaning';
+import { analyzeBudget, budgetAnalysisToToolResult, savingsRecommendation } from '@/ai/analysis/budget';
+import { applyCleaningChanges, previewCleaning } from '@/ai/analysis/cleaning';
 import { parseUserIntent } from '@/ai/intentParser';
 import { AI_ANALYSIS_CONFIG } from '@/ai/config';
 import { resolveActTemplates } from '@shared/actTemplates';
 import type { SheetInsights } from '@/ai/sheetInsights';
 import type { AttachedFilePreview } from '@/ai/types';
-import { computeSortedCellUpdates, type SortPatch } from '@/lib/sheetSort';
+import { computeSortedCellUpdates, findHeaderRow, findLastDataRow, type SortPatch } from '@/lib/sheetSort';
 import { conditionToRule, attachConditionalRuleToColumn } from '@/lib/conditionalFormat';
 import { v4 as uuid } from 'uuid';
-import { defaultSkills } from '@/data/skills';
+import { defaultSkills } from '@/data/chatPresets';
 
 // History for undo/redo
 interface HistoryEntry {
@@ -557,25 +558,28 @@ export const useStore = create<AppState>()(
           );
 
           // ─── Agent Parser (instant, no LLM) ─────────────────────────────────
-          const parsed = parseMessage(input);
+          const headerRowIdx = findHeaderRow(sheet);
+          const lastDataRowIdx = findLastDataRow(sheet);
+          let lastDataColIdx = 0;
+          const headers: string[] = [];
+          for (const cellId of Object.keys(sheet.cells)) {
+            lastDataColIdx = Math.max(lastDataColIdx, cellToRef(cellId).col);
+          }
+          for (let c = 0; c <= lastDataColIdx; c++) {
+            headers.push(state.getComputedValue(headerRowIdx, c));
+          }
+          const parsed = parseMessage(input, {
+            headerRow: headerRowIdx,
+            lastDataRow: lastDataRowIdx,
+            lastDataCol: lastDataColIdx,
+            headers,
+          });
           if (parsed.understood && parsed.calls.length > 0) {
             // Push a single undo point BEFORE the batch executes
             get().pushHistory(`AI: ${parsed.explanation || parsed.calls.map(c => c.description).join(', ')}`);
 
-            // Build execution context — suppress per-tool pushHistory since we already saved the undo point
-            const execCtx: ExecutionContext = {
-              getActiveSheet: get().getActiveSheet,
-              getComputedValue: get().getComputedValue,
-              setCellValue: get().setCellValue,
-              setCellFormat: get().setCellFormat,
-              bulkSetCells: get().bulkSetCells,
-              applySortPatch: get().applySortPatch,
-              deleteRow: get().deleteRow,
-              insertRow: get().insertRow,
-              addSheet: get().addSheet,
-              renameSheet: get().renameSheet,
-              pushHistory: () => {}, // no-op: single undo point already saved above
-            };
+            // Shared execution context — suppress per-tool pushHistory since we already saved the undo point
+            const execCtx = buildExecutionContext(get, set, { suppressHistory: true });
 
             // Execute all tool calls in sequence
             const results = parsed.calls.map(call => executeTool(call, execCtx));
@@ -1263,8 +1267,72 @@ function estimateActionChangeCount(action: AgentAction): number {
   return 0;
 }
 
-// Execute AI actions
+/** Cell ids covered by the current selection rectangle. */
+function selectionCellIds(sel: Selection | null): string[] {
+  if (!sel) return [];
+  const ids: string[] = [];
+  for (let r = Math.min(sel.startRow, sel.endRow); r <= Math.max(sel.startRow, sel.endRow); r++) {
+    for (let c = Math.min(sel.startCol, sel.endCol); c <= Math.max(sel.startCol, sel.endCol); c++) {
+      ids.push(refToCell(r, c));
+    }
+  }
+  return ids;
+}
+
+/**
+ * Build the ExecutionContext used by both the fast path (parser) and the
+ * LLM Apply path — so all mutation tools run through the same executor logic.
+ */
+function buildExecutionContext(
+  get: () => AppState,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  set: any,
+  opts?: { suppressHistory?: boolean },
+): ExecutionContext {
+  return {
+    getActiveSheet: () => get().getActiveSheet(),
+    getComputedValue: (row, col) => get().getComputedValue(row, col),
+    setCellValue: (cellId, value, formula) => get().setCellValue(cellId, value, formula),
+    setCellFormat: (cellId, format) => get().setCellFormat(cellId, format),
+    bulkSetCells: (cells) => get().bulkSetCells(cells),
+    applySortPatch: (patch) => get().applySortPatch(patch),
+    setFilters: (filters) => get().setFilters(filters),
+    deleteRow: (row) => get().deleteRow(row),
+    insertRow: (afterRow) => get().insertRow(afterRow),
+    addSheet: (name) => get().addSheet(name),
+    renameSheet: (sheetId, name) => get().renameSheet(sheetId, name),
+    pushHistory: opts?.suppressHistory ? () => {} : (desc) => get().pushHistory(desc),
+    getSelection: () => selectionCellIds(get().selection),
+    executeTemplate: (tool, params) => {
+      executeTemplateAction(
+        { id: uuid(), tool, params, description: tool, status: 'applied' } as AgentAction,
+        get,
+        set,
+      );
+      return { success: true, message: `Built ${tool.replace(/^create_/, '').replace(/_/g, ' ')}`, modified: 0 };
+    },
+  };
+}
+
+// Execute AI actions — operational (mutation) tools run through the unified
+// agent executor; create_* templates use the template switch below.
 function executeAction(
+  action: AgentAction,
+  get: () => AppState,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  set: any
+) {
+  if (MUTATION_TOOL_NAMES.includes(action.tool)) {
+    // applyAction already pushed a single undo point for this action
+    const ctx = buildExecutionContext(get, set, { suppressHistory: true });
+    executeTool({ tool: action.tool, params: action.params, description: action.description }, ctx);
+    return;
+  }
+  executeTemplateAction(action, get, set);
+}
+
+// Template (create_*) and read-only action handlers
+function executeTemplateAction(
   action: AgentAction,
   get: () => AppState,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1545,46 +1613,8 @@ function executeAction(
       break;
     }
 
-    case 'apply_formula': {
-      const col = (params.column as string) || 'B';
-      const sheet = state.getActiveSheet();
-      // Find max row with data in that column
-      let maxRow = 0;
-      for (const cellId of Object.keys(sheet.cells)) {
-        if (cellId.startsWith(col)) {
-          const ref = cellToRef(cellId);
-          maxRow = Math.max(maxRow, ref.row);
-        }
-      }
-      if (maxRow > 0) {
-        const formulaCell = `${col}${maxRow + 2}`;
-        state.setCellValue(formulaCell, null, `=SUM(${col}1:${col}${maxRow + 1})`);
-        state.setCellFormat(formulaCell, { bold: true, bgColor: '#FEF3C7' });
-        state.setCellValue(`A${maxRow + 2}`, 'Total');
-        state.setCellFormat(`A${maxRow + 2}`, { bold: true });
-      }
-      break;
-    }
-
-    case 'format_cells': {
-      const format: Partial<CellFormat> = {};
-      if (params.bold) format.bold = true;
-      if (params.bgColor) format.bgColor = params.bgColor as string;
-      state.setRangeFormat(format);
-      break;
-    }
-
-    case 'modify_column': {
-      const col = (params.column as string) || 'B';
-      const factor = (params.factor as number) || 1.1;
-      const sheet = state.getActiveSheet();
-      for (const [cellId, data] of Object.entries(sheet.cells)) {
-        if (cellId.startsWith(col) && typeof data.value === 'number') {
-          state.setCellValue(cellId, Math.round(data.value * factor * 100) / 100);
-        }
-      }
-      break;
-    }
+    // apply_formula, format_cells, modify_column, clear_sheet, sort_sheet, and
+    // filter are mutation tools handled by the unified agent executor.
 
     case 'create_chart': {
       const chartType = (params.type as string) || 'bar';
@@ -1662,7 +1692,7 @@ function executeAction(
     }
 
     case 'clean_sheet_data': {
-      const preview = params.preview as import('@/ai/skills/cleaning').CleaningPreview | undefined;
+      const preview = params.preview as import('@/ai/analysis/cleaning').CleaningPreview | undefined;
       const cleaning = preview ?? previewCleaning(state.getActiveSheet());
       const { cellUpdates, rowsToDelete } = applyCleaningChanges(state.getActiveSheet(), cleaning);
       state.bulkSetCells(cellUpdates);
@@ -2813,14 +2843,6 @@ function executeAction(
     case 'analyze_data': {
       // Read-only — explanation is in the assistant message
       break
-    }
-
-    case 'clear_sheet': {
-      _set((s: AppState) => {
-        const sh = s.workbook.sheets.find((sheet: SheetData) => sheet.id === s.activeSheetId);
-        if (sh) sh.cells = {};
-      });
-      break;
     }
   }
 }

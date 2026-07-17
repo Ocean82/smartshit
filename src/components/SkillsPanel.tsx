@@ -109,7 +109,7 @@ export function SkillsPanel() {
             </div>
             <div className="flex items-center gap-1 mt-1.5">
               <span className="text-[9px] px-1.5 py-0.5 bg-gray-100 rounded text-gray-500">{skill.category}</span>
-              <span className="text-[9px] px-1.5 py-0.5 bg-gray-100 rounded text-gray-500">{skill.tools.length} tools</span>
+              <span className="text-[9px] px-1.5 py-0.5 bg-gray-100 rounded text-gray-500">{skill.tools.length === 0 ? 'preset' : `${skill.tools.length} actions`}</span>
             </div>
           </div>
         ))}

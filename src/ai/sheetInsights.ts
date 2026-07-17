@@ -1,5 +1,6 @@
 import type { SheetData } from '@/types'
 import { cellToRef, colToLetter, refToCell } from '@/engine/spreadsheet'
+import { cellScalar } from '@/lib/formatUtils'
 import { AI_ANALYSIS_CONFIG } from '@/ai/config'
 import { detectOutliers, type OutlierItem } from '@/ai/outliers'
 
@@ -87,7 +88,7 @@ function buildMatrix(
     const computed = getComputedValue(row, col)
     const raw = cell.formula ?? cell.value
     if (raw !== null && raw !== undefined && raw !== '') {
-      matrix[row][col] = raw
+      matrix[row][col] = cellScalar(raw)
     } else if (computed) {
       const num = parseNumeric(computed)
       matrix[row][col] = num ?? computed

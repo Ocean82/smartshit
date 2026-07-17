@@ -1,5 +1,5 @@
 import { v4 as uuid } from 'uuid'
-import type { ChatMessage } from '@/types'
+import type { ChatMessage, CellChange } from '@/types'
 import type { SheetInsights } from '@/ai/sheetInsights'
 import type { SheetProfile, ToolResult } from '@/ai/types'
 import { AI_ANALYSIS_CONFIG } from '@/ai/config'
@@ -145,7 +145,7 @@ export function toolResultToChatMessage(
 ): ChatMessage {
   const actions = (result.actions ?? []).map((action) => {
     const previewChanges = Array.isArray(action.params.previewChanges)
-      ? action.params.previewChanges as Array<{ cell: string; oldValue: unknown; newValue: unknown }>
+      ? action.params.previewChanges as CellChange[]
       : undefined
     const changeLabel = previewChanges?.length ? ` (about ${previewChanges.length} changes)` : ''
 

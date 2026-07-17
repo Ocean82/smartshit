@@ -21,6 +21,36 @@ const RANGE_REF = /\b([A-Z]\d{1,3}):([A-Z]\d{1,3})\b/i
 const NUMBER = /\$?([\d,]+(?:\.\d+)?)/
 const PERCENT = /(\d+)\s*%/
 
+/** Vivid hexes for font colors */
+const FONT_COLOR_HEX: Record<string, string> = {
+  red: '#FF0000',
+  blue: '#0000FF',
+  green: '#008000',
+  yellow: '#EAB308',
+  orange: '#F97316',
+  purple: '#800080',
+  pink: '#EC4899',
+  black: '#000000',
+  white: '#FFFFFF',
+  gray: '#6B7280',
+  grey: '#6B7280',
+}
+
+/** Soft hexes for cell highlight backgrounds */
+const HIGHLIGHT_BG_HEX: Record<string, string> = {
+  red: '#FEE2E2',
+  blue: '#DBEAFE',
+  green: '#DCFCE7',
+  yellow: '#FFF9C4',
+  orange: '#FFEDD5',
+  purple: '#F3E8FF',
+  pink: '#FCE7F3',
+  gray: '#F3F4F6',
+  grey: '#F3F4F6',
+}
+
+const COLOR_WORD_RE = /\b(red|blue|green|yellow|orange|purple|pink|black|white|gray|grey)\b/
+
 /**
  * Parse a user message into zero or more tool calls.
  * Returns { understood: false } if no patterns match (should fallback to LLM).
@@ -180,15 +210,68 @@ export function parseMessage(message: string, sheetContext?: SheetContext): Pars
 
   // ─── Bold/format ────────────────────────────────────────────────────────────
   if (lower.includes('bold') && lower.includes('header')) {
-    calls.push({ tool: 'format_range', params: { range: 'A1:Z1', bold: true }, description: 'Bold headers' })
+    const headerRowNum = (sheetContext?.headerRow ?? 0) + 1
+    calls.push({ tool: 'format_cells', params: { range: `A${headerRowNum}:Z${headerRowNum}`, bold: true }, description: 'Bold headers' })
     return { calls, understood: true, explanation: 'Making the header row bold.' }
   }
 
-  // ─── Highlight negatives ────────────────────────────────────────────────────
-  if (lower.match(/highlight.*(negative|red)/i)) {
-    const col = lower.match(/column\s+([a-z])/i)?.[1]?.toUpperCase() || 'D'
-    calls.push({ tool: 'conditional_format', params: { column: col, condition: 'negative', color: '#FEE2E2' }, description: 'Highlight negatives' })
-    return { calls, understood: true, explanation: `Highlighting negative values in column ${col} with red.` }
+  // ─── Format/color intents (must run BEFORE find/replace) ───────────────────
+
+  // "change the text to red" / "make text blue" / "font color red" → fontColor
+  const fontColorMatch =
+    lower.match(/(?:change|make|set|turn|color|colour)\s+(?:all\s+)?(?:the\s+)?(?:text|font|writing)(?:\s+colou?r)?\s+(?:to\s+)?(\w+)/) ??
+    lower.match(/(?:font|text)\s+colou?r\s*:?\s*(?:to\s+)?(\w+)/)
+  if (fontColorMatch && FONT_COLOR_HEX[fontColorMatch[1]]) {
+    const colorWord = fontColorMatch[1]
+    calls.push({
+      tool: 'format_cells',
+      params: { fontColor: FONT_COLOR_HEX[colorWord] },
+      description: `Change text color to ${colorWord}`,
+    })
+    return { calls, understood: true, explanation: `Changing the text color to ${colorWord}.` }
+  }
+
+  // "highlight cells containing 4" / "identify cells that contain 4 and highlight" → contains condition
+  const containsMatch = lower.match(
+    /cells?\s+(?:that\s+)?(?:contain(?:ing|s)?|with|having)\s+(?:the\s+)?(?:number\s+|value\s+|text\s+)?["']?([\w.$-]+)["']?/,
+  )
+  if (containsMatch && lower.match(/(?:highlight|colou?r|mark|shade)/)) {
+    const value = containsMatch[1]
+    const colorWord = lower.match(COLOR_WORD_RE)?.[1]
+    const bgColor = (colorWord && colorWord !== value && HIGHLIGHT_BG_HEX[colorWord]) || '#FFF9C4'
+    calls.push({
+      tool: 'format_cells',
+      params: { condition: { operator: 'contains', value }, bgColor },
+      description: `Highlight cells containing ${value}`,
+    })
+    return { calls, understood: true, explanation: `Highlighting cells containing "${value}".` }
+  }
+
+  // "highlight cells equal to 4" → numeric eq condition
+  const highlightEquals = lower.match(
+    /(?:highlight|colou?r|mark|shade)\s+(?:the\s+)?cells?\s+(?:that\s+are\s+)?(?:equal(?:s)?(?:\s+to)?|=)\s*\$?([\d,.]+)/,
+  )
+  if (highlightEquals) {
+    const value = parseFloat(highlightEquals[1].replace(/,/g, ''))
+    const colorWord = lower.slice(highlightEquals.index! + highlightEquals[0].length).match(COLOR_WORD_RE)?.[1]
+    const bgColor = (colorWord && HIGHLIGHT_BG_HEX[colorWord]) || '#FFF9C4'
+    calls.push({
+      tool: 'format_cells',
+      params: { condition: { operator: 'eq', value }, bgColor },
+      description: `Highlight cells equal to ${value}`,
+    })
+    return { calls, understood: true, explanation: `Highlighting cells equal to ${value}.` }
+  }
+
+  // ─── Highlight negatives (requires the word "negative") ────────────────────
+  if (lower.match(/(?:highlight|colou?r|mark|shade)/) && lower.includes('negative')) {
+    const col = lower.match(/column\s+([a-z])/i)?.[1]?.toUpperCase()
+    calls.push({
+      tool: 'format_cells',
+      params: { range: col, condition: { operator: 'negative' }, bgColor: '#FEE2E2' },
+      description: 'Highlight negatives',
+    })
+    return { calls, understood: true, explanation: `Highlighting negative values${col ? ` in column ${col}` : ''} in red.` }
   }
 
   // ─── Rename sheet ───────────────────────────────────────────────────────────
@@ -204,6 +287,21 @@ export function parseMessage(message: string, sheetContext?: SheetContext): Pars
   if (findReplace && !lower.includes('column') && !lower.includes('header') && !lower.includes('rename')) {
     const find = findReplace[1].trim()
     const replace = findReplace[2].trim()
+    // Formatting request, not find/replace: "change X to red", "change the highlight color to blue"
+    const isFormattingIntent =
+      COLOR_WORD_RE.test(replace) ||
+      /\b(highlight|font|colou?r)\b/.test(lower)
+    if (isFormattingIntent) {
+      if (FONT_COLOR_HEX[replace]) {
+        calls.push({
+          tool: 'format_cells',
+          params: { fontColor: FONT_COLOR_HEX[replace] },
+          description: `Change text color to ${replace}`,
+        })
+        return { calls, understood: true, explanation: `Changing the text color to ${replace}.` }
+      }
+      return { calls: [], understood: false }
+    }
     calls.push({ tool: 'find_and_replace', params: { find, replace }, description: `Replace "${find}" with "${replace}"` })
     return { calls, understood: true, explanation: `Replacing all "${find}" with "${replace}".` }
   }
@@ -214,6 +312,7 @@ export function parseMessage(message: string, sheetContext?: SheetContext): Pars
 
 /** Minimal sheet context for parser decisions */
 export interface SheetContext {
+  headerRow: number
   lastDataRow: number
   lastDataCol: number
   headers: string[]

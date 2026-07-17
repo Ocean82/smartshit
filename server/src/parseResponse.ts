@@ -1,4 +1,5 @@
 import { resolveIntent, isWeakResponse } from './intent.js'
+import { ACTION_TOOL_NAMES } from '../../shared/toolRegistry.js'
 
 interface ParsedAgentJson {
   message?: string
@@ -9,28 +10,9 @@ interface ParsedAgentJson {
   }>
 }
 
-const ALLOWED_TOOLS = new Set([
-  'create_budget_template',
-  'create_sales_tracker',
-  'create_invoice',
-  'create_project_tracker',
-  'create_employee_roster',
-  'create_kpi_dashboard',
-  'create_expense_report',
-  'clean_sheet_data',
-  'apply_formula',
-  'format_cells',
-  'create_chart',
-  'modify_column',
-  'clear_sheet',
-  'sort_sheet',
-  'filter',
-  'find_duplicates',
-  'aggregate',
-  'top_n',
-  'summary',
-  'analyze_data',
-])
+// Derived from the shared registry — the server only returns actions the
+// client executor (or template switch) can actually run.
+const ALLOWED_TOOLS = new Set(ACTION_TOOL_NAMES)
 
 function extractJsonObject(text: string): string | null {
   const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/i)

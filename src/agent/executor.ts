@@ -6,23 +6,29 @@
  */
 
 import type { ParsedToolCall } from './parser'
-import { refToCell, cellToRef, colToLetter } from '@/engine/spreadsheet'
-import type { SheetData, CellData } from '@/types'
+import { refToCell, cellToRef, letterToCol } from '@/engine/spreadsheet'
+import type { SheetData, FilterConfig, CellFormat } from '@/types'
 import { computeSortedCellUpdates, findHeaderRow, findLastDataRow, type SortPatch } from '@/lib/sheetSort'
-import { conditionToRule, attachConditionalRuleToColumn } from '@/lib/conditionalFormat'
+import { applyFormatCells } from '@/lib/formatCellsTool'
+import { resolveToolName, TEMPLATE_TOOL_NAMES } from '@shared/toolRegistry'
 
 export interface ExecutionContext {
   getActiveSheet: () => SheetData
   getComputedValue: (row: number, col: number) => string
   setCellValue: (cellId: string, value: string | number | boolean | null, formula?: string) => void
-  setCellFormat: (cellId: string, format: Record<string, unknown>) => void
+  setCellFormat: (cellId: string, format: Partial<CellFormat>) => void
   bulkSetCells: (cells: Record<string, { value: string | number | boolean | null; formula?: string }>) => void
   applySortPatch: (patch: SortPatch) => void
+  setFilters: (filters: FilterConfig[]) => void
   deleteRow: (row: number) => void
   insertRow: (afterRow: number) => void
   addSheet: (name?: string) => void
   renameSheet: (sheetId: string, name: string) => void
   pushHistory: (desc: string) => void
+  /** Currently selected cell ids, if any (used by format_cells defaults). */
+  getSelection?: () => string[]
+  /** Runs a create_* template via the store's template handlers. */
+  executeTemplate?: (tool: string, params: Record<string, unknown>) => ExecutionResult
 }
 
 export interface ExecutionResult {
@@ -35,8 +41,15 @@ export interface ExecutionResult {
  * Execute a single tool call against the spreadsheet.
  */
 export function executeTool(call: ParsedToolCall, ctx: ExecutionContext): ExecutionResult {
-  const { tool, params } = call
+  const tool = resolveToolName(call.tool)
+  const params = normalizeAliasParams(call.tool, call.params)
   const sheet = ctx.getActiveSheet()
+
+  // Templates are built by the store's template handlers
+  if (TEMPLATE_TOOL_NAMES.includes(tool)) {
+    if (ctx.executeTemplate) return ctx.executeTemplate(tool, params)
+    return { success: false, message: `Template "${tool}" is not available in this context`, modified: 0 }
+  }
 
   switch (tool) {
     case 'set_cell': {
@@ -127,8 +140,11 @@ export function executeTool(call: ParsedToolCall, ctx: ExecutionContext): Execut
     }
 
     case 'apply_formula': {
-      const target = (params.cell as string).toUpperCase()
-      const formula = params.formula as string
+      // Accept legacy {column} param alongside canonical {cell}
+      const target = String((params.cell ?? params.column ?? '') as string).toUpperCase()
+      if (!target) return { success: false, message: 'No target cell or column specified', modified: 0 }
+      let formula = String(params.formula ?? '=SUM')
+      if (!formula.startsWith('=')) formula = `=${formula}`
       ctx.pushHistory(`Apply formula`)
 
       // If target is a single column letter (e.g., "B"), put formula at bottom
@@ -154,6 +170,9 @@ export function executeTool(call: ParsedToolCall, ctx: ExecutionContext): Execut
       const col = (params.column as string).toUpperCase()
       const operation = params.operation as string
       const factor = params.factor as number
+      if (typeof factor !== 'number' || !Number.isFinite(factor)) {
+        return { success: false, message: 'modify_column needs a numeric factor', modified: 0 }
+      }
       const colIdx = col.charCodeAt(0) - 65
       ctx.pushHistory(`Modify column ${col}`)
 
@@ -192,34 +211,25 @@ export function executeTool(call: ParsedToolCall, ctx: ExecutionContext): Execut
       return { success: true, message: `Sorted rows by column ${col} (${direction})`, modified: count }
     }
 
-    case 'format_range': {
-      const range = params.range as string
-      const format: Record<string, unknown> = {}
-      if (params.bold) format.bold = true
-      if (params.bgColor) format.bgColor = params.bgColor
-      if (params.fontColor) format.fontColor = params.fontColor
-      if (params.fontSize) format.fontSize = params.fontSize
-
-      ctx.pushHistory('Format cells')
-      const cells = expandRange(range)
-      for (const cellId of cells) {
-        ctx.setCellFormat(cellId, format)
-      }
-      return { success: true, message: `Formatted ${cells.length} cells`, modified: cells.length }
+    case 'format_cells': {
+      return applyFormatCells(params, ctx)
     }
 
-    case 'conditional_format': {
-      const col = (params.column as string).toUpperCase()
-      const condition = String(params.condition ?? 'negative').toLowerCase()
-      const threshold = typeof params.value === 'number' ? params.value : 0
-      const color = typeof params.color === 'string' ? params.color : '#FEE2E2'
-      const colIdx = col.charCodeAt(0) - 65
-      ctx.pushHistory(`Conditional format ${col}`)
-
-      const rule = conditionToRule(condition, color, threshold)
-      const count = attachConditionalRuleToColumn(sheet, colIdx, rule, ctx.setCellFormat)
-
-      return { success: true, message: `Applied conditional formatting to ${count} cells in column ${col}`, modified: count }
+    case 'filter': {
+      const rawColumn = String(params.column ?? '').trim()
+      const colIdx = resolveColumnIndex(rawColumn, sheet, ctx.getComputedValue)
+      if (colIdx == null) {
+        return { success: false, message: `Could not find column "${rawColumn}"`, modified: 0 }
+      }
+      const condition = String(params.condition ?? 'equals').toLowerCase()
+      if (condition === 'not_empty') {
+        // Approximate not_empty: keep rows whose cell contains anything
+        ctx.setFilters([{ column: colIdx, condition: 'contains', value: '' }])
+      } else {
+        const mapped = condition === 'eq' ? 'equals' : condition
+        ctx.setFilters([{ column: colIdx, condition: mapped, value: params.value as string | number }])
+      }
+      return { success: true, message: `Filtered rows by column ${rawColumn.toUpperCase()} (${condition})`, modified: 0 }
     }
 
     case 'clear_sheet': {
@@ -285,6 +295,35 @@ export function executeTool(call: ParsedToolCall, ctx: ExecutionContext): Execut
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+/** Translate legacy alias params (format_range passthrough, conditional_format column/color) into format_cells params. */
+function normalizeAliasParams(originalTool: string, params: Record<string, unknown>): Record<string, unknown> {
+  if (originalTool === 'conditional_format') {
+    const condition = String(params.condition ?? 'negative').toLowerCase()
+    return {
+      range: typeof params.column === 'string' ? params.column : undefined,
+      condition: { operator: condition, value: params.value },
+      bgColor: typeof params.color === 'string' ? params.color : '#FEE2E2',
+    }
+  }
+  // format_range params are a subset of format_cells params — pass through
+  return params
+}
+
+/** Resolve a column given as a letter ("B") or a header name ("Amount"). */
+function resolveColumnIndex(
+  column: string,
+  sheet: SheetData,
+  getComputedValue: (row: number, col: number) => string,
+): number | null {
+  if (/^[A-Z]{1,3}$/i.test(column)) return letterToCol(column.toUpperCase())
+  const headerRow = findHeaderRow(sheet)
+  const lowered = column.toLowerCase()
+  for (let c = 0; c < 60; c++) {
+    if (getComputedValue(headerRow, c).toLowerCase() === lowered) return c
+  }
+  return null
+}
+
 function findLastDataRowInCol(sheet: SheetData, colIdx: number): number {
   let max = 0
   for (const cellId of Object.keys(sheet.cells)) {
@@ -303,29 +342,3 @@ function findRowByContent(sheet: SheetData, text: string): number {
   return -1
 }
 
-function expandRange(range: string): string[] {
-  // Handle "A1:D1" style ranges
-  const match = range.match(/^([A-Z])(\d+):([A-Z])(\d+)$/i)
-  if (!match) {
-    // Single cell or column
-    if (/^[A-Z]$/i.test(range)) {
-      // Full column — just format first 30 rows
-      const col = range.toUpperCase().charCodeAt(0) - 65
-      return Array.from({ length: 30 }, (_, i) => refToCell(i, col))
-    }
-    return [range.toUpperCase()]
-  }
-
-  const startCol = match[1].toUpperCase().charCodeAt(0) - 65
-  const startRow = parseInt(match[2]) - 1
-  const endCol = match[3].toUpperCase().charCodeAt(0) - 65
-  const endRow = parseInt(match[4]) - 1
-  const cells: string[] = []
-
-  for (let r = startRow; r <= endRow; r++) {
-    for (let c = startCol; c <= endCol; c++) {
-      cells.push(refToCell(r, c))
-    }
-  }
-  return cells
-}
