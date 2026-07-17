@@ -10,6 +10,17 @@ export const NUMBER_FORMATS = [
   { value: 'text', label: 'Text (@)' },
 ] as const;
 
+/**
+ * Coerce a raw cell value to an analysis-friendly scalar.
+ * Booleans become their spreadsheet display form ("TRUE"/"FALSE") so downstream
+ * matrices and profilers can stay typed as `string | number | null`.
+ */
+export function cellScalar(value: string | number | boolean | null | undefined): string | number | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'boolean') return value ? 'TRUE' : 'FALSE';
+  return value;
+}
+
 export function formatCellValue(value: string | number | boolean | null, numberFormat?: string): string {
   if (value === null || value === undefined) return '';
   if (typeof value === 'boolean') return value ? 'TRUE' : 'FALSE';
