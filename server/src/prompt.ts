@@ -1,30 +1,11 @@
 import type { AgentMode } from './mode.js'
 import type { UserIntent } from '../../shared/intentTypes.js'
+import { ACTION_TOOL_NAMES, formatToolsForPrompt } from '../../shared/toolRegistry.js'
 
-export const SPREADSHEET_AGENT_TOOLS = [
-  'create_budget_template',
-  'create_sales_tracker',
-  'create_invoice',
-  'create_project_tracker',
-  'create_employee_roster',
-  'create_kpi_dashboard',
-  'create_expense_report',
-  'clean_sheet_data',
-  'apply_formula',
-  'format_cells',
-  'create_chart',
-  'modify_column',
-  'clear_sheet',
-  'sort_sheet',
-  'filter',
-  'find_duplicates',
-  'aggregate',
-  'top_n',
-  'summary',
-  'analyze_data',
-] as const
+/** Action tools the LLM may return — derived from the shared registry. */
+export const SPREADSHEET_AGENT_TOOLS: readonly string[] = ACTION_TOOL_NAMES
 
-export type SpreadsheetTool = (typeof SPREADSHEET_AGENT_TOOLS)[number]
+export type SpreadsheetTool = string
 
 export interface ChatMessageInput {
   role: 'system' | 'user' | 'assistant'
@@ -319,31 +300,18 @@ export function buildActionPrompt(context?: SpreadsheetContextInput): string {
 Format: {"message":"explanation","actions":[{"tool":"name","params":{},"description":"label"}]}
 
 Available tools and their params:
-- create_budget_template: {} — Build a monthly budget with income, expenses, totals
-- create_sales_tracker: {} — Create a sales tracking spreadsheet
-- create_invoice: {} — Generate a professional invoice template
-- create_project_tracker: {} — Create a project/task tracker
-- create_employee_roster: {} — Build an employee directory
-- create_kpi_dashboard: {} — Create a KPI metrics dashboard
-- create_expense_report: {} — Generate an expense report template
-- clean_sheet_data: {} — Clean whitespace, normalize headers, trim data
-- apply_formula: {column, formula} — Apply a formula (SUM, AVERAGE, COUNT, MAX, MIN)
-- format_cells: {range, bold, bgColor, fontColor, condition} — Format cells. Use "condition" to target cells by value (e.g. {condition: {contains: "7"}, fontColor: "#0000FF"} or {condition: {operator: "lt", value: 0}, fontColor: "#FF0000"})
-- create_chart: {type, dataRange} — Create a chart (bar, pie, line, scatter)
-- modify_column: {column, operation, factor} — Apply math to a column (multiply, add, subtract)
-- clear_sheet: {} — Clear all data from the current sheet
-- sort_sheet: {column, direction} — Sort by a column (asc/desc)
-- filter: {column, condition, value} — Filter rows by condition (gt, lt, eq, contains, not_empty)
-- find_duplicates: {columns} — Find duplicate rows by specified columns
-- aggregate: {column, agg} — Aggregate a column (sum, mean, count, min, max)
-- top_n: {column, n, ascending} — Get top/bottom N rows by column
-- summary: {} — Summarize the current sheet data
-- analyze_data: {} — Analyze data patterns and provide insights
+${formatToolsForPrompt()}
+
+format_cells condition examples (shape: {operator, value?}):
+- Highlight cells containing 4: {"tool":"format_cells","params":{"condition":{"operator":"contains","value":"4"},"bgColor":"#FFF9C4"}}
+- Red font for negatives in column B: {"tool":"format_cells","params":{"range":"B","condition":{"operator":"negative"},"fontColor":"#FF0000"}}
+- Highlight values over 500: {"tool":"format_cells","params":{"condition":{"operator":"gt","value":500},"bgColor":"#FFE0B2"}}
 
 Rules:
 - message: plain English, friendly, short. Describe what you will do.
 - actions: array of tool calls (empty array if no sheet changes needed)
 - For conditional formatting (color cells by value), use format_cells with a condition param
+- Read/analysis questions (totals, top N, duplicates, summaries) are answered in the message prose using the provided context — never emit actions for them
 - No markdown fences, no extra text outside JSON. Start with { end with }
 ${contextBlock}`
 }

@@ -1,3 +1,6 @@
+// TODO: unused — this module is implemented but never called from server/src/index.ts.
+// Either wire it into the chat route as an LLM-based intent fallback or delete it
+// in the follow-up plan (see "llmIntentParser integration" deferred item).
 import type { UserIntent } from '../../shared/intentTypes.js'
 import { config } from './config.js'
 import { callProvider, providerIsConfigured, providerOrder } from './providers.js'

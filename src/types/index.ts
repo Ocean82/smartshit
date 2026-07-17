@@ -26,10 +26,12 @@ export interface CellFormat {
 }
 
 export interface ConditionalRule {
-  type: 'greaterThan' | 'lessThan' | 'equals' | 'between' | 'text' | 'colorScale';
+  type: 'greaterThan' | 'lessThan' | 'equals' | 'between' | 'text' | 'colorScale' | 'dataBar';
   value: number | string;
   value2?: number | string;
   style: Partial<CellFormat>;
+  /** Fill color for data-bar rules (defaults to a soft blue). */
+  dataBarColor?: string;
 }
 
 export interface DataValidation {

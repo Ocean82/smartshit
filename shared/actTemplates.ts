@@ -1,4 +1,5 @@
 import type { ActTemplateResult } from './intentTypes.js'
+import { FONT_COLOR_HEX, HIGHLIGHT_BG_HEX } from './colorMaps.js'
 
 export function resolveActTemplates(message: string): ActTemplateResult {
   const lower = message.toLowerCase().trim()
@@ -151,20 +152,61 @@ export function resolveActTemplates(message: string): ActTemplateResult {
     }
   }
 
-  if (lower.includes('bold') || lower.includes('format') || lower.includes('highlight') || lower.includes('color')) {
-    // Conditional formatting requests (targeting cells by value) should be handled by the LLM
-    // Only handle simple "make it bold" / "highlight the selection" here
-    const isConditional = /\b(with|contain|has|have|equal|where|if|that)\b/.test(lower)
-      || /\b\d+\b/.test(lower) // mentions a specific number
-      || lower.includes('negative') || lower.includes('positive')
-    if (isConditional) {
-      // Let the LLM handle complex conditional formatting
-      return { message: '', actions: [] }
+  const colorWord = lower.match(/\b(red|blue|green|yellow|orange|purple|pink|black|white|gray|grey)\b/)?.[1]
+  const wantsFormatting = lower.includes('bold') || lower.includes('format') || lower.includes('highlight') || lower.includes('colour') || lower.includes('color')
+    || (colorWord != null && /\b(text|font|cells?|writing)\b/.test(lower))
+
+  if (wantsFormatting) {
+    const bgColor = (colorWord && HIGHLIGHT_BG_HEX[colorWord]) || '#FFF9C4'
+
+    // "highlight negatives in red"
+    if (lower.includes('negative')) {
+      return {
+        message: 'I will highlight negative values in red. Click Apply to confirm.',
+        actions: [{ tool: 'format_cells', params: { condition: { operator: 'negative' }, bgColor: '#FEE2E2' }, description: 'Highlight negative values' }],
+      }
     }
 
+    // "highlight cells equal to 4"
+    const equalsMatch = lower.match(/equal(?:s)?(?:\s+to)?\s*\$?([\d,.]+)/)
+    if (equalsMatch) {
+      const value = parseFloat(equalsMatch[1].replace(/,/g, ''))
+      return {
+        message: `I will highlight cells equal to ${value}. Click Apply to confirm.`,
+        actions: [{ tool: 'format_cells', params: { condition: { operator: 'eq', value }, bgColor }, description: `Highlight cells equal to ${value}` }],
+      }
+    }
+
+    // "highlight cells containing 4" / "color cells with 4"
+    const containsMatch = lower.match(/(?:contain(?:ing|s)?|with|having)\s+(?:the\s+)?(?:number\s+|value\s+|text\s+)?["']?([\w.$-]+)["']?/)
+    if (containsMatch) {
+      const value = containsMatch[1]
+      return {
+        message: `I will highlight cells containing "${value}". Click Apply to confirm.`,
+        actions: [{ tool: 'format_cells', params: { condition: { operator: 'contains', value }, bgColor }, description: `Highlight cells containing ${value}` }],
+      }
+    }
+
+    // "change the text to red" / "make the font blue"
+    if (colorWord && FONT_COLOR_HEX[colorWord] && /\b(text|font|writing)\b/.test(lower)) {
+      return {
+        message: `I will change the text color to ${colorWord}. Click Apply to confirm.`,
+        actions: [{ tool: 'format_cells', params: { fontColor: FONT_COLOR_HEX[colorWord] }, description: `Change text color to ${colorWord}` }],
+      }
+    }
+
+    // Simple "make it bold" / "highlight the selection"
+    const params: Record<string, unknown> = {}
+    if (lower.includes('bold')) params.bold = true
+    if (lower.includes('highlight')) params.bgColor = bgColor
+    else if (colorWord && HIGHLIGHT_BG_HEX[colorWord]) params.bgColor = HIGHLIGHT_BG_HEX[colorWord]
+    if (Object.keys(params).length === 0) {
+      // "format this nicely" with no concrete style — let the LLM decide
+      return { message: '', actions: [] }
+    }
     return {
       message: 'I will format the selected cells. Click Apply to confirm.',
-      actions: [{ tool: 'format_cells', params: { bold: lower.includes('bold'), bgColor: lower.includes('highlight') ? '#FFF9C4' : undefined }, description: 'Format selected cells' }],
+      actions: [{ tool: 'format_cells', params, description: 'Format selected cells' }],
     }
   }
 
