@@ -1,0 +1,281 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`template registry > per-template structure summary (regression snapshot) 1`] = `
+{
+  "create_accounts_payable": {
+    "cells": 36,
+    "formatSteps": 4,
+    "formattedCells": 12,
+  },
+  "create_accounts_receivable": {
+    "cells": 37,
+    "formatSteps": 4,
+    "formattedCells": 13,
+  },
+  "create_airbnb_income": {
+    "cells": 32,
+    "formatSteps": 4,
+    "formattedCells": 11,
+  },
+  "create_assignment_tracker": {
+    "cells": 34,
+    "formatSteps": 2,
+    "formattedCells": 7,
+  },
+  "create_baby_budget": {
+    "cells": 37,
+    "formatSteps": 4,
+    "formattedCells": 9,
+  },
+  "create_break_even": {
+    "cells": 35,
+    "formatSteps": 4,
+    "formattedCells": 11,
+  },
+  "create_budget_template": {
+    "cells": 63,
+    "formatSteps": 8,
+    "formattedCells": 19,
+  },
+  "create_cash_flow": {
+    "cells": 43,
+    "formatSteps": 2,
+    "formattedCells": 7,
+  },
+  "create_class_schedule": {
+    "cells": 23,
+    "formatSteps": 2,
+    "formattedCells": 7,
+  },
+  "create_client_tracker": {
+    "cells": 33,
+    "formatSteps": 4,
+    "formattedCells": 12,
+  },
+  "create_college_savings": {
+    "cells": 27,
+    "formatSteps": 3,
+    "formattedCells": 19,
+  },
+  "create_debt_snowball": {
+    "cells": 36,
+    "formatSteps": 5,
+    "formattedCells": 12,
+  },
+  "create_emergency_fund": {
+    "cells": 36,
+    "formatSteps": 3,
+    "formattedCells": 8,
+  },
+  "create_employee_roster": {
+    "cells": 47,
+    "formatSteps": 2,
+    "formattedCells": 9,
+  },
+  "create_equipment_depreciation": {
+    "cells": 33,
+    "formatSteps": 4,
+    "formattedCells": 12,
+  },
+  "create_expense_report": {
+    "cells": 25,
+    "formatSteps": 4,
+    "formattedCells": 8,
+  },
+  "create_freelancer_dashboard": {
+    "cells": 29,
+    "formatSteps": 6,
+    "formattedCells": 9,
+  },
+  "create_freelancer_invoice": {
+    "cells": 33,
+    "formatSteps": 4,
+    "formattedCells": 7,
+  },
+  "create_gpa_calculator": {
+    "cells": 26,
+    "formatSteps": 5,
+    "formattedCells": 8,
+  },
+  "create_habit_tracker": {
+    "cells": 51,
+    "formatSteps": 3,
+    "formattedCells": 11,
+  },
+  "create_holiday_budget": {
+    "cells": 40,
+    "formatSteps": 4,
+    "formattedCells": 11,
+  },
+  "create_hourly_timesheet": {
+    "cells": 47,
+    "formatSteps": 4,
+    "formattedCells": 11,
+  },
+  "create_income_expense_log": {
+    "cells": 41,
+    "formatSteps": 4,
+    "formattedCells": 11,
+  },
+  "create_inventory_tracker": {
+    "cells": 38,
+    "formatSteps": 4,
+    "formattedCells": 10,
+  },
+  "create_invoice": {
+    "cells": 44,
+    "formatSteps": 8,
+    "formattedCells": 14,
+  },
+  "create_kpi_dashboard": {
+    "cells": 24,
+    "formatSteps": 2,
+    "formattedCells": 5,
+  },
+  "create_lease_tracker": {
+    "cells": 31,
+    "formatSteps": 2,
+    "formattedCells": 7,
+  },
+  "create_meal_planner": {
+    "cells": 45,
+    "formatSteps": 6,
+    "formattedCells": 10,
+  },
+  "create_medical_expenses": {
+    "cells": 35,
+    "formatSteps": 4,
+    "formattedCells": 11,
+  },
+  "create_mileage_tracker": {
+    "cells": 28,
+    "formatSteps": 4,
+    "formattedCells": 10,
+  },
+  "create_mortgage_calculator": {
+    "cells": 28,
+    "formatSteps": 4,
+    "formattedCells": 13,
+  },
+  "create_net_worth_tracker": {
+    "cells": 34,
+    "formatSteps": 6,
+    "formattedCells": 8,
+  },
+  "create_payroll_sheet": {
+    "cells": 37,
+    "formatSteps": 4,
+    "formattedCells": 12,
+  },
+  "create_pnl_statement": {
+    "cells": 34,
+    "formatSteps": 8,
+    "formattedCells": 12,
+  },
+  "create_profit_margin": {
+    "cells": 23,
+    "formatSteps": 4,
+    "formattedCells": 8,
+  },
+  "create_project_quote": {
+    "cells": 33,
+    "formatSteps": 4,
+    "formattedCells": 8,
+  },
+  "create_project_tracker": {
+    "cells": 49,
+    "formatSteps": 2,
+    "formattedCells": 8,
+  },
+  "create_property_comparison": {
+    "cells": 37,
+    "formatSteps": 3,
+    "formattedCells": 13,
+  },
+  "create_quarterly_tax": {
+    "cells": 36,
+    "formatSteps": 4,
+    "formattedCells": 12,
+  },
+  "create_renovation_budget": {
+    "cells": 31,
+    "formatSteps": 4,
+    "formattedCells": 11,
+  },
+  "create_rent_roll": {
+    "cells": 40,
+    "formatSteps": 4,
+    "formattedCells": 12,
+  },
+  "create_rental_property": {
+    "cells": 29,
+    "formatSteps": 4,
+    "formattedCells": 11,
+  },
+  "create_retirement_calculator": {
+    "cells": 23,
+    "formatSteps": 3,
+    "formattedCells": 17,
+  },
+  "create_roi_calculator": {
+    "cells": 21,
+    "formatSteps": 3,
+    "formattedCells": 16,
+  },
+  "create_sales_tracker": {
+    "cells": 53,
+    "formatSteps": 3,
+    "formattedCells": 12,
+  },
+  "create_savings_goal": {
+    "cells": 44,
+    "formatSteps": 2,
+    "formattedCells": 6,
+  },
+  "create_scholarship_tracker": {
+    "cells": 35,
+    "formatSteps": 6,
+    "formattedCells": 11,
+  },
+  "create_startup_costs": {
+    "cells": 45,
+    "formatSteps": 4,
+    "formattedCells": 10,
+  },
+  "create_student_gradebook": {
+    "cells": 29,
+    "formatSteps": 4,
+    "formattedCells": 9,
+  },
+  "create_student_loan_payoff": {
+    "cells": 39,
+    "formatSteps": 4,
+    "formattedCells": 15,
+  },
+  "create_travel_budget": {
+    "cells": 40,
+    "formatSteps": 4,
+    "formattedCells": 10,
+  },
+  "create_unit_economics": {
+    "cells": 21,
+    "formatSteps": 4,
+    "formattedCells": 17,
+  },
+  "create_wedding_budget": {
+    "cells": 51,
+    "formatSteps": 4,
+    "formattedCells": 14,
+  },
+  "create_weight_tracker": {
+    "cells": 33,
+    "formatSteps": 5,
+    "formattedCells": 11,
+  },
+  "create_workout_log": {
+    "cells": 41,
+    "formatSteps": 6,
+    "formattedCells": 11,
+  },
+}
+`;

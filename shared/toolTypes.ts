@@ -54,4 +54,10 @@ export interface ToolDefinition {
   examples: string[]
   /** When set, this tool is a legacy alias that dispatches to the named canonical tool. */
   aliasFor?: string
+  /**
+   * Hidden tools are valid for execution (allowlist, executor delegation) but
+   * excluded from the LLM system prompt to keep it compact. Used for the
+   * niche gallery templates, which are launched from the template gallery.
+   */
+  hidden?: boolean
 }

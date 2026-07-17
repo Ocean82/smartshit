@@ -85,4 +85,28 @@ describe('shared toolRegistry', () => {
     expect(prompt).not.toContain('conditional_format')
     expect(prompt).toContain('create_budget_template')
   })
+
+  it('hidden niche templates are registered but excluded from the LLM prompt', () => {
+    const hidden = TOOL_REGISTRY.filter((t) => t.hidden)
+    expect(hidden.length).toBe(48)
+    for (const tool of hidden) {
+      expect(tool.category, tool.name).toBe('template')
+      expect(TEMPLATE_TOOL_NAMES, tool.name).toContain(tool.name)
+      expect(ACTION_TOOL_NAMES, tool.name).toContain(tool.name)
+    }
+    const prompt = formatToolsForPrompt()
+    expect(prompt).not.toContain('create_wedding_budget')
+    expect(prompt).not.toContain('create_workout_log')
+  })
+
+  it('server allowlist accepts hidden template tools', () => {
+    const raw = JSON.stringify({
+      message: 'ok',
+      actions: [
+        { tool: 'create_wedding_budget', params: {}, description: 'Wedding budget' },
+      ],
+    })
+    const parsed = parseAgentResponse(raw)
+    expect(parsed.actions.map((a) => a.tool)).toEqual(['create_wedding_budget'])
+  })
 })

@@ -7,7 +7,7 @@
 
 import type { ParsedToolCall } from './parser'
 import { refToCell, cellToRef, letterToCol } from '@/engine/spreadsheet'
-import type { SheetData, FilterConfig, CellFormat } from '@/types'
+import type { SheetData, FilterConfig, CellFormat, ChartConfig } from '@/types'
 import { computeSortedCellUpdates, findHeaderRow, findLastDataRow, type SortPatch } from '@/lib/sheetSort'
 import { applyFormatCells } from '@/lib/formatCellsTool'
 import { resolveToolName, TEMPLATE_TOOL_NAMES } from '@shared/toolRegistry'
@@ -27,7 +27,9 @@ export interface ExecutionContext {
   pushHistory: (desc: string) => void
   /** Currently selected cell ids, if any (used by format_cells defaults). */
   getSelection?: () => string[]
-  /** Runs a create_* template via the store's template handlers. */
+  /** Adds a chart to the active sheet (used by create_chart). */
+  addChart?: (chart: ChartConfig) => void
+  /** Runs a create_* template via the template module (src/templates). */
   executeTemplate?: (tool: string, params: Record<string, unknown>) => ExecutionResult
 }
 
