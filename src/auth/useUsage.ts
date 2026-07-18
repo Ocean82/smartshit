@@ -46,16 +46,41 @@ function useUnlimitedUsage() {
 
 /** Production hook — checks Clerk session metadata for Pro plan */
 function useTrackedUsage() {
-  const { sessionClaims } = useAuth()
+  const { sessionClaims, getToken } = useAuth()
   const [usage, setUsage] = useState<UsageData>(getStoredUsage)
+  const [serverIsPro, setServerIsPro] = useState<boolean | null>(null)
 
   // Check plan from Clerk session claims (set via webhook -> Clerk Backend API)
+  // Clerk exposes publicMetadata in JWT claims — check multiple possible paths
   const claims = sessionClaims as Record<string, unknown> | undefined
-  const metadata = (claims?.metadata ?? claims?.publicMetadata) as Record<string, unknown> | undefined
-  const isPro = Boolean(
+  const metadata = (
+    claims?.metadata ??
+    claims?.publicMetadata ??
+    (claims?.public_metadata as Record<string, unknown> | undefined)
+  ) as Record<string, unknown> | undefined
+  const claimsPro = Boolean(
     metadata?.plan === 'pro' ||
     metadata?.stripeSubscriptionId
   )
+
+  // Fetch server-side usage/pro status once per session as authoritative source
+  useState(() => {
+    const API_BASE = import.meta.env.VITE_AI_API_URL ?? ''
+    getToken().then((token) => {
+      if (!token) return
+      fetch(`${API_BASE}/api/usage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      })
+        .then((r) => r.ok ? r.json() : null)
+        .then((data) => {
+          if (data && (data.limit === null || data.remaining === null)) setServerIsPro(true)
+        })
+        .catch(() => {})
+    })
+  })
+
+  const isPro = claimsPro || serverIsPro === true
 
   const canAsk = isPro || usage.count < FREE_DAILY_LIMIT
   const remaining = isPro ? Infinity : Math.max(0, FREE_DAILY_LIMIT - usage.count)
