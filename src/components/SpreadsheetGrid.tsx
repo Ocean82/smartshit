@@ -346,6 +346,35 @@ export function SpreadsheetGrid() {
     setResizeStartWidth(getColWidth(col));
   }, [getColWidth]);
 
+  // Auto-fit column width based on content
+  const handleAutoFitColumn = useCallback((col: number) => {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.font = '13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+
+    let maxWidth = 40; // minimum width
+    // Check header width
+    const headerText = colToLetter(col);
+    maxWidth = Math.max(maxWidth, ctx.measureText(headerText).width + 24);
+
+    // Check all cells in the column that have data
+    for (const [cellId, cellData] of Object.entries(sheet.cells)) {
+      const ref = cellToRef(cellId);
+      if (ref.col !== col) continue;
+      const computed = getComputedValue(ref.row, ref.col);
+      const text = computed || String(cellData.value ?? '');
+      if (text) {
+        const measured = ctx.measureText(text).width + 20; // padding
+        maxWidth = Math.max(maxWidth, measured);
+      }
+    }
+
+    // Cap at a reasonable max
+    maxWidth = Math.min(maxWidth, 400);
+    setColumnWidths((prev) => ({ ...prev, [col]: Math.ceil(maxWidth) }));
+  }, [sheet.cells, getComputedValue]);
+
   useEffect(() => {
     if (resizingCol === null) return;
     const handleMove = (e: MouseEvent) => {
@@ -591,6 +620,33 @@ export function SpreadsheetGrid() {
           scrollTop={scrollState.scrollTop}
           scrollLeft={scrollState.scrollLeft}
         />
+        {/* Freeze pane indicators */}
+        {sheet.frozenRows && sheet.frozenRows > 0 && (
+          <div
+            className="absolute pointer-events-none z-[8]"
+            style={{
+              top: sheet.frozenRows * CELL_HEIGHT + COL_HEADER_HEIGHT,
+              left: 0,
+              right: 0,
+              height: 2,
+              backgroundColor: '#3b82f6',
+              opacity: 0.6,
+            }}
+          />
+        )}
+        {sheet.frozenCols && sheet.frozenCols > 0 && (
+          <div
+            className="absolute pointer-events-none z-[8]"
+            style={{
+              top: 0,
+              left: (() => { let w = ROW_HEADER_WIDTH; for (let c = 0; c < (sheet.frozenCols ?? 0); c++) w += getColWidth(c); return w; })(),
+              bottom: 0,
+              width: 2,
+              backgroundColor: '#3b82f6',
+              opacity: 0.6,
+            }}
+          />
+        )}
         {/* Column headers - sticky */}
         <div className="flex sticky top-0 z-20" style={{ height: COL_HEADER_HEIGHT }}>
           <div
@@ -628,6 +684,7 @@ export function SpreadsheetGrid() {
                     <div
                       className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-400 opacity-0 group-hover:opacity-100 z-10"
                       onMouseDown={(e) => handleResizeStart(col, e)}
+                      onDoubleClick={(e) => { e.stopPropagation(); handleAutoFitColumn(col); }}
                     />
                   </div>
                 );

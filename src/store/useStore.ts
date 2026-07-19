@@ -160,6 +160,8 @@ interface AppState {
   // Data operations
   addChart: (chart: ChartConfig) => void;
   removeChart: (chartId: string) => void;
+  updateChartPosition: (chartId: string, x: number, y: number) => void;
+  setFreeze: (rows: number, cols: number) => void;
   setSortConfig: (config: SortConfig | null) => void;
   setFilters: (filters: FilterConfig[]) => void;
   sortByColumn: (column: number, direction: 'asc' | 'desc') => void;
@@ -902,6 +904,29 @@ export const useStore = create<AppState>()(
           const sheet = s.workbook.sheets.find((sh) => sh.id === s.activeSheetId);
           if (sheet && sheet.charts) {
             sheet.charts = sheet.charts.filter((c) => c.id !== chartId);
+          }
+        });
+      },
+
+      updateChartPosition: (chartId, x, y) => {
+        set((s) => {
+          const sheet = s.workbook.sheets.find((sh) => sh.id === s.activeSheetId);
+          if (sheet && sheet.charts) {
+            const chart = sheet.charts.find((c) => c.id === chartId);
+            if (chart) {
+              chart.position.x = x;
+              chart.position.y = y;
+            }
+          }
+        });
+      },
+
+      setFreeze: (rows, cols) => {
+        set((s) => {
+          const sheet = s.workbook.sheets.find((sh) => sh.id === s.activeSheetId);
+          if (sheet) {
+            sheet.frozenRows = rows;
+            sheet.frozenCols = cols;
           }
         });
       },

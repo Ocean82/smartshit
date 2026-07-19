@@ -20,7 +20,7 @@ export function ChartOverlay() {
 }
 
 function ChartCard({ chart, onRemove }: { chart: ChartConfig; onRemove: () => void }) {
-  const { getActiveSheet, getComputedValue } = useStore();
+  const { getActiveSheet, getComputedValue, updateChartPosition } = useStore();
   const sheet = getActiveSheet();
   const [pos, setPos] = useState({ x: chart.position.x, y: chart.position.y });
   const [isDragging, setIsDragging] = useState(false);
@@ -40,8 +40,11 @@ function ChartCard({ chart, onRemove }: { chart: ChartConfig; onRemove: () => vo
   }, [isDragging, dragOffset]);
 
   const handleMouseUp = useCallback(() => {
+    if (isDragging) {
+      updateChartPosition(chart.id, pos.x, pos.y);
+    }
     setIsDragging(false);
-  }, []);
+  }, [isDragging, pos, chart.id, updateChartPosition]);
 
   const maxVal = Math.max(...data.values.map(Math.abs), 1);
 

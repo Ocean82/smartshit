@@ -28,6 +28,8 @@ import { TelemetryDebugPanel } from '@/components/TelemetryDebugPanel'
 import { WorkbookPicker } from '@/components/WorkbookPicker'
 import { VersionHistoryPanel } from '@/components/VersionHistoryPanel'
 import { ShareDialog } from '@/components/ShareDialog'
+import { FormulaBar } from '@/components/FormulaBar'
+import { GoToCellDialog } from '@/components/GoToCellDialog'
 import { Sparkles, Zap, Cloud, CloudOff, Loader2, Share2, PanelLeftOpen, MessageSquare } from 'lucide-react'
 import { UserNav } from '@/auth'
 import {
@@ -60,6 +62,7 @@ function App() {
   const [showCommandPalette, setShowCommandPalette] = useState(false)
   const [showWorkbookPicker, setShowWorkbookPicker] = useState(false)
   const [showShareDialog, setShowShareDialog] = useState(false)
+  const [showGoToCell, setShowGoToCell] = useState(false)
   const [isMobileChatOpen, setIsMobileChatOpen] = useState(false)
   const jsonRestoreInputRef = useRef<HTMLInputElement>(null)
 
@@ -88,6 +91,10 @@ function App() {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault()
         setShowCommandPalette(true)
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'g') {
+        e.preventDefault()
+        setShowGoToCell(true)
       }
     }
     document.addEventListener('keydown', handler)
@@ -119,6 +126,7 @@ function App() {
         <MenuBar />
         <Toolbar />
       </div>
+      <FormulaBar />
 
       <div className="flex-1 flex overflow-hidden min-h-0">
         <FileExplorer />
@@ -216,6 +224,7 @@ function App() {
       />
       <WorkbookPicker open={showWorkbookPicker} onClose={() => setShowWorkbookPicker(false)} />
       <ShareDialog open={showShareDialog} onClose={() => setShowShareDialog(false)} />
+      <GoToCellDialog open={showGoToCell} onClose={() => setShowGoToCell(false)} />
       {import.meta.env.DEV ? <TelemetryDebugPanel /> : null}
     </div>
   )

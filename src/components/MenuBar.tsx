@@ -200,6 +200,8 @@ export function MenuBar() {
         { label: showFileExplorer ? '✓ File Explorer' : '  File Explorer', action: () => { toggleFileExplorer(); setOpenMenu(null) } },
         { label: showFormatPanel ? '✓ Format Panel' : '  Format Panel', action: () => { setShowFormatPanel(!showFormatPanel); setOpenMenu(null) } },
         { label: showVersionHistory ? '✓ Version History' : '  Version History', action: () => { setShowVersionHistory(!showVersionHistory); setOpenMenu(null) }, dividerAfter: true },
+        { label: 'Freeze Panes', action: () => { if (selection) { useStore.getState().setFreeze(selection.startRow, selection.startCol); } setOpenMenu(null) }, disabled: !selection },
+        { label: 'Unfreeze Panes', action: () => { useStore.getState().setFreeze(0, 0); setOpenMenu(null) }, dividerAfter: true },
         { label: 'Full Screen', shortcut: 'F11', action: () => { document.documentElement.requestFullscreen?.(); setOpenMenu(null) } },
       ],
     },
