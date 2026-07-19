@@ -73,7 +73,7 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
     name: 'format_cells',
     category: 'mutate',
     description:
-      'Format cells: bold, background color, font color, font size. Optional "range" (e.g. "A1:D1", "B", "B2:B10"); defaults to selection or populated cells. Optional "condition" targets cells by value.',
+      'Format cells: bold, background color, font color, font size, number format. Optional "range" (e.g. "A1:D1", "B", "B2:B10"); defaults to selection or populated cells. Optional "condition" targets cells by value.',
     params: [
       { name: 'range', type: 'string', description: 'A1-style range, column letter, or single cell. Omit to use selection/whole sheet.' },
       { name: 'bold', type: 'boolean', description: 'Make text bold' },
@@ -81,6 +81,7 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
       { name: 'fontSize', type: 'number', description: 'Font size in px' },
       { name: 'bgColor', type: 'string', description: 'Background color hex, e.g. "#FFF9C4"' },
       { name: 'fontColor', type: 'string', description: 'Font color hex, e.g. "#FF0000"' },
+      { name: 'numberFormat', type: 'string', description: 'Number format: number, number-int, currency, currency-int, currency-gbp, currency-eur, currency-jpy, accounting, accounting-neg, percent, percent-int, date, date-iso, date-long, date-short-eu, time, time-24, datetime, fraction, scientific, text' },
       {
         name: 'condition',
         type: 'object',
@@ -93,6 +94,8 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
       'change the text to red',
       'bold the headers',
       'highlight negative values in red',
+      'format column B as currency',
+      'show column C as percentages',
     ],
   },
   {

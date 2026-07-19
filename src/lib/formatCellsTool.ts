@@ -179,6 +179,7 @@ export function buildFormatPatch(params: FormatCellsParams): Partial<CellFormat>
   if (typeof params.fontSize === 'number') patch.fontSize = params.fontSize
   if (typeof params.bgColor === 'string' && params.bgColor) patch.bgColor = params.bgColor
   if (typeof params.fontColor === 'string' && params.fontColor) patch.fontColor = params.fontColor
+  if (typeof params.numberFormat === 'string' && params.numberFormat) patch.numberFormat = params.numberFormat
   return Object.keys(patch).length > 0 ? patch : null
 }
 

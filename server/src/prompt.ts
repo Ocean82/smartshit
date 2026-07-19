@@ -270,6 +270,8 @@ format_cells condition examples (shape: {operator, value?}):
 - Highlight cells containing 4: {"tool":"format_cells","params":{"condition":{"operator":"contains","value":"4"},"bgColor":"#FFF9C4"}}
 - Red font for negatives in column B: {"tool":"format_cells","params":{"range":"B","condition":{"operator":"negative"},"fontColor":"#FF0000"}}
 - Highlight values over 500: {"tool":"format_cells","params":{"condition":{"operator":"gt","value":500},"bgColor":"#FFE0B2"}}
+- Format column B as currency: {"tool":"format_cells","params":{"range":"B","numberFormat":"currency"}}
+- Show column C as percentages: {"tool":"format_cells","params":{"range":"C","numberFormat":"percent"}}
 
 Rules:
 - message: plain English, friendly, short. Describe what you will do.

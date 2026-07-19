@@ -6,7 +6,7 @@ import { FormulaAutocomplete } from './FormulaAutocomplete';
 import { FindReplaceDialog } from './FindReplaceDialog';
 import { SelectionOverlay } from './SelectionOverlay';
 import type { CellFormat } from '@/types';
-import { formatCellValue, getBorderCSS } from '@/lib/formatUtils';
+import { formatCellValue, getBorderCSS, isNegativeRedFormat } from '@/lib/formatUtils';
 import { buildFilteredRowIndex } from '@/lib/rowFilter';
 import { findHeaderRow, findLastDataRow } from '@/lib/sheetSort';
 import { resolveCellFormat, getDataBarRule, dataBarWidthPercent, columnDataBarPeerValues } from '@/lib/conditionalFormat';
@@ -439,9 +439,9 @@ export function SpreadsheetGrid() {
     return selection?.startRow === row && selection?.startCol === col;
   }, [selection]);
 
-  const getCellStyle = useCallback((format: CellFormat | undefined): React.CSSProperties => {
+  const getCellStyle = useCallback((format: CellFormat | undefined, cellValue?: string | number | boolean | null): React.CSSProperties => {
     if (!format) return {};
-    return {
+    const style: React.CSSProperties = {
       fontWeight: format.bold ? 700 : undefined,
       fontStyle: format.italic ? 'italic' : undefined,
       textDecoration: format.underline ? 'underline' : undefined,
@@ -451,6 +451,11 @@ export function SpreadsheetGrid() {
       textAlign: format.textAlign || undefined,
       ...getBorderCSS(format.borders),
     };
+    // Apply red text for negative values with number-neg-red format
+    if (isNegativeRedFormat(format.numberFormat, cellValue ?? null) && !format.fontColor) {
+      style.color = '#DC2626';
+    }
+    return style;
   }, []);
 
   // Select all cells in a row
@@ -749,7 +754,7 @@ export function SpreadsheetGrid() {
                           height: CELL_HEIGHT,
                           position: 'absolute',
                           left: visibleColOffsets.offsets[j],
-                          ...getCellStyle(resolveCellFormat(cellData?.format, computed)),
+                          ...getCellStyle(resolveCellFormat(cellData?.format, computed), rawValue),
                           ...(pendingChange ? { backgroundColor: undefined } : {}),
                         }}
                         onMouseDown={(e) => handleMouseDown(row, col, e)}

@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { useStore } from '@/store/useStore';
 import { refToCell } from '@/engine/spreadsheet';
-import { NUMBER_FORMATS } from '@/lib/formatUtils';
+import { NUMBER_FORMATS, NUMBER_FORMAT_GROUPS } from '@/lib/formatUtils';
 import { FULL_COLORS as COLORS } from '@/data/colors';
 import type { CellFormat } from '@/types';
 
@@ -213,9 +213,22 @@ export function FormatPanel() {
             aria-label="Number format"
             disabled={!hasSelection}
           >
-            {NUMBER_FORMATS.map((f) => (
-              <option key={f.value} value={f.value}>{f.label}</option>
-            ))}
+            {NUMBER_FORMAT_GROUPS.map((group) => {
+              const groupFormats = NUMBER_FORMATS.filter((f) => f.group === group);
+              if (!groupFormats.length) return null;
+              if (group === 'General') {
+                return groupFormats.map((f) => (
+                  <option key={f.value} value={f.value}>{f.label}</option>
+                ));
+              }
+              return (
+                <optgroup key={group} label={group}>
+                  {groupFormats.map((f) => (
+                    <option key={f.value} value={f.value}>{f.label}</option>
+                  ))}
+                </optgroup>
+              );
+            })}
           </select>
         </div>
       </Section>

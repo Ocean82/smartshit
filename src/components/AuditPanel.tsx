@@ -43,8 +43,12 @@ export function AuditPanel() {
     const store = useStore.getState()
     const { cellId, formula, value } = finding.fixAction
 
+    store.pushHistory('Audit auto-fix')
+
     if (formula) {
-      store.setCellValue(cellId, formula.startsWith('=') ? formula : `=${formula}`)
+      // setCellValue(cellId, value, formula) — formula goes in 3rd arg
+      const formulaStr = formula.startsWith('=') ? formula : `=${formula}`
+      store.setCellValue(cellId, null, formulaStr)
     } else if (value !== undefined) {
       store.setCellValue(cellId, value)
     }
@@ -88,7 +92,7 @@ export function AuditPanel() {
     : ''
 
   return (
-    <div className="w-72 border-r border-gray-200 flex flex-col bg-white shrink-0">
+    <div className="w-72 border-l border-gray-200 flex flex-col bg-white shrink-0">
       {/* Header */}
       <div className="px-3 py-2.5 border-b border-gray-200 flex items-center justify-between">
         <div className="flex items-center gap-1.5">

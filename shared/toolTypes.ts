@@ -34,6 +34,8 @@ export interface FormatCellsParams {
   fontSize?: number
   bgColor?: string
   fontColor?: string
+  /** Number format key (e.g. "currency", "percent", "date-iso", "accounting-neg"). */
+  numberFormat?: string
   /** When present, only cells matching the condition are formatted. */
   condition?: FormatCondition
 }
