@@ -50,6 +50,16 @@
   animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
+/* Marching ants animation for copy/cut feedback */
+@keyframes marching-ants {
+  0% { background-position: 0 0, 100% 0, 100% 100%, 0 100%; }
+  100% { background-position: 20px 0, calc(100% - 20px) 0, calc(100% - 20px) 100%, 20px 100%; }
+}
+
+.animate-marching-ants {
+  animation: marching-ants 0.4s linear infinite;
+}
+
 /* Custom focus styles */
 input:focus, textarea:focus, select:focus {
   outline: none;

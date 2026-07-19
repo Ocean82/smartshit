@@ -1,7 +1,7 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useStore } from '@/store/useStore'
 import { refToCell, cellToRef } from '@/engine/spreadsheet'
-import { TrendingUp, TrendingDown, Wallet, PiggyBank } from 'lucide-react'
+import { TrendingUp, TrendingDown, Wallet, PiggyBank, ChevronDown, ChevronRight } from 'lucide-react'
 
 interface BudgetMetric {
   label: string
@@ -112,32 +112,48 @@ export function SummaryCards() {
     },
   ]
 
+  const [collapsed, setCollapsed] = useState(false)
+
   return (
-    <div className="px-4 py-3 bg-gradient-to-r from-slate-50 to-blue-50 border-b border-gray-200">
-      <div className="flex items-center gap-2 mb-2">
-        <Wallet size={14} className="text-slate-500" />
-        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+    <div className="border-b border-gray-200">
+      <button
+        type="button"
+        onClick={() => setCollapsed(!collapsed)}
+        className="w-full flex items-center gap-2 px-4 py-1.5 bg-gradient-to-r from-slate-50 to-blue-50 hover:from-slate-100 hover:to-blue-100 transition-colors"
+      >
+        {collapsed ? <ChevronRight size={12} className="text-slate-400" /> : <ChevronDown size={12} className="text-slate-400" />}
+        <Wallet size={12} className="text-slate-500" />
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
           At a glance
         </span>
-      </div>
-      <div className="grid grid-cols-3 gap-3">
-        {cards.map(({ icon: Icon, label, metric, color, bg }) => (
-          <div key={label} className={`rounded-xl ${bg} px-3 py-2.5 border border-white/80`}>
-            <div className="flex items-center gap-1.5 mb-1">
-              <Icon size={12} className={color} />
-              <span className="text-[10px] font-medium uppercase tracking-wide text-gray-500">
-                {label}
-              </span>
-            </div>
-            <p className={`text-lg font-bold ${color}`}>
-              {metric ? metric.formatted : '—'}
-            </p>
-            {metric && (
-              <p className="text-[10px] text-gray-500 truncate">{metric.label}</p>
-            )}
+        {collapsed && metrics.income && (
+          <span className="ml-auto text-[10px] text-gray-500">
+            Income: {metrics.income.formatted} | Expenses: {metrics.expenses?.formatted ?? '—'}
+          </span>
+        )}
+      </button>
+      {!collapsed && (
+        <div className="px-4 py-2 bg-gradient-to-r from-slate-50 to-blue-50">
+          <div className="grid grid-cols-3 gap-3">
+            {cards.map(({ icon: Icon, label, metric, color, bg }) => (
+              <div key={label} className={`rounded-xl ${bg} px-3 py-2.5 border border-white/80`}>
+                <div className="flex items-center gap-1.5 mb-1">
+                  <Icon size={12} className={color} />
+                  <span className="text-[10px] font-medium uppercase tracking-wide text-gray-500">
+                    {label}
+                  </span>
+                </div>
+                <p className={`text-lg font-bold ${color}`}>
+                  {metric ? metric.formatted : '—'}
+                </p>
+                {metric && (
+                  <p className="text-[10px] text-gray-500 truncate">{metric.label}</p>
+                )}
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+        </div>
+      )}
     </div>
   )
 }

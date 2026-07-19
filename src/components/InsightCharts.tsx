@@ -9,7 +9,7 @@
  * Only renders when meaningful budget data is detected.
  */
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useStore } from '@/store/useStore'
 import { computeSheetInsights } from '@/ai/sheetInsights'
 
@@ -32,14 +32,37 @@ export function InsightCharts() {
 
   if (!hasCategories && !hasIncomeExpense) return null
 
+  const [collapsed, setCollapsed] = useState(true)
+
   return (
-    <div className="flex gap-3 px-3 py-2 border-b border-gray-100 overflow-x-auto bg-gray-50/50">
-      {hasCategories && <CategoryBarChart categories={insights.categoryTotals ?? []} />}
-      {hasIncomeExpense && (
-        <IncomeExpenseGauge
-          income={insights.totalIncome ?? 0}
-          expenses={insights.totalExpenses ?? 0}
-        />
+    <div className="border-b border-gray-100">
+      <button
+        type="button"
+        onClick={() => setCollapsed(!collapsed)}
+        className="w-full flex items-center gap-2 px-3 py-1.5 bg-gray-50/50 hover:bg-gray-100/50 transition-colors text-left"
+      >
+        <span className="text-[10px] text-gray-400">{collapsed ? '▶' : '▼'}</span>
+        <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">
+          Insights
+        </span>
+        {collapsed && (
+          <span className="ml-auto text-[10px] text-gray-400">
+            {hasCategories ? `${insights.categoryTotals?.length ?? 0} categories` : ''}
+            {hasCategories && hasIncomeExpense ? ' · ' : ''}
+            {hasIncomeExpense ? 'Income vs Expenses' : ''}
+          </span>
+        )}
+      </button>
+      {!collapsed && (
+        <div className="flex gap-3 px-3 py-2 overflow-x-auto bg-gray-50/50">
+          {hasCategories && <CategoryBarChart categories={insights.categoryTotals ?? []} />}
+          {hasIncomeExpense && (
+            <IncomeExpenseGauge
+              income={insights.totalIncome ?? 0}
+              expenses={insights.totalExpenses ?? 0}
+            />
+          )}
+        </div>
       )}
     </div>
   )

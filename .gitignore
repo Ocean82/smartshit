@@ -21,7 +21,7 @@ server/dist/
 
 # Archived local prototypes (consolidated into root src/)
 prototypes/
-
+temp/
 # Local scratch notes (not shipped documentation)
 docs/images/notes
 

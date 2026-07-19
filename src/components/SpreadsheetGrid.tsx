@@ -4,6 +4,7 @@ import { useStore } from '@/store/useStore';
 import { colToLetter, refToCell, cellToRef } from '@/engine/spreadsheet';
 import { FormulaAutocomplete } from './FormulaAutocomplete';
 import { FindReplaceDialog } from './FindReplaceDialog';
+import { SelectionOverlay } from './SelectionOverlay';
 import type { CellFormat } from '@/types';
 import { formatCellValue, getBorderCSS } from '@/lib/formatUtils';
 import { buildFilteredRowIndex } from '@/lib/rowFilter';
@@ -580,6 +581,16 @@ export function SpreadsheetGrid() {
       style={{ outline: 'none', userSelect: 'none', WebkitOverflowScrolling: 'touch' }}
     >
       <div style={{ minWidth: ROW_HEADER_WIDTH + totalWidth + 20, height: totalHeight + COL_HEADER_HEIGHT }}>
+        {/* Selection range overlay */}
+        <SelectionOverlay
+          getColWidth={getColWidth}
+          totalCols={TOTAL_COLS}
+          cellHeight={CELL_HEIGHT}
+          rowHeaderWidth={ROW_HEADER_WIDTH}
+          colHeaderHeight={COL_HEADER_HEIGHT}
+          scrollTop={scrollState.scrollTop}
+          scrollLeft={scrollState.scrollLeft}
+        />
         {/* Column headers - sticky */}
         <div className="flex sticky top-0 z-20" style={{ height: COL_HEADER_HEIGHT }}>
           <div

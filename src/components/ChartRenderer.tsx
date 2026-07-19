@@ -53,15 +53,17 @@ function ChartCard({ chart, onRemove }: { chart: ChartConfig; onRemove: () => vo
         top: pos.y,
         width: chart.position.width,
         height: chart.position.height,
+        pointerEvents: 'none',
       }}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseUp}
     >
-      {/* Chart header */}
+      {/* Chart header — interactive for drag and close */}
       <div
         className="flex items-center justify-between px-3 py-2 bg-gray-50 border-b border-gray-200 cursor-move"
+        style={{ pointerEvents: 'auto' }}
         onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}
       >
         <div className="flex items-center gap-1.5">
           <Move size={12} className="text-gray-400" />
@@ -75,7 +77,7 @@ function ChartCard({ chart, onRemove }: { chart: ChartConfig; onRemove: () => vo
         </button>
       </div>
 
-      {/* Chart body */}
+      {/* Chart body — pointer-events: none inherited, users can click through to grid */}
       <div className="p-3 flex-1" style={{ height: chart.position.height - 40 }}>
         {chart.type === 'bar' || chart.type === 'column' ? (
           <BarChart data={data} colors={chart.colors || []} maxVal={maxVal} horizontal={chart.type === 'bar'} />

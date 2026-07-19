@@ -91,6 +91,7 @@ interface AppState {
 
   // Clipboard
   clipboard: { cells: Record<string, CellData>; selection: Selection } | null;
+  copiedRange: Selection | null;
 
   // Sort/Filter
   activeFilters: FilterConfig[];
@@ -257,6 +258,7 @@ export const useStore = create<AppState>()(
       attachedFilePreview: null,
       skills: defaultSkills,
       clipboard: null,
+      copiedRange: null,
       activeFilters: [],
       activeSortConfig: null,
       scrollRow: 0,
@@ -855,7 +857,7 @@ export const useStore = create<AppState>()(
             }
           }
         }
-        set((s) => { s.clipboard = { cells, selection: sel }; });
+        set((s) => { s.clipboard = { cells, selection: sel }; s.copiedRange = sel; });
       },
 
       cut: () => {
@@ -882,6 +884,7 @@ export const useStore = create<AppState>()(
             get().setCellFormat(newCellId, cellData.format);
           }
         }
+        set((s) => { s.copiedRange = null; });
       },
 
       addChart: (chart) => {
