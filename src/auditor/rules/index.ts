@@ -9,9 +9,11 @@ import { circularRefsRule } from './circularRefs'
 import { rangeGapsRule } from './rangeGaps'
 import { inconsistentFormulasRule } from './inconsistentFormulas'
 import { hardcodedConstantsRule } from './hardcodedConstants'
+import { hiddenDependenciesRule } from './hiddenDependencies'
 import { magnitudeOutliersRule } from './magnitudeOutliers'
 import { volatileFunctionsRule } from './volatileFunctions'
 import { orphanedFormulasRule } from './orphanedFormulas'
+import { duplicateFormulasRule } from './duplicateFormulas'
 
 export const ALL_RULES: AuditRule[] = [
   // Critical
@@ -22,9 +24,11 @@ export const ALL_RULES: AuditRule[] = [
   inconsistentFormulasRule,
   // Medium
   hardcodedConstantsRule,
+  hiddenDependenciesRule,
   // Low
   magnitudeOutliersRule,
   orphanedFormulasRule,
   // Info
   volatileFunctionsRule,
+  duplicateFormulasRule,
 ]

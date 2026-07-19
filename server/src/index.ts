@@ -161,8 +161,13 @@ async function runLlmChat(params: {
   // Few-shot examples for explain/advise mode — teaches the model the response style.
   // Full library lives in prompts/fewShot.ts (8 examples covering audit, budget,
   // formula help, debugging, teaching, vague requests, off-topic, and performance).
+  // Token budget: when context is large (>3k chars), trim to 4 examples to leave
+  // room for actual data. The first 4 cover the most critical patterns (audit,
+  // budget, formula, debugging).
+  const contextSize = systemPrompt.length
+  const maxExamples = contextSize > 3000 ? 4 : FEW_SHOT_EXAMPLES.length
   const fewShot: Array<{ role: 'user' | 'assistant'; content: string }> = llmOnly
-    ? FEW_SHOT_EXAMPLES
+    ? FEW_SHOT_EXAMPLES.slice(0, maxExamples)
     : []
 
   const messages = [

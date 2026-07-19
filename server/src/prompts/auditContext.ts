@@ -1,13 +1,15 @@
 /**
  * Formats audit findings for injection into the system prompt.
  *
- * NOTE: In this project, audit data flows from the frontend via the
- * `deterministicSummary` field in SpreadsheetContextInput. The frontend
- * runs the auditor locally (src/auditor/index.ts → formatAuditForContext)
- * and includes the results in the context payload.
+ * CURRENT STATUS: This module is a structured alternative to the inline
+ * `formatAuditForContext` in src/auditor/index.ts. Today, audit data flows
+ * from the frontend through the `deterministicSummary` field. This module
+ * is available for a future API enhancement where the frontend sends audit
+ * results as a separate structured `auditContext` field in the request body,
+ * enabling richer severity-based formatting on the server side.
  *
- * This module provides a server-side formatter for cases where audit data
- * is sent as a separate structured payload (future API enhancement).
+ * To activate: accept an optional `auditContext` field in ChatRequestBody,
+ * call buildAuditContext() in buildExplainPrompt, and append to the prompt.
  */
 
 export interface AuditFindingSummary {

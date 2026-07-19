@@ -27,6 +27,7 @@ import { MobileMenu } from '@/components/MobileMenu'
 import { TelemetryDebugPanel } from '@/components/TelemetryDebugPanel'
 import { WorkbookPicker } from '@/components/WorkbookPicker'
 import { VersionHistoryPanel } from '@/components/VersionHistoryPanel'
+import { AuditPanel } from '@/components/AuditPanel'
 import { ShareDialog } from '@/components/ShareDialog'
 import { FormulaBar } from '@/components/FormulaBar'
 import { GoToCellDialog } from '@/components/GoToCellDialog'
@@ -163,6 +164,7 @@ function App() {
         </div>
         <FormatPanel />
         <VersionHistoryPanel />
+        <AuditPanel />
       </div>
 
       {/* Mobile bottom toolbar */}

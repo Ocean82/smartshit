@@ -30,14 +30,14 @@ export interface AIContext {
  */
 export function useAIContext(): AIContext {
   const workbook = useStore((s) => s.workbook)
+  const activeSheetId = useStore((s) => s.activeSheetId)
   const selection = useStore((s) => s.selection)
   const getComputedValue = useStore((s) => s.getComputedValue)
-  const getActiveSheet = useStore((s) => s.getActiveSheet)
 
   const context = useMemo(() => {
-    const sheet = getActiveSheet()
+    const sheet = workbook.sheets.find((s) => s.id === activeSheetId) ?? workbook.sheets[0]
     return buildSpreadsheetContext(workbook, sheet, selection, getComputedValue)
-  }, [workbook, selection, getComputedValue, getActiveSheet])
+  }, [workbook, activeSheetId, selection, getComputedValue])
 
   const stats = useMemo(() => ({
     totalCells: context.dimensions.populatedCells,

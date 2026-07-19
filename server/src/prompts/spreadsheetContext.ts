@@ -1,13 +1,16 @@
 /**
  * Builds the live spreadsheet state block for the system prompt.
  *
- * This is a thin re-export/adapter — the heavy lifting is done by
- * `formatContextBlock` in prompt.ts which already handles all the
- * rich context assembly (sheet summaries, profiles, insights, etc.).
+ * CURRENT STATUS: The primary context builder is `formatContextBlock` in
+ * ../prompt.ts — it handles all the rich context assembly (sheet summaries,
+ * profiles, insights, sample rows, deterministic summaries, etc.).
  *
- * This module exists to complete the modular architecture described in
- * docs/chat-prompt/chat.md and to provide typed interfaces for the
- * spreadsheet snapshot concept.
+ * This module provides a lightweight alternative for scenarios where the
+ * full SpreadsheetContextInput is unavailable (e.g., health/status queries,
+ * minimal-context endpoints, or a future mobile client with limited state).
+ *
+ * To activate: use buildMinimalSpreadsheetContext() in any endpoint that
+ * receives a SpreadsheetSnapshot instead of the full context payload.
  */
 
 export interface SpreadsheetSnapshot {

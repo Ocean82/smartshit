@@ -64,6 +64,7 @@ interface AppState {
   chatWidth: number;
   showFileExplorer: boolean;
   showSkills: boolean;
+  showAuditPanel: boolean;
   showChartDialog: boolean;
   showFormatPanel: boolean;
   showVersionHistory: boolean;
@@ -118,6 +119,7 @@ interface AppState {
   setChatWidth: (w: number) => void;
   toggleFileExplorer: () => void;
   toggleSkills: () => void;
+  toggleAuditPanel: () => void;
   setShowChartDialog: (v: boolean) => void;
   setShowFormatPanel: (v: boolean) => void;
   setShowVersionHistory: (v: boolean) => void;
@@ -239,6 +241,7 @@ export const useStore = create<AppState>()(
       chatWidth: initialChatWidth,
       showFileExplorer: false,
       showSkills: false,
+      showAuditPanel: false,
       showChartDialog: false,
       showFormatPanel: false,
       showVersionHistory: false,
@@ -408,6 +411,7 @@ export const useStore = create<AppState>()(
       }),
       toggleFileExplorer: () => set((s) => { s.showFileExplorer = !s.showFileExplorer; }),
       toggleSkills: () => set((s) => { s.showSkills = !s.showSkills; }),
+      toggleAuditPanel: () => set((s) => { s.showAuditPanel = !s.showAuditPanel; }),
       setShowChartDialog: (v) => set((s) => { s.showChartDialog = v; }),
       setShowFormatPanel: (v) => set((s) => { s.showFormatPanel = v; }),
       setShowVersionHistory: (v) => set((s) => { s.showVersionHistory = v; }),
