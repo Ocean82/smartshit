@@ -21,9 +21,6 @@ interface SelectionOverlayProps {
   rowHeaderWidth: number;
   /** Column header height constant */
   colHeaderHeight: number;
-  /** Current scroll offsets */
-  scrollTop: number;
-  scrollLeft: number;
 }
 
 export function SelectionOverlay({
@@ -32,8 +29,6 @@ export function SelectionOverlay({
   cellHeight,
   rowHeaderWidth,
   colHeaderHeight,
-  scrollTop,
-  scrollLeft,
 }: SelectionOverlayProps) {
   const { selection, copiedRange } = useStore();
 

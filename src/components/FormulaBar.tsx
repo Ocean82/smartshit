@@ -7,7 +7,7 @@
  * - Formula/value content on the right (editable)
  * - Cancel (X) and Confirm (✓) buttons when editing
  */
-import { useCallback, useRef, useEffect, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useStore } from '@/store/useStore';
 import { colToLetter, refToCell, cellToRef } from '@/engine/spreadsheet';
 import { X, Check, FunctionSquare } from 'lucide-react';
@@ -134,13 +134,6 @@ export function FormulaBar() {
       setNameBoxEditing(false);
     }
   }, [handleNameBoxSubmit]);
-
-  // Sync formula bar input focus with editing state
-  useEffect(() => {
-    if (isEditing && inputRef.current && document.activeElement !== inputRef.current) {
-      // Don't steal focus from the grid inline editor
-    }
-  }, [isEditing]);
 
   return (
     <div className="hidden md:flex h-7 border-b border-gray-200 bg-white items-center gap-0 shrink-0">

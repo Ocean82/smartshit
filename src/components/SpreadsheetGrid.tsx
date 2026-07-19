@@ -617,8 +617,6 @@ export function SpreadsheetGrid() {
           cellHeight={CELL_HEIGHT}
           rowHeaderWidth={ROW_HEADER_WIDTH}
           colHeaderHeight={COL_HEADER_HEIGHT}
-          scrollTop={scrollState.scrollTop}
-          scrollLeft={scrollState.scrollLeft}
         />
         {/* Freeze pane indicators */}
         {sheet.frozenRows && sheet.frozenRows > 0 && (

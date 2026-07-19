@@ -21,6 +21,7 @@ const CHART_COLORS = [
 export function InsightCharts() {
   const { getActiveSheet, getComputedValue } = useStore()
   const sheet = getActiveSheet()
+  const [collapsed, setCollapsed] = useState(true)
 
   const insights = useMemo(() => {
     return computeSheetInsights(sheet, getComputedValue)
@@ -31,8 +32,6 @@ export function InsightCharts() {
   const hasIncomeExpense = (insights.totalIncome ?? 0) > 0 || (insights.totalExpenses ?? 0) > 0
 
   if (!hasCategories && !hasIncomeExpense) return null
-
-  const [collapsed, setCollapsed] = useState(true)
 
   return (
     <div className="border-b border-gray-100">

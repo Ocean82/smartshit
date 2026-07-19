@@ -1,7 +1,7 @@
 import { useStore } from '@/store/useStore';
 import { cellToRef, refToCell } from '@/engine/spreadsheet';
 import { X, Move } from 'lucide-react';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import type { ChartConfig } from '@/types';
 
 export function ChartOverlay() {
@@ -25,6 +25,8 @@ function ChartCard({ chart, onRemove }: { chart: ChartConfig; onRemove: () => vo
   const [pos, setPos] = useState({ x: chart.position.x, y: chart.position.y });
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const posRef = useRef(pos);
+  posRef.current = pos;
 
   // Parse data range
   const data = parseChartData(chart, sheet.cells, getComputedValue);
@@ -36,15 +38,17 @@ function ChartCard({ chart, onRemove }: { chart: ChartConfig; onRemove: () => vo
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     if (!isDragging) return;
-    setPos({ x: e.clientX - dragOffset.x, y: e.clientY - dragOffset.y });
+    const newPos = { x: e.clientX - dragOffset.x, y: e.clientY - dragOffset.y };
+    setPos(newPos);
+    posRef.current = newPos;
   }, [isDragging, dragOffset]);
 
   const handleMouseUp = useCallback(() => {
     if (isDragging) {
-      updateChartPosition(chart.id, pos.x, pos.y);
+      updateChartPosition(chart.id, posRef.current.x, posRef.current.y);
     }
     setIsDragging(false);
-  }, [isDragging, pos, chart.id, updateChartPosition]);
+  }, [isDragging, chart.id, updateChartPosition]);
 
   const maxVal = Math.max(...data.values.map(Math.abs), 1);
 
