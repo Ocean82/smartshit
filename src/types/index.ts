@@ -36,11 +36,22 @@ export interface ConditionalRule {
 
 export interface DataValidation {
   type: 'number' | 'text' | 'date' | 'list' | 'custom';
+  /** Criteria/operator for the validation rule */
   criteria?: string;
+  /** Allowed values for list type */
   values?: string[];
+  /** Minimum value (number) or minimum length (text) */
   min?: number;
+  /** Maximum value (number) or maximum length (text) */
   max?: number;
+  /** Custom error message */
   message?: string;
+  /** Text to check for contains/startsWith/endsWith (text type) */
+  containsText?: string;
+  /** Minimum date (ISO string) for date range validation */
+  dateMin?: string;
+  /** Maximum date (ISO string) for date range validation */
+  dateMax?: string;
 }
 
 export interface PivotField {
@@ -102,6 +113,46 @@ export interface ChartConfig {
   labelRange?: string;
   position: { x: number; y: number; width: number; height: number };
   colors?: string[];
+  /** Multi-series definitions. When present, each series is plotted separately. */
+  series?: ChartSeries[];
+  /** Trend line configuration. Only applies to line/scatter/area/column/bar charts. */
+  trendLine?: TrendLineConfig;
+  /** Axis configuration (min/max, labels, gridlines). */
+  axisConfig?: AxisConfig;
+}
+
+export interface ChartSeries {
+  /** Column or range for this series data values */
+  dataRange: string;
+  /** Series display name (shown in legend) */
+  label: string;
+  /** Optional color override for this series */
+  color?: string;
+}
+
+export interface TrendLineConfig {
+  type: 'linear' | 'exponential' | 'polynomial' | 'movingAverage';
+  /** Polynomial degree (only for type: 'polynomial'). Defaults to 2. */
+  degree?: number;
+  /** Window size for moving average. Defaults to 3. */
+  period?: number;
+  /** Color of the trend line */
+  color?: string;
+  /** Show the equation label on chart */
+  showEquation?: boolean;
+}
+
+export interface AxisConfig {
+  /** Custom Y-axis minimum value (auto-scaled if omitted) */
+  yMin?: number;
+  /** Custom Y-axis maximum value (auto-scaled if omitted) */
+  yMax?: number;
+  /** X-axis label */
+  xLabel?: string;
+  /** Y-axis label */
+  yLabel?: string;
+  /** Show gridlines (defaults to true) */
+  showGrid?: boolean;
 }
 
 export interface WorkbookData {

@@ -27,9 +27,11 @@ const BUFFER_COLS = 3;
 export function SpreadsheetGrid() {
   const {
     selection,
+    additionalSelections,
     editingCell,
     editValue,
     setSelection,
+    addSelection,
     setEditingCell,
     setEditValue,
     setCellValue,
@@ -156,12 +158,15 @@ export function SpreadsheetGrid() {
         endRow: row,
         endCol: col,
       });
+    } else if ((e.ctrlKey || e.metaKey) && selection) {
+      // Ctrl+click: add a new disjoint range
+      addSelection({ startRow: row, startCol: col, endRow: row, endCol: col });
     } else {
       setSelection({ startRow: row, startCol: col, endRow: row, endCol: col });
     }
     if (editingCell) commitEdit();
     setEditingCell(null);
-  }, [selection, editingCell, setSelection, setEditingCell, commitEdit]);
+  }, [selection, editingCell, setSelection, addSelection, setEditingCell, commitEdit]);
 
   const handleCellDoubleClick = useCallback((row: number, col: number) => {
     const cellId = refToCell(row, col);
@@ -428,12 +433,22 @@ export function SpreadsheetGrid() {
 
   const isSelected = useCallback((row: number, col: number) => {
     if (!selection) return false;
+    // Check primary selection
     const minR = Math.min(selection.startRow, selection.endRow);
     const maxR = Math.max(selection.startRow, selection.endRow);
     const minC = Math.min(selection.startCol, selection.endCol);
     const maxC = Math.max(selection.startCol, selection.endCol);
-    return row >= minR && row <= maxR && col >= minC && col <= maxC;
-  }, [selection]);
+    if (row >= minR && row <= maxR && col >= minC && col <= maxC) return true;
+    // Check additional selections (Ctrl+click ranges)
+    for (const sel of additionalSelections) {
+      const r0 = Math.min(sel.startRow, sel.endRow);
+      const r1 = Math.max(sel.startRow, sel.endRow);
+      const c0 = Math.min(sel.startCol, sel.endCol);
+      const c1 = Math.max(sel.startCol, sel.endCol);
+      if (row >= r0 && row <= r1 && col >= c0 && col <= c1) return true;
+    }
+    return false;
+  }, [selection, additionalSelections]);
 
   const isActiveCell = useCallback((row: number, col: number) => {
     return selection?.startRow === row && selection?.startCol === col;

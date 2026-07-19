@@ -20,6 +20,7 @@ export function ValidationDialog({ isOpen, onClose }: Props) {
   const [min, setMin] = useState('');
   const [max, setMax] = useState('');
   const [message, setMessage] = useState('');
+  const [containsText, setContainsText] = useState('');
 
   useEffect(() => {
     if (existing) {
@@ -29,6 +30,7 @@ export function ValidationDialog({ isOpen, onClose }: Props) {
       setMin(existing.min != null ? String(existing.min) : '');
       setMax(existing.max != null ? String(existing.max) : '');
       setMessage(existing.message || '');
+      setContainsText(existing.containsText || '');
     } else {
       setType('number');
       setCriteria('');
@@ -36,6 +38,7 @@ export function ValidationDialog({ isOpen, onClose }: Props) {
       setMin('');
       setMax('');
       setMessage('');
+      setContainsText('');
     }
   }, [existing, isOpen]);
 
@@ -50,6 +53,9 @@ export function ValidationDialog({ isOpen, onClose }: Props) {
       min: min !== '' ? Number(min) : undefined,
       max: max !== '' ? Number(max) : undefined,
       message: message || undefined,
+      containsText: (type === 'text' && (criteria === 'contains' || criteria === 'notContains' || criteria === 'startsWith' || criteria === 'endsWith'))
+        ? containsText || undefined
+        : undefined,
     };
     // Apply to all selected cells
     const minR = Math.min(selection.startRow, selection.endRow);
@@ -139,7 +145,7 @@ export function ValidationDialog({ isOpen, onClose }: Props) {
               </div>
             )}
             {criteria === 'contains' && (
-              <input value={message} onChange={e => setMessage(e.target.value)}
+              <input value={containsText} onChange={e => setContainsText(e.target.value)}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mt-2" placeholder="Text to contain" />
             )}
           </div>

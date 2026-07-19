@@ -43,6 +43,7 @@ import { computeSortedCellUpdates, findHeaderRow, findLastDataRow, type SortPatc
 import { conditionToRule, attachConditionalRuleToColumn } from '@/lib/conditionalFormat';
 import { v4 as uuid } from 'uuid';
 import { defaultSkills } from '@/data/chatPresets';
+import { validateCell } from '@/lib/validation';
 
 // History for undo/redo
 interface HistoryEntry {
@@ -94,6 +95,9 @@ interface AppState {
   clipboard: { cells: Record<string, CellData>; selection: Selection } | null;
   copiedRange: Selection | null;
 
+  // Multi-range selection (Ctrl+click)
+  additionalSelections: Selection[];
+
   // Sort/Filter
   activeFilters: FilterConfig[];
   activeSortConfig: SortConfig | null;
@@ -112,6 +116,7 @@ interface AppState {
   setCellFormat: (cellId: string, format: Partial<CellFormat>) => void;
   setRangeFormat: (format: Partial<CellFormat>) => void;
   setSelection: (sel: Selection | null) => void;
+  addSelection: (sel: Selection) => void;
   setEditingCell: (cellId: string | null) => void;
   setEditValue: (val: string) => void;
   toggleChat: () => void;
@@ -264,6 +269,7 @@ export const useStore = create<AppState>()(
       skills: defaultSkills,
       clipboard: null,
       copiedRange: null,
+      additionalSelections: [],
       activeFilters: [],
       activeSortConfig: null,
       scrollRow: 0,
@@ -370,30 +376,40 @@ export const useStore = create<AppState>()(
         set((s) => {
           const sheet = s.workbook.sheets.find((sh) => sh.id === s.activeSheetId);
           if (!sheet) return;
-          const minR = Math.min(sel.startRow, sel.endRow);
-          const maxR = Math.max(sel.startRow, sel.endRow);
-          const minC = Math.min(sel.startCol, sel.endCol);
-          const maxC = Math.max(sel.startCol, sel.endCol);
-          for (let r = minR; r <= maxR; r++) {
-            for (let c = minC; c <= maxC; c++) {
-              const cid = refToCell(r, c);
-              if (!sheet.cells[cid]) {
-                sheet.cells[cid] = { value: null };
+          // Apply to primary selection + any additional Ctrl+click ranges
+          const allRanges = [sel, ...s.additionalSelections];
+          for (const range of allRanges) {
+            const minR = Math.min(range.startRow, range.endRow);
+            const maxR = Math.max(range.startRow, range.endRow);
+            const minC = Math.min(range.startCol, range.endCol);
+            const maxC = Math.max(range.startCol, range.endCol);
+            for (let r = minR; r <= maxR; r++) {
+              for (let c = minC; c <= maxC; c++) {
+                const cid = refToCell(r, c);
+                if (!sheet.cells[cid]) {
+                  sheet.cells[cid] = { value: null };
+                }
+                const existing = sheet.cells[cid].format;
+                sheet.cells[cid].format = {
+                  ...existing,
+                  ...format,
+                  borders: format.borders
+                    ? { ...existing?.borders, ...format.borders }
+                    : existing?.borders,
+                };
               }
-              const existing = sheet.cells[cid].format;
-              sheet.cells[cid].format = {
-                ...existing,
-                ...format,
-                borders: format.borders
-                  ? { ...existing?.borders, ...format.borders }
-                  : existing?.borders,
-              };
             }
           }
         });
       },
 
-      setSelection: (sel) => set((s) => { s.selection = sel; }),
+      setSelection: (sel) => set((s) => { s.selection = sel; s.additionalSelections = []; }),
+      addSelection: (sel: Selection) => set((s) => {
+        if (s.selection) {
+          s.additionalSelections = [...s.additionalSelections, s.selection];
+        }
+        s.selection = sel;
+      }),
       setEditingCell: (cellId) => set((s) => { s.editingCell = cellId; }),
       setEditValue: (val) => set((s) => { s.editValue = val; }),
       toggleChat: () => set((s) => {
@@ -433,48 +449,7 @@ export const useStore = create<AppState>()(
         const sheet = get().getActiveSheet();
         const cell = sheet.cells[cellId];
         if (!cell?.validation) return { valid: true };
-        const v = cell.validation;
-        const strVal = value == null ? '' : String(value);
-
-        switch (v.type) {
-          case 'number': {
-            const num = Number(strVal);
-            if (strVal !== '' && isNaN(num)) return { valid: false, message: v.message || 'Must be a number' };
-            if (v.min != null && num < v.min) return { valid: false, message: v.message || `Must be ≥ ${v.min}` };
-            if (v.max != null && num > v.max) return { valid: false, message: v.message || `Must be ≤ ${v.max}` };
-            return { valid: true };
-          }
-          case 'list': {
-            if (strVal !== '' && v.values && !v.values.includes(strVal))
-              return { valid: false, message: v.message || `Must be one of: ${v.values.join(', ')}` };
-            return { valid: true };
-          }
-          case 'text': {
-            if (v.criteria === 'length' && v.min != null && strVal.length < v.min)
-              return { valid: false, message: v.message || `Must be at least ${v.min} characters` };
-            if (v.criteria === 'length' && v.max != null && strVal.length > v.max)
-              return { valid: false, message: v.message || `Must be at most ${v.max} characters` };
-            if (v.criteria === 'contains' && v.criteria && !strVal.includes(v.criteria))
-              return { valid: false, message: v.message || `Must contain "${v.criteria}"` };
-            return { valid: true };
-          }
-          case 'date': {
-            if (strVal !== '' && isNaN(Date.parse(strVal)))
-              return { valid: false, message: v.message || 'Must be a valid date' };
-            return { valid: true };
-          }
-          case 'custom': {
-            if (!v.criteria) return { valid: true };
-            try {
-              const fn = new Function('value', `return ${v.criteria}`);
-              return fn(value) ? { valid: true } : { valid: false, message: v.message || 'Custom validation failed' };
-            } catch {
-              return { valid: true };
-            }
-          }
-          default:
-            return { valid: true };
-        }
+        return validateCell(value, cell.validation);
       },
 
       pushHistory: (desc) => {
@@ -1411,7 +1386,13 @@ function buildExecutionContext(
     addSheet: (name) => get().addSheet(name),
     renameSheet: (sheetId, name) => get().renameSheet(sheetId, name),
     pushHistory: opts?.suppressHistory ? () => {} : (desc) => get().pushHistory(desc),
-    getSelection: () => selectionCellIds(get().selection),
+    getSelection: () => {
+      const state = get();
+      const primary = selectionCellIds(state.selection);
+      const additional = state.additionalSelections.flatMap((s) => selectionCellIds(s));
+      if (additional.length === 0) return primary;
+      return [...new Set([...primary, ...additional])];
+    },
     addChart: (chart) => get().addChart(chart),
   };
   ctx.executeTemplate = (tool, params) => executeTemplateTool(tool, params, ctx);
