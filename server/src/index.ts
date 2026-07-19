@@ -11,6 +11,7 @@ import {
   type ChatRequestBody,
   type ChatResponseBody,
 } from './prompt.js'
+import { FEW_SHOT_EXAMPLES } from './prompts/index.js'
 import { parseAgentResponse } from './parseResponse.js'
 import { resolveIntent, isWeakResponse } from './intent.js'
 import { classifyMode, isLlmOnlyMode } from './mode.js'
@@ -157,14 +158,11 @@ async function runLlmChat(params: {
     ? buildExplainPrompt(body.context, mode, userIntent)
     : buildActionPrompt(body.context)
 
-  // Few-shot examples for explain/advise mode — teaches the model the response style
+  // Few-shot examples for explain/advise mode — teaches the model the response style.
+  // Full library lives in prompts/fewShot.ts (8 examples covering audit, budget,
+  // formula help, debugging, teaching, vague requests, off-topic, and performance).
   const fewShot: Array<{ role: 'user' | 'assistant'; content: string }> = llmOnly
-    ? [
-        { role: 'user', content: 'what does the range gap error mean' },
-        { role: 'assistant', content: '**Your SUM formula is skipping an adjacent cell that has data.**\n\nExample: Numbers in B2:B10, your SUM in B11 covers `=SUM(B2:B9)` — it\'s missing B10.\n\n**Fix:** Extend the range to `=SUM(B2:B10)`\n\nThe auditor flagged this because an adjacent numeric cell is excluded — that\'s almost never intentional.' },
-        { role: 'user', content: 'where am i overspending' },
-        { role: 'assistant', content: '**Your top overspending areas by amount over budget:**\n\n1. **Entertainment** — $250 actual vs $200 budgeted (+$50, 25% over)\n2. **Groceries** — $450 actual vs $400 budgeted (+$50, 12.5% over)\n\n**Quick wins:** Entertainment is the easiest to cut — it\'s discretionary. Groceries overspend often means impulse purchases or eating out counted in the wrong category.\n\n**Suggestion:** Move $50 from your Savings allocation to Entertainment if that spending is intentional, or set a weekly grocery cap of $100.' },
-      ]
+    ? FEW_SHOT_EXAMPLES
     : []
 
   const messages = [
