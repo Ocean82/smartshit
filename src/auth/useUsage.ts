@@ -1,5 +1,5 @@
 import { useAuth } from '@clerk/react'
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 
 const CLERK_PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ?? ''
 const FREE_DAILY_LIMIT = 3
@@ -49,6 +49,7 @@ function useTrackedUsage() {
   const { sessionClaims, getToken } = useAuth()
   const [usage, setUsage] = useState<UsageData>(getStoredUsage)
   const [serverIsPro, setServerIsPro] = useState<boolean | null>(null)
+  const fetchedRef = useRef(false)
 
   // Check plan from Clerk session claims (set via webhook -> Clerk Backend API)
   // Clerk exposes publicMetadata in JWT claims — check multiple possible paths
@@ -64,7 +65,10 @@ function useTrackedUsage() {
   )
 
   // Fetch server-side usage/pro status once per session as authoritative source
-  useState(() => {
+  useEffect(() => {
+    if (fetchedRef.current || claimsPro) return
+    fetchedRef.current = true
+
     const API_BASE = import.meta.env.VITE_AI_API_URL ?? ''
     getToken().then((token) => {
       if (!token) return
@@ -74,11 +78,15 @@ function useTrackedUsage() {
       })
         .then((r) => r.ok ? r.json() : null)
         .then((data) => {
-          if (data && (data.limit === null || data.remaining === null)) setServerIsPro(true)
+          if (data?.isPro === true || data?.limit === null || data?.remaining === null) {
+            setServerIsPro(true)
+          } else {
+            setServerIsPro(false)
+          }
         })
         .catch(() => {})
     })
-  })
+  }, [getToken, claimsPro])
 
   const isPro = claimsPro || serverIsPro === true
 

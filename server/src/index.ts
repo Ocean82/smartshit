@@ -72,7 +72,7 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
 
     if (result) {
       const client = getClerkClient()
-      await client.users.updateUser(result.userId, {
+      await client.users.updateUserMetadata(result.userId, {
         publicMetadata: {
           plan: result.plan,
           stripeSubscriptionId: result.stripeSubscriptionId ?? null,

@@ -19,6 +19,7 @@ export interface UsageCheckResult {
   remaining: number
   limit: number
   used: number
+  isPro: boolean
 }
 
 /**
@@ -28,7 +29,7 @@ export interface UsageCheckResult {
 export function checkUsage(userId: string | undefined, isPro: boolean): UsageCheckResult {
   // Pro users always allowed
   if (isPro) {
-    return { allowed: true, remaining: Infinity, limit: Infinity, used: 0 }
+    return { allowed: true, remaining: Infinity, limit: Infinity, used: 0, isPro: true }
   }
 
   // Anonymous users (no userId) get a generous limit but can't bypass
@@ -38,7 +39,7 @@ export function checkUsage(userId: string | undefined, isPro: boolean): UsageChe
 
   if (!entry || entry.date !== today) {
     // New day or new user
-    return { allowed: true, remaining: FREE_DAILY_LIMIT, limit: FREE_DAILY_LIMIT, used: 0 }
+    return { allowed: true, remaining: FREE_DAILY_LIMIT, limit: FREE_DAILY_LIMIT, used: 0, isPro: false }
   }
 
   const remaining = Math.max(0, FREE_DAILY_LIMIT - entry.count)
@@ -47,6 +48,7 @@ export function checkUsage(userId: string | undefined, isPro: boolean): UsageChe
     remaining,
     limit: FREE_DAILY_LIMIT,
     used: entry.count,
+    isPro: false,
   }
 }
 
