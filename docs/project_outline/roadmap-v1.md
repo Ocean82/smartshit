@@ -1,147 +1,146 @@
-# SmartSht v1 Roadmap — Ship, Learn, Earn, Upgrade
+# smartsh!t v1 Roadmap — Understand Your Spreadsheet
 
-> **Philosophy:** Don't over-engineer. Ship a solid product that works, attracts users,
-> and generates revenue. Reinvest earnings into each upgrade toward the end goal (see `outline.md`).
+> **Core problem:** You open a complex budget or financial spreadsheet someone else built.
+> You don't know where anything is, what formulas are doing, or whether the numbers are right.
+> You need a tool that tells you what's going on — without asking you to become an Excel expert.
+
+---
+
+## The Vision
+
+smartsh!t is **a spreadsheet that explains itself**.
+
+Import any budget, expense report, or financial model. The app immediately tells you:
+- What this spreadsheet is tracking
+- Where the important numbers are
+- What looks wrong or unusual
+- How to find what you need
+
+The AI isn't a chatbot bolted onto a grid. It's an **understanding layer** that sits between you and complex data — the colleague who built the spreadsheet explaining it to you.
 
 ---
 
 ## Current State (July 2026)
 
-What's already working:
+What's working:
 - [x] Full spreadsheet grid with formulas (HyperFormula)
-- [x] AI chat assistant (Ollama local + BYOK cloud providers)
-- [x] Excel import/export
-- [x] Cloud save (RDS + S3)
-- [x] Auth + Pro billing (Clerk + Stripe, $7/mo)
-- [x] 50+ built-in templates
-- [x] Community template marketplace
-- [x] Version history
-- [x] Sharing (public links)
+- [x] Excel import/export (.xlsx, .csv)
+- [x] AI chat assistant (local + cloud providers)
+- [x] Spreadsheet auditor (formula errors, outliers, inconsistencies)
+- [x] Instant command execution (add rows, format, sort — no LLM needed)
+- [x] 50+ templates for common use cases
+- [x] Auth + Pro billing (Clerk + Stripe)
+- [x] Cloud save, version history, sharing
 - [x] Conditional formatting, charts, sorting, filtering
-- [x] Zoom controls, Ctrl+End/Home navigation
-- [x] Dynamic grid bounds (no more infinite empty scroll)
+
+What's broken or missing:
+- [ ] No proactive insights on import (user has to ask)
+- [ ] Auditor results aren't surfaced prominently enough
+- [ ] Chat is the primary UI when it should be secondary
+- [ ] No "explain this cell" or "what feeds into this number" interaction
+- [ ] No guided navigation ("show me where expenses are")
+- [ ] Context window too shallow for complex multi-sheet workbooks
 
 ---
 
-## Phase 1: Foundation Fix (NOW — 1-2 weeks)
-*Goal: Make the AI actually useful. Fix the #1 user complaint.*
+## Phase 1: Proactive Intelligence (NOW — 2 weeks)
+*Goal: The app explains the spreadsheet before you ask.*
 
-- [ ] **EAV cell storage in Postgres**
-  - Create `smartsht.spreadsheet_cells` table (sparse matrix)
-  - On file upload/save: serialize browser cells → Postgres rows
-  - On load: reconstruct sparse map from Postgres
-  - Gives the AI agent full SQL access to user data
+### Auto-Insights on Import
+When a user imports a file, immediately show a summary card (not in chat — overlaid on the grid):
+- What this sheet appears to be (budget, invoice, tracker, etc.)
+- Key totals with labels (Total Income: $X, Total Expenses: $Y, Net: $Z)
+- Top 3-5 categories or line items by magnitude
+- Anything unusual (outliers, errors, missing data)
+- "Here's what I found" — not "ask me anything"
 
-- [ ] **Agent SQL tools**
-  - New server tools: `query_data`, `aggregate_column`, `find_by_value`
-  - Agent runs real SQL instead of parsing a 60-row text preview
-  - Conditional formatting by value ("cells with 7 → blue") becomes a DB query
+### Auditor as First-Class UI
+- Run audit automatically on import (not hidden behind a panel toggle)
+- Show a health badge in the sheet tab: "3 issues found"
+- Critical findings surface as a non-modal banner above the grid
+- One-click navigate to the problem cell
 
-- [ ] **Increase sample context to LLM**
-  - Already bumped from 25→60 rows
-  - With Postgres backing, can send full column stats without row limits
-
----
-
-## Phase 2: UX Polish (Weeks 3-4)
-*Goal: Make it feel professional. Reduce friction for new users.*
-
-- [ ] **Onboarding flow**
-  - First-time wizard: "Import a file" or "Start from template"
-  - Show 3 example prompts after import ("Explain this sheet", "Find overspending", "Create a chart")
-
-- [ ] **Streaming cell preview**
-  - When agent returns cell mutations, show them as highlighted/ghost cells
-  - User clicks "Apply" or "Esc" to reject (already partially built)
-
-- [ ] **Better error states**
-  - When AI fails: show what it tried, offer retry with different phrasing
-  - When upload fails: clear error message with fix suggestion
-
-- [ ] **Mobile responsive**
-  - Chat panel as full-screen overlay on mobile
-  - Touch-friendly cell selection
+### "What's This?" Cell Inspector
+- Hover/click a cell → popover showing:
+  - Plain-English explanation of what this formula does
+  - What cells feed into it (dependencies)
+  - What cells depend on it (dependents)  
+  - Whether the auditor flagged anything about it
+- This replaces the need to mentally trace formula chains
 
 ---
 
-## Phase 3: Growth Features (Weeks 5-8)
-*Goal: Give users reasons to stay and share.*
+## Phase 2: Guided Navigation (Weeks 3-4)
+*Goal: Help users find what they need in spreadsheets they didn't build.*
 
-- [ ] **Formula suggestions**
-  - As user types `=`, suggest common formulas based on column data types
-  - "You have a column of numbers — try =SUM, =AVERAGE, =MAX"
+### Smart Search
+- "Where are the expenses?" → highlights the expense section, scrolls to it
+- "Find rent" → jumps to the cell, highlights related formulas
+- "What formula calculates the total?" → shows the dependency chain
+- Not chat-based. A search bar that understands spreadsheet structure.
 
-- [ ] **Auto-insights on upload**
-  - Immediately after import, show 3-5 key findings (totals, trends, outliers)
-  - No prompt needed — proactive value delivery
+### Section Detection
+- Automatically identify logical sections of a spreadsheet (income block, expenses block, summary row, etc.)
+- Show a minimap/outline panel: "Income (rows 2-8) | Expenses (rows 10-25) | Totals (row 27)"
+- Click to navigate
 
-- [ ] **Export as PDF report**
-  - One-click professional report from sheet data
-  - Uses the AI to write a narrative summary
-
-- [ ] **Shareable templates with previews**
-  - Template gallery shows a live preview thumbnail
-  - Users can "remix" community templates
-
----
-
-## Phase 4: Revenue Optimization (Weeks 9-12)
-*Goal: Convert free users to Pro. Justify the $7/mo.*
-
-- [ ] **Pro features gate**
-  - Free: 3 AI questions/day, 1 workbook, basic templates
-  - Pro: Unlimited AI, unlimited workbooks, export, version history, priority
-
-- [ ] **Usage analytics dashboard**
-  - Show users their AI usage, savings found, time saved
-  - "SmartSht saved you 2 hours this week" → retention hook
-
-- [ ] **Referral system**
-  - "Share with a friend, both get 1 week Pro free"
-  - Viral loop for organic growth
+### Contextual Suggestions
+- When a user selects a range, offer relevant actions:
+  - Selected a column of numbers → "Sum: $4,200 | Average: $350 | 2 outliers detected"
+  - Selected a formula cell → "This calculates [explanation]. It depends on [cells]."
+  - Selected an error cell → "This is broken because [reason]. Fix: [suggestion]."
 
 ---
 
-## What We're NOT Building Yet
+## Phase 3: Conversation That Understands Context (Weeks 5-7)
+*Goal: When users do ask questions, the AI actually helps.*
 
-These are end-goal features (see `outline.md`). Don't touch until Phase 4 revenue justifies it:
+### Selection-Aware Chat
+- The chat always knows what the user is looking at
+- "Explain this" → explains the selected cell/range without asking "explain what?"
+- "Is this right?" → audits the selected formula and gives a confidence answer
+- "What if I change this to $500?" → shows downstream impact
 
-- ❌ Column-level type enforcement (typed schemas)
-- ❌ Workflow automation / triggers
-- ❌ pgvector RAG for cross-sheet search
-- ❌ Worker pools / Lambda execution
-- ❌ Custom formula compiler (HyperFormula is fine)
-- ❌ Real-time collaboration (Yjs)
-- ❌ WebSocket streaming mutations
+### Better Memory
+- Remember what the user has already asked about this sheet
+- "You asked about rent earlier — it's in B12, and it's the largest single expense"
+- Don't lose context after 4 exchanges
 
-### Note on Async Task Queuing
-
-The current architecture is already non-blocking for our scale:
-- Express + Node.js async I/O handles concurrent requests without thread blocking
-- LLM calls (Ollama/cloud) are `fetch()`-based and run in parallel
-- Cell sync to Postgres fires asynchronously after the HTTP response is sent
-- SSE streaming means users see immediate feedback ("thinking..." → tokens appear)
-
-**When to add a formal task queue (BullMQ + Redis):**
-- When a single agent action modifies 1000+ cells and DB writes exceed 5 seconds
-- When concurrent Ollama users exceed what a single model instance can handle
-- When we add Level 3 workflow automation (triggers that fire bulk mutations)
-
-This is a half-day addition when the time comes — not a gap in the current architecture.
-The BYOK feature further reduces server load since most inference goes to the user's own cloud endpoint.
+### Error-Aware Responses
+- When the AI suggests an action that fails, explain why and offer an alternative
+- When a formula returns #REF!, explain the specific broken reference — not generic docs
 
 ---
 
-## Technical Decisions (Keep It Simple)
+## Phase 4: Revenue & Retention (Weeks 8-12)
+*Goal: Convert free users to Pro based on real value delivered.*
 
-| Decision | Choice | Why |
-|----------|--------|-----|
-| Cell storage | EAV in existing RDS | No new infra, already connected |
-| Formula engine | HyperFormula (browser) | Already working, fast enough |
-| LLM providers | BYOK + Ollama fallback | Zero cost to us |
-| Deployment | Single EC2 + RDS + S3 | Already running, scales to 1000+ users |
-| Frontend | React SPA (single HTML) | Already built, fast deploys |
-| Queue/workers | None (direct DB writes) | Add later when scale demands |
+### Pro Features That Matter
+- Free: Import, auto-insights, 3 AI questions/day, auditor (basic)
+- Pro ($7/mo): Unlimited AI, full auditor with auto-fix, version history, export reports, priority cloud models
+
+### Value Proof
+- "smartsh!t found 3 formula errors in your budget" → share-worthy moment
+- Monthly email: "This month you imported 4 spreadsheets. We caught 7 issues and answered 12 questions."
+- Before/after: "Your spreadsheet health improved from 62/100 to 94/100"
+
+### Retention Hooks
+- Saved workbooks with persistent auditor history
+- "Your Q1 budget had 2 over-budget categories — tap to compare with Q2"
+
+---
+
+## What We're NOT Building in v1
+
+| Feature | Why Not Yet |
+|---------|-------------|
+| Real-time collaboration | Needs Yjs/CRDT infra — not the core problem |
+| Postgres EAV cell storage | Current local-first arch works for target users |
+| Full autonomous agent loop | Overkill — users need understanding, not automation |
+| pgvector / RAG | Only matters for multi-sheet workspaces (v2) |
+| Custom formula compiler | HyperFormula is sufficient |
+| Workflow automation | Solving "understand" before "automate" |
+| Template marketplace | Premature — build audience first |
 
 ---
 
@@ -149,24 +148,26 @@ The BYOK feature further reduces server load since most inference goes to the us
 
 | Metric | Target (3 months) |
 |--------|-------------------|
-| Monthly active users | 500+ |
-| Pro subscribers | 50+ ($350/mo revenue) |
-| AI response success rate | >80% (up from ~30% current) |
-| Average response time | <5 seconds |
-| Template usage | 100+ template runs/week |
+| Import → insight shown | <3 seconds |
+| Auditor findings per import | Track (proves value) |
+| Users who import a file on first visit | >50% |
+| AI response relevance (thumbs up rate) | >70% |
+| Pro conversion from auditor users | >8% |
+| Returning users (week 2) | >30% |
 
 ---
 
-## Upgrade Path (Revenue → Reinvestment)
+## Technical Priorities
 
-```
-$0-350/mo   → Current infra (t3.large + RDS)
-$350-1000/mo → Add OpenRouter as default provider (better AI for all)
-$1000-3000/mo → Upgrade to t3.xlarge, add pgvector, typed columns
-$3000+/mo   → Worker pools, real-time collab, full end-goal architecture
-```
+| Priority | What | Why |
+|----------|------|-----|
+| 1 | Auto-insights engine | The core "aha" moment |
+| 2 | Cell inspector / formula explainer | Solves "what does this do?" |
+| 3 | Auditor prominence | Proves value without user effort |
+| 4 | Smart search / navigation | Solves "where is this?" |
+| 5 | Selection-aware chat context | Makes conversations useful |
 
 ---
 
-> The end goal in `outline.md` is where we're headed. This roadmap is how we get there
-> without burning cash or building features no one uses yet.
+> This app exists because spreadsheets are hard to read, not hard to write.
+> The AI helps you understand what's already there — that's the job.

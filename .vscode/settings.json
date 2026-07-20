@@ -1,5 +1,6 @@
 {
     "snyk.advanced.autoSelectOrganization": true,
     "js/ts.experimental.useTsgo": false,
-    "steeringDocs.repository": "sickn33/agentic-awesome-skills"
+    "steeringDocs.repository": "https://github.com/Ocean82/agentsys",
+    "steeringDocs.branch": "main"
 }
