@@ -144,6 +144,7 @@ interface AppState {
   setChatInput: (val: string) => void;
   addMessage: (msg: ChatMessage) => void;
   sendMessage: () => void;
+  clearChat: () => void;
   /** Build a template directly (gallery), bypassing the parser/LLM round-trip. */
   runTemplateTool: (tool: string) => void;
   attachFileForChat: (file: File) => Promise<void>;
@@ -496,6 +497,17 @@ export const useStore = create<AppState>()(
       setChatInput: (val) => set((s) => { s.chatInput = val; }),
 
       addMessage: (msg) => set((s) => { s.messages.push(msg); }),
+
+      clearChat: () => set((s) => {
+        s.messages = [{
+          id: uuid(),
+          role: 'assistant',
+          content: `Welcome to **smartsh!t** — your budgeting copilot.\n\nStart by importing a spreadsheet, then ask:\n- *"Explain this spreadsheet I just loaded"*\n- *"Where am I overspending?"*\n- *"What should I cut first to save more?"*\n\nI only apply changes after you review and approve them.`,
+          timestamp: Date.now(),
+        }];
+        s.chatInput = '';
+        s.isAiProcessing = false;
+      }),
 
       sendMessage: () => {
         const input = get().chatInput.trim();

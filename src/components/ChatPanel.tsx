@@ -3,13 +3,14 @@ import { useStore } from '@/store/useStore'
 import { fetchServerHealth, type ServerHealth } from '@/ai/agentClient'
 import {
   Send, Check, XCircle, Sparkles, Bot, User, Loader2, Paperclip, X, ThumbsUp, ThumbsDown, Copy, Download,
-  PanelLeftClose,
+  PanelLeftClose, SquarePen,
 } from 'lucide-react'
 import type { AgentAction } from '@/types'
 import { getFeedbackForMessage, recordChatFeedback, type ChatFeedbackRating } from '@/ai/chatFeedback'
 import { exportChatAsReport } from '@/lib/exportChat'
 import { useUsage, UpgradePrompt } from '@/auth'
 import { ApiKeySettings } from './ApiKeySettings'
+import { ChatMarkdown } from './ChatMarkdown'
 
 function healthFooterMessage(health: ServerHealth | null): string {
   if (!health) return 'Instant analysis active · AI server connecting…'
@@ -27,6 +28,7 @@ export function ChatPanel({ isMobileOpen, onCloseMobile }: { isMobileOpen?: bool
     chatInput,
     setChatInput,
     sendMessage,
+    clearChat,
     isAiProcessing,
     applyAction,
     rejectAction,
@@ -52,7 +54,23 @@ export function ChatPanel({ isMobileOpen, onCloseMobile }: { isMobileOpen?: bool
   const [waitSeconds, setWaitSeconds] = useState(0)
   const [health, setHealth] = useState<ServerHealth | null>(null)
   const [feedbackById, setFeedbackById] = useState<Record<string, ChatFeedbackRating>>({})
+  const [confirmClear, setConfirmClear] = useState(false)
 
+  const handleClearChat = () => {
+    if (messages.length <= 2) {
+      // Only welcome + maybe 1 message — skip confirmation
+      clearChat()
+      return
+    }
+    if (confirmClear) {
+      clearChat()
+      setConfirmClear(false)
+    } else {
+      setConfirmClear(true)
+      // Auto-dismiss after 3 seconds
+      setTimeout(() => setConfirmClear(false), 3000)
+    }
+  }
   useEffect(() => {
     const map: Record<string, ChatFeedbackRating> = {}
     for (const msg of messages) {
@@ -170,6 +188,21 @@ export function ChatPanel({ isMobileOpen, onCloseMobile }: { isMobileOpen?: bool
           {messages.length > 1 && (
             <button
               type="button"
+              onClick={handleClearChat}
+              className={`p-1.5 rounded-lg transition-colors ${
+                confirmClear
+                  ? 'bg-red-500/80 text-white hover:bg-red-500'
+                  : 'text-blue-200 hover:bg-white/20 hover:text-white'
+              }`}
+              title={confirmClear ? 'Click again to confirm' : 'New conversation'}
+              aria-label={confirmClear ? 'Confirm clear chat' : 'Start new conversation'}
+            >
+              <SquarePen size={15} />
+            </button>
+          )}
+          {messages.length > 1 && (
+            <button
+              type="button"
               onClick={() => exportChatAsReport(messages, workbook.name)}
               className="p-1.5 rounded-lg text-blue-200 hover:bg-white/20 hover:text-white transition-colors"
               title="Export conversation as report"
@@ -217,7 +250,9 @@ export function ChatPanel({ isMobileOpen, onCloseMobile }: { isMobileOpen?: bool
       </div>
 
       <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
-        {messages.map((msg) => (
+        {messages.map((msg, idx) => {
+          const isStreamingMsg = isAiProcessing && msg.role === 'assistant' && idx === messages.length - 1
+          return (
           <div key={msg.id} className={`flex gap-2 ${msg.role === 'user' ? 'justify-end' : ''}`}>
             {msg.role === 'assistant' && (
               <div className="w-7 h-7 rounded-full bg-gradient-to-br from-slate-700 to-blue-600 flex items-center justify-center shrink-0 mt-0.5">
@@ -232,7 +267,7 @@ export function ChatPanel({ isMobileOpen, onCloseMobile }: { isMobileOpen?: bool
                     : 'bg-gray-100 text-gray-800 rounded-tl-sm'
                 }`}
               >
-                <MessageContent content={msg.content} />
+                <MessageContent content={msg.content} role={msg.role} isStreaming={isStreamingMsg} />
               </div>
               {msg.role === 'assistant' && msg.suggestions && msg.suggestions.length > 0 && (
                 <div className="mt-2 flex flex-wrap gap-1.5">
@@ -298,7 +333,7 @@ export function ChatPanel({ isMobileOpen, onCloseMobile }: { isMobileOpen?: bool
               </div>
             )}
           </div>
-        ))}
+        )})}
         {isAiProcessing && (
           <div className="flex gap-2" role="status" aria-live="polite" aria-busy="true">
             <div className="w-7 h-7 rounded-full bg-gradient-to-br from-slate-700 to-blue-600 flex items-center justify-center shrink-0">
@@ -422,7 +457,12 @@ export function ChatPanel({ isMobileOpen, onCloseMobile }: { isMobileOpen?: bool
   )
 }
 
-function MessageContent({ content }: { content: string }) {
+function MessageContent({ content, role, isStreaming }: { content: string; role: string; isStreaming?: boolean }) {
+  // During streaming, use simple text rendering to avoid expensive markdown re-parsing on every token
+  if (role === 'assistant' && !isStreaming) {
+    return <ChatMarkdown content={content} />
+  }
+  // User messages + streaming assistant messages: simple text with line breaks and basic formatting
   const parts = content.split(/(\*\*.*?\*\*|\*.*?\*|\n)/g)
   return (
     <>
