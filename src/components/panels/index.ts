@@ -1,4 +1,6 @@
 export { PanelRail } from './PanelRail'
 export { DockPanel } from './DockPanel'
 export { AuditPanelContent } from './AuditPanelContent'
+export { InsightsPanelContent } from './InsightsPanelContent'
+export { InspectorPanelContent } from './InspectorPanelContent'
 export { PANELS, getPanelDef, type PanelId } from './panelTypes'

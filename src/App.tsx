@@ -6,7 +6,6 @@ import { SpreadsheetGrid } from '@/components/SpreadsheetGrid'
 import { ChatPanel } from '@/components/ChatPanel'
 import { SheetTabs } from '@/components/SheetTabs'
 import { FileExplorer } from '@/components/FileExplorer'
-import { SkillsPanel } from '@/components/SkillsPanel'
 import { ContextMenu } from '@/components/ContextMenu'
 import { ChartDialog } from '@/components/ChartDialog'
 import { ChartOverlay } from '@/components/ChartRenderer'
@@ -17,8 +16,6 @@ import { FilterDialog } from '@/components/FilterDialog'
 import { ConditionalFormatDialog } from '@/components/ConditionalFormatDialog'
 import { StatusBar } from '@/components/StatusBar'
 import { WelcomeOverlay } from '@/components/WelcomeOverlay'
-import { SummaryCards } from '@/components/SummaryCards'
-import { InsightCharts } from '@/components/InsightCharts'
 import { TemplateGallery } from '@/components/TemplateGallery'
 import { CommandPalette } from '@/components/CommandPalette'
 import { MenuBar } from '@/components/MenuBar'
@@ -28,11 +25,11 @@ import { TelemetryDebugPanel } from '@/components/TelemetryDebugPanel'
 import { WorkbookPicker } from '@/components/WorkbookPicker'
 import { VersionHistoryPanel } from '@/components/VersionHistoryPanel'
 import { AuditPanel } from '@/components/AuditPanel'
-import { PanelRail, DockPanel, AuditPanelContent } from '@/components/panels'
+import { PanelRail, DockPanel, AuditPanelContent, InsightsPanelContent, InspectorPanelContent } from '@/components/panels'
 import { ShareDialog } from '@/components/ShareDialog'
 import { FormulaBar } from '@/components/FormulaBar'
 import { GoToCellDialog } from '@/components/GoToCellDialog'
-import { Sparkles, Zap, Cloud, CloudOff, Loader2, Share2, PanelLeftOpen, MessageSquare } from 'lucide-react'
+import { Sparkles, Zap, Cloud, CloudOff, Loader2, Share2, MessageSquare } from 'lucide-react'
 import { UserNav } from '@/auth'
 import {
   getSyncStatus,
@@ -47,9 +44,6 @@ function App() {
   const {
     workbook,
     engine,
-    showChat,
-    toggleChat,
-    setShowChat,
     showValidationDialog,
     setShowValidationDialog,
     showPivotDialog,
@@ -58,6 +52,7 @@ function App() {
     setShowFilterDialog,
     showConditionalFormatDialog,
     setShowConditionalFormatDialog,
+    setActivePanel,
   } = useStore()
   const [isLoaded, setIsLoaded] = useState(false)
   const [showTemplates, setShowTemplates] = useState(false)
@@ -65,7 +60,6 @@ function App() {
   const [showWorkbookPicker, setShowWorkbookPicker] = useState(false)
   const [showShareDialog, setShowShareDialog] = useState(false)
   const [showGoToCell, setShowGoToCell] = useState(false)
-  const [isMobileChatOpen, setIsMobileChatOpen] = useState(false)
   const jsonRestoreInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -87,7 +81,7 @@ function App() {
     return () => document.removeEventListener('smartsht:open-share', handler)
   }, [])
 
-  // Ctrl/Cmd+K opens the command palette
+  // Ctrl/Cmd+K opens the command palette, ESC closes panels
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
@@ -97,6 +91,9 @@ function App() {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'g') {
         e.preventDefault()
         setShowGoToCell(true)
+      }
+      if (e.key === 'Escape' && useStore.getState().activePanel) {
+        setActivePanel(null)
       }
     }
     document.addEventListener('keydown', handler)
@@ -132,31 +129,9 @@ function App() {
 
       <div className="flex-1 flex overflow-hidden min-h-0">
         <FileExplorer />
-        <SkillsPanel />
-
-        {/* Legacy chat — shown when panel system is not being used */}
-        {(showChat || isMobileChatOpen) && (
-          <ChatPanel isMobileOpen={isMobileChatOpen} onCloseMobile={() => setIsMobileChatOpen(false)} />
-        )}
-        {!showChat && (
-          <button
-            type="button"
-            onClick={() => toggleChat()}
-            className="hidden md:flex shrink-0 w-9 flex-col items-center justify-center gap-2 border-r border-gray-200 bg-gradient-to-b from-slate-800 to-blue-800 text-white hover:from-slate-900 hover:to-blue-900 transition-colors"
-            title="Show assistant"
-            aria-label="Show assistant"
-          >
-            <PanelLeftOpen size={16} />
-            <span className="text-[10px] font-semibold tracking-wide" style={{ writingMode: 'vertical-rl' }}>
-              Assistant
-            </span>
-          </button>
-        )}
 
         {/* Spreadsheet — always takes remaining space */}
         <div className="flex-1 flex flex-col overflow-hidden min-w-0 relative">
-          <SummaryCards />
-          <InsightCharts />
           <div className="flex-1 flex flex-col overflow-hidden relative pb-[52px] md:pb-0">
             <SpreadsheetGrid />
             <ChartOverlay />
@@ -164,9 +139,18 @@ function App() {
           <SheetTabs />
         </div>
 
-        {/* Right-side panel system (new) */}
-        <DockPanel panelId="auditor">
+        {/* Right-side panel system */}
+        <DockPanel panelId="chat" title="Chat">
+          <ChatPanel embedded />
+        </DockPanel>
+        <DockPanel panelId="insights" title="Insights">
+          <InsightsPanelContent />
+        </DockPanel>
+        <DockPanel panelId="auditor" title="Auditor">
           <AuditPanelContent />
+        </DockPanel>
+        <DockPanel panelId="inspector" title="Inspector">
+          <InspectorPanelContent />
         </DockPanel>
 
         <FormatPanel />
@@ -184,10 +168,7 @@ function App() {
       {/* Mobile chat toggle FAB — positioned above mobile toolbar */}
       <button
         type="button"
-        onClick={() => {
-          if (!showChat) toggleChat()
-          setIsMobileChatOpen(true)
-        }}
+        onClick={() => setActivePanel('chat')}
         className="md:hidden fixed bottom-16 right-4 z-30 p-3.5 rounded-full bg-gradient-to-r from-slate-800 to-blue-700 text-white shadow-lg hover:from-slate-900 hover:to-blue-800 transition-all active:scale-95"
         aria-label="Open chat"
       >
@@ -208,8 +189,7 @@ function App() {
         onClose={() => setShowCommandPalette(false)}
         onOpenTemplates={() => setShowTemplates(true)}
         onFocusChat={() => {
-          setShowChat(true)
-          setIsMobileChatOpen(true)
+          setActivePanel('chat')
           window.setTimeout(() => {
             document.dispatchEvent(new Event('smartsht:focus-chat'))
           }, 50)

@@ -266,9 +266,9 @@ export function Toolbar() {
         />
         <ToolButton
           icon={<Sparkles size={15} />}
-          title="Skills"
-          active={showSkills}
-          onClick={toggleSkills}
+          title="AI Assistant"
+          active={useStore.getState().activePanel === 'chat'}
+          onClick={() => useStore.getState().setActivePanel(useStore.getState().activePanel === 'chat' ? null : 'chat')}
         />
         <Divider />
 

@@ -32,6 +32,7 @@ import { toolResultToChatMessage, toolResultToMessage } from '@/ai/responseBuild
 import { buildFilePreview } from '@/ai/filePreview';
 import { recordTelemetry } from '@/ai/telemetry';
 import { classifyMode, isLlmOnlyMode, isBudgetExplainQuery } from '@/ai/mode';
+import { runAudit } from '@/auditor';
 import { analyzeBudget, budgetAnalysisToToolResult, savingsRecommendation } from '@/ai/analysis/budget';
 import { parseUserIntent } from '@/ai/intentParser';
 import { AI_ANALYSIS_CONFIG } from '@/ai/config';
@@ -77,6 +78,7 @@ interface AppState {
   // Panel system (right-side dock)
   activePanel: 'chat' | 'insights' | 'auditor' | 'inspector' | null;
   panelWidths: Record<string, number>;
+  lastAuditResult: import('@/auditor/types').AuditResult | null;
   setActivePanel: (panel: 'chat' | 'insights' | 'auditor' | 'inspector' | null) => void;
   setPanelWidth: (panel: string, width: number) => void;
 
@@ -269,6 +271,7 @@ export const useStore = create<AppState>()(
       // Panel system
       activePanel: null,
       panelWidths: JSON.parse(storage?.getItem('smartsht-panel-widths') || '{}'),
+      lastAuditResult: null,
       setActivePanel: (panel) => set({ activePanel: panel }),
       setPanelWidth: (panel, width) => {
         set((s) => { s.panelWidths[panel] = width })
@@ -1168,16 +1171,22 @@ export const useStore = create<AppState>()(
           });
         });
 
-        // Auto-analyze: trigger an explain message after import
-        if (activeRows > 0) {
+        // Auto-open Insights panel on import (replaces old auto-chat-explain)
+        if (activeRows > 5) {
+          set((s) => { s.activePanel = 'insights' });
+
+          // Auto-run audit in background (non-blocking)
           setTimeout(() => {
-            set((s) => {
-              s.chatInput = multi
-                ? `Explain the "${sheet?.name ?? 'active'}" sheet and highlight key insights. Mention the other sheets briefly.`
-                : 'Explain this spreadsheet and highlight key insights';
-            });
-            get().sendMessage();
-          }, 300);
+            try {
+              const activeSheet = get().getActiveSheet();
+              if (Object.keys(activeSheet.cells).length > 4) {
+                const auditResult = runAudit(activeSheet, get().getComputedValue);
+                set((s) => { s.lastAuditResult = auditResult });
+              }
+            } catch {
+              // Audit failure is non-fatal
+            }
+          }, 500);
         }
       },
 

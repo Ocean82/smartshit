@@ -22,7 +22,7 @@ function healthFooterMessage(health: ServerHealth | null): string {
   return 'Instant analysis active · Skills work without AI'
 }
 
-export function ChatPanel({ isMobileOpen, onCloseMobile }: { isMobileOpen?: boolean; onCloseMobile?: () => void }) {
+export function ChatPanel({ isMobileOpen, onCloseMobile, embedded }: { isMobileOpen?: boolean; onCloseMobile?: () => void; embedded?: boolean }) {
   const {
     messages,
     chatInput,
@@ -169,13 +169,17 @@ export function ChatPanel({ isMobileOpen, onCloseMobile }: { isMobileOpen?: bool
 
   return (
     <div
-      className={`
+      className={embedded
+        ? 'flex flex-col h-full bg-white'
+        : `
         relative flex flex-col bg-white shrink-0 border-r border-gray-200
         w-full
         ${isMobileOpen ? 'fixed inset-0 z-40' : showChat ? 'hidden md:flex' : 'hidden'}
       `}
-      style={isMobileOpen || !showChat ? undefined : { width: chatWidth, minWidth: 280, maxWidth: 720 }}
+      style={embedded ? undefined : (isMobileOpen || !showChat ? undefined : { width: chatWidth, minWidth: 280, maxWidth: 720 })}
     >
+      {/* Header — only shown in standalone mode (DockPanel provides its own header) */}
+      {!embedded && (
       <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between bg-gradient-to-r from-slate-800 to-blue-800">
         <div className="flex items-center gap-2 min-w-0">
           <Sparkles size={18} className="text-amber-300 shrink-0" />
@@ -231,6 +235,7 @@ export function ChatPanel({ isMobileOpen, onCloseMobile }: { isMobileOpen?: bool
           )}
         </div>
       </div>
+      )}
 
       <div className="px-3 py-2 border-b border-gray-100 overflow-x-auto scrollbar-hide">
         <div className="flex gap-1.5 md:flex-wrap">
@@ -442,7 +447,8 @@ export function ChatPanel({ isMobileOpen, onCloseMobile }: { isMobileOpen?: bool
         <ApiKeySettings />
       </div>
 
-      {/* Desktop drag handle to resize chat width */}
+      {/* Desktop drag handle to resize chat width — only in standalone mode */}
+      {!embedded && (
       <div
         role="separator"
         aria-orientation="vertical"
@@ -453,6 +459,7 @@ export function ChatPanel({ isMobileOpen, onCloseMobile }: { isMobileOpen?: bool
       >
         <div className="absolute top-1/2 right-0 -translate-y-1/2 w-1 h-8 rounded-full bg-gray-300 group-hover:bg-blue-500 transition-colors" />
       </div>
+      )}
     </div>
   )
 }
