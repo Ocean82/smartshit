@@ -1,46 +1,155 @@
-# Phase 1 Implementation Plan: Proactive Intelligence
+# Phase 1 Implementation Plan: Proactive Intelligence + Panel Architecture
 
-> **Goal:** The app explains the spreadsheet before the user asks.
-> **Timeline:** 2 weeks
+> **Goal:** The app explains the spreadsheet before the user asks. The grid is king.
+> **Timeline:** 2-3 weeks
 > **Outcome:** When a user imports a file, they immediately see what it contains,
-> what's wrong, and how to navigate it — without typing anything.
+> what's wrong, and how to navigate it — without typing anything. All tools live
+> in a right-side panel rail and never permanently obstruct the spreadsheet.
 
 ---
 
 ## Overview
 
-Three deliverables, in priority order:
+Five deliverables, in priority order:
 
-1. **Import Insights Card** — A visual summary overlay shown immediately after file import
-2. **Auditor Auto-Run + Banner** — Audit runs on import; critical findings surface as a top banner
-3. **Cell Inspector Popover** — Click/hover any formula cell to see a plain-English explanation
+1. **Panel Rail + Dock System** — Right-side icon rail with slide-out panels (replaces current layout)
+2. **Import Insights Panel** — KPI dashboard + summary (moved from grid cells to Insights panel)
+3. **Auditor Auto-Run + Status Bar** — Audit runs on import; findings shown in status bar + panel
+4. **Cell Inspector Panel** — Click any formula cell to see a plain-English explanation
+5. **Chat Migration** — Move chat from fixed left sidebar into the panel system
 
 ---
 
-## 1. Import Insights Card
+## 0. Panel Rail + Dock System (Foundation)
 
 ### What It Is
-A dismissible card/panel that appears above the spreadsheet grid immediately after importing a file (or opening a saved workbook for the first time). Not in the chat. On the grid itself.
+A thin icon rail (44px) on the RIGHT edge of the screen. Each icon opens a docked panel
+that slides in from the right, pushing the grid left. Only one panel open at a time.
 
-### Content
+### Layout (Default — No Panel Open)
 ```
-┌──────────────────────────────────────────────────────────────┐
-│  📊 Budget Tracker — 47 rows × 6 columns                    │
-│                                                              │
-│  This looks like a monthly expense budget with categories,   │
-│  planned amounts, and actual spending.                       │
-│                                                              │
-│  Key Numbers:                                                │
-│  • Total Expenses: $4,230    • Total Income: $5,000          │
-│  • Net: +$770               • Over-budget items: 3           │
-│                                                              │
-│  Top Categories: Rent ($1,500) · Food ($800) · Transport ($400)  │
-│                                                              │
-│  ⚠️ 2 potential issues detected  [View Audit]               │
-│                                                              │
-│  [Dismiss]                          [Explain in Detail →]    │
-└──────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┬────┐
+│ [toolbar...]                                                    │    │
+├─────────────────────────────────────────────────────────────────│ 💬 │
+│                                                                 │ 📊 │
+│              S P R E A D S H E E T   G R I D                   │ 🛡️ │
+│              (100% width — nothing covering it)                 │ 🔬 │
+│                                                                 │    │
+├─────────────────────────────────────────────────────────────────┴────┤
+│ Sheet 1  │  37 cells  │  ⚠️ 2 issues  │  100%  │ smartshit v1.0    │
+└──────────────────────────────────────────────────────────────────────┘
 ```
+
+### Layout (Panel Open)
+```
+┌──────────────────────────────────────────────────┬───────────┬────┐
+│ [toolbar...]                                     │ Panel     │    │
+├──────────────────────────────────────────────────│ header    │ 💬 │
+│                                                  │───────────│ 📊 │
+│          GRID (shrinks to fit)                   │ content   │ 🛡️ │
+│                                                  │           │ 🔬 │
+│                                                  │           │    │
+├──────────────────────────────────────────────────┴───────────┴────┤
+│ Sheet 1  │  37 cells  │  ⚠️ 2 issues  │  100%                    │
+└──────────────────────────────────────────────────────────────────────┘
+```
+
+### Panel Rail Icons
+| Icon | Panel | Purpose |
+|------|-------|---------|
+| 💬 | Chat | AI assistant (replaces current left-side chat) |
+| 📊 | Insights | KPI dashboard, category breakdown, charts |
+| 🛡️ | Auditor | Health score + findings list |
+| 🔬 | Inspector | Formula explanation + cell dependencies |
+
+### Behaviors
+- Click icon → panel slides in (320px default width)
+- Click same icon again → panel closes
+- Click different icon → panel swaps content (no close/reopen animation)
+- Resize handle on left edge of panel (min 280px, max 500px)
+- Width persisted in localStorage per panel
+- ESC closes any open panel
+- Panel state persisted (which panel was open, width)
+
+### Why Right Side (Not Left)
+Spreadsheets are read left-to-right. Column A contains row labels (Category, Name, etc.).
+Panels on the right preserve the most important columns. The current left-side chat
+pushes column A offscreen when opened (see screenshot analysis).
+
+### Implementation
+```
+src/components/panels/PanelRail.tsx      — Icon rail + active state
+src/components/panels/DockPanel.tsx      — Panel container (header + resize + content slot)
+src/components/panels/panelTypes.ts      — Panel IDs, icons, labels
+src/store/useStore.ts                    — Add: activePanel, panelWidths
+```
+
+### Store Changes
+```typescript
+// New state
+activePanel: 'chat' | 'insights' | 'auditor' | 'inspector' | null
+panelWidths: Record<string, number>  // persisted per-panel widths
+
+// New actions
+setActivePanel: (panel: string | null) => void
+setPanelWidth: (panel: string, width: number) => void
+```
+
+### Migration from Current Layout
+- Remove `showChat` / `toggleChat` / `chatWidth` (replaced by panel system)
+- Remove `showSkills` / skills panel (skills become chips inside chat panel)
+- Remove `showAuditPanel` / `toggleAuditPanel` (replaced by panel system)
+- The ChatPanel component becomes a child of DockPanel (content only, no wrapper)
+- The AuditPanel component becomes a child of DockPanel (content only, no wrapper)
+
+---
+
+## 1. Import Insights Panel
+
+### What It Is
+The "AT A GLANCE" dashboard (currently rendered as rows inside the spreadsheet grid)
+moves into the **Insights panel** (📊 icon in the rail). This removes it from occupying
+spreadsheet rows and puts it in a proper panel.
+
+### Content (Inside the Insights Panel)
+```
+┌─────────────────────────────────────────┐
+│ 📊 Insights                         [X] │
+│─────────────────────────────────────────│
+│ Monthly Budget · 47 rows × 6 columns   │
+│                                         │
+│ ┌─────────┐ ┌─────────┐ ┌─────────┐   │
+│ │ INCOME  │ │EXPENSES │ │   NET   │   │
+│ │  $5,000 │ │  $9,680 │ │ -$4,680 │   │
+│ └─────────┘ └─────────┘ └─────────┘   │
+│                                         │
+│ SPENDING BY CATEGORY                    │
+│ ━━━━━━━━━━━━━━━━━━━                    │
+│ Salary        ████████████  $5,000      │
+│ Housing/Rent  █████████     $1,500      │
+│ Groceries     ████          $450        │
+│ Savings       ████          $400        │
+│ Insurance     ███           $300        │
+│ Entertainment ██            $250        │
+│                                         │
+│ ⚠️ 2 potential issues  [Open Auditor]  │
+│                                         │
+│ DETECTED PURPOSE: Budget tracker        │
+│ Over-budget items: 3                    │
+└─────────────────────────────────────────┘
+```
+
+### Auto-Open on Import
+When a user imports a file with data (>5 rows):
+1. The Insights panel auto-opens (sets `activePanel = 'insights'`)
+2. Shows the computed summary immediately
+3. User can close it and reopen anytime via the 📊 icon
+
+### Import Toast (Non-Blocking)
+Additionally, a small toast notification appears bottom-right (auto-dismisses 5s):
+"✓ Imported budget.xlsx — 47 rows · 2 insights · 1 issue"
+
+This ensures even if the user immediately closes the panel, they got the key info.
 
 ### Implementation
 
@@ -202,19 +311,30 @@ src/lib/formulaExplainer.ts         — Pattern-based formula → English
 
 ## Implementation Order
 
-### Week 1
-1. **Store changes** — Add `showInsightsCard`, `insightsData`, `lastAuditResult`, `dismissInsightsBanner`
-2. **Auto-audit on import** — Wire `runAudit()` into `importWorkbook()`
-3. **AuditBanner.tsx** — Build and render the findings banner
-4. **InsightsCard.tsx** — Build the import summary card
-5. **insightsSummary.ts** — Transform raw insights into display-ready format
+### Week 1: Panel Infrastructure
+1. **panelTypes.ts** — Define panel IDs, icons, labels
+2. **PanelRail.tsx** — Icon rail component (right edge)
+3. **DockPanel.tsx** — Panel container with resize handle, header, close
+4. **Store changes** — `activePanel`, `panelWidths`, `setActivePanel`, `setPanelWidth`
+5. **App.tsx layout refactor** — Replace current flex layout with: grid + rail + dock area
+6. **Migrate ChatPanel** — Move into DockPanel system (remove fixed left-side positioning)
+7. **Remove SkillsPanel** — Skills become chips inside chat (already partially there)
 
-### Week 2
-6. **formulaExplainer.ts** — Pattern-based formula explainer
-7. **CellInspector.tsx** — Build the inspector UI (below formula bar)
-8. **Wire HyperFormula dependency graph** — getCellPrecedents/getDependents
-9. **Connect audit findings per-cell** — Show relevant findings in inspector
-10. **Polish + edge cases** — Empty sheets, huge sheets (>10k cells), multi-sheet imports
+### Week 2: Insights + Auditor
+8. **InsightsPanel.tsx** — KPI cards + category chart (content previously in grid cells)
+9. **Remove AT A GLANCE from grid** — The template generators stop injecting dashboard rows
+10. **Auto-audit on import** — Wire `runAudit()` into `importWorkbook()`
+11. **AuditPanel migration** — Move existing AuditPanel content into DockPanel
+12. **Status bar audit indicator** — "⚠️ N issues" in bottom bar, clickable
+13. **Import toast notification** — Brief non-blocking import confirmation
+
+### Week 3: Cell Inspector + Polish
+14. **formulaExplainer.ts** — Pattern-based formula → English translator
+15. **InspectorPanel.tsx** — Cell explanation + dependencies
+16. **Wire HyperFormula dependency graph** — getCellPrecedents/getDependents
+17. **Connect audit findings per-cell** — Show relevant findings in inspector
+18. **Polish** — Animations, localStorage persistence, edge cases, mobile
+19. **Remove dead code** — Old `showChat`, `showSkills`, `showAuditPanel` state
 
 ---
 
@@ -222,21 +342,25 @@ src/lib/formulaExplainer.ts         — Pattern-based formula → English
 
 | Before | After |
 |--------|-------|
-| Import a file → see raw grid | Import → see summary card with key numbers |
-| Audit requires 3 clicks to find | Audit runs automatically, banner alerts you |
-| Formula understanding requires reading Excel | Click a cell → read English explanation |
-| Chat is the only way to get insights | Insights are proactive and visual |
-| "Explain this spreadsheet" is the first thing users type | The app already explained it before they typed anything |
+| Chat fixed on left, eats 55% of width | Chat in right-side panel, user-controlled width |
+| Skills panel takes entire column | Skills are chips inside chat header |
+| AT A GLANCE in spreadsheet cells | KPI dashboard in Insights panel |
+| Audit hidden behind View > Auditor menu | Audit in rail icon, auto-runs, status bar indicator |
+| Formula cells are opaque | Inspector panel explains any formula |
+| Three panels can open simultaneously | One panel at a time, grid always usable |
+| Grid gets 40% width with tools open | Grid never goes below 60% width |
+| Import → see raw grid | Import → Insights panel auto-opens with summary |
 
 ---
 
 ## What We're NOT Doing in Phase 1
 
+- No full drag-to-any-position floating (v2 — add "pop out" button later)
 - No LLM calls for insights (everything is deterministic/computed)
-- No changes to the chat system (it still works, just isn't the primary path)
 - No server-side changes
-- No new dependencies (all client-side TypeScript)
+- No new npm dependencies for the panel system (pure React + Tailwind)
 - No changes to the auditor rules (they're already solid)
+- No mobile-specific layout yet (v2 — panels become bottom sheets)
 
 ---
 

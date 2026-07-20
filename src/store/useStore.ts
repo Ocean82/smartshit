@@ -74,6 +74,12 @@ interface AppState {
   setShowPivotDialog: (show: boolean) => void;
   contextMenu: { x: number; y: number; cell: string } | null;
 
+  // Panel system (right-side dock)
+  activePanel: 'chat' | 'insights' | 'auditor' | 'inspector' | null;
+  panelWidths: Record<string, number>;
+  setActivePanel: (panel: 'chat' | 'insights' | 'auditor' | 'inspector' | null) => void;
+  setPanelWidth: (panel: string, width: number) => void;
+
   // History
   undoStack: HistoryEntry[];
   redoStack: HistoryEntry[];
@@ -259,6 +265,20 @@ export const useStore = create<AppState>()(
       showConditionalFormatDialog: false,
       setShowConditionalFormatDialog: (v) => set({ showConditionalFormatDialog: v }),
       contextMenu: null,
+
+      // Panel system
+      activePanel: null,
+      panelWidths: JSON.parse(storage?.getItem('smartsht-panel-widths') || '{}'),
+      setActivePanel: (panel) => set({ activePanel: panel }),
+      setPanelWidth: (panel, width) => {
+        set((s) => { s.panelWidths[panel] = width })
+        try {
+          const current = JSON.parse(storage?.getItem('smartsht-panel-widths') || '{}')
+          current[panel] = width
+          storage?.setItem('smartsht-panel-widths', JSON.stringify(current))
+        } catch { /* ignore */ }
+      },
+
       undoStack: [],
       redoStack: [],
       files: persisted?.files ?? [initialFile],
