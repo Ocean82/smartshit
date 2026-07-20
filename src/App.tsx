@@ -28,6 +28,7 @@ import { TelemetryDebugPanel } from '@/components/TelemetryDebugPanel'
 import { WorkbookPicker } from '@/components/WorkbookPicker'
 import { VersionHistoryPanel } from '@/components/VersionHistoryPanel'
 import { AuditPanel } from '@/components/AuditPanel'
+import { PanelRail, DockPanel, AuditPanelContent } from '@/components/panels'
 import { ShareDialog } from '@/components/ShareDialog'
 import { FormulaBar } from '@/components/FormulaBar'
 import { GoToCellDialog } from '@/components/GoToCellDialog'
@@ -133,7 +134,7 @@ function App() {
         <FileExplorer />
         <SkillsPanel />
 
-        {/* Chat drawer — hideable for full spreadsheet view */}
+        {/* Legacy chat — shown when panel system is not being used */}
         {(showChat || isMobileChatOpen) && (
           <ChatPanel isMobileOpen={isMobileChatOpen} onCloseMobile={() => setIsMobileChatOpen(false)} />
         )}
@@ -152,7 +153,7 @@ function App() {
           </button>
         )}
 
-        {/* Spreadsheet + summary on the right */}
+        {/* Spreadsheet — always takes remaining space */}
         <div className="flex-1 flex flex-col overflow-hidden min-w-0 relative">
           <SummaryCards />
           <InsightCharts />
@@ -162,9 +163,19 @@ function App() {
           </div>
           <SheetTabs />
         </div>
+
+        {/* Right-side panel system (new) */}
+        <DockPanel panelId="auditor">
+          <AuditPanelContent />
+        </DockPanel>
+
         <FormatPanel />
         <VersionHistoryPanel />
-        <AuditPanel />
+
+        {/* Panel rail — rightmost edge (desktop only) */}
+        <div className="hidden md:flex">
+          <PanelRail />
+        </div>
       </div>
 
       {/* Mobile bottom toolbar */}
