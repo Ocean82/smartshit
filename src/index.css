@@ -12,29 +12,29 @@
   --brand-hue: 250;
 
   /* Primary accent scale — the luminous blue from the logo */
-  --accent-50: oklch(0.97 0.015 var(--brand-hue));
-  --accent-100: oklch(0.93 0.04 var(--brand-hue));
-  --accent-200: oklch(0.86 0.08 var(--brand-hue));
-  --accent-300: oklch(0.75 0.12 var(--brand-hue));
-  --accent-400: oklch(0.65 0.16 var(--brand-hue));
-  --accent-500: oklch(0.55 0.19 var(--brand-hue));
-  --accent-600: oklch(0.50 0.20 var(--brand-hue));
-  --accent-700: oklch(0.42 0.18 var(--brand-hue));
-  --accent-800: oklch(0.33 0.14 var(--brand-hue));
-  --accent-900: oklch(0.24 0.09 var(--brand-hue));
+  --accent-50: oklch(0.97 0.015 250);
+  --accent-100: oklch(0.93 0.04 250);
+  --accent-200: oklch(0.86 0.08 250);
+  --accent-300: oklch(0.75 0.12 250);
+  --accent-400: oklch(0.65 0.16 250);
+  --accent-500: oklch(0.55 0.19 250);
+  --accent-600: oklch(0.50 0.20 250);
+  --accent-700: oklch(0.42 0.18 250);
+  --accent-800: oklch(0.33 0.14 250);
+  --accent-900: oklch(0.24 0.09 250);
 
   /* Tinted neutrals — faint blue tint for cohesion with brand */
-  --neutral-50: oklch(0.985 0.005 var(--brand-hue));
-  --neutral-100: oklch(0.965 0.007 var(--brand-hue));
-  --neutral-200: oklch(0.92 0.009 var(--brand-hue));
-  --neutral-300: oklch(0.87 0.011 var(--brand-hue));
-  --neutral-400: oklch(0.70 0.013 var(--brand-hue));
-  --neutral-500: oklch(0.55 0.015 var(--brand-hue));
-  --neutral-600: oklch(0.45 0.016 var(--brand-hue));
-  --neutral-700: oklch(0.35 0.014 var(--brand-hue));
-  --neutral-800: oklch(0.25 0.02 var(--brand-hue));
-  --neutral-900: oklch(0.18 0.03 var(--brand-hue));
-  --neutral-950: oklch(0.12 0.035 var(--brand-hue));
+  --neutral-50: oklch(0.985 0.005 250);
+  --neutral-100: oklch(0.965 0.007 250);
+  --neutral-200: oklch(0.92 0.009 250);
+  --neutral-300: oklch(0.87 0.011 250);
+  --neutral-400: oklch(0.70 0.013 250);
+  --neutral-500: oklch(0.55 0.015 250);
+  --neutral-600: oklch(0.45 0.016 250);
+  --neutral-700: oklch(0.35 0.014 250);
+  --neutral-800: oklch(0.25 0.02 250);
+  --neutral-900: oklch(0.18 0.03 250);
+  --neutral-950: oklch(0.12 0.035 250);
 
   /* Semantic */
   --success: oklch(0.64 0.17 155);
@@ -53,7 +53,7 @@
   --ink-primary: var(--neutral-900);
   --ink-secondary: var(--neutral-600);
   --ink-muted: var(--neutral-400);
-  --ink-on-dark: oklch(0.92 0.01 var(--brand-hue));
+  --ink-on-dark: oklch(0.92 0.01 250);
   --ink-on-accent: oklch(0.98 0 0);
 }
 

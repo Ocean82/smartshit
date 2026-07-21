@@ -1,5 +1,6 @@
 import { useAuth } from '@clerk/react'
 import { useState, useCallback, useEffect, useRef } from 'react'
+import { loadUserApiKey } from '@/lib/userApiKey'
 
 const CLERK_PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ?? ''
 const FREE_DAILY_LIMIT = 3
@@ -51,6 +52,9 @@ function useTrackedUsage() {
   const [serverIsPro, setServerIsPro] = useState<boolean | null>(null)
   const fetchedRef = useRef(false)
 
+  // BYOK users bypass limits — they're paying for their own tokens
+  const hasByok = Boolean(loadUserApiKey()?.apiKey)
+
   // Check plan from Clerk session claims (set via webhook -> Clerk Backend API)
   // Clerk exposes publicMetadata in JWT claims — check multiple possible paths
   const claims = sessionClaims as Record<string, unknown> | undefined
@@ -66,7 +70,7 @@ function useTrackedUsage() {
 
   // Fetch server-side usage/pro status once per session as authoritative source
   useEffect(() => {
-    if (fetchedRef.current || claimsPro) return
+    if (fetchedRef.current || claimsPro || hasByok) return
     fetchedRef.current = true
 
     const API_BASE = import.meta.env.VITE_AI_API_URL ?? ''
@@ -84,17 +88,20 @@ function useTrackedUsage() {
             setServerIsPro(false)
           }
         })
-        .catch(() => {})
+        .catch(() => setServerIsPro(false))
     })
-  }, [getToken, claimsPro])
+  }, [getToken, claimsPro, hasByok])
 
-  const isPro = claimsPro || serverIsPro === true
+  const isPro = claimsPro || serverIsPro === true || hasByok
 
-  const canAsk = isPro || usage.count < FREE_DAILY_LIMIT
-  const remaining = isPro ? Infinity : Math.max(0, FREE_DAILY_LIMIT - usage.count)
+  // While server check is in-flight (serverIsPro === null), don't gate the user.
+  // This prevents the flash of "3 questions remaining" before the server responds.
+  const isCheckingPro = !claimsPro && !hasByok && serverIsPro === null
+  const canAsk = isPro || isCheckingPro || usage.count < FREE_DAILY_LIMIT
+  const remaining = isPro || isCheckingPro ? Infinity : Math.max(0, FREE_DAILY_LIMIT - usage.count)
 
   const recordUsage = useCallback(() => {
-    if (isPro) return
+    if (isPro || hasByok) return
 
     const current = getStoredUsage()
     const updated: UsageData = {
@@ -103,7 +110,7 @@ function useTrackedUsage() {
     }
     setStoredUsage(updated)
     setUsage(updated)
-  }, [isPro])
+  }, [isPro, hasByok])
 
   return {
     isPro,

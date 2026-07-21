@@ -28,7 +28,7 @@ import { PanelRail, DockPanel, AuditPanelContent, InsightsPanelContent, Inspecto
 import { ShareDialog } from '@/components/ShareDialog'
 import { FormulaBar } from '@/components/FormulaBar'
 import { GoToCellDialog } from '@/components/GoToCellDialog'
-import { Sparkles, Zap, Cloud, CloudOff, Loader2, Share2, MessageSquare } from 'lucide-react'
+import { Sparkles, Zap, Cloud, CloudOff, Loader2, Share2, MessageSquare, SquarePen } from 'lucide-react'
 import { UserNav } from '@/auth'
 import {
   getSyncStatus,
@@ -137,7 +137,7 @@ function App() {
         </div>
 
         {/* Right-side panel system */}
-        <DockPanel panelId="chat" title="Chat">
+        <DockPanel panelId="chat" title="Chat" headerActions={<ChatDockActions />}>
           <ChatPanel embedded />
         </DockPanel>
         <DockPanel panelId="insights" title="Insights">
@@ -346,6 +346,43 @@ function TitleBar({ onOpenTemplates, onOpenCloudPicker, onOpenShare }: { onOpenT
         <UserNav />
       </div>
     </div>
+  )
+}
+
+function ChatDockActions() {
+  const { messages, clearChat } = useStore()
+  const [confirmClear, setConfirmClear] = useState(false)
+
+  const handleClear = () => {
+    if (messages.length <= 2) {
+      clearChat()
+      return
+    }
+    if (confirmClear) {
+      clearChat()
+      setConfirmClear(false)
+    } else {
+      setConfirmClear(true)
+      setTimeout(() => setConfirmClear(false), 3000)
+    }
+  }
+
+  if (messages.length <= 1) return null
+
+  return (
+    <button
+      type="button"
+      onClick={handleClear}
+      className={`p-1 rounded transition-colors ${
+        confirmClear
+          ? 'bg-red-100 text-red-600 hover:bg-red-200'
+          : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
+      }`}
+      title={confirmClear ? 'Click again to confirm' : 'New conversation'}
+      aria-label={confirmClear ? 'Confirm clear chat' : 'Start new conversation'}
+    >
+      <SquarePen size={13} />
+    </button>
   )
 }
 

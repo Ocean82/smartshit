@@ -61,13 +61,35 @@ export function extractRangeRefs(formula: string): Array<{ range: string; start:
 
 /**
  * Normalize a formula for pattern comparison.
- * Replaces absolute cell refs with relative offsets from the cell's position.
- * This allows detecting when a formula in a column breaks the pattern.
+ * Replaces cell refs with relative offsets from the cell's position,
+ * EXCEPT for references that only vary in the same axis as the cell's
+ * direction (column offset stays constant = same-column ref = relative;
+ * row offset stays constant across group = likely a constant/absolute ref).
+ *
+ * Heuristic: if a reference's column matches the formula's own column offset
+ * (within the same row or a fixed row), it gets relative treatment.
+ * References to the SAME absolute cell across the group (like $G$1 or a
+ * header row) are detected by the caller via a two-pass approach.
+ *
+ * Simple approach: Normalize same-row refs as relative, but refs pointing to
+ * row 0 (headers) or a row far away from the formula are marked as absolute.
  */
 export function normalizeFormula(formula: string, row: number, col: number): string {
-  return formula.replace(/\b([A-Z]{1,3})(\d{1,5})\b/g, (_, colStr: string, rowStr: string) => {
+  return formula.replace(/(\$?)([A-Z]{1,3})(\$?)(\d{1,5})\b/g, (match, colAbs: string, colStr: string, rowAbs: string, rowStr: string) => {
     const refCol = letterToCol(colStr)
     const refRow = parseInt(rowStr, 10) - 1
+
+    // If either axis is explicitly absolute ($A$1 or $A1 or A$1), preserve as-is
+    if (colAbs === '$' || rowAbs === '$') {
+      return `ABS[${colStr}${rowStr}]`
+    }
+
+    // Heuristic: if the reference points to row 0 (header row) or the same fixed
+    // cell regardless of formula position (row offset > 3 rows away), treat as constant
+    if (refRow === 0 && row > 0) {
+      return `ABS[${colStr}${rowStr}]`
+    }
+
     return `R[${refRow - row}]C[${refCol - col}]`
   })
 }

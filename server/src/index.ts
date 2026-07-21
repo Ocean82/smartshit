@@ -395,8 +395,10 @@ app.post('/api/chat/stream', requireAuth, async (req, res) => {
   }
 
   // ─── Usage gate (free tier enforcement) ────────────────────────────────────
+  // BYOK users bypass the limit — they're paying for their own tokens
+  const hasByok = Boolean(body.byok?.apiKey && body.byok?.baseUrl)
   const userId = getRequestUserId(req) ?? undefined
-  const isPro = await resolveIsPro(userId ?? null)
+  const isPro = hasByok || await resolveIsPro(userId ?? null)
   const usage = checkUsage(userId, isPro)
 
   if (!usage.allowed) {
