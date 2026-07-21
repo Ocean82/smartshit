@@ -85,10 +85,10 @@ export const config = {
   modelPath: path.join(projectRoot, 'models', 'qwen2.5-coder-1.5b-q8_0.gguf'),
   modelfilePath: path.join(projectRoot, 'server', 'Modelfile'),
 
-  /** Context window — smaller = faster on CPU */
-  numCtx: Number(process.env.NUM_CTX ?? 2048),
+  /** Context window — 4096 allows room for system prompt + history + context */
+  numCtx: Number(process.env.NUM_CTX ?? 4096),
   /** Max tokens to generate per response */
-  numPredict: Number(process.env.NUM_PREDICT ?? 512),
+  numPredict: Number(process.env.NUM_PREDICT ?? 768),
   corsOrigin: process.env.CORS_ORIGIN ?? '*',
 
   // Cloud Storage (RDS + S3)
@@ -113,10 +113,15 @@ export const config = {
   appUrl: process.env.APP_URL ?? 'https://smartsht.com',
 
   analysis: {
-    maxRowsPreview: 60,
+    maxRowsPreview: 120,
     maxRowsAnalysis: 10_000,
     outlierStdThreshold: 2.5,
   },
+
+  /** Max conversation history sent to cloud providers (Groq, OpenRouter, HuggingFace) */
+  maxHistoryCloud: Number(process.env.MAX_HISTORY_CLOUD ?? 12),
+  /** Max conversation history sent to local Ollama */
+  maxHistoryLocal: Number(process.env.MAX_HISTORY_LOCAL ?? 4),
 
   intentConfidenceThreshold: Math.max(0, Math.min(1, Number(process.env.INTENT_CONFIDENCE_THRESHOLD ?? 0.6))),
 }

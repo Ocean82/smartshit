@@ -10,6 +10,7 @@ import { formatInsights, explainOutliers, mergeToolResultContent, toolResultToMe
 import { chatWithAgentServerStream } from '@/ai/agentClient'
 import { recordTelemetry } from '@/ai/telemetry'
 import { runAudit, formatAuditForContext } from '@/auditor'
+import { getContextualSuggestions } from '@/ai/contextualSuggestions'
 import type { SheetInsights } from '@/ai/sheetInsights'
 import { isOutlierFollowUp } from '@/ai/outliers'
 import type { AttachedFilePreview, ToolResult } from '@/ai/types'
@@ -40,6 +41,65 @@ function resolveOutliersForFollowUp(
   return []
 }
 
+/**
+ * Build a comprehensive "What do I know?" response from live sheet context.
+ * Answers the user's question about what data the AI can see.
+ */
+function buildDataAwarenessResponse(
+  profile: ReturnType<typeof buildSheetProfile>,
+  insights: SheetInsights,
+  workbookName: string,
+  target: AnalysisTarget,
+): string {
+  const lines: string[] = ['### What I can see about your data\n']
+
+  lines.push(`**Workbook:** ${workbookName}`)
+  lines.push(`**Active sheet:** ${profile.name} (${profile.rowCount} rows × ${profile.colCount} cols)`)
+  lines.push(`**Detected purpose:** ${profile.detectedPurpose}`)
+
+  if (insights.headers.length > 0) {
+    lines.push(`\n**Columns I found:** ${insights.headers.slice(0, 12).join(', ')}${insights.headers.length > 12 ? ` (+${insights.headers.length - 12} more)` : ''}`)
+  }
+
+  if (profile.columns.length > 0) {
+    const roles = profile.columns
+      .filter((c) => c.role !== 'unknown')
+      .map((c) => `${c.name} (${c.role})`)
+      .slice(0, 8)
+    if (roles.length > 0) {
+      lines.push(`**Column roles:** ${roles.join(', ')}`)
+    }
+  }
+
+  if (insights.totalIncome || insights.totalExpenses) {
+    lines.push('\n**Financial summary:**')
+    if (insights.totalIncome) lines.push(`- Income: $${insights.totalIncome.toLocaleString()}`)
+    if (insights.totalExpenses) lines.push(`- Expenses: $${insights.totalExpenses.toLocaleString()}`)
+    if (insights.netCashflow !== undefined) lines.push(`- Net: $${insights.netCashflow.toLocaleString()}`)
+  }
+
+  if (insights.columnStats.length > 0) {
+    const numericCols = insights.columnStats.filter((c) => c.sum !== undefined)
+    if (numericCols.length > 0) {
+      lines.push(`\n**Numeric columns:** ${numericCols.length} columns with computed stats (sum, avg, min, max)`)
+    }
+  }
+
+  if (insights.outliers?.length) {
+    lines.push(`\n**Flagged values:** ${insights.outliers.length} statistical outlier${insights.outliers.length > 1 ? 's' : ''} detected`)
+  }
+
+  if (insights.categoryTotals?.length) {
+    lines.push(`**Categories:** ${insights.categoryTotals.length} unique categories tracked`)
+  }
+
+  const dataPreviewRows = target.context.sampleRows?.length ?? 0
+  lines.push(`\n**Data preview:** I can see ${dataPreviewRows} rows${target.context.sampleRowsTruncated ? ' (truncated — full sheet is larger)' : ''}.`)
+  lines.push(`**What I can do:** analyze, audit for errors, answer questions, build formulas, format, create charts, and apply changes you approve.`)
+
+  return lines.join('\n')
+}
+
 function runDeterministicSkills(
   target: AnalysisTarget,
   workbookName: string,
@@ -65,6 +125,15 @@ function runDeterministicSkills(
           ]
         : ['Analyze my data for patterns', 'Explain this spreadsheet I just loaded'],
     }, 'outlier-explain')
+  }
+
+  // ─── "What do you know about my data?" — data context awareness ─────────────
+  const lower = message.toLowerCase()
+  if (lower.includes('what do you know') || lower.includes('what context') || lower.includes('what data do you')) {
+    return withTool({
+      success: true,
+      message: buildDataAwarenessResponse(profile, insights, workbookName, target),
+    }, 'data-awareness')
   }
 
   if (intent.intentType === 'clean') {
@@ -182,30 +251,52 @@ export async function processMessage(input: ProcessMessageInput): Promise<ToolRe
   )
 
   if (serverResult) {
-    // Never append fallback disclaimers on top of real sheet findings — that reads as "AI is broken"
+    // ─── Deduplicate deterministic + LLM responses ────────────────────────────
+    // When deterministic text already answered the question well, skip the LLM
+    // text if it's just a fallback or a weaker restatement of the same numbers.
     const llmText = serverResult.source === 'fallback'
       && (deterministicText.trim() || insightsBlock.trim())
       ? ''
       : serverResult.message
+
+    // Skip LLM text if it substantially overlaps with deterministic content
+    // (the model tends to rephrase the same numbers we already computed)
+    const shouldSkipLlm = deterministicText.trim().length > 100
+      && llmText.trim().length > 0
+      && llmText.trim().length < deterministicText.trim().length * 0.8
+      && serverResult.source !== 'llm'
+    const finalLlmText = shouldSkipLlm ? '' : llmText
+
     const combined = mergeToolResultContent([
       deterministicText,
       insightsBlock && !deterministicText.includes('Sheet insights') ? insightsBlock : '',
-      llmText,
+      finalLlmText,
     ].filter(Boolean))
 
-    if (deterministicText.trim().length > 0 && llmText.trim().length > 0) {
+    if (deterministicText.trim().length > 0 && finalLlmText.trim().length > 0) {
       recordTelemetry('hybridResponses', deterministic?.toolUsed ?? 'hybrid')
-    } else if (llmText.trim().length > 0) {
+    } else if (finalLlmText.trim().length > 0) {
       recordTelemetry('llmResponses', serverResult.source)
     } else {
       recordTelemetry('deterministicResponses', deterministic?.toolUsed ?? 'local-insights')
     }
 
+    // ─── Contextual suggestions based on live sheet state ─────────────────────
+    const contextualSuggestions = getContextualSuggestions({
+      insights: target.context.insights,
+      profile: target.context.profile,
+      lastUserMessage: input.message,
+      hasMultipleSheets: input.workbook.sheets.length > 1,
+      sheetNames: input.workbook.sheets.map((s) => s.name),
+    })
+
     return {
       success: true,
       message: combined || 'I looked at your sheet but didn\'t find enough to go on. Try selecting a range or asking a more specific question.',
-      toolUsed: deterministic?.toolUsed ?? (llmText ? 'llm' : 'insights'),
-      suggestions: deterministic?.suggestions ?? serverResult.suggestions,
+      toolUsed: deterministic?.toolUsed ?? (finalLlmText ? 'llm' : 'insights'),
+      suggestions: contextualSuggestions.length > 0
+        ? contextualSuggestions
+        : (deterministic?.suggestions ?? serverResult.suggestions),
       actions: serverResult.actions.map((a) => ({
         tool: a.tool,
         params: a.params,
@@ -216,20 +307,39 @@ export async function processMessage(input: ProcessMessageInput): Promise<ToolRe
 
   if (deterministic) {
     recordTelemetry('deterministicResponses', deterministic.toolUsed ?? 'deterministic')
-    return deterministic
+    // Add contextual suggestions to deterministic responses too
+    const contextualSuggestions = getContextualSuggestions({
+      insights: target.context.insights,
+      profile: target.context.profile,
+      lastUserMessage: input.message,
+      hasMultipleSheets: input.workbook.sheets.length > 1,
+      sheetNames: input.workbook.sheets.map((s) => s.name),
+    })
+    return {
+      ...deterministic,
+      suggestions: contextualSuggestions.length > 0
+        ? contextualSuggestions
+        : deterministic.suggestions,
+    }
   }
 
   // Local insights still useful when the AI server is down — no scary "AI broken" footer
   if (insightsBlock) {
     recordTelemetry('fallbackResponses', 'insights-without-llm')
+    const contextualSuggestions = getContextualSuggestions({
+      insights: target.context.insights,
+      profile: target.context.profile,
+      lastUserMessage: input.message,
+      hasMultipleSheets: input.workbook.sheets.length > 1,
+      sheetNames: input.workbook.sheets.map((s) => s.name),
+    })
     return {
       success: true,
       message: insightsBlock,
       toolUsed: 'insights',
-      suggestions: [
-        'What makes those values unusual?',
-        'Analyze my data for patterns',
-      ],
+      suggestions: contextualSuggestions.length > 0
+        ? contextualSuggestions
+        : ['What makes those values unusual?', 'Analyze my data for patterns'],
     }
   }
 

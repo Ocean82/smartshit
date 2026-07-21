@@ -185,6 +185,8 @@ export interface ChatMessage {
   toolUsed?: string;
   insightsSnapshot?: Record<string, unknown>;
   suggestions?: string[];
+  /** Whether this message is pinned/bookmarked by the user */
+  pinned?: boolean;
 }
 
 export interface AgentAction {

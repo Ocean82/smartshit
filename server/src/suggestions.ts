@@ -1,7 +1,8 @@
 import type { IntentType } from '../../shared/intentTypes.js'
 
 /**
- * Suggestion engine — token-overlap scoring against a curated action bank.
+ * Suggestion engine — token-overlap scoring against a curated action bank,
+ * enhanced with contextual awareness when spreadsheet context is available.
  * Optional future work: vector embeddings for semantic similarity
  * (see docs/planning/24-chat-system-improvements.md Phase 4).
  */
@@ -10,6 +11,17 @@ interface SuggestionEntry {
   query: string
   intentType: IntentType
   keywords: string[]
+}
+
+interface SheetContextForSuggestions {
+  detectedPurpose?: string
+  hasMultipleSheets?: boolean
+  sheetNames?: string[]
+  hasDateColumn?: boolean
+  hasCategoryColumn?: boolean
+  categoryColumnName?: string
+  hasOutliers?: boolean
+  hasFinancialData?: boolean
 }
 
 const SUGGESTION_BANK: SuggestionEntry[] = [
@@ -83,4 +95,65 @@ export function getSuggestions(query: string, count = 3): string[] {
   }
 
   return results
+}
+
+/**
+ * Enhanced contextual suggestions that use sheet metadata when available.
+ * Falls back to keyword-based scoring if no context is provided.
+ */
+export function getContextualServerSuggestions(
+  query: string,
+  sheetContext?: SheetContextForSuggestions,
+  count = 3,
+): string[] {
+  if (!sheetContext) return getSuggestions(query, count)
+
+  const contextual: string[] = []
+  const lower = query.toLowerCase()
+
+  // Purpose-specific suggestions
+  if (sheetContext.detectedPurpose === 'budget' && !lower.includes('overspend')) {
+    contextual.push('Where am I overspending?')
+  }
+  if (sheetContext.detectedPurpose === 'budget' && !lower.includes('save')) {
+    contextual.push('How much should I save each month?')
+  }
+  if (sheetContext.detectedPurpose === 'sales' && !lower.includes('top')) {
+    contextual.push('What are my top-selling items?')
+  }
+  if (sheetContext.detectedPurpose === 'invoice' && !lower.includes('outstanding')) {
+    contextual.push('What is the total outstanding?')
+  }
+
+  // Column-aware suggestions
+  if (sheetContext.hasDateColumn && !lower.includes('month') && !lower.includes('trend')) {
+    contextual.push('Show me totals by month')
+  }
+  if (sheetContext.hasCategoryColumn && sheetContext.categoryColumnName && !lower.includes('category')) {
+    contextual.push(`Group totals by ${sheetContext.categoryColumnName}`)
+  }
+
+  // Outlier suggestions
+  if (sheetContext.hasOutliers && !lower.includes('unusual') && !lower.includes('outlier')) {
+    contextual.push('What makes those values unusual?')
+  }
+
+  // Multi-sheet suggestions
+  if (sheetContext.hasMultipleSheets && sheetContext.sheetNames && sheetContext.sheetNames.length > 1) {
+    const otherSheet = sheetContext.sheetNames.find((n) => !lower.includes(n.toLowerCase()))
+    if (otherSheet) {
+      contextual.push(`Compare with ${otherSheet} sheet`)
+    }
+  }
+
+  // Fill remaining slots with keyword-based suggestions
+  if (contextual.length < count) {
+    const keywordBased = getSuggestions(query, count - contextual.length)
+    for (const s of keywordBased) {
+      if (!contextual.includes(s)) contextual.push(s)
+      if (contextual.length >= count) break
+    }
+  }
+
+  return contextual.slice(0, count)
 }

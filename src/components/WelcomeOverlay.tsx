@@ -20,7 +20,7 @@ export function WelcomeOverlay({ onOpenTemplates }: WelcomeOverlayProps) {
 
   const steps = [
     {
-      icon: <span className="text-3xl font-black text-slate-800">s!</span>,
+      icon: <img src="/smartsht-logo2.PNG" alt="smartsh!t" className="w-16 h-16 object-contain" />,
       title: 'Welcome to smartsh!t',
       description:
         'A spreadsheet that listens. Tell the assistant what you want to track — budgets, expenses, inventory — and it builds it for you.',

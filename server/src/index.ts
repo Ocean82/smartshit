@@ -17,7 +17,7 @@ import { resolveIntent, isWeakResponse } from './intent.js'
 import { classifyMode, isLlmOnlyMode } from './mode.js'
 import { parseUserIntent as parseIntentWithKeyword } from './intentParser.js'
 import type { UserIntent } from '../../shared/intentTypes.js'
-import { getSuggestions } from './suggestions.js'
+import { getSuggestions, getContextualServerSuggestions } from './suggestions.js'
 import {
   type ProviderName,
   providerOrder,
@@ -170,14 +170,39 @@ async function runLlmChat(params: {
     ? FEW_SHOT_EXAMPLES.slice(0, maxExamples)
     : []
 
+  // ─── Conversation history — use larger window for cloud providers ───────────
+  // Cloud providers (Groq, OpenRouter, HuggingFace) have 128K+ context windows.
+  // Local Ollama has a smaller window. Adapt history length accordingly.
+  const isCloudAvailable = providerOrder().filter(providerIsConfigured)
+    .some((p) => p !== 'ollama')
+  const maxHistory = isCloudAvailable ? config.maxHistoryCloud : config.maxHistoryLocal
+
+  // Summarize older messages into a brief context note when history is long
+  let conversationSummary: string | null = null
+  let trimmedHistory = history
+  if (history.length > maxHistory) {
+    const older = history.slice(0, -(maxHistory - 2))
+    trimmedHistory = history.slice(-(maxHistory - 2))
+
+    // Build a brief summary of older messages
+    const userTopics = older
+      .filter((m) => m.role === 'user')
+      .map((m) => m.content.slice(0, 80).replace(/\n/g, ' ').trim())
+      .slice(-4)
+    if (userTopics.length > 0) {
+      conversationSummary = `[Earlier in this conversation, the user asked about: ${userTopics.join('; ')}]`
+    }
+  }
+
   const messages = [
     { role: 'system' as const, content: systemPrompt },
     ...fewShot.map((m) => ({ role: m.role, content: m.content })),
-    ...history.slice(-4),
+    ...(conversationSummary
+      ? [{ role: 'system' as const, content: conversationSummary }]
+      : []),
+    ...trimmedHistory,
     { role: 'user' as const, content: userMessage },
   ]
-
-  // If user provided their own API key (BYOK), use it as the primary provider
   const byok = body.byok
   const availableProviders = providerOrder().filter(providerIsConfigured)
   let fullText = ''
@@ -312,8 +337,18 @@ app.post('/api/chat/stream', requireAuth, async (req, res) => {
   const history = (body.history ?? []).filter((m) => m.role === 'user' || m.role === 'assistant')
   const userIntent = parseIntentWithKeyword(userMessage)
 
-  // Generate suggestions after we have a valid message
-  const suggestions = getSuggestions(userMessage)
+  // Generate contextual suggestions using sheet metadata when available
+  const sheetCtx = body.context ? {
+    detectedPurpose: body.context.profile?.detectedPurpose,
+    hasMultipleSheets: (body.context.sheetNames?.length ?? 0) > 1,
+    sheetNames: body.context.sheetNames,
+    hasDateColumn: body.context.profile?.columns?.some((c) => c.role === 'date'),
+    hasCategoryColumn: body.context.profile?.columns?.some((c) => c.role === 'category'),
+    categoryColumnName: body.context.profile?.columns?.find((c) => c.role === 'category')?.name,
+    hasOutliers: Boolean(body.context.insights?.columnStats?.some((c) => c.sum !== undefined)),
+    hasFinancialData: Boolean(body.context.insights?.totalIncome || body.context.insights?.totalExpenses),
+  } : undefined
+  const suggestions = getContextualServerSuggestions(userMessage, sheetCtx)
 
   // Low-confidence intent — clarify only for action requests (avoid blocking explain/advise Q&A)
   if (
@@ -445,8 +480,18 @@ app.post('/api/chat', requireAuth, async (req, res) => {
   const history = (body.history ?? []).filter((m) => m.role === 'user' || m.role === 'assistant')
   const userIntent = parseIntentWithKeyword(userMessage)
 
-  // Generate suggestions after we have a valid message
-  const suggestions = getSuggestions(userMessage)
+  // Generate contextual suggestions using sheet metadata when available
+  const sheetCtx = body.context ? {
+    detectedPurpose: body.context.profile?.detectedPurpose,
+    hasMultipleSheets: (body.context.sheetNames?.length ?? 0) > 1,
+    sheetNames: body.context.sheetNames,
+    hasDateColumn: body.context.profile?.columns?.some((c) => c.role === 'date'),
+    hasCategoryColumn: body.context.profile?.columns?.some((c) => c.role === 'category'),
+    categoryColumnName: body.context.profile?.columns?.find((c) => c.role === 'category')?.name,
+    hasOutliers: Boolean(body.context.insights?.columnStats?.some((c) => c.sum !== undefined)),
+    hasFinancialData: Boolean(body.context.insights?.totalIncome || body.context.insights?.totalExpenses),
+  } : undefined
+  const suggestions = getContextualServerSuggestions(userMessage, sheetCtx)
 
   // Low-confidence intent — clarify only for action requests (avoid blocking explain/advise Q&A)
   if (

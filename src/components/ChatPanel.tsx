@@ -3,7 +3,7 @@ import { useStore } from '@/store/useStore'
 import { fetchServerHealth, type ServerHealth } from '@/ai/agentClient'
 import {
   Send, Check, XCircle, Sparkles, Bot, User, Loader2, Paperclip, X, ThumbsUp, ThumbsDown, Copy, Download,
-  PanelLeftClose, SquarePen,
+  PanelLeftClose, SquarePen, Pin, PinOff, ChevronDown, ChevronUp,
 } from 'lucide-react'
 import type { AgentAction } from '@/types'
 import { getFeedbackForMessage, recordChatFeedback, type ChatFeedbackRating } from '@/ai/chatFeedback'
@@ -42,6 +42,7 @@ export function ChatPanel({ isMobileOpen, onCloseMobile, embedded }: { isMobileO
     setChatWidth,
     toggleChat,
     showChat,
+    togglePinMessage,
   } = useStore()
 
   const { canAsk, remaining, dailyLimit, recordUsage, isPro } = useUsage()
@@ -255,10 +256,16 @@ export function ChatPanel({ isMobileOpen, onCloseMobile, embedded }: { isMobileO
       </div>
 
       <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
+        {/* Pinned messages section */}
+        {messages.some((m) => m.pinned) && (
+          <PinnedMessagesSection messages={messages.filter((m) => m.pinned)} onUnpin={togglePinMessage} onJumpTo={(id) => {
+            document.getElementById(`msg-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          }} />
+        )}
         {messages.map((msg, idx) => {
           const isStreamingMsg = isAiProcessing && msg.role === 'assistant' && idx === messages.length - 1
           return (
-          <div key={msg.id} className={`flex gap-2 ${msg.role === 'user' ? 'justify-end' : ''}`}>
+          <div key={msg.id} id={`msg-${msg.id}`} className={`flex gap-2 ${msg.role === 'user' ? 'justify-end' : ''}${msg.pinned ? ' ring-1 ring-amber-200 rounded-xl bg-amber-50/30' : ''}`}>
             {msg.role === 'assistant' && (
               <div className="w-7 h-7 rounded-full bg-gradient-to-br from-slate-700 to-blue-600 flex items-center justify-center shrink-0 mt-0.5">
                 <Bot size={14} className="text-white" />
@@ -298,6 +305,15 @@ export function ChatPanel({ isMobileOpen, onCloseMobile, embedded }: { isMobileO
                     className="p-1 rounded hover:bg-gray-200 text-gray-400 hover:text-gray-600"
                   >
                     <Copy size={12} />
+                  </button>
+                  <button
+                    type="button"
+                    title={msg.pinned ? 'Unpin message' : 'Pin message'}
+                    aria-label={msg.pinned ? 'Unpin this message' : 'Pin this message for reference'}
+                    onClick={() => togglePinMessage(msg.id)}
+                    className={`p-1 rounded hover:bg-gray-200 ${msg.pinned ? 'text-amber-500' : 'text-gray-400 hover:text-gray-600'}`}
+                  >
+                    {msg.pinned ? <PinOff size={12} /> : <Pin size={12} />}
                   </button>
                   <button
                     type="button"
@@ -350,10 +366,23 @@ export function ChatPanel({ isMobileOpen, onCloseMobile, embedded }: { isMobileO
                 <span>
                   {messages[messages.length - 1]?.role === 'assistant' && messages[messages.length - 1]?.content
                     ? 'Finishing up…'
-                    : `Thinking…${waitSeconds > 0 ? ` (${waitSeconds}s)` : ''}`
+                    : waitSeconds < 2
+                      ? 'Analyzing your data…'
+                      : waitSeconds < 5
+                        ? 'Running analysis…'
+                        : waitSeconds < 10
+                          ? 'Consulting AI model…'
+                          : `Thinking…${waitSeconds > 0 ? ` (${waitSeconds}s)` : ''}`
                   }
                 </span>
               </div>
+              {waitSeconds >= 3 && waitSeconds < 15 && !messages[messages.length - 1]?.content && (
+                <div className="mt-1.5 flex flex-wrap gap-1">
+                  {waitSeconds >= 3 && <span className="inline-flex items-center gap-1 text-[10px] text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full">✓ Sheet context loaded</span>}
+                  {waitSeconds >= 5 && <span className="inline-flex items-center gap-1 text-[10px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-full">✓ Auditor checked</span>}
+                  {waitSeconds >= 8 && <span className="inline-flex items-center gap-1 text-[10px] text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded-full">⟳ Waiting for AI…</span>}
+                </div>
+              )}
               {waitSeconds >= 15 && !messages[messages.length - 1]?.content && (
                 <p className="mt-1 text-[11px] text-gray-400">
                   Template requests like &quot;build a budget&quot; are instant. Open-ended questions take a few seconds.
@@ -428,7 +457,7 @@ export function ChatPanel({ isMobileOpen, onCloseMobile, embedded }: { isMobileO
             value={chatInput}
             onChange={(e) => setChatInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder='e.g. "Explain this spreadsheet" or "Where am I overspending?" (Ctrl+K for commands)'
+            placeholder='e.g. "Explain this spreadsheet" or "@Sheet2 show totals" (Ctrl+K for commands)'
           />
           <button
             type="button"
@@ -554,6 +583,65 @@ function ActionCard({
             <XCircle size={12} />
             Reject
           </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function PinnedMessagesSection({
+  messages,
+  onUnpin,
+  onJumpTo,
+}: {
+  messages: Array<{ id: string; content: string; timestamp: number }>
+  onUnpin: (id: string) => void
+  onJumpTo: (id: string) => void
+}) {
+  const [expanded, setExpanded] = useState(false)
+
+  if (messages.length === 0) return null
+
+  return (
+    <div className="mb-2 rounded-xl border border-amber-200 bg-amber-50/60 overflow-hidden">
+      <button
+        type="button"
+        className="w-full flex items-center justify-between px-3 py-2 text-xs font-medium text-amber-800 hover:bg-amber-100/50 transition-colors"
+        onClick={() => setExpanded(!expanded)}
+      >
+        <span className="flex items-center gap-1.5">
+          <Pin size={12} className="text-amber-600" />
+          {messages.length} pinned message{messages.length > 1 ? 's' : ''}
+        </span>
+        {expanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+      </button>
+      {expanded && (
+        <div className="px-3 pb-2 space-y-1.5 border-t border-amber-200/60">
+          {messages.map((msg) => (
+            <div key={msg.id} className="flex items-start gap-2 py-1.5">
+              <div className="flex-1 min-w-0">
+                <p className="text-[11px] text-gray-700 truncate">{msg.content.slice(0, 120)}{msg.content.length > 120 ? '…' : ''}</p>
+              </div>
+              <div className="flex items-center gap-0.5 shrink-0">
+                <button
+                  type="button"
+                  className="p-0.5 rounded text-amber-600 hover:bg-amber-100 text-[10px]"
+                  onClick={() => onJumpTo(msg.id)}
+                  title="Jump to message"
+                >
+                  ↓
+                </button>
+                <button
+                  type="button"
+                  className="p-0.5 rounded text-gray-400 hover:text-red-500 hover:bg-red-50"
+                  onClick={() => onUnpin(msg.id)}
+                  title="Unpin"
+                >
+                  <PinOff size={10} />
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>

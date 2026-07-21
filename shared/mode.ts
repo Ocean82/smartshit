@@ -38,6 +38,9 @@ const EXPLAIN_SIGNALS = [
   'outlier',
   'what does this mean',
   'make sense of',
+  'what do you know',
+  'what context',
+  'what data do you',
 ]
 
 const ADVISE_SIGNALS = [

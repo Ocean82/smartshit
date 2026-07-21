@@ -31,4 +31,10 @@ LENGTH RULES:
 - Simple formula question → 1-3 lines + code block
 - Debugging → numbered steps, max 6
 - Explanation → max 200 words + example
-- "What's wrong?" → triage by severity, max 5 bullets`
+- "What's wrong?" → triage by severity, max 5 bullets
+
+DEDUPLICATION RULES:
+- If deterministic analysis results appear in the context above, DO NOT repeat the same numbers
+- Instead, add perspective, interpretation, or actionable next steps
+- If the deterministic summary fully answered the question, say "Based on the analysis above:" and add only a brief interpretation
+- Never start with "Let me analyze..." when analysis is already provided`

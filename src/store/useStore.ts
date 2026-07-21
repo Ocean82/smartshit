@@ -153,6 +153,10 @@ interface AppState {
   addMessage: (msg: ChatMessage) => void;
   sendMessage: () => void;
   clearChat: () => void;
+  /** Toggle pin/bookmark on a chat message */
+  togglePinMessage: (messageId: string) => void;
+  /** Get all pinned messages */
+  getPinnedMessages: () => ChatMessage[];
   /** Build a template directly (gallery), bypassing the parser/LLM round-trip. */
   runTemplateTool: (tool: string) => void;
   attachFileForChat: (file: File) => Promise<void>;
@@ -532,6 +536,15 @@ export const useStore = create<AppState>()(
         s.isAiProcessing = false;
       }),
 
+      togglePinMessage: (messageId) => set((s) => {
+        const msg = s.messages.find((m) => m.id === messageId);
+        if (msg) msg.pinned = !msg.pinned;
+      }),
+
+      getPinnedMessages: () => {
+        return get().messages.filter((m) => m.pinned);
+      },
+
       sendMessage: () => {
         const input = get().chatInput.trim();
         if (!input) return;
@@ -560,11 +573,25 @@ export const useStore = create<AppState>()(
 
         void (async () => {
           const state = get();
+
+          // ─── @-mention sheet switching ──────────────────────────────────────
+          // If user writes "@SheetName" in their message, switch to that sheet
+          const sheetMention = input.match(/@([A-Za-z0-9_ -]+)/);
+          if (sheetMention) {
+            const mentionedName = sheetMention[1].trim();
+            const targetSheet = state.workbook.sheets.find(
+              (s) => s.name.toLowerCase() === mentionedName.toLowerCase()
+            );
+            if (targetSheet && targetSheet.id !== state.activeSheetId) {
+              set((s) => { s.activeSheetId = targetSheet.id; });
+            }
+          }
+
           const sheet = state.getActiveSheet();
           const history = state.messages
             .filter((m) => m.role === 'user' || m.role === 'assistant')
             .slice(0, -2)
-            .slice(-8)
+            .slice(-12)
             .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }));
 
           const priorInsights = state.messages

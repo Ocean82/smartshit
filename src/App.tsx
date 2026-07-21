@@ -104,9 +104,7 @@ function App() {
     return (
       <div className="h-screen w-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-slate-800 to-blue-700 flex items-center justify-center shadow-lg">
-            <span className="text-white font-black text-sm">s!</span>
-          </div>
+          <img src="/smartsht-favicon.PNG" alt="smartsh!t" className="w-12 h-12 rounded-2xl shadow-lg" />
           <div className="text-sm text-gray-500 animate-pulse">Loading smartsh!t...</div>
         </div>
       </div>
@@ -296,9 +294,7 @@ function TitleBar({ onOpenTemplates, onOpenCloudPicker, onOpenShare }: { onOpenT
       <MobileMenu />
 
       <div className="flex items-center gap-2">
-        <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-blue-500 to-violet-600 flex items-center justify-center">
-          <span className="text-white font-black text-[10px]">s!</span>
-        </div>
+        <img src="/smartsht-favicon.PNG" alt="smartsh!t" className="w-6 h-6 rounded-lg" />
         <span className="text-sm font-bold text-white tracking-tight hidden sm:inline">smartsh!t</span>
       </div>
 

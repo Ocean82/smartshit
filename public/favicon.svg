@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="sGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ffffff;stop-opacity:1" />
+      <stop offset="40%" style="stop-color:#60a5fa;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1e3a8a;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="glowGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#93c5fd;stop-opacity:0.9" />
+      <stop offset="100%" style="stop-color:#dbeafe;stop-opacity:0.6" />
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="1.5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <!-- Background -->
+  <rect width="64" height="64" rx="12" fill="#0a0a0a"/>
+  <!-- S letter -->
+  <text x="18" y="50" font-family="Arial Black, Arial, sans-serif" font-size="46" font-weight="900" fill="url(#sGrad)" filter="url(#glow)">S</text>
+  <!-- Exclamation mark -->
+  <rect x="46" y="14" width="6" height="24" rx="3" fill="url(#glowGrad)" filter="url(#glow)"/>
+  <circle cx="49" cy="48" r="4" fill="url(#glowGrad)" filter="url(#glow)"/>
+</svg>
