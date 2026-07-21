@@ -28,14 +28,14 @@ export function SheetTabs() {
   };
 
   return (
-    <div className="bg-gray-50 border-t border-gray-200 flex items-center px-2 h-9 overflow-x-auto">
+    <div className="bg-slate-50 border-t border-gray-200 flex items-center px-2 h-8 overflow-x-auto shrink-0">
       {workbook.sheets.map((sheet) => (
         <div
           key={sheet.id}
-          className={`flex items-center gap-1 px-3 py-1 text-xs font-medium rounded-t cursor-pointer transition-colors border-b-2 group ${
+          className={`flex items-center gap-1 px-3 py-1 text-[11px] font-medium cursor-pointer transition-colors group ${
             sheet.id === activeSheetId
-              ? 'bg-white text-blue-700 border-blue-500 shadow-sm'
-              : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100 border-transparent'
+              ? 'bg-white text-slate-800 shadow-sm rounded-t-md border border-gray-200 border-b-white -mb-px'
+              : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-md'
           }`}
           onClick={() => setActiveSheet(sheet.id)}
           onDoubleClick={() => handleStartRename(sheet.id, sheet.name)}

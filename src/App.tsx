@@ -101,10 +101,10 @@ function App() {
 
   if (!isLoaded) {
     return (
-      <div className="h-screen w-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center">
-        <div className="flex flex-col items-center gap-3">
-          <img src="/smartsht-favicon.PNG" alt="smartsh!t" className="w-12 h-12 rounded-2xl shadow-lg" />
-          <div className="text-sm text-gray-500 animate-pulse">Loading smartsh!t...</div>
+      <div className="h-screen w-screen flex items-center justify-center" style={{ background: 'var(--surface-body)' }}>
+        <div className="flex flex-col items-center gap-4">
+          <img src="/smartsht-favicon.PNG" alt="smartsh!t" className="w-14 h-14 rounded-2xl shadow-md" />
+          <div className="text-sm animate-pulse font-medium" style={{ color: 'var(--ink-secondary)' }}>Loading smartsh!t...</div>
         </div>
       </div>
     )
@@ -162,11 +162,12 @@ function App() {
       {/* Mobile bottom toolbar */}
       <MobileToolbar />
 
-      {/* Mobile chat toggle FAB — positioned above mobile toolbar */}
+      {/* Mobile chat toggle FAB */}
       <button
         type="button"
         onClick={() => setActivePanel('chat')}
-        className="md:hidden fixed bottom-16 right-4 z-30 p-3.5 rounded-full bg-gradient-to-r from-slate-800 to-blue-700 text-white shadow-lg hover:from-slate-900 hover:to-blue-800 transition-all active:scale-95"
+        className="md:hidden fixed bottom-16 right-4 z-30 p-3.5 rounded-full text-white shadow-lg transition-colors active:scale-95"
+        style={{ background: 'var(--accent-600)' }}
         aria-label="Open chat"
       >
         <MessageSquare size={22} />
@@ -242,69 +243,70 @@ function TitleBar({ onOpenTemplates, onOpenCloudPicker, onOpenShare }: { onOpenT
   const syncBadge = (() => {
     if (!isCloudConfigured()) {
       return (
-        <div className="flex items-center gap-1 px-2 py-0.5 bg-slate-700/50 rounded-full">
-          <Zap size={10} className="text-green-400" />
-          <span>Autosaved</span>
+        <div className="flex items-center gap-1.5 px-2 py-1 rounded-md" style={{ background: 'var(--neutral-900)' }}>
+          <Zap size={11} className="text-green-400" />
+          <span style={{ color: 'var(--neutral-300)' }}>Local</span>
         </div>
       )
     }
     switch (syncStatus) {
       case 'syncing':
         return (
-          <div className="flex items-center gap-1 px-2 py-0.5 bg-slate-700/50 rounded-full">
-            <Loader2 size={10} className="text-blue-400 animate-spin" />
-            <span className="text-blue-300">Syncing...</span>
+          <div className="flex items-center gap-1.5 px-2 py-1 rounded-md" style={{ background: 'var(--neutral-900)' }}>
+            <Loader2 size={11} className="text-blue-400 animate-spin" />
+            <span className="text-blue-300">Syncing</span>
           </div>
         )
       case 'saved':
         return (
-          <div className="flex items-center gap-1 px-2 py-0.5 bg-slate-700/50 rounded-full">
-            <Cloud size={10} className="text-green-400" />
+          <div className="flex items-center gap-1.5 px-2 py-1 rounded-md" style={{ background: 'var(--neutral-900)' }}>
+            <Cloud size={11} className="text-green-400" />
             <span className="text-green-300">Saved</span>
           </div>
         )
       case 'error':
         return (
-          <div className="flex items-center gap-1 px-2 py-0.5 bg-slate-700/50 rounded-full">
-            <CloudOff size={10} className="text-red-400" />
-            <span className="text-red-300">Sync error</span>
+          <div className="flex items-center gap-1.5 px-2 py-1 rounded-md" style={{ background: 'var(--neutral-900)' }}>
+            <CloudOff size={11} className="text-red-400" />
+            <span className="text-red-300">Error</span>
           </div>
         )
       case 'offline':
         return (
-          <div className="flex items-center gap-1 px-2 py-0.5 bg-slate-700/50 rounded-full">
-            <CloudOff size={10} className="text-amber-400" />
+          <div className="flex items-center gap-1.5 px-2 py-1 rounded-md" style={{ background: 'var(--neutral-900)' }}>
+            <CloudOff size={11} className="text-amber-400" />
             <span className="text-amber-300">Offline</span>
           </div>
         )
       default:
         return (
-          <div className="flex items-center gap-1 px-2 py-0.5 bg-slate-700/50 rounded-full">
-            <Cloud size={10} className="text-slate-400" />
-            <span>Cloud</span>
+          <div className="flex items-center gap-1.5 px-2 py-1 rounded-md" style={{ background: 'var(--neutral-900)' }}>
+            <Cloud size={11} style={{ color: 'var(--neutral-400)' }} />
+            <span style={{ color: 'var(--neutral-300)' }}>Cloud</span>
           </div>
         )
     }
   })()
 
   return (
-    <div className="h-10 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 flex items-center px-2 md:px-4 gap-2 md:gap-3 shrink-0">
+    <div className="h-10 flex items-center px-2 md:px-4 gap-2 md:gap-3 shrink-0" style={{ background: 'var(--surface-chrome)' }}>
       {/* Mobile hamburger menu */}
       <MobileMenu />
 
       <div className="flex items-center gap-2">
         <img src="/smartsht-favicon.PNG" alt="smartsh!t" className="w-6 h-6 rounded-lg" />
-        <span className="text-sm font-bold text-white tracking-tight hidden sm:inline">smartsh!t</span>
+        <span className="text-sm font-semibold tracking-tight hidden sm:inline" style={{ color: 'var(--ink-on-dark)' }}>smartsh!t</span>
       </div>
 
-      <div className="w-px h-5 bg-slate-600 hidden md:block" />
+      <div className="w-px h-4 hidden md:block" style={{ background: 'var(--neutral-800)' }} />
 
-      <span className="text-xs text-slate-300 truncate max-w-[120px] md:max-w-[200px]">{workbook.name}</span>
+      <span className="text-xs truncate max-w-[120px] md:max-w-[200px]" style={{ color: 'var(--neutral-400)' }}>{workbook.name}</span>
 
       <button
         type="button"
         onClick={onOpenTemplates}
-        className="hidden md:inline-flex text-[10px] px-2 py-0.5 rounded-full bg-slate-700/60 text-slate-300 hover:bg-slate-600 hover:text-white transition-colors"
+        className="hidden md:inline-flex text-[11px] px-2.5 py-1 rounded-md transition-colors hover:text-white"
+        style={{ background: 'var(--neutral-900)', color: 'var(--neutral-300)' }}
       >
         Templates
       </button>
@@ -312,32 +314,34 @@ function TitleBar({ onOpenTemplates, onOpenCloudPicker, onOpenShare }: { onOpenT
       <button
         type="button"
         onClick={onOpenCloudPicker}
-        className="hidden md:inline-flex text-[10px] px-2 py-0.5 rounded-full bg-slate-700/60 text-slate-300 hover:bg-slate-600 hover:text-white transition-colors items-center gap-1"
+        className="hidden md:inline-flex text-[11px] px-2.5 py-1 rounded-md transition-colors items-center gap-1 hover:text-white"
+        style={{ background: 'var(--neutral-900)', color: 'var(--neutral-300)' }}
       >
-        <Cloud size={10} />
+        <Cloud size={11} />
         Cloud
       </button>
 
       <button
         type="button"
         onClick={onOpenShare}
-        className="hidden md:inline-flex text-[10px] px-2 py-0.5 rounded-full bg-slate-700/60 text-slate-300 hover:bg-slate-600 hover:text-white transition-colors items-center gap-1"
+        className="hidden md:inline-flex text-[11px] px-2.5 py-1 rounded-md transition-colors items-center gap-1 hover:text-white"
+        style={{ background: 'var(--neutral-900)', color: 'var(--neutral-300)' }}
       >
-        <Share2 size={10} />
+        <Share2 size={11} />
         Share
       </button>
 
       <div className="flex-1" />
 
-      <div className="flex items-center gap-1.5 md:gap-2 text-slate-400 text-[10px]">
-        <div className="flex items-center gap-1 px-1.5 md:px-2 py-0.5 bg-slate-700/50 rounded-full">
-          <Sparkles size={10} className="text-amber-400" />
+      <div className="flex items-center gap-2 md:gap-2.5 text-[11px]" style={{ color: 'var(--neutral-400)' }}>
+        <div className="flex items-center gap-1.5 px-2 py-1 rounded-md" style={{ background: 'var(--neutral-900)' }}>
+          <Sparkles size={11} className="text-amber-400" />
           <span className={`${aiClass} hidden sm:inline`}>{aiLabel}</span>
           <span className={`${aiClass} sm:hidden`}>{health?.ok ? '●' : '○'}</span>
         </div>
         <span className="hidden md:inline">{syncBadge}</span>
-        <span className="text-slate-500 hidden sm:inline">
-          {new Date(workbook.updatedAt).toLocaleTimeString()}
+        <span className="hidden sm:inline text-[10px]" style={{ color: 'var(--neutral-500)' }}>
+          {new Date(workbook.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
         </span>
         <UserNav />
       </div>

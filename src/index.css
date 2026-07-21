@@ -1,22 +1,79 @@
 @import "tailwindcss";
 
-/* Scrollbar styling */
+/* ========================================
+   BRAND COLOR SYSTEM — smartsh!t
+   Strategy: Restrained (tinted neutrals + one accent)
+   Hue anchor: 250 (deep navy-blue) — from logo gradient
+   Brand DNA: deep navy base, luminous blue accent, subtle glow
+   ======================================== */
+
+:root {
+  /* Brand hue — derived from logo gradient (#1e3a8a → #60a5fa) */
+  --brand-hue: 250;
+
+  /* Primary accent scale — the luminous blue from the logo */
+  --accent-50: oklch(0.97 0.015 var(--brand-hue));
+  --accent-100: oklch(0.93 0.04 var(--brand-hue));
+  --accent-200: oklch(0.86 0.08 var(--brand-hue));
+  --accent-300: oklch(0.75 0.12 var(--brand-hue));
+  --accent-400: oklch(0.65 0.16 var(--brand-hue));
+  --accent-500: oklch(0.55 0.19 var(--brand-hue));
+  --accent-600: oklch(0.50 0.20 var(--brand-hue));
+  --accent-700: oklch(0.42 0.18 var(--brand-hue));
+  --accent-800: oklch(0.33 0.14 var(--brand-hue));
+  --accent-900: oklch(0.24 0.09 var(--brand-hue));
+
+  /* Tinted neutrals — faint blue tint for cohesion with brand */
+  --neutral-50: oklch(0.985 0.005 var(--brand-hue));
+  --neutral-100: oklch(0.965 0.007 var(--brand-hue));
+  --neutral-200: oklch(0.92 0.009 var(--brand-hue));
+  --neutral-300: oklch(0.87 0.011 var(--brand-hue));
+  --neutral-400: oklch(0.70 0.013 var(--brand-hue));
+  --neutral-500: oklch(0.55 0.015 var(--brand-hue));
+  --neutral-600: oklch(0.45 0.016 var(--brand-hue));
+  --neutral-700: oklch(0.35 0.014 var(--brand-hue));
+  --neutral-800: oklch(0.25 0.02 var(--brand-hue));
+  --neutral-900: oklch(0.18 0.03 var(--brand-hue));
+  --neutral-950: oklch(0.12 0.035 var(--brand-hue));
+
+  /* Semantic */
+  --success: oklch(0.64 0.17 155);
+  --warning: oklch(0.78 0.14 70);
+  --error: oklch(0.60 0.2 25);
+  --info: oklch(0.62 0.15 240);
+
+  /* Surfaces */
+  --surface-body: var(--neutral-50);
+  --surface-panel: oklch(1 0 0);
+  --surface-elevated: oklch(1 0 0);
+  --surface-chrome: var(--neutral-950);
+  --surface-secondary: var(--neutral-100);
+
+  /* Text */
+  --ink-primary: var(--neutral-900);
+  --ink-secondary: var(--neutral-600);
+  --ink-muted: var(--neutral-400);
+  --ink-on-dark: oklch(0.92 0.01 var(--brand-hue));
+  --ink-on-accent: oklch(0.98 0 0);
+}
+
+/* Scrollbar styling — brand-tinted neutrals */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #f1f1f1;
+  background: var(--neutral-100);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #c1c1c1;
+  background: var(--neutral-300);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #a1a1a1;
+  background: var(--neutral-400);
 }
 
 /* Hide scrollbar for mobile skill pills */
@@ -68,8 +125,10 @@ input:focus, textarea:focus, select:focus {
 body {
   margin: 0;
   padding: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
   overflow: hidden;
+  background: var(--surface-body);
+  color: var(--ink-primary);
 }
 
 /* ========================================

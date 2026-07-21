@@ -190,8 +190,9 @@ function MobileToolBtn({
     <button
       type="button"
       className={`flex items-center justify-center w-10 h-10 rounded-xl transition-colors active:scale-95 ${
-        active ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'
+        active ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-100'
       } ${disabled ? 'opacity-30 pointer-events-none' : ''}`}
+      style={!active ? { color: 'var(--neutral-600)' } : undefined}
       onClick={onClick}
       disabled={disabled}
       aria-label={label}

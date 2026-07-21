@@ -12,15 +12,11 @@ import {
 import { BG_COLORS, FULL_COLORS } from '@/data/colors';
 import { useRef, useState, useEffect } from 'react';
 import { v4 as uuid } from 'uuid';
-import { FormulaAutocomplete } from './FormulaAutocomplete';
 import './Toolbar.css';
 
 export function Toolbar() {
   const {
     selection,
-    editingCell,
-    editValue,
-    setEditValue,
     setRangeFormat,
     undo,
     redo,
@@ -45,16 +41,11 @@ export function Toolbar() {
     paste,
     pushHistory,
     getActiveSheet,
-    getComputedValue,
     setCellValue,
-    setEditingCell,
   } = useStore();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const formulaBarRef = useRef<HTMLInputElement>(null);
   const fontColorRef = useRef<HTMLDivElement>(null);
-  const [fbAutocompleteVisible, setFbAutocompleteVisible] = useState(false);
-  const [fbAutocompletePos, setFbAutocompletePos] = useState({ top: 0, left: 0 });
   const [showFontColor, setShowFontColor] = useState(false);
   const sheet = getActiveSheet();
 
@@ -71,38 +62,6 @@ export function Toolbar() {
 
   const selectedCellId = selection ? refToCell(selection.startRow, selection.startCol) : '';
   const selectedCellData = selectedCellId ? sheet.cells[selectedCellId] : undefined;
-
-  const handleFormulaBarChange = (val: string) => {
-    setEditValue(val);
-    if (selectedCellId && !editingCell) {
-      setEditingCell(selectedCellId);
-    }
-  };
-
-  const handleFormulaBarKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      if (selectedCellId) {
-        pushHistory('Edit ' + selectedCellId);
-        if (editValue.startsWith('=')) {
-          setCellValue(selectedCellId, null, editValue);
-        } else {
-          const num = Number(editValue);
-          if (editValue !== '' && !isNaN(num)) {
-            setCellValue(selectedCellId, num);
-          } else {
-            setCellValue(selectedCellId, editValue || null);
-          }
-        }
-        setEditingCell(null);
-        setEditValue('');
-      }
-    }
-  };
-
-  const displayFormulaValue = editingCell
-    ? editValue
-    : selectedCellData?.formula || (selectedCellData?.value != null ? String(selectedCellData.value) : '') || (selection ? getComputedValue(selection.startRow, selection.startCol) : '');
 
   const handleExportCSV = () => {
     exportSheetToCsv(sheet, sheet.name.replace(/\s+/g, '_'));
@@ -392,8 +351,9 @@ export function Toolbar() {
           type="button"
           onClick={() => setShowFormatPanel(!showFormatPanel)}
           className={`flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded transition-colors ${
-            showFormatPanel ? 'bg-blue-100 text-blue-700' : 'text-gray-700 hover:bg-gray-100'
+            showFormatPanel ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-100'
           }`}
+          style={!showFormatPanel ? { color: 'var(--neutral-700)' } : undefined}
           title="Toggle format panel"
         >
           Format
@@ -430,7 +390,8 @@ export function Toolbar() {
           <button
             onClick={() => setShowPivotDialog(true)}
             disabled={!selection}
-            className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium hover:bg-blue-50 hover:text-blue-700 rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ color: 'var(--neutral-700)' }}
             title="Create pivot table from selection"
           >
             <span className="text-sm">📊</span> Pivot
@@ -457,67 +418,6 @@ export function Toolbar() {
 
         <div className="flex-1" />
       </div>
-
-      {/* Formula bar */}
-      <div className="flex items-center px-2 py-1 gap-2">
-        <div className="w-16 text-center text-sm font-medium text-gray-600 bg-gray-50 border border-gray-200 rounded px-2 py-0.5">
-          {selectedCellId || ''}
-        </div>
-        <div className="text-gray-400 text-sm font-mono">ƒx</div>
-        <input
-          ref={formulaBarRef}
-          className="flex-1 text-sm px-2 py-0.5 border border-gray-200 rounded focus:border-blue-400 focus:ring-1 focus:ring-blue-200 outline-none font-mono"
-          value={displayFormulaValue}
-          onFocus={(e) => {
-            if (e.currentTarget.value.startsWith('=')) {
-              const rect = e.currentTarget.getBoundingClientRect();
-              setFbAutocompletePos({ top: rect.bottom + 2, left: rect.left });
-              setFbAutocompleteVisible(true);
-            }
-          }}
-          onChange={(e) => {
-            const val = e.target.value;
-            handleFormulaBarChange(val);
-            if (val.startsWith('=')) {
-              const rect = formulaBarRef.current?.getBoundingClientRect();
-              if (rect) setFbAutocompletePos({ top: rect.bottom + 2, left: rect.left });
-              setFbAutocompleteVisible(true);
-            } else {
-              setFbAutocompleteVisible(false);
-            }
-          }}
-          onBlur={() => setTimeout(() => setFbAutocompleteVisible(false), 200)}
-          onKeyDown={handleFormulaBarKeyDown}
-          placeholder="Enter a value or formula..."
-        />
-        <button
-          onClick={() => {
-            const store = useStore.getState();
-            if (store.selection) {
-              const cid = refToCell(store.selection.startRow, store.selection.startCol);
-              store.pushHistory('Quick formula');
-              store.setCellValue(cid, null, '=SUM(A1:A10)');
-            }
-          }}
-          className="text-xs px-2 py-1 bg-gray-100 rounded hover:bg-gray-200 text-gray-600"
-          title="Insert SUM"
-        >
-          Σ
-        </button>
-      </div>
-      <FormulaAutocomplete
-        visible={fbAutocompleteVisible}
-        editValue={displayFormulaValue}
-        onSelect={(fn) => {
-          if (fn) {
-            const currentVal = displayFormulaValue;
-            const newVal = currentVal.replace(/=[A-Za-z_]*$/, '=' + fn + '(');
-            handleFormulaBarChange(newVal);
-          }
-          setFbAutocompleteVisible(false);
-        }}
-        position={fbAutocompletePos}
-      />
     </div>
   );
 }
@@ -540,8 +440,9 @@ function ToolButton({
   return (
     <button
       className={`p-1.5 rounded transition-colors ${
-        active ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'
+        active ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-100'
       } ${disabled ? 'opacity-40 cursor-not-allowed' : ''} ${className}`}
+      style={!active ? { color: 'var(--neutral-600)' } : undefined}
       title={title}
       onClick={onClick}
       disabled={disabled}

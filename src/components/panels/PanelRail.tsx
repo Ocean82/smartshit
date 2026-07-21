@@ -15,7 +15,7 @@ export function PanelRail() {
   }
 
   return (
-    <div className="flex flex-col items-center w-11 bg-gray-50 border-l border-gray-200 py-2 gap-1 shrink-0">
+    <div className="flex flex-col items-center w-11 border-l py-2.5 gap-1.5 shrink-0" style={{ background: 'var(--surface-secondary)', borderColor: 'var(--neutral-200)' }}>
       {PANELS.map((panel) => {
         const isActive = activePanel === panel.id
         return (
@@ -24,20 +24,24 @@ export function PanelRail() {
             type="button"
             onClick={() => handleClick(panel.id)}
             className={`
-              w-9 h-9 rounded-lg flex items-center justify-center text-base
+              w-8 h-8 rounded-lg flex items-center justify-center text-base
               transition-all duration-150 relative group
               ${isActive
-                ? 'bg-blue-100 text-blue-700 shadow-sm ring-1 ring-blue-200'
-                : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'
+                ? 'ring-1 ring-blue-200'
+                : 'hover:text-slate-700'
               }
             `}
+            style={isActive
+              ? { background: 'var(--accent-50)', color: 'var(--accent-700)' }
+              : { color: 'var(--neutral-500)' }
+            }
             title={panel.label}
             aria-label={`${isActive ? 'Close' : 'Open'} ${panel.label} panel`}
             aria-pressed={isActive}
           >
             <span aria-hidden="true">{panel.icon}</span>
             {/* Tooltip */}
-            <span className="absolute right-full mr-2 px-2 py-1 text-[11px] font-medium text-white bg-gray-800 rounded-md opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
+            <span className="absolute right-full mr-2 px-2 py-1 text-[11px] font-medium text-white rounded-md opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap" style={{ background: 'var(--neutral-900)' }}>
               {panel.label}
             </span>
           </button>

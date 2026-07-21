@@ -152,7 +152,7 @@ export function FormulaBar() {
         ) : (
           <button
             type="button"
-            className="w-full h-full px-2 text-xs font-mono text-center text-gray-700 hover:bg-blue-50 transition-colors cursor-text"
+            className="w-full h-full px-2 text-xs font-mono text-center text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition-colors cursor-text"
             onClick={() => {
               setNameBoxEditing(true);
               setNameBoxValue(cellRef);
@@ -208,7 +208,7 @@ export function FormulaBar() {
           />
         ) : (
           <div
-            className="w-full h-full flex items-center px-2 text-[13px] font-mono text-gray-700 cursor-text hover:bg-blue-50/30 transition-colors truncate"
+            className="w-full h-full flex items-center px-2 text-[13px] font-mono text-gray-700 cursor-text hover:bg-blue-50/30 hover:text-blue-800 transition-colors truncate"
             onClick={handleBarClick}
             title={cellContent || 'Click to edit'}
           >

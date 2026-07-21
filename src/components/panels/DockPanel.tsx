@@ -78,10 +78,10 @@ export function DockPanel({ panelId, children, title, headerActions }: DockPanel
       </div>
 
       {/* Header */}
-      <div className="px-3 py-2.5 border-b border-gray-200 flex items-center justify-between shrink-0">
+      <div className="px-3 py-2.5 border-b flex items-center justify-between shrink-0" style={{ borderColor: 'var(--neutral-200)' }}>
         <div className="flex items-center gap-2 min-w-0">
           <span className="text-sm" aria-hidden="true">{def.icon}</span>
-          <h3 className="text-xs font-semibold text-gray-700 uppercase tracking-wider truncate">
+          <h3 className="text-xs font-semibold uppercase tracking-wider truncate" style={{ color: 'var(--neutral-700)' }}>
             {title ?? def.label}
           </h3>
         </div>

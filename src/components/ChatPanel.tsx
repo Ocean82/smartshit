@@ -181,12 +181,12 @@ export function ChatPanel({ isMobileOpen, onCloseMobile, embedded }: { isMobileO
     >
       {/* Header — only shown in standalone mode (DockPanel provides its own header) */}
       {!embedded && (
-      <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between bg-gradient-to-r from-slate-800 to-blue-800">
+      <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between" style={{ background: 'linear-gradient(135deg, var(--neutral-950), var(--accent-800))' }}>
         <div className="flex items-center gap-2 min-w-0">
           <Sparkles size={18} className="text-amber-300 shrink-0" />
           <div className="min-w-0">
             <h2 className="text-sm font-bold text-white truncate">smartsh!t assistant</h2>
-            <p className="text-[10px] text-blue-200 truncate">Describe what you need — I handle the rest</p>
+            <p className="text-[10px] truncate" style={{ color: 'var(--accent-300)' }}>Describe what you need — I handle the rest</p>
           </div>
         </div>
         <div className="flex items-center gap-1 shrink-0">
@@ -238,18 +238,18 @@ export function ChatPanel({ isMobileOpen, onCloseMobile, embedded }: { isMobileO
       </div>
       )}
 
-      <div className="px-3 py-2 border-b border-gray-100 overflow-x-auto scrollbar-hide">
+      <div className="px-3 py-2.5 border-b border-gray-100 overflow-x-auto scrollbar-hide">
         <div className="flex gap-1.5 md:flex-wrap">
           {skills.slice(0, 6).map((skill) => (
             <button
               key={skill.id}
               type="button"
-              className="flex items-center gap-1 px-2.5 py-1 text-xs bg-gray-50 rounded-full border border-gray-200 hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700 transition-colors whitespace-nowrap shrink-0"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs bg-slate-50 rounded-lg border border-slate-200 hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700 transition-colors whitespace-nowrap shrink-0"
               onClick={() => handleSkillClick(skill.prompt)}
               title={skill.description}
             >
               <span>{skill.icon}</span>
-              <span>{skill.name}</span>
+              <span className="font-medium">{skill.name}</span>
             </button>
           ))}
         </div>
@@ -267,7 +267,7 @@ export function ChatPanel({ isMobileOpen, onCloseMobile, embedded }: { isMobileO
           return (
           <div key={msg.id} id={`msg-${msg.id}`} className={`flex gap-2 ${msg.role === 'user' ? 'justify-end' : ''}${msg.pinned ? ' ring-1 ring-amber-200 rounded-xl bg-amber-50/30' : ''}`}>
             {msg.role === 'assistant' && (
-              <div className="w-7 h-7 rounded-full bg-gradient-to-br from-slate-700 to-blue-600 flex items-center justify-center shrink-0 mt-0.5">
+              <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 mt-0.5" style={{ background: 'linear-gradient(135deg, var(--neutral-950), var(--accent-600))' }}>
                 <Bot size={14} className="text-white" />
               </div>
             )}
@@ -275,9 +275,10 @@ export function ChatPanel({ isMobileOpen, onCloseMobile, embedded }: { isMobileO
               <div
                 className={`rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
                   msg.role === 'user'
-                    ? 'bg-blue-600 text-white rounded-tr-sm'
-                    : 'bg-gray-100 text-gray-800 rounded-tl-sm'
+                    ? 'text-white rounded-tr-sm'
+                    : 'text-gray-800 rounded-tl-sm'
                 }`}
+                style={msg.role === 'user' ? { background: 'var(--accent-600)' } : { background: 'var(--neutral-100)' }}
               >
                 <MessageContent content={msg.content} role={msg.role} isStreaming={isStreamingMsg} />
               </div>
@@ -357,7 +358,7 @@ export function ChatPanel({ isMobileOpen, onCloseMobile, embedded }: { isMobileO
         )})}
         {isAiProcessing && (
           <div className="flex gap-2" role="status" aria-live="polite" aria-busy="true">
-            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-slate-700 to-blue-600 flex items-center justify-center shrink-0">
+            <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0" style={{ background: 'linear-gradient(135deg, var(--neutral-950), var(--accent-600))' }}>
               <Bot size={14} className="text-white" aria-hidden="true" />
             </div>
             <div className="bg-gray-100 rounded-2xl rounded-tl-sm px-4 py-3">
@@ -394,19 +395,19 @@ export function ChatPanel({ isMobileOpen, onCloseMobile, embedded }: { isMobileO
         <div ref={messagesEndRef} />
       </div>
 
-      <div className="px-3 py-3 border-t border-gray-200 bg-gray-50">
+      <div className="px-3 py-3 border-t border-gray-200 bg-slate-50/80">
         {!isPro && <UpgradePrompt remaining={remaining} dailyLimit={dailyLimit} />}
         {attachedFilePreview && (
           <div className="mb-2 flex items-center justify-between gap-2 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-2 text-xs">
             <div className="flex items-center gap-2 min-w-0">
               <Paperclip size={14} className="text-blue-600 shrink-0" />
               <span className="truncate text-blue-900">{attachedFilePreview.fileName}</span>
-              <span className="text-blue-600 shrink-0">— asking about attached file</span>
+              <span className="text-blue-600 shrink-0">attached</span>
             </div>
             <div className="flex items-center gap-1 shrink-0">
               <button
                 type="button"
-                className="px-2 py-1 rounded-md bg-blue-600 text-white hover:bg-blue-700"
+                className="px-2 py-1 rounded-md bg-blue-600 text-white hover:bg-blue-700 text-xs font-medium"
                 onClick={() => void importAttachedFile()}
               >
                 Import
@@ -443,7 +444,7 @@ export function ChatPanel({ isMobileOpen, onCloseMobile, embedded }: { isMobileO
           />
           <button
             type="button"
-            className="p-2.5 rounded-xl border border-gray-300 bg-white text-gray-600 hover:bg-gray-100 disabled:opacity-50 shrink-0"
+            className="p-2.5 rounded-xl border border-gray-200 bg-white text-slate-500 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50 shrink-0 transition-colors"
             onClick={() => fileInputRef.current?.click()}
             disabled={isAiProcessing}
             title="Attach spreadsheet file"
@@ -452,16 +453,17 @@ export function ChatPanel({ isMobileOpen, onCloseMobile, embedded }: { isMobileO
           </button>
           <textarea
             ref={inputRef}
-            className="flex-1 resize-none rounded-xl border border-gray-300 px-3.5 py-2.5 text-sm focus:border-blue-400 focus:ring-1 focus:ring-blue-200 outline-none bg-white min-h-[44px] max-h-[120px] md:min-h-[80px]"
+            className="flex-1 resize-none rounded-xl border border-gray-200 px-3.5 py-2.5 text-sm focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none bg-white min-h-[44px] max-h-[120px] md:min-h-[80px] placeholder:text-slate-400"
             rows={2}
             value={chatInput}
             onChange={(e) => setChatInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder='e.g. "Explain this spreadsheet" or "@Sheet2 show totals" (Ctrl+K for commands)'
+            placeholder='e.g. "Explain this spreadsheet" or "Build a monthly budget"'
           />
           <button
             type="button"
-            className="p-2.5 rounded-xl bg-gradient-to-r from-slate-800 to-blue-700 text-white hover:from-slate-900 hover:to-blue-800 disabled:opacity-50 transition-all shadow-sm shrink-0"
+            className="p-2.5 rounded-xl text-white disabled:opacity-40 transition-colors shadow-sm shrink-0"
+            style={{ background: 'var(--accent-600)' }}
             onClick={handleSend}
             disabled={!chatInput.trim() || isAiProcessing || !canAsk}
             title="Send message"
@@ -470,7 +472,7 @@ export function ChatPanel({ isMobileOpen, onCloseMobile, embedded }: { isMobileO
             <Send size={16} />
           </button>
         </div>
-        <p className="text-[10px] text-gray-400 mt-1.5 text-center">
+        <p className="text-[10px] text-slate-400 mt-2 text-center">
           {healthFooterMessage(health)}
         </p>
         <ApiKeySettings />
@@ -633,7 +635,7 @@ function PinnedMessagesSection({
                 </button>
                 <button
                   type="button"
-                  className="p-0.5 rounded text-gray-400 hover:text-red-500 hover:bg-red-50"
+                  className="p-0.5 rounded text-gray-400 hover:text-red-600 hover:bg-red-50"
                   onClick={() => onUnpin(msg.id)}
                   title="Unpin"
                 >

@@ -83,8 +83,9 @@ export function WelcomeOverlay({ onOpenTemplates }: WelcomeOverlayProps) {
               <div
                 key={i}
                 className={`h-1.5 rounded-full transition-all ${
-                  i === step ? 'w-6 bg-blue-600' : 'w-1.5 bg-gray-200'
+                  i === step ? 'w-6' : 'w-1.5 bg-gray-200'
                 }`}
+                style={i === step ? { background: 'var(--accent-500)' } : undefined}
               />
             ))}
           </div>
@@ -102,7 +103,8 @@ export function WelcomeOverlay({ onOpenTemplates }: WelcomeOverlayProps) {
             {step < steps.length - 1 ? (
               <button
                 type="button"
-                className="flex-1 py-2.5 px-4 text-sm bg-gradient-to-r from-slate-800 to-blue-700 text-white rounded-xl hover:from-slate-900 hover:to-blue-800 flex items-center justify-center gap-1.5"
+                className="flex-1 py-2.5 px-4 text-sm text-white rounded-xl transition-colors flex items-center justify-center gap-1.5"
+                style={{ background: 'var(--accent-600)' }}
                 onClick={() => setStep(step + 1)}
               >
                 Next <ArrowRight size={14} />
@@ -110,7 +112,8 @@ export function WelcomeOverlay({ onOpenTemplates }: WelcomeOverlayProps) {
             ) : (
               <button
                 type="button"
-                className="flex-1 py-2.5 px-4 text-sm bg-gradient-to-r from-slate-800 to-blue-700 text-white rounded-xl hover:from-slate-900 hover:to-blue-800 flex items-center justify-center gap-1.5"
+                className="flex-1 py-2.5 px-4 text-sm text-white rounded-xl transition-colors flex items-center justify-center gap-1.5"
+                style={{ background: 'var(--accent-600)' }}
                 onClick={() => {
                   dismiss()
                   onOpenTemplates()

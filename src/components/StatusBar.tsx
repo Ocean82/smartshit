@@ -99,18 +99,18 @@ export function StatusBar() {
   const cellCount = Object.keys(sheet.cells).filter(k => sheet.cells[k]?.value != null).length;
 
   return (
-    <div className="h-6 bg-gray-50 border-t border-gray-200 flex items-center px-3 text-[10px] text-gray-500 gap-4">
-      <span>{sheet.name}</span>
-      <span className="text-gray-300">|</span>
+    <div className="h-6 border-t flex items-center px-3 text-[10px] gap-3 shrink-0 hidden md:flex" style={{ background: 'var(--surface-secondary)', borderColor: 'var(--neutral-200)', color: 'var(--neutral-500)' }}>
+      <span className="font-medium" style={{ color: 'var(--neutral-700)' }}>{sheet.name}</span>
+      <span style={{ color: 'var(--neutral-300)' }}>·</span>
       <span>{cellCount} cells</span>
 
       {stats && stats.count > 0 && (
         <>
-          <span className="text-gray-300">|</span>
+          <span className="text-slate-300" style={{ color: 'var(--neutral-300)' }}>·</span>
           <span>Count: {stats.count}</span>
           {stats.sum !== null && (
             <>
-              <span className="font-medium text-gray-600">Sum: {stats.sum.toLocaleString()}</span>
+              <span className="font-medium" style={{ color: 'var(--neutral-700)' }}>Sum: {stats.sum.toLocaleString()}</span>
               <span>Avg: {stats.avg?.toLocaleString()}</span>
               <span>Min: {stats.min?.toLocaleString()}</span>
               <span>Max: {stats.max?.toLocaleString()}</span>
@@ -122,13 +122,13 @@ export function StatusBar() {
       <div className="flex-1" />
 
       {responseTime && (
-        <span className="text-gray-400" title="Last AI response time">
+        <span title="Last AI response time" style={{ color: 'var(--neutral-400)' }}>
           ⚡ {responseTime}
         </span>
       )}
 
       {/* Zoom controls */}
-      <div className="flex items-center gap-1 border-l border-gray-200 pl-3 ml-2">
+      <div className="flex items-center gap-1.5 border-l border-gray-200 pl-3 ml-1">
         <button
           type="button"
           onClick={zoomOut}
@@ -141,7 +141,7 @@ export function StatusBar() {
         <select
           value={zoom}
           onChange={(e) => handleZoomChange(Number(e.target.value))}
-          className="text-[10px] bg-transparent border-none cursor-pointer text-gray-600 font-medium w-[42px] text-center appearance-none"
+          className="text-[10px] bg-transparent border-none cursor-pointer text-slate-600 font-medium w-[42px] text-center appearance-none"
           title="Zoom level"
         >
           {ZOOM_LEVELS.map((z) => (
@@ -158,8 +158,6 @@ export function StatusBar() {
           <Plus size={11} />
         </button>
       </div>
-
-      <span className="text-gray-400">smartsh!t v1.0</span>
     </div>
   );
 }
