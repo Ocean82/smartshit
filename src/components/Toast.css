@@ -54,15 +54,15 @@
 }
 
 .toast-success .toast-icon {
-  color: oklch(0.72 0.18 155);
+  color: var(--success);
 }
 
 .toast-error .toast-icon {
-  color: oklch(0.7 0.2 25);
+  color: var(--error);
 }
 
 .toast-info .toast-icon {
-  color: oklch(0.72 0.15 240);
+  color: var(--info);
 }
 
 /* ─── Message ─── */

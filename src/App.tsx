@@ -30,7 +30,8 @@ import { FormulaBar } from '@/components/FormulaBar'
 import { GoToCellDialog } from '@/components/GoToCellDialog'
 import { ToastContainer } from '@/components/Toast'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
-import { Sparkles, Zap, Cloud, CloudOff, Loader2, Share2, MessageSquare, SquarePen } from 'lucide-react'
+import { EmptyGridGuide } from '@/components/EmptyGridGuide'
+import { Sparkles, Zap, Cloud, CloudOff, Loader2, Share2, MessageSquare, SquarePen, Search } from 'lucide-react'
 import { UserNav } from '@/auth'
 import {
   getSyncStatus,
@@ -40,6 +41,8 @@ import {
   type SyncStatus,
 } from '@/lib/cloudSync'
 import { exportWorkbookToJson, importWorkbookFromJsonFile, normalizeImportedWorkbook } from '@/io/workbookJson'
+import { exportWorkbookToXlsx } from '@/io/xlsx'
+import { refToCell } from '@/engine/spreadsheet'
 
 function App() {
   const {
@@ -99,6 +102,45 @@ function App() {
         e.preventDefault()
         toggleToolbar()
       }
+      // Ctrl+S: Save as Excel
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === 's') {
+        e.preventDefault()
+        exportWorkbookToXlsx(useStore.getState().workbook)
+        useStore.getState().showToast({ type: 'success', message: 'Saved as Excel' })
+      }
+      // Ctrl+O: Open file
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === 'o') {
+        e.preventDefault()
+        document.querySelector<HTMLInputElement>('input[accept=".csv,.xlsx,.xls"]')?.click()
+      }
+      // Ctrl+B/I/U: Text formatting (only when not editing a cell)
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === 'b') {
+        const state = useStore.getState()
+        if (state.selection && !state.editingCell) {
+          e.preventDefault()
+          const cellId = refToCell(state.selection.startRow, state.selection.startCol)
+          const cell = state.getActiveSheet().cells[cellId]
+          state.setRangeFormat({ bold: !cell?.format?.bold })
+        }
+      }
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === 'i') {
+        const state = useStore.getState()
+        if (state.selection && !state.editingCell) {
+          e.preventDefault()
+          const cellId = refToCell(state.selection.startRow, state.selection.startCol)
+          const cell = state.getActiveSheet().cells[cellId]
+          state.setRangeFormat({ italic: !cell?.format?.italic })
+        }
+      }
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === 'u') {
+        const state = useStore.getState()
+        if (state.selection && !state.editingCell) {
+          e.preventDefault()
+          const cellId = refToCell(state.selection.startRow, state.selection.startCol)
+          const cell = state.getActiveSheet().cells[cellId]
+          state.setRangeFormat({ underline: !cell?.format?.underline })
+        }
+      }
       if (e.key === 'Escape' && useStore.getState().activePanel) {
         setActivePanel(null)
       }
@@ -132,6 +174,7 @@ function App() {
         onOpenTemplates={() => setShowTemplates(true)}
         onOpenCloudPicker={() => setShowWorkbookPicker(true)}
         onOpenShare={() => setShowShareDialog(true)}
+        onOpenCommandPalette={() => setShowCommandPalette(true)}
       />
       {/* Desktop-only: toolbar (hideable via Ctrl+Shift+T) */}
       {showToolbar && (
@@ -149,6 +192,7 @@ function App() {
           <div className="flex-1 flex flex-col overflow-hidden relative pb-[52px] md:pb-0">
             <SpreadsheetGrid />
             <ChartOverlay />
+            <EmptyGridGuide onOpenTemplates={() => setShowTemplates(true)} />
           </div>
           <SheetTabs />
         </div>
@@ -240,7 +284,7 @@ function App() {
   )
 }
 
-function TitleBar({ onOpenTemplates, onOpenCloudPicker, onOpenShare }: { onOpenTemplates: () => void; onOpenCloudPicker: () => void; onOpenShare: () => void }) {
+function TitleBar({ onOpenTemplates, onOpenCloudPicker, onOpenShare, onOpenCommandPalette }: { onOpenTemplates: () => void; onOpenCloudPicker: () => void; onOpenShare: () => void; onOpenCommandPalette: () => void }) {
   const { workbook } = useStore()
   const [health, setHealth] = useState<ServerHealth | null>(null)
   const [syncStatus, setSyncStatus] = useState<SyncStatus>(getSyncStatus())
@@ -256,14 +300,14 @@ function TitleBar({ onOpenTemplates, onOpenCloudPicker, onOpenShare }: { onOpenT
   }, [])
 
   const aiLabel = health?.ok ? 'AI online' : health?.ollama ? 'Model loading' : 'AI offline'
-  const aiClass = health?.ok ? 'text-green-400' : 'text-amber-400'
+  const aiColor = health?.ok ? 'var(--success)' : 'var(--warning)'
 
   // Cloud sync badge
   const syncBadge = (() => {
     if (!isCloudConfigured()) {
       return (
         <div className="flex items-center gap-1.5 px-2 py-1 rounded-md" style={{ background: 'var(--neutral-900)' }}>
-          <Zap size={11} className="text-green-400" />
+          <Zap size={11} style={{ color: 'var(--success)' }} />
           <span style={{ color: 'var(--neutral-300)' }}>Local</span>
         </div>
       )
@@ -272,29 +316,29 @@ function TitleBar({ onOpenTemplates, onOpenCloudPicker, onOpenShare }: { onOpenT
       case 'syncing':
         return (
           <div className="flex items-center gap-1.5 px-2 py-1 rounded-md" style={{ background: 'var(--neutral-900)' }}>
-            <Loader2 size={11} className="text-blue-400 animate-spin" />
-            <span className="text-blue-300">Syncing</span>
+            <Loader2 size={11} className="animate-spin" style={{ color: 'var(--info)' }} />
+            <span style={{ color: 'var(--info)' }}>Syncing</span>
           </div>
         )
       case 'saved':
         return (
           <div className="flex items-center gap-1.5 px-2 py-1 rounded-md" style={{ background: 'var(--neutral-900)' }}>
-            <Cloud size={11} className="text-green-400" />
-            <span className="text-green-300">Saved</span>
+            <Cloud size={11} style={{ color: 'var(--success)' }} />
+            <span style={{ color: 'var(--success)' }}>Saved</span>
           </div>
         )
       case 'error':
         return (
           <div className="flex items-center gap-1.5 px-2 py-1 rounded-md" style={{ background: 'var(--neutral-900)' }}>
-            <CloudOff size={11} className="text-red-400" />
-            <span className="text-red-300">Error</span>
+            <CloudOff size={11} style={{ color: 'var(--error)' }} />
+            <span style={{ color: 'var(--error)' }}>Error</span>
           </div>
         )
       case 'offline':
         return (
           <div className="flex items-center gap-1.5 px-2 py-1 rounded-md" style={{ background: 'var(--neutral-900)' }}>
-            <CloudOff size={11} className="text-amber-400" />
-            <span className="text-amber-300">Offline</span>
+            <CloudOff size={11} style={{ color: 'var(--warning)' }} />
+            <span style={{ color: 'var(--warning)' }}>Offline</span>
           </div>
         )
       default:
@@ -333,6 +377,17 @@ function TitleBar({ onOpenTemplates, onOpenCloudPicker, onOpenShare }: { onOpenT
       <div className="flex items-center gap-2 md:gap-2.5 text-[11px]" style={{ color: 'var(--neutral-400)' }}>
         <button
           type="button"
+          onClick={onOpenCommandPalette}
+          className="hidden md:inline-flex px-2 py-1 rounded-md transition-colors items-center gap-1.5 hover:text-white"
+          style={{ background: 'var(--neutral-900)', color: 'var(--neutral-300)' }}
+          title="Command Palette (Ctrl+K)"
+        >
+          <Search size={11} />
+          <span>Ctrl+K</span>
+        </button>
+
+        <button
+          type="button"
           onClick={onOpenTemplates}
           className="hidden md:inline-flex px-2 py-1 rounded-md transition-colors hover:text-white"
           style={{ background: 'var(--neutral-900)', color: 'var(--neutral-300)' }}
@@ -361,9 +416,9 @@ function TitleBar({ onOpenTemplates, onOpenCloudPicker, onOpenShare }: { onOpenT
         </button>
 
         <div className="flex items-center gap-1.5 px-2 py-1 rounded-md" style={{ background: 'var(--neutral-900)' }}>
-          <Sparkles size={11} className="text-amber-400" />
-          <span className={`${aiClass} hidden sm:inline`}>{aiLabel}</span>
-          <span className={`${aiClass} sm:hidden`}>{health?.ok ? '●' : '○'}</span>
+          <Sparkles size={11} style={{ color: 'var(--warning)' }} />
+          <span className="hidden sm:inline" style={{ color: aiColor }}>{aiLabel}</span>
+          <span className="sm:hidden" style={{ color: aiColor }}>{health?.ok ? '●' : '○'}</span>
         </div>
         <span className="hidden md:inline">{syncBadge}</span>
         <span className="hidden sm:inline text-[10px]" style={{ color: 'var(--neutral-500)' }}>

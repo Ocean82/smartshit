@@ -112,6 +112,16 @@ export function Toolbar() {
           timestamp: Date.now(),
         });
       }
+      // Post-import nudge: suggest the auditor on first import
+      const hasSeenAuditorNudge = localStorage.getItem('smartsht-auditor-nudge-seen');
+      if (!hasSeenAuditorNudge) {
+        localStorage.setItem('smartsht-auditor-nudge-seen', '1');
+        useStore.getState().showToast({
+          type: 'info',
+          message: 'Imported! Open the Auditor panel (right side) to check for formula errors.',
+          duration: 6000,
+        });
+      }
       if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }

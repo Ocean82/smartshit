@@ -58,10 +58,11 @@ export function SheetTabs() {
 
   return (
     <div
-      className="bg-slate-50 border-t border-gray-200 flex items-center px-2 h-8 overflow-x-auto shrink-0"
+      className="border-t border-gray-200 flex items-center px-2 h-8 overflow-x-auto shrink-0"
       ref={tabsRef}
       role="tablist"
       aria-label="Sheet tabs"
+      style={{ background: 'var(--surface-secondary)' }}
     >
       {workbook.sheets.map((sheet, index) => (
         <div
@@ -72,9 +73,13 @@ export function SheetTabs() {
           tabIndex={sheet.id === activeSheetId ? 0 : -1}
           className={`flex items-center gap-1 px-3 py-1 text-[11px] font-medium cursor-pointer transition-colors group ${
             sheet.id === activeSheetId
-              ? 'bg-white text-slate-800 shadow-sm rounded-t-md border border-gray-200 border-b-white -mb-px'
+              ? 'rounded-t-md border border-b-white -mb-px shadow-sm'
               : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-md'
           }`}
+          style={sheet.id === activeSheetId
+            ? { background: 'var(--surface-panel)', borderColor: 'var(--neutral-200)', color: 'var(--accent-700)' }
+            : undefined
+          }
           onClick={() => setActiveSheet(sheet.id)}
           onDoubleClick={() => handleStartRename(sheet.id, sheet.name)}
           onKeyDown={(e) => handleTabKeyDown(e, index)}

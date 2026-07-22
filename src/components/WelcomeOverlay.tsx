@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useStore } from '@/store/useStore'
-import { MessageSquare, Zap, LayoutTemplate, ArrowRight, X } from 'lucide-react'
+import { MessageSquare, Zap, LayoutTemplate, ArrowRight, X, Shield, Search } from 'lucide-react'
 
 interface WelcomeOverlayProps {
   onOpenTemplates: () => void
@@ -30,6 +30,12 @@ export function WelcomeOverlay({ onOpenTemplates }: WelcomeOverlayProps) {
       title: 'Chat first, formulas never',
       description:
         'Say things like "Build a monthly budget" or "Why am I overspending on food?" The assistant explains everything in plain English.',
+    },
+    {
+      icon: <Shield size={40} className="text-emerald-600" />,
+      title: 'The Auditor catches your mistakes',
+      description:
+        'Import any spreadsheet and the Auditor instantly flags formula errors, skipped cells in SUMs, and outliers — before they compound. Find it in the right panel.',
     },
     {
       icon: <LayoutTemplate size={40} className="text-violet-600" />,
@@ -65,6 +71,7 @@ export function WelcomeOverlay({ onOpenTemplates }: WelcomeOverlayProps) {
               type="button"
               className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
               onClick={dismiss}
+              aria-label="Close welcome"
             >
               <X size={18} />
             </button>
@@ -90,7 +97,7 @@ export function WelcomeOverlay({ onOpenTemplates }: WelcomeOverlayProps) {
             ))}
           </div>
 
-          <div className="px-8 pb-8 flex gap-3">
+          <div className="px-8 pb-6 flex gap-3">
             {step > 0 && (
               <button
                 type="button"
@@ -122,6 +129,16 @@ export function WelcomeOverlay({ onOpenTemplates }: WelcomeOverlayProps) {
                 Pick a template
               </button>
             )}
+          </div>
+
+          {/* Keyboard shortcut hint — always visible at bottom */}
+          <div className="px-8 pb-6 flex items-center justify-center">
+            <div className="flex items-center gap-2 text-[11px] text-gray-400">
+              <Search size={11} />
+              <span>Press</span>
+              <kbd className="px-1.5 py-0.5 bg-gray-100 rounded text-[10px] font-mono text-gray-500 border border-gray-200">Ctrl+K</kbd>
+              <span>anytime for commands</span>
+            </div>
           </div>
         </div>
       </div>

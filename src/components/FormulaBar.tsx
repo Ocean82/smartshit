@@ -136,13 +136,14 @@ export function FormulaBar() {
   }, [handleNameBoxSubmit]);
 
   return (
-    <div className="hidden md:flex h-7 border-b border-gray-200 bg-white items-center gap-0 shrink-0">
+    <div className="hidden md:flex h-7 border-b items-center gap-0 shrink-0" style={{ background: 'var(--surface-panel)', borderColor: 'var(--neutral-200)' }}>
       {/* Cell name box (Go to Cell) */}
-      <div className="w-[80px] h-full border-r border-gray-200 flex items-center">
+      <div className="w-[80px] h-full border-r flex items-center" style={{ borderColor: 'var(--neutral-200)' }}>
         {nameBoxEditing ? (
           <input
             ref={nameBoxRef}
-            className="w-full h-full px-2 text-xs font-mono text-center bg-white outline-none border-none"
+            className="w-full h-full px-2 text-xs font-mono text-center outline-none border-none"
+            style={{ background: 'var(--accent-50)', color: 'var(--accent-700)' }}
             value={nameBoxValue}
             onChange={(e) => setNameBoxValue(e.target.value.toUpperCase())}
             onBlur={handleNameBoxSubmit}
@@ -152,7 +153,8 @@ export function FormulaBar() {
         ) : (
           <button
             type="button"
-            className="w-full h-full px-2 text-xs font-mono text-center text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition-colors cursor-text"
+            className="w-full h-full px-2 text-xs font-mono text-center transition-colors cursor-text"
+            style={{ color: 'var(--ink-secondary)' }}
             onClick={() => {
               setNameBoxEditing(true);
               setNameBoxValue(cellRef);
@@ -165,7 +167,7 @@ export function FormulaBar() {
       </div>
 
       {/* Action buttons (show when editing) */}
-      <div className="flex items-center gap-0.5 px-1 border-r border-gray-200 h-full">
+      <div className="flex items-center gap-0.5 px-1 border-r h-full" style={{ borderColor: 'var(--neutral-200)' }}>
         {isEditing ? (
           <>
             <button
