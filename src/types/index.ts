@@ -226,3 +226,23 @@ export interface Selection {
 }
 
 export type CellRef = { row: number; col: number };
+
+// ─── Toast System ───
+export interface Toast {
+  id: string;
+  type: 'success' | 'error' | 'info';
+  message: string;
+  duration?: number;
+  undoAction?: () => void;
+}
+
+// ─── Confirmation Dialog ───
+export interface ConfirmDialogState {
+  title: string;
+  message: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  variant?: 'danger' | 'warning';
+  onConfirm?: () => void;
+  onCancel?: () => void;
+}

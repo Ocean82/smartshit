@@ -249,15 +249,17 @@ async function runLlmChat(params: {
     if (providerErrors.length) {
       console.warn('[llm] all providers failed:', providerErrors.join(' | '))
     }
-    // When the client already showed local sheet analysis, stay quiet — do not
-    // append a "AI unavailable" disclaimer that makes the product look broken.
+    // When ALL AI providers failed, be honest about it — don't let local
+    // deterministic analysis pretend to answer questions it can't.
     const hasDeterministic = Boolean(
       body.context && typeof body.context === 'object'
       && 'deterministicSummary' in body.context
       && String((body.context as { deterministicSummary?: string }).deterministicSummary ?? '').trim(),
     )
     return {
-      message: intent.message || (hasDeterministic ? '' : 'I couldn\'t generate a response just now. Please try again in a moment.'),
+      message: intent.message || (hasDeterministic
+        ? '⚠️ AI is currently unavailable. The analysis above is based on local calculations only — for deeper questions, please try again in a moment.'
+        : '⚠️ AI is currently unavailable. Please check your connection or try again in a moment.'),
       actions: llmOnly ? [] : intent.actions,
       source: 'fallback',
     }

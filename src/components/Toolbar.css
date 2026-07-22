@@ -1,4 +1,222 @@
-/* Background colors for toolbar cell color buttons */
+/* ========================================
+   TOOLBAR — Compact, scannable, no sprawl
+   ======================================== */
+
+.toolbar-root {
+  background: var(--surface-panel);
+  border-bottom: 1px solid var(--neutral-200);
+}
+
+.toolbar-row {
+  display: flex;
+  align-items: center;
+  padding: 3px 8px;
+  gap: 2px;
+  min-height: 34px;
+}
+
+/* ─── Button groups ─── */
+.toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  position: relative;
+}
+
+/* ─── Base button ─── */
+.toolbar-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--neutral-600);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.toolbar-btn:hover:not(:disabled) {
+  background: var(--neutral-100);
+  color: var(--neutral-800);
+}
+
+.toolbar-btn-active,
+.toolbar-btn-active:hover {
+  background: var(--accent-100);
+  color: var(--accent-700);
+}
+
+.toolbar-btn-disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* ─── Font size select ─── */
+.toolbar-font-size {
+  padding: 2px 4px 2px 22px;
+  font-size: 11px;
+  line-height: 1;
+  height: 28px;
+  min-width: 52px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--neutral-700);
+  appearance: none;
+  transition: border-color 0.12s, background 0.12s;
+}
+
+.toolbar-font-size:hover {
+  border-color: var(--neutral-200);
+  background: var(--neutral-50);
+}
+
+.toolbar-font-size:focus {
+  outline: none;
+  border-color: var(--accent-400);
+}
+
+/* ─── Color button (text "A" with underline swatch) ─── */
+.toolbar-btn-color {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.toolbar-btn-color:hover {
+  background: var(--neutral-100);
+}
+
+/* ─── More/chevron buttons ─── */
+.toolbar-btn-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 28px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--neutral-500);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.toolbar-btn-more:hover,
+.toolbar-btn-more.active {
+  background: var(--neutral-100);
+  color: var(--neutral-700);
+}
+
+/* ─── Export split button ─── */
+.toolbar-btn-export {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  height: 28px;
+  padding: 0 6px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--neutral-600);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.toolbar-btn-export:hover,
+.toolbar-btn-export.active {
+  background: var(--neutral-100);
+  color: var(--neutral-800);
+}
+
+/* ─── Divider ─── */
+.toolbar-divider {
+  width: 1px;
+  height: 18px;
+  background: var(--neutral-200);
+  margin: 0 4px;
+  flex-shrink: 0;
+}
+
+/* ─── Dropdown menu ─── */
+.toolbar-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 180px;
+  background: var(--surface-panel);
+  border: 1px solid var(--neutral-200);
+  border-radius: 8px;
+  padding: 4px;
+  box-shadow:
+    0 4px 12px oklch(0.2 0 0 / 0.08),
+    0 1px 3px oklch(0.2 0 0 / 0.04);
+  z-index: 50;
+  animation: toolbar-dropdown-in 0.12s ease-out;
+}
+
+.toolbar-dropdown-right {
+  left: auto;
+  right: 0;
+}
+
+@keyframes toolbar-dropdown-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.toolbar-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 10px;
+  border: none;
+  background: transparent;
+  border-radius: 5px;
+  font-size: 12px;
+  color: var(--neutral-700);
+  cursor: pointer;
+  transition: background 0.1s;
+  text-align: left;
+}
+
+.toolbar-dropdown-item:hover:not(:disabled) {
+  background: var(--neutral-100);
+}
+
+.toolbar-dropdown-item:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.toolbar-dropdown-divider {
+  height: 1px;
+  background: var(--neutral-100);
+  margin: 4px 6px;
+}
+
+/* ─── Color swatch buttons (toolbar palette) ─── */
 .toolbar-color-0 { background-color: #FFFFFF; }
 .toolbar-color-1 { background-color: #FEE2E2; }
 .toolbar-color-2 { background-color: #FEF3C7; }
@@ -14,3 +232,16 @@
 .toolbar-color-12 { background-color: #C4B5FD; }
 .toolbar-color-13 { background-color: #F9A8D4; }
 
+/* ─── Reduced motion ─── */
+@media (prefers-reduced-motion: reduce) {
+  .toolbar-dropdown {
+    animation: none;
+  }
+  .toolbar-btn,
+  .toolbar-btn-color,
+  .toolbar-btn-more,
+  .toolbar-btn-export,
+  .toolbar-font-size {
+    transition: none;
+  }
+}

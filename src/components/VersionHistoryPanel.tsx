@@ -10,7 +10,7 @@ import {
 import { History, RotateCcw, Eye, X, Loader2, CloudOff, Clock, Save } from 'lucide-react'
 
 export function VersionHistoryPanel() {
-  const { showVersionHistory, setShowVersionHistory, loadWorkbookData } = useStore()
+  const { showVersionHistory, setShowVersionHistory, loadWorkbookData, showConfirm, showToast } = useStore()
   const [versions, setVersions] = useState<VersionEntry[]>([])
   const [loading, setLoading] = useState(false)
   const [actionId, setActionId] = useState<string | null>(null)
@@ -48,16 +48,26 @@ export function VersionHistoryPanel() {
 
   const handleRestore = async (versionId: string) => {
     if (!cloudId) return
-    if (!confirm('Restore this version? Your current workbook will be replaced.')) return
 
-    setActionId(versionId)
-    const data = await loadVersion(cloudId, versionId)
-    if (data) {
-      loadWorkbookData(data)
-      setPreviewId(null)
-      setShowVersionHistory(false)
-    }
-    setActionId(null)
+    showConfirm({
+      title: 'Restore version',
+      message: 'Your current workbook will be replaced with this older version. You can undo this with Ctrl+Z.',
+      confirmLabel: 'Restore',
+      variant: 'warning',
+      onConfirm: async () => {
+        setActionId(versionId)
+        const data = await loadVersion(cloudId, versionId)
+        if (data) {
+          loadWorkbookData(data)
+          setPreviewId(null)
+          setShowVersionHistory(false)
+          showToast({ type: 'success', message: 'Version restored' })
+        } else {
+          showToast({ type: 'error', message: 'Failed to restore version' })
+        }
+        setActionId(null)
+      },
+    })
   }
 
   const formatDate = (iso: string): string => {

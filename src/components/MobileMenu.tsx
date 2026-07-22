@@ -38,6 +38,7 @@ export function MobileMenu() {
     addMessage,
     showVersionHistory,
     setShowVersionHistory,
+    showConfirm,
   } = useStore();
 
   const sheet = getActiveSheet();
@@ -59,10 +60,20 @@ export function MobileMenu() {
 
   const handleNewWorkbook = () => {
     if (Object.keys(getActiveSheet().cells).length > 0) {
-      if (!confirm('Create a new workbook? Unsaved changes will be lost.')) return;
+      showConfirm({
+        title: 'New workbook',
+        message: 'Your current work hasn\'t been saved. Creating a new workbook will discard all unsaved changes.',
+        confirmLabel: 'Create new',
+        variant: 'warning',
+        onConfirm: () => {
+          initWorkbook('New Workbook');
+          setIsOpen(false);
+        },
+      });
+    } else {
+      initWorkbook('New Workbook');
+      setIsOpen(false);
     }
-    initWorkbook('New Workbook');
-    setIsOpen(false);
   };
 
   const actions = [

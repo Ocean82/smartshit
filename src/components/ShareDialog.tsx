@@ -12,6 +12,7 @@ import {
   Clock,
 } from 'lucide-react'
 import { getCloudWorkbookId, isCloudConfigured, getAuthHeaders } from '@/lib/cloudSync'
+import { useStore } from '@/store/useStore'
 
 const API_BASE = import.meta.env.VITE_AI_API_URL ?? ''
 
@@ -88,19 +89,28 @@ export function ShareDialog({ open, onClose }: ShareDialogProps) {
 
   const handleRevoke = async (token: string) => {
     if (!isCloudConfigured()) return
-    if (!confirm('Revoke this share link? Anyone with it will lose access.')) return
-    try {
-      const headers = await getAuthHeaders()
-      if (!headers.Authorization) return
-      await fetch(`${API_BASE}/api/shares/${token}`, {
-        method: 'DELETE',
-        headers,
-        signal: AbortSignal.timeout(10_000),
-      })
-      setShares((prev) => prev.filter((s) => s.share_token !== token))
-    } catch {
-      // ignore
-    }
+    const { showConfirm, showToast } = useStore.getState()
+    showConfirm({
+      title: 'Revoke share link',
+      message: 'Anyone with this link will immediately lose access to the workbook.',
+      confirmLabel: 'Revoke',
+      variant: 'danger',
+      onConfirm: async () => {
+        try {
+          const headers = await getAuthHeaders()
+          if (!headers.Authorization) return
+          await fetch(`${API_BASE}/api/shares/${token}`, {
+            method: 'DELETE',
+            headers,
+            signal: AbortSignal.timeout(10_000),
+          })
+          setShares((prev) => prev.filter((s) => s.share_token !== token))
+          showToast({ type: 'success', message: 'Share link revoked' })
+        } catch {
+          showToast({ type: 'error', message: 'Failed to revoke share link' })
+        }
+      },
+    })
   }
 
   const handleCopy = (token: string) => {

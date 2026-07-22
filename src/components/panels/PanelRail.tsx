@@ -35,7 +35,6 @@ export function PanelRail() {
               ? { background: 'var(--accent-50)', color: 'var(--accent-700)' }
               : { color: 'var(--neutral-500)' }
             }
-            title={panel.label}
             aria-label={`${isActive ? 'Close' : 'Open'} ${panel.label} panel`}
             aria-pressed={isActive}
           >

@@ -14,6 +14,8 @@ import type {
   FilterConfig,
   SortConfig,
   DataValidation,
+  Toast,
+  ConfirmDialogState,
 } from '@/types';
 import {
   createEmptyWorkbook,
@@ -68,6 +70,7 @@ interface AppState {
   showSkills: boolean;
   showChartDialog: boolean;
   showFormatPanel: boolean;
+  showToolbar: boolean;
   showVersionHistory: boolean;
   showValidationDialog: boolean;
   showPivotDialog: boolean;
@@ -113,6 +116,16 @@ interface AppState {
   scrollRow: number;
   scrollCol: number;
 
+  // Toast notifications
+  toasts: Toast[];
+  showToast: (toast: Omit<Toast, 'id'>) => void;
+  dismissToast: (id: string) => void;
+
+  // Confirmation dialog
+  confirmDialog: ConfirmDialogState | null;
+  showConfirm: (dialog: ConfirmDialogState) => void;
+  dismissConfirm: () => void;
+
   // Actions
   initWorkbook: (name?: string) => void;
   setActiveSheet: (sheetId: string) => void;
@@ -133,6 +146,8 @@ interface AppState {
   toggleSkills: () => void;
   setShowChartDialog: (v: boolean) => void;
   setShowFormatPanel: (v: boolean) => void;
+  setShowToolbar: (v: boolean) => void;
+  toggleToolbar: () => void;
   setShowVersionHistory: (v: boolean) => void;
   setShowValidationDialog: (show: boolean) => void;
   setContextMenu: (menu: { x: number; y: number; cell: string } | null) => void;
@@ -259,6 +274,7 @@ export const useStore = create<AppState>()(
       showSkills: false,
       showChartDialog: false,
       showFormatPanel: false,
+      showToolbar: storage?.getItem('smartsht-show-toolbar') !== '0',
       showVersionHistory: false,
       showValidationDialog: false,
       showPivotDialog: false,
@@ -300,6 +316,27 @@ export const useStore = create<AppState>()(
       scrollRow: 0,
       scrollCol: 0,
 
+      // Toast notifications
+      toasts: [],
+      showToast: (toast) => {
+        const id = uuid();
+        set((s) => {
+          s.toasts.push({ ...toast, id });
+          // Cap at 5 visible toasts — dismiss oldest when exceeded
+          if (s.toasts.length > 5) {
+            s.toasts = s.toasts.slice(-5);
+          }
+        });
+      },
+      dismissToast: (id) => {
+        set((s) => { s.toasts = s.toasts.filter((t) => t.id !== id); });
+      },
+
+      // Confirmation dialog
+      confirmDialog: null,
+      showConfirm: (dialog) => set({ confirmDialog: dialog }),
+      dismissConfirm: () => set({ confirmDialog: null }),
+
       initWorkbook: (name = 'Untitled Workbook') => {
         const wb = createEmptyWorkbook(name);
         const eng = get().engine;
@@ -336,6 +373,7 @@ export const useStore = create<AppState>()(
       },
 
       deleteSheet: (sheetId) => {
+        get().pushHistory('Delete sheet');
         set((s) => {
           if (s.workbook.sheets.length <= 1) return;
           s.workbook.sheets = s.workbook.sheets.filter((sh) => sh.id !== sheetId);
@@ -454,6 +492,15 @@ export const useStore = create<AppState>()(
       toggleSkills: () => set((s) => { s.showSkills = !s.showSkills; }),
       setShowChartDialog: (v) => set((s) => { s.showChartDialog = v; }),
       setShowFormatPanel: (v) => set((s) => { s.showFormatPanel = v; }),
+      setShowToolbar: (v) => {
+        set((s) => { s.showToolbar = v; });
+        storage?.setItem('smartsht-show-toolbar', v ? '1' : '0');
+      },
+      toggleToolbar: () => {
+        const next = !get().showToolbar;
+        set((s) => { s.showToolbar = next; });
+        storage?.setItem('smartsht-show-toolbar', next ? '1' : '0');
+      },
       setShowVersionHistory: (v) => set((s) => { s.showVersionHistory = v; }),
       setShowValidationDialog: (show) => set((s) => { s.showValidationDialog = show; }),
       setContextMenu: (menu) => set((s) => { s.contextMenu = menu; }),

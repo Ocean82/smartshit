@@ -56,6 +56,9 @@ export function MenuBar() {
     initWorkbook,
     addMessage,
     getActiveSheet,
+    showConfirm,
+    showToolbar,
+    toggleToolbar,
   } = useStore()
 
   // Close menu on outside click
@@ -81,17 +84,28 @@ export function MenuBar() {
   }, [openMenu])
 
   const handleNewWorkbook = () => {
-    if (Object.keys(getActiveSheet().cells).length > 0) {
-      if (!confirm('Create a new workbook? Unsaved changes will be lost.')) return
+    const doCreate = () => {
+      initWorkbook('New Workbook')
+      addMessage({
+        id: uuid(),
+        role: 'assistant',
+        content: 'Started a fresh workbook. Try **"Create a monthly budget"** or import a file to get started.',
+        timestamp: Date.now(),
+      })
+      setOpenMenu(null)
     }
-    initWorkbook('New Workbook')
-    addMessage({
-      id: uuid(),
-      role: 'assistant',
-      content: 'Started a fresh workbook. Try **"Create a monthly budget"** or import a file to get started.',
-      timestamp: Date.now(),
-    })
-    setOpenMenu(null)
+
+    if (Object.keys(getActiveSheet().cells).length > 0) {
+      showConfirm({
+        title: 'New workbook',
+        message: 'Your current work hasn\'t been saved. Creating a new workbook will discard all unsaved changes.',
+        confirmLabel: 'Create new',
+        variant: 'warning',
+        onConfirm: doCreate,
+      })
+    } else {
+      doCreate()
+    }
   }
 
   const handleOpen = () => {
@@ -199,6 +213,7 @@ export function MenuBar() {
     view: {
       label: 'View',
       items: [
+        { label: showToolbar ? '✓ Toolbar' : '  Toolbar', shortcut: 'Ctrl+Shift+T', action: () => { toggleToolbar(); setOpenMenu(null) } },
         { label: showFileExplorer ? '✓ File Explorer' : '  File Explorer', action: () => { toggleFileExplorer(); setOpenMenu(null) } },
         { label: showFormatPanel ? '✓ Format Panel' : '  Format Panel', action: () => { setShowFormatPanel(!showFormatPanel); setOpenMenu(null) } },
         { label: showVersionHistory ? '✓ Version History' : '  Version History', action: () => { setShowVersionHistory(!showVersionHistory); setOpenMenu(null) } },
@@ -240,26 +255,30 @@ export function MenuBar() {
   }
 
   return (
-    <div ref={menuRef} className="flex items-center bg-white border-b border-gray-200 px-1 h-7 text-xs relative z-50">
+    <div ref={menuRef} className="flex items-center gap-0.5 text-[11px] relative z-50" role="menubar">
       {Object.entries(menus).map(([id, menu]) => (
         <div key={id} className="relative">
           <button
             type="button"
+            role="menuitem"
+            aria-haspopup="true"
+            aria-expanded={openMenu === id}
             onMouseDown={() => setOpenMenu(openMenu === id ? null : id as MenuId)}
             onMouseEnter={() => { if (openMenu) setOpenMenu(id as MenuId) }}
-            className={`px-2.5 py-1 rounded text-gray-600 hover:bg-gray-100 transition-colors ${
-              openMenu === id ? 'bg-gray-100 text-gray-900' : ''
+            className={`px-2 py-1 rounded transition-colors ${
+              openMenu === id ? 'bg-white/15 text-white' : 'text-white/70 hover:text-white hover:bg-white/10'
             }`}
           >
             {menu.label}
           </button>
 
           {openMenu === id && (
-            <div className="absolute top-full left-0 mt-0.5 bg-white border border-gray-200 rounded-lg shadow-xl py-1 min-w-[200px] z-50">
+            <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-xl py-1 min-w-[200px] z-50" role="menu">
               {menu.items.map((item, i) => (
                 <div key={i}>
                   <button
                     type="button"
+                    role="menuitem"
                     onClick={item.action}
                     disabled={item.disabled}
                     className={`w-full text-left px-3 py-1.5 text-xs flex items-center justify-between gap-4 ${

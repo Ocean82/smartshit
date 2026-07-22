@@ -28,6 +28,8 @@ import { PanelRail, DockPanel, AuditPanelContent, InsightsPanelContent, Inspecto
 import { ShareDialog } from '@/components/ShareDialog'
 import { FormulaBar } from '@/components/FormulaBar'
 import { GoToCellDialog } from '@/components/GoToCellDialog'
+import { ToastContainer } from '@/components/Toast'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { Sparkles, Zap, Cloud, CloudOff, Loader2, Share2, MessageSquare, SquarePen } from 'lucide-react'
 import { UserNav } from '@/auth'
 import {
@@ -52,6 +54,8 @@ function App() {
     showConditionalFormatDialog,
     setShowConditionalFormatDialog,
     setActivePanel,
+    showToolbar,
+    toggleToolbar,
   } = useStore()
   const [isLoaded, setIsLoaded] = useState(false)
   const [showTemplates, setShowTemplates] = useState(false)
@@ -91,6 +95,10 @@ function App() {
         e.preventDefault()
         setShowGoToCell(true)
       }
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 't') {
+        e.preventDefault()
+        toggleToolbar()
+      }
       if (e.key === 'Escape' && useStore.getState().activePanel) {
         setActivePanel(null)
       }
@@ -112,23 +120,32 @@ function App() {
 
   return (
     <div className="h-screen w-screen flex flex-col bg-white overflow-hidden">
+      {/* Skip to main content — keyboard a11y */}
+      <a
+        href="#spreadsheet-main"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[9999] focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:rounded-lg"
+        style={{ background: 'var(--accent-600)', color: 'white' }}
+      >
+        Skip to spreadsheet
+      </a>
       <TitleBar
         onOpenTemplates={() => setShowTemplates(true)}
         onOpenCloudPicker={() => setShowWorkbookPicker(true)}
         onOpenShare={() => setShowShareDialog(true)}
       />
-      {/* Desktop-only: traditional menu and toolbar */}
-      <div className="hidden md:block">
-        <MenuBar />
-        <Toolbar />
-      </div>
+      {/* Desktop-only: toolbar (hideable via Ctrl+Shift+T) */}
+      {showToolbar && (
+        <div className="hidden md:block">
+          <Toolbar />
+        </div>
+      )}
       <FormulaBar />
 
       <div className="flex-1 flex overflow-hidden min-h-0">
         <FileExplorer />
 
         {/* Spreadsheet — always takes remaining space */}
-        <div className="flex-1 flex flex-col overflow-hidden min-w-0 relative">
+        <div id="spreadsheet-main" className="flex-1 flex flex-col overflow-hidden min-w-0 relative">
           <div className="flex-1 flex flex-col overflow-hidden relative pb-[52px] md:pb-0">
             <SpreadsheetGrid />
             <ChartOverlay />
@@ -217,6 +234,8 @@ function App() {
       <ShareDialog open={showShareDialog} onClose={() => setShowShareDialog(false)} />
       <GoToCellDialog open={showGoToCell} onClose={() => setShowGoToCell(false)} />
       {import.meta.env.DEV ? <TelemetryDebugPanel /> : null}
+      <ToastContainer />
+      <ConfirmDialog />
     </div>
   )
 }
@@ -300,40 +319,47 @@ function TitleBar({ onOpenTemplates, onOpenCloudPicker, onOpenShare }: { onOpenT
 
       <div className="w-px h-4 hidden md:block" style={{ background: 'var(--neutral-800)' }} />
 
+      {/* Integrated menu bar — desktop only */}
+      <div className="hidden md:block">
+        <MenuBar />
+      </div>
+
+      <div className="w-px h-4 hidden md:block" style={{ background: 'var(--neutral-800)' }} />
+
       <span className="text-xs truncate max-w-[120px] md:max-w-[200px]" style={{ color: 'var(--neutral-400)' }}>{workbook.name}</span>
-
-      <button
-        type="button"
-        onClick={onOpenTemplates}
-        className="hidden md:inline-flex text-[11px] px-2.5 py-1 rounded-md transition-colors hover:text-white"
-        style={{ background: 'var(--neutral-900)', color: 'var(--neutral-300)' }}
-      >
-        Templates
-      </button>
-
-      <button
-        type="button"
-        onClick={onOpenCloudPicker}
-        className="hidden md:inline-flex text-[11px] px-2.5 py-1 rounded-md transition-colors items-center gap-1 hover:text-white"
-        style={{ background: 'var(--neutral-900)', color: 'var(--neutral-300)' }}
-      >
-        <Cloud size={11} />
-        Cloud
-      </button>
-
-      <button
-        type="button"
-        onClick={onOpenShare}
-        className="hidden md:inline-flex text-[11px] px-2.5 py-1 rounded-md transition-colors items-center gap-1 hover:text-white"
-        style={{ background: 'var(--neutral-900)', color: 'var(--neutral-300)' }}
-      >
-        <Share2 size={11} />
-        Share
-      </button>
 
       <div className="flex-1" />
 
       <div className="flex items-center gap-2 md:gap-2.5 text-[11px]" style={{ color: 'var(--neutral-400)' }}>
+        <button
+          type="button"
+          onClick={onOpenTemplates}
+          className="hidden md:inline-flex px-2 py-1 rounded-md transition-colors hover:text-white"
+          style={{ background: 'var(--neutral-900)', color: 'var(--neutral-300)' }}
+        >
+          Templates
+        </button>
+
+        <button
+          type="button"
+          onClick={onOpenCloudPicker}
+          className="hidden md:inline-flex px-2 py-1 rounded-md transition-colors items-center gap-1 hover:text-white"
+          style={{ background: 'var(--neutral-900)', color: 'var(--neutral-300)' }}
+        >
+          <Cloud size={11} />
+          Cloud
+        </button>
+
+        <button
+          type="button"
+          onClick={onOpenShare}
+          className="hidden md:inline-flex px-2 py-1 rounded-md transition-colors items-center gap-1 hover:text-white"
+          style={{ background: 'var(--neutral-900)', color: 'var(--neutral-300)' }}
+        >
+          <Share2 size={11} />
+          Share
+        </button>
+
         <div className="flex items-center gap-1.5 px-2 py-1 rounded-md" style={{ background: 'var(--neutral-900)' }}>
           <Sparkles size={11} className="text-amber-400" />
           <span className={`${aiClass} hidden sm:inline`}>{aiLabel}</span>

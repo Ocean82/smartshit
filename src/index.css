@@ -122,6 +122,17 @@ input:focus, textarea:focus, select:focus {
   outline: none;
 }
 
+/* Visible focus indicator for keyboard users */
+:focus-visible {
+  outline: 2px solid var(--accent-500);
+  outline-offset: 2px;
+}
+
+/* Remove outline for mouse users */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
 body {
   margin: 0;
   padding: 0;

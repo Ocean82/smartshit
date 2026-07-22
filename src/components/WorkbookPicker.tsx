@@ -16,7 +16,7 @@ interface WorkbookPickerProps {
 }
 
 export function WorkbookPicker({ open, onClose }: WorkbookPickerProps) {
-  const { workbook, initWorkbook } = useStore()
+  const { workbook, initWorkbook, showConfirm, showToast } = useStore()
   const [workbooks, setWorkbooks] = useState<CloudWorkbook[]>([])
   const [loading, setLoading] = useState(false)
   const [actionId, setActionId] = useState<string | null>(null)
@@ -44,13 +44,24 @@ export function WorkbookPicker({ open, onClose }: WorkbookPickerProps) {
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Delete this workbook from the cloud? This cannot be undone.')) return
-    setActionId(id)
-    const ok = await deleteFromCloud(id)
-    if (ok) {
-      setWorkbooks((prev) => prev.filter((w) => w.id !== id))
-    }
-    setActionId(null)
+    const wb = workbooks.find((w) => w.id === id)
+    showConfirm({
+      title: 'Delete cloud workbook',
+      message: `"${wb?.name || 'this workbook'}" will be permanently removed from the cloud. This cannot be undone.`,
+      confirmLabel: 'Delete',
+      variant: 'danger',
+      onConfirm: async () => {
+        setActionId(id)
+        const ok = await deleteFromCloud(id)
+        if (ok) {
+          setWorkbooks((prev) => prev.filter((w) => w.id !== id))
+          showToast({ type: 'success', message: 'Workbook deleted from cloud' })
+        } else {
+          showToast({ type: 'error', message: 'Failed to delete workbook' })
+        }
+        setActionId(null)
+      },
+    })
   }
 
   const handleSaveCurrent = async () => {

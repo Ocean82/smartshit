@@ -6,11 +6,11 @@ import { isBankCSV, parseBankCSV } from '@/lib/bankImport';
 import {
   Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight,
   Undo2, Redo2, Paintbrush, Type, Grid3x3, BarChart3,
-  Download, Upload, Plus, FolderOpen, Sparkles,
-  Filter, SortAsc, Scissors, Copy, ClipboardPaste,
+  Download, Upload, ChevronDown,
+  Filter, SortAsc,
 } from 'lucide-react';
 import { BG_COLORS, FULL_COLORS } from '@/data/colors';
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect, useCallback } from 'react';
 import { v4 as uuid } from 'uuid';
 import './Toolbar.css';
 
@@ -22,12 +22,7 @@ export function Toolbar() {
     redo,
     undoStack,
     redoStack,
-    toggleFileExplorer,
-    toggleSkills,
-    showFileExplorer,
-    showSkills,
     setShowChartDialog,
-    showPivotDialog,
     setShowPivotDialog,
     showFormatPanel,
     setShowFormatPanel,
@@ -36,19 +31,20 @@ export function Toolbar() {
     sortByColumn,
     setShowFilterDialog,
     setShowConditionalFormatDialog,
-    copy,
-    cut,
-    paste,
     pushHistory,
     getActiveSheet,
-    setCellValue,
   } = useStore();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const fontColorRef = useRef<HTMLDivElement>(null);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
+  const moreMenuRef = useRef<HTMLDivElement>(null);
   const [showFontColor, setShowFontColor] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
   const sheet = getActiveSheet();
 
+  // Close font color picker on outside click
   useEffect(() => {
     if (!showFontColor) return;
     function handleClickOutside(e: MouseEvent) {
@@ -60,29 +56,55 @@ export function Toolbar() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showFontColor]);
 
+  // Close export menu on outside click
+  useEffect(() => {
+    if (!showExportMenu) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) {
+        setShowExportMenu(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showExportMenu]);
+
+  // Close more menu on outside click
+  useEffect(() => {
+    if (!showMoreMenu) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (moreMenuRef.current && !moreMenuRef.current.contains(e.target as Node)) {
+        setShowMoreMenu(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showMoreMenu]);
+
   const selectedCellId = selection ? refToCell(selection.startRow, selection.startCol) : '';
   const selectedCellData = selectedCellId ? sheet.cells[selectedCellId] : undefined;
 
-  const handleExportCSV = () => {
+  const handleExportCSV = useCallback(() => {
     exportSheetToCsv(sheet, sheet.name.replace(/\s+/g, '_'));
-  };
+    setShowExportMenu(false);
+  }, [sheet]);
 
-  const handleExportXlsx = () => {
+  const handleExportXlsx = useCallback(() => {
     const { workbook } = useStore.getState();
     exportWorkbookToXlsx(workbook);
-  };
+    setShowExportMenu(false);
+  }, []);
 
   const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-  // Also route CSV through SheetJS so multi-sheet-capable paths stay consistent
-  if (file.name.match(/\.(xlsx?|csv)$/i)) {
+    // Also route CSV through SheetJS so multi-sheet-capable paths stay consistent
+    if (file.name.match(/\.(xlsx?|csv)$/i)) {
       pushHistory('Import file');
       const { workbook, meta } = await importWorkbookFromFileWithMeta(file);
       useStore.getState().importWorkbook(workbook, { fileName: file.name });
       if (meta.warnings.length) {
-        recordTelemetry('importTruncationEvents', `Toolbar import: ${file.name}`)
+        recordTelemetry('importTruncationEvents', `Toolbar import: ${file.name}`);
         useStore.getState().addMessage({
           id: uuid(),
           role: 'assistant',
@@ -110,21 +132,17 @@ export function Toolbar() {
         const result = parseBankCSV(text);
         if (result && result.transactions.length > 0) {
           pushHistory('Import Bank CSV');
-          // Build a categorized spreadsheet from bank transactions
           const cells: Record<string, { value: string | number | boolean | null }> = {};
-          // Header row
           cells[refToCell(0, 0)] = { value: '📊 Bank Statement Import' };
           cells[refToCell(1, 0)] = { value: `Source: ${result.bankName}` };
           cells[refToCell(1, 2)] = { value: `${result.dateRange.start} to ${result.dateRange.end}` };
 
-          // Transaction headers
           cells[refToCell(3, 0)] = { value: 'Date' };
           cells[refToCell(3, 1)] = { value: 'Description' };
           cells[refToCell(3, 2)] = { value: 'Category' };
           cells[refToCell(3, 3)] = { value: 'Amount' };
           cells[refToCell(3, 4)] = { value: 'Type' };
 
-          // Transaction data
           result.transactions.forEach((t, i) => {
             const row = 4 + i;
             cells[refToCell(row, 0)] = { value: t.date };
@@ -134,7 +152,6 @@ export function Toolbar() {
             cells[refToCell(row, 4)] = { value: t.type === 'credit' ? 'Income' : 'Expense' };
           });
 
-          // Summary section
           const summaryRow = 4 + result.transactions.length + 2;
           cells[refToCell(summaryRow, 0)] = { value: '📈 Summary' };
           cells[refToCell(summaryRow + 1, 0)] = { value: 'Total Income' };
@@ -144,7 +161,6 @@ export function Toolbar() {
           cells[refToCell(summaryRow + 3, 0)] = { value: 'Net' };
           cells[refToCell(summaryRow + 3, 1)] = { value: result.totalIncome - result.totalExpenses };
 
-          // Category breakdown
           const catRow = summaryRow + 5;
           cells[refToCell(catRow, 0)] = { value: '📋 Spending by Category' };
           cells[refToCell(catRow + 1, 0)] = { value: 'Category' };
@@ -158,7 +174,6 @@ export function Toolbar() {
 
           useStore.getState().bulkSetCells(cells);
 
-          // Format headers
           useStore.getState().setCellFormat(refToCell(0, 0), { bold: true, fontSize: 16, fontColor: '#1E40AF' });
           useStore.getState().setCellFormat(refToCell(3, 0), { bold: true, bgColor: '#1E40AF', fontColor: '#FFFFFF' });
           useStore.getState().setCellFormat(refToCell(3, 1), { bold: true, bgColor: '#1E40AF', fontColor: '#FFFFFF' });
@@ -166,7 +181,6 @@ export function Toolbar() {
           useStore.getState().setCellFormat(refToCell(3, 3), { bold: true, bgColor: '#1E40AF', fontColor: '#FFFFFF' });
           useStore.getState().setCellFormat(refToCell(3, 4), { bold: true, bgColor: '#1E40AF', fontColor: '#FFFFFF' });
 
-          // Build summary message
           const topCats = result.categoryBreakdown.slice(0, 5).map((c) => `• **${c.category}**: $${c.total.toLocaleString()} (${c.count} transactions)`).join('\n');
           useStore.getState().addMessage({
             id: uuid(),
@@ -209,83 +223,48 @@ export function Toolbar() {
   };
 
   const colorOptions = BG_COLORS;
-
   const fontColorOptions = FULL_COLORS;
 
   return (
-    <div className="bg-white border-b border-gray-200">
-      {/* Top toolbar row */}
-      <div className="flex items-center px-2 py-1 gap-1 border-b border-gray-100 overflow-x-auto">
-        {/* Sidebar toggles */}
-        <ToolButton
-          icon={<FolderOpen size={15} />}
-          title="Files"
-          active={showFileExplorer}
-          onClick={toggleFileExplorer}
-        />
-        <ToolButton
-          icon={<Sparkles size={15} />}
-          title="AI Assistant"
-          active={useStore.getState().activePanel === 'chat'}
-          onClick={() => useStore.getState().setActivePanel(useStore.getState().activePanel === 'chat' ? null : 'chat')}
-        />
+    <div className="toolbar-root">
+      <div className="toolbar-row">
+        {/* ─── Primary: Undo / Redo ─── */}
+        <div className="toolbar-group">
+          <ToolButton icon={<Undo2 size={15} />} title="Undo (Ctrl+Z)" onClick={undo} disabled={undoStack.length === 0} />
+          <ToolButton icon={<Redo2 size={15} />} title="Redo (Ctrl+Y)" onClick={redo} disabled={redoStack.length === 0} />
+        </div>
+
         <Divider />
 
-        {/* Undo/Redo */}
-        <ToolButton icon={<Undo2 size={15} />} title="Undo (Ctrl+Z)" onClick={undo} disabled={undoStack.length === 0} />
-        <ToolButton icon={<Redo2 size={15} />} title="Redo (Ctrl+Y)" onClick={redo} disabled={redoStack.length === 0} />
+        {/* ─── Text formatting ─── */}
+        <div className="toolbar-group">
+          <ToolButton
+            icon={<Bold size={15} />}
+            title="Bold (Ctrl+B)"
+            active={selectedCellData?.format?.bold}
+            onClick={() => setRangeFormat({ bold: !selectedCellData?.format?.bold })}
+          />
+          <ToolButton
+            icon={<Italic size={15} />}
+            title="Italic (Ctrl+I)"
+            active={selectedCellData?.format?.italic}
+            onClick={() => setRangeFormat({ italic: !selectedCellData?.format?.italic })}
+          />
+          <ToolButton
+            icon={<Underline size={15} />}
+            title="Underline (Ctrl+U)"
+            active={selectedCellData?.format?.underline}
+            onClick={() => setRangeFormat({ underline: !selectedCellData?.format?.underline })}
+          />
+        </div>
+
         <Divider />
 
-        {/* Clipboard */}
-        <ToolButton icon={<Copy size={15} />} title="Copy (Ctrl+C)" onClick={copy} />
-        <ToolButton icon={<Scissors size={15} />} title="Cut (Ctrl+X)" onClick={cut} />
-        <ToolButton icon={<ClipboardPaste size={15} />} title="Paste (Ctrl+V)" onClick={paste} />
-        <Divider />
-
-        {/* Formatting */}
-        <ToolButton
-          icon={<Bold size={15} />}
-          title="Bold (Ctrl+B)"
-          active={selectedCellData?.format?.bold}
-          onClick={() => setRangeFormat({ bold: !selectedCellData?.format?.bold })}
-        />
-        <ToolButton
-          icon={<Italic size={15} />}
-          title="Italic (Ctrl+I)"
-          active={selectedCellData?.format?.italic}
-          onClick={() => setRangeFormat({ italic: !selectedCellData?.format?.italic })}
-        />
-        <ToolButton
-          icon={<Underline size={15} />}
-          title="Underline"
-          active={selectedCellData?.format?.underline}
-          onClick={() => setRangeFormat({ underline: !selectedCellData?.format?.underline })}
-        />
-        <Divider />
-
-        {/* Alignment */}
-        <ToolButton
-          icon={<AlignLeft size={15} />}
-          title="Align Left"
-          onClick={() => setRangeFormat({ textAlign: 'left' })}
-        />
-        <ToolButton
-          icon={<AlignCenter size={15} />}
-          title="Align Center"
-          onClick={() => setRangeFormat({ textAlign: 'center' })}
-        />
-        <ToolButton
-          icon={<AlignRight size={15} />}
-          title="Align Right"
-          onClick={() => setRangeFormat({ textAlign: 'right' })}
-        />
-        <Divider />
-
-        {/* Font size */}
+        {/* ─── Font size (compact) ─── */}
         <div className="relative">
-          <Type size={13} className="absolute left-1.5 top-1/2 -translate-y-1/2 text-gray-400" />
+          <Type size={12} className="absolute left-1.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--neutral-400)' }} />
           <select
-            className="pl-6 pr-1 py-1 text-xs bg-white border border-gray-200 rounded hover:border-gray-300 cursor-pointer appearance-none"
+            className="toolbar-font-size"
             value={selectedCellData?.format?.fontSize || 13}
             onChange={(e) => setRangeFormat({ fontSize: parseInt(e.target.value) })}
             title="Font size"
@@ -297,115 +276,186 @@ export function Toolbar() {
           </select>
         </div>
 
-        {/* Cell color */}
-        <div className="relative group">
-          <ToolButton icon={<Paintbrush size={15} />} title="Cell Color" onClick={() => {}} />
-          <div className="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-xl border border-gray-200 p-2 hidden group-hover:grid grid-cols-7 gap-1 z-50">
-            {colorOptions.map((color, index) => (
-              <button
-                key={color}
-                className={`w-5 h-5 rounded border border-gray-200 hover:scale-110 transition-transform toolbar-color-${index}`}
-                onClick={() => setRangeFormat({ bgColor: color })}
-                aria-label={`Set cell color ${color}`}
-                title={`Set cell color ${color}`}
+        {/* ─── Alignment ─── */}
+        <div className="toolbar-group">
+          <ToolButton
+            icon={<AlignLeft size={15} />}
+            title="Align Left"
+            onClick={() => setRangeFormat({ textAlign: 'left' })}
+          />
+          <ToolButton
+            icon={<AlignCenter size={15} />}
+            title="Align Center"
+            onClick={() => setRangeFormat({ textAlign: 'center' })}
+          />
+          <ToolButton
+            icon={<AlignRight size={15} />}
+            title="Align Right"
+            onClick={() => setRangeFormat({ textAlign: 'right' })}
+          />
+        </div>
+
+        <Divider />
+
+        {/* ─── Color tools ─── */}
+        <div className="toolbar-group">
+          {/* Cell color */}
+          <div className="relative group">
+            <ToolButton icon={<Paintbrush size={15} />} title="Cell background color" onClick={() => {}} />
+            <div className="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-xl border border-gray-200 p-2 hidden group-hover:grid grid-cols-7 gap-1 z-50">
+              {colorOptions.map((color, index) => (
+                <button
+                  key={color}
+                  className={`w-5 h-5 rounded border border-gray-200 hover:scale-110 transition-transform toolbar-color-${index}`}
+                  onClick={() => setRangeFormat({ bgColor: color })}
+                  aria-label={`Set cell color ${color}`}
+                  title={`Set cell color ${color}`}
+                />
+              ))}
+            </div>
+          </div>
+
+          {/* Font color */}
+          <div className="relative" ref={fontColorRef}>
+            <button
+              type="button"
+              onClick={() => setShowFontColor(!showFontColor)}
+              className="toolbar-btn-color"
+              title="Text color"
+            >
+              <span className="font-bold text-xs leading-none" style={{ color: selectedCellData?.format?.fontColor || 'var(--neutral-800)' }}>A</span>
+              <div
+                className="w-3.5 h-0.5 rounded-sm"
+                style={{ backgroundColor: selectedCellData?.format?.fontColor || 'var(--neutral-800)' }}
               />
-            ))}
+            </button>
+            {showFontColor && (
+              <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg p-2 z-50 grid grid-cols-7 gap-1">
+                {fontColorOptions.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    className="w-5 h-5 rounded border border-gray-200 hover:scale-110 transition-transform"
+                    style={{ backgroundColor: c }}
+                    onClick={() => {
+                      setRangeFormat({ fontColor: c });
+                      setShowFontColor(false);
+                    }}
+                    aria-label={`Set text color ${c}`}
+                    title={`Set text color ${c}`}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Font color */}
-        <div className="relative" ref={fontColorRef}>
+        <Divider />
+
+        {/* ─── Data tools: filter & sort ─── */}
+        <div className="toolbar-group">
+          <ToolButton
+            icon={<Filter size={15} />}
+            title="Filter"
+            active={activeFilters.length > 0}
+            onClick={() => setShowFilterDialog(true)}
+          />
+          <ToolButton
+            icon={<SortAsc size={15} />}
+            title="Sort by column"
+            onClick={() => {
+              if (!selection) return;
+              const col = Math.min(selection.startCol, selection.endCol);
+              const nextDir = activeSortConfig?.column === col && activeSortConfig.direction === 'asc' ? 'desc' : 'asc';
+              sortByColumn(col, nextDir);
+            }}
+          />
+        </div>
+
+        <Divider />
+
+        {/* ─── Insert: Chart + more ─── */}
+        <div className="toolbar-group" ref={moreMenuRef}>
+          <ToolButton icon={<BarChart3 size={15} />} title="Insert Chart" onClick={() => setShowChartDialog(true)} />
           <button
             type="button"
-            onClick={() => setShowFontColor(!showFontColor)}
-            className="flex items-center gap-1 px-1.5 py-1.5 text-xs text-gray-600 hover:bg-gray-100 rounded transition-colors"
-            title="Text color"
+            onClick={() => setShowMoreMenu(!showMoreMenu)}
+            className={`toolbar-btn-more ${showMoreMenu ? 'active' : ''}`}
+            title="More tools"
+            aria-label="More tools"
+            aria-expanded={showMoreMenu}
           >
-            <span className="font-bold" style={{ color: selectedCellData?.format?.fontColor || '#000' }}>A</span>
-            <div
-              className="w-4 h-1 rounded-sm"
-              style={{ backgroundColor: selectedCellData?.format?.fontColor || '#000' }}
-            />
+            <ChevronDown size={13} />
           </button>
-          {showFontColor && (
-            <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg p-2 z-50 grid grid-cols-7 gap-1">
-              {fontColorOptions.map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  className="w-5 h-5 rounded border border-gray-200 hover:scale-110 transition-transform"
-                  style={{ backgroundColor: c }}
-                  onClick={() => {
-                    setRangeFormat({ fontColor: c });
-                    setShowFontColor(false);
-                  }}
-                  aria-label={`Set text color ${c}`}
-                  title={`Set text color ${c}`}
-                />
-              ))}
+
+          {showMoreMenu && (
+            <div className="toolbar-dropdown" role="menu">
+              <button
+                role="menuitem"
+                className="toolbar-dropdown-item"
+                onClick={() => { setShowConditionalFormatDialog(true); setShowMoreMenu(false); }}
+              >
+                <Grid3x3 size={14} />
+                <span>Conditional Format</span>
+              </button>
+              <button
+                role="menuitem"
+                className="toolbar-dropdown-item"
+                onClick={() => { setShowPivotDialog(true); setShowMoreMenu(false); }}
+                disabled={!selection}
+              >
+                <BarChart3 size={14} />
+                <span>Pivot Table</span>
+              </button>
+              <div className="toolbar-dropdown-divider" />
+              <button
+                role="menuitem"
+                className="toolbar-dropdown-item"
+                onClick={() => { setShowFormatPanel(!showFormatPanel); setShowMoreMenu(false); }}
+              >
+                <Paintbrush size={14} />
+                <span>Format Panel</span>
+              </button>
             </div>
           )}
         </div>
 
-        <button
-          type="button"
-          onClick={() => setShowFormatPanel(!showFormatPanel)}
-          className={`flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded transition-colors ${
-            showFormatPanel ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-100'
-          }`}
-          style={!showFormatPanel ? { color: 'var(--neutral-700)' } : undefined}
-          title="Toggle format panel"
-        >
-          Format
-        </button>
-        <Divider />
+        {/* ─── Spacer ─── */}
+        <div className="flex-1" />
 
-        {/* Data tools */}
-        <ToolButton
-          icon={<Filter size={15} />}
-          title="Filter"
-          active={activeFilters.length > 0}
-          onClick={() => setShowFilterDialog(true)}
-        />
-        <ToolButton
-          icon={<SortAsc size={15} />}
-          title="Sort by column"
-          onClick={() => {
-            if (!selection) return;
-            const col = Math.min(selection.startCol, selection.endCol);
-            const nextDir = activeSortConfig?.column === col && activeSortConfig.direction === 'asc' ? 'desc' : 'asc';
-            sortByColumn(col, nextDir);
-          }}
-        />
-        <ToolButton
-          icon={<Grid3x3 size={15} />}
-          title="Conditional Format"
-          onClick={() => setShowConditionalFormatDialog(true)}
-        />
-        <ToolButton icon={<BarChart3 size={15} />} title="Insert Chart" onClick={() => setShowChartDialog(true)} />
-        <Divider />
+        {/* ─── Import / Export (right-aligned) ─── */}
+        <div className="toolbar-group">
+          <ToolButton
+            icon={<Upload size={15} />}
+            title="Import file"
+            onClick={() => fileInputRef.current?.click()}
+          />
 
-        {/* Pivot Table */}
-        <div className="flex items-center gap-1 border-l border-gray-200 pl-2">
-          <button
-            onClick={() => setShowPivotDialog(true)}
-            disabled={!selection}
-            className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium hover:bg-blue-50 hover:text-blue-700 rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-            style={{ color: 'var(--neutral-700)' }}
-            title="Create pivot table from selection"
-          >
-            <span className="text-sm">📊</span> Pivot
-          </button>
+          <div className="relative" ref={exportMenuRef}>
+            <button
+              type="button"
+              onClick={() => setShowExportMenu(!showExportMenu)}
+              className={`toolbar-btn-export ${showExportMenu ? 'active' : ''}`}
+              title="Export"
+              aria-label="Export options"
+              aria-expanded={showExportMenu}
+            >
+              <Download size={15} />
+              <ChevronDown size={10} />
+            </button>
+            {showExportMenu && (
+              <div className="toolbar-dropdown toolbar-dropdown-right" role="menu">
+                <button role="menuitem" className="toolbar-dropdown-item" onClick={handleExportCSV}>
+                  <span>Export as CSV</span>
+                </button>
+                <button role="menuitem" className="toolbar-dropdown-item" onClick={handleExportXlsx}>
+                  <span>Export as Excel</span>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Import/Export */}
-        <ToolButton
-          icon={<Upload size={15} />}
-          title="Import CSV / Excel"
-          onClick={() => fileInputRef.current?.click()}
-        />
-        <ToolButton icon={<Download size={15} />} title="Export CSV" onClick={handleExportCSV} />
-        <ToolButton icon={<Download size={15} />} title="Export Excel" onClick={handleExportXlsx} />
         <input
           ref={fileInputRef}
           type="file"
@@ -415,8 +465,6 @@ export function Toolbar() {
           title="Import spreadsheet file"
           onChange={handleImportFile}
         />
-
-        <div className="flex-1" />
       </div>
     </div>
   );
@@ -439,10 +487,7 @@ function ToolButton({
 }) {
   return (
     <button
-      className={`p-1.5 rounded transition-colors ${
-        active ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-100'
-      } ${disabled ? 'opacity-40 cursor-not-allowed' : ''} ${className}`}
-      style={!active ? { color: 'var(--neutral-600)' } : undefined}
+      className={`toolbar-btn ${active ? 'toolbar-btn-active' : ''} ${disabled ? 'toolbar-btn-disabled' : ''} ${className}`}
       title={title}
       onClick={onClick}
       disabled={disabled}
@@ -453,8 +498,9 @@ function ToolButton({
 }
 
 function Divider() {
-  return <div className="w-px h-5 bg-gray-200 mx-1" />;
+  return <div className="toolbar-divider" />;
 }
 
-// Add Plus icon export for sheet tabs
+// Keep Plus icon export for sheet tabs
+import { Plus } from 'lucide-react';
 export { Plus };

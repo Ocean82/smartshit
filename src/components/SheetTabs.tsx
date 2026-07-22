@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { useStore } from '@/store/useStore';
 import { Plus, X, Edit3, Check } from 'lucide-react';
 
@@ -10,10 +10,14 @@ export function SheetTabs() {
     addSheet,
     deleteSheet,
     renameSheet,
+    showConfirm,
+    showToast,
+    undo,
   } = useStore();
 
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
+  const tabsRef = useRef<HTMLDivElement>(null);
 
   const handleStartRename = (sheetId: string, currentName: string) => {
     setRenamingId(sheetId);
@@ -27,11 +31,45 @@ export function SheetTabs() {
     setRenamingId(null);
   };
 
+  // Arrow key navigation between tabs
+  const handleTabKeyDown = useCallback((e: React.KeyboardEvent, index: number) => {
+    const sheets = workbook.sheets;
+    if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+      e.preventDefault();
+      const nextIndex = e.key === 'ArrowRight'
+        ? (index + 1) % sheets.length
+        : (index - 1 + sheets.length) % sheets.length;
+      setActiveSheet(sheets[nextIndex].id);
+      // Focus the new active tab
+      const tabs = tabsRef.current?.querySelectorAll<HTMLElement>('[role="tab"]');
+      tabs?.[nextIndex]?.focus();
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      setActiveSheet(sheets[0].id);
+      const tabs = tabsRef.current?.querySelectorAll<HTMLElement>('[role="tab"]');
+      tabs?.[0]?.focus();
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      setActiveSheet(sheets[sheets.length - 1].id);
+      const tabs = tabsRef.current?.querySelectorAll<HTMLElement>('[role="tab"]');
+      tabs?.[sheets.length - 1]?.focus();
+    }
+  }, [workbook.sheets, setActiveSheet]);
+
   return (
-    <div className="bg-slate-50 border-t border-gray-200 flex items-center px-2 h-8 overflow-x-auto shrink-0">
-      {workbook.sheets.map((sheet) => (
+    <div
+      className="bg-slate-50 border-t border-gray-200 flex items-center px-2 h-8 overflow-x-auto shrink-0"
+      ref={tabsRef}
+      role="tablist"
+      aria-label="Sheet tabs"
+    >
+      {workbook.sheets.map((sheet, index) => (
         <div
           key={sheet.id}
+          role="tab"
+          aria-selected={sheet.id === activeSheetId}
+          aria-label={sheet.name}
+          tabIndex={sheet.id === activeSheetId ? 0 : -1}
           className={`flex items-center gap-1 px-3 py-1 text-[11px] font-medium cursor-pointer transition-colors group ${
             sheet.id === activeSheetId
               ? 'bg-white text-slate-800 shadow-sm rounded-t-md border border-gray-200 border-b-white -mb-px'
@@ -39,6 +77,7 @@ export function SheetTabs() {
           }`}
           onClick={() => setActiveSheet(sheet.id)}
           onDoubleClick={() => handleStartRename(sheet.id, sheet.name)}
+          onKeyDown={(e) => handleTabKeyDown(e, index)}
         >
           {renamingId === sheet.id ? (
             <div className="flex items-center gap-1">
@@ -74,8 +113,23 @@ export function SheetTabs() {
                   className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 ml-0.5"
                   onClick={(e) => {
                     e.stopPropagation();
-                    deleteSheet(sheet.id);
+                    const sheetName = sheet.name;
+                    showConfirm({
+                      title: 'Delete sheet',
+                      message: `"${sheetName}" and all its data will be permanently removed.`,
+                      confirmLabel: 'Delete',
+                      variant: 'danger',
+                      onConfirm: () => {
+                        deleteSheet(sheet.id);
+                        showToast({
+                          type: 'success',
+                          message: `Deleted "${sheetName}"`,
+                          undoAction: undo,
+                        });
+                      },
+                    });
                   }}
+                  aria-label={`Delete sheet ${sheet.name}`}
                 >
                   <X size={12} />
                 </button>
