@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useStore } from '@/store/useStore';
 import { CheckCircle2, AlertCircle, Info, X, Undo2 } from 'lucide-react';
 import type { Toast as ToastType } from '@/types';
@@ -24,17 +24,23 @@ export function ToastContainer() {
 function ToastItem({ toast }: { toast: ToastType }) {
   const dismissToast = useStore((s) => s.dismissToast);
   const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const [exiting, setExiting] = useState(false);
+
+  const handleDismiss = () => {
+    setExiting(true);
+    setTimeout(() => dismissToast(toast.id), 200);
+  };
 
   useEffect(() => {
     if (toast.duration !== Infinity) {
       timerRef.current = setTimeout(() => {
-        dismissToast(toast.id);
+        handleDismiss();
       }, toast.duration || 4000);
     }
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [toast.id, toast.duration, dismissToast]);
+  }, [toast.id, toast.duration]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const icons = {
     success: <CheckCircle2 size={16} />,
@@ -44,7 +50,7 @@ function ToastItem({ toast }: { toast: ToastType }) {
 
   return (
     <div
-      className={`toast-item toast-${toast.type}`}
+      className={`toast-item toast-${toast.type} ${exiting ? 'toast-exit' : ''}`}
       role={toast.type === 'error' ? 'alert' : 'status'}
       aria-atomic="true"
     >
@@ -58,7 +64,7 @@ function ToastItem({ toast }: { toast: ToastType }) {
           className="toast-undo"
           onClick={() => {
             toast.undoAction!();
-            dismissToast(toast.id);
+            handleDismiss();
           }}
         >
           <Undo2 size={13} />
@@ -68,7 +74,7 @@ function ToastItem({ toast }: { toast: ToastType }) {
       <button
         type="button"
         className="toast-dismiss"
-        onClick={() => dismissToast(toast.id)}
+        onClick={handleDismiss}
         aria-label="Dismiss notification"
       >
         <X size={14} />

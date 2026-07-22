@@ -153,7 +153,7 @@ export function FormulaBar() {
         ) : (
           <button
             type="button"
-            className="w-full h-full px-2 text-xs font-mono text-center transition-colors cursor-text"
+            className="w-full h-full px-2 text-xs font-mono text-center transition-colors cursor-text hover:bg-blue-50 hover:text-blue-700"
             style={{ color: 'var(--ink-secondary)' }}
             onClick={() => {
               setNameBoxEditing(true);

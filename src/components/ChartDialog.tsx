@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useStore } from '@/store/useStore';
 import { X, BarChart3, LineChart, PieChart, TrendingUp } from 'lucide-react';
 import { v4 as uuid } from 'uuid';
+import { useFocusTrap } from '@/hooks/useFocusTrap';
 import type { ChartConfig, TrendLineConfig, AxisConfig } from '@/types';
 
 const chartTypes: { type: ChartConfig['type']; icon: React.ReactNode; label: string }[] = [
@@ -31,6 +32,7 @@ export function ChartDialog() {
   const [xLabel, setXLabel] = useState('');
   const [yLabel, setYLabel] = useState('');
   const [showGrid, setShowGrid] = useState(true);
+  const containerRef = useFocusTrap<HTMLDivElement>(showChartDialog);
 
   if (!showChartDialog) return null;
 
@@ -67,8 +69,12 @@ export function ChartDialog() {
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setShowChartDialog(false)}>
       <div
+        ref={containerRef}
         className="bg-white rounded-2xl shadow-2xl w-[480px] overflow-hidden"
         onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="chart-dialog-title"
       >
         <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
           <h3 className="text-sm font-semibold text-gray-800">Insert Chart</h3>

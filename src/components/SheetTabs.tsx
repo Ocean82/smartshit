@@ -74,11 +74,11 @@ export function SheetTabs() {
           className={`flex items-center gap-1 px-3 py-1 text-[11px] font-medium cursor-pointer transition-colors group ${
             sheet.id === activeSheetId
               ? 'rounded-t-md border border-b-white -mb-px shadow-sm'
-              : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-md'
+              : 'hover:bg-gray-100 rounded-md'
           }`}
           style={sheet.id === activeSheetId
             ? { background: 'var(--surface-panel)', borderColor: 'var(--neutral-200)', color: 'var(--accent-700)' }
-            : undefined
+            : { color: 'var(--ink-secondary)' }
           }
           onClick={() => setActiveSheet(sheet.id)}
           onDoubleClick={() => handleStartRename(sheet.id, sheet.name)}

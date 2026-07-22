@@ -121,18 +121,13 @@
   animation: marching-ants 0.4s linear infinite;
 }
 
-/* Custom focus styles */
-input:focus, textarea:focus, select:focus {
-  outline: none;
-}
-
 /* Visible focus indicator for keyboard users */
 :focus-visible {
   outline: 2px solid var(--accent-500);
   outline-offset: 2px;
 }
 
-/* Remove outline for mouse users */
+/* Remove outline for mouse/pointer users */
 :focus:not(:focus-visible) {
   outline: none;
 }

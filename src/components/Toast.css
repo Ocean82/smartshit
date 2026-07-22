@@ -46,6 +46,22 @@
   }
 }
 
+/* ─── Exit animation ─── */
+.toast-exit {
+  animation: toast-out 0.2s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+@keyframes toast-out {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(4px) scale(0.96);
+  }
+}
+
 /* ─── Icon ─── */
 .toast-icon {
   flex-shrink: 0;
@@ -118,6 +134,10 @@
 @media (prefers-reduced-motion: reduce) {
   .toast-item {
     animation: none;
+  }
+  .toast-exit {
+    animation: none;
+    opacity: 0;
   }
 }
 

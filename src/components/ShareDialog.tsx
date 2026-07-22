@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import { getCloudWorkbookId, isCloudConfigured, getAuthHeaders } from '@/lib/cloudSync'
 import { useStore } from '@/store/useStore'
+import { useFocusTrap } from '@/hooks/useFocusTrap'
 
 const API_BASE = import.meta.env.VITE_AI_API_URL ?? ''
 
@@ -36,6 +37,7 @@ export function ShareDialog({ open, onClose }: ShareDialogProps) {
   const [copiedToken, setCopiedToken] = useState<string | null>(null)
   const [permission, setPermission] = useState<'view' | 'edit'>('view')
   const [expiresIn, setExpiresIn] = useState<'24h' | '7d' | '30d' | 'never'>('never')
+  const containerRef = useFocusTrap<HTMLDivElement>(open)
 
   const cloudId = getCloudWorkbookId()
   const canShare = isCloudConfigured() && Boolean(cloudId)
@@ -132,7 +134,7 @@ export function ShareDialog({ open, onClose }: ShareDialogProps) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+      <div ref={containerRef} className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden" role="dialog" aria-modal="true" aria-labelledby="share-dialog-title">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
           <div className="flex items-center gap-2">

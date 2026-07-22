@@ -9,6 +9,7 @@ import {
   type CloudWorkbook,
 } from '@/lib/cloudSync'
 import { useStore } from '@/store/useStore'
+import { useFocusTrap } from '@/hooks/useFocusTrap'
 
 interface WorkbookPickerProps {
   open: boolean
@@ -20,6 +21,7 @@ export function WorkbookPicker({ open, onClose }: WorkbookPickerProps) {
   const [workbooks, setWorkbooks] = useState<CloudWorkbook[]>([])
   const [loading, setLoading] = useState(false)
   const [actionId, setActionId] = useState<string | null>(null)
+  const containerRef = useFocusTrap<HTMLDivElement>(open)
 
   useEffect(() => {
     if (open && isCloudConfigured()) {
@@ -93,7 +95,7 @@ export function WorkbookPicker({ open, onClose }: WorkbookPickerProps) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden">
+      <div ref={containerRef} className="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden" role="dialog" aria-modal="true" aria-labelledby="workbook-picker-title">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
           <div className="flex items-center gap-2">
