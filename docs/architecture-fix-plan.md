@@ -112,12 +112,12 @@ Issues identified from the SmartSht review, verified against the actual codebase
 
 ## Phase 3: Architecture
 
-### 3.1 Decompose the God Store
+### 3.1 Decompose the God Store (Phase 1: Extract Chat Service) ✅
 
 **Problem:** 1,614-line single store mixing workbook mutations, AI orchestration, file management, clipboard, UI state, undo/redo, toasts, and validation in one flat namespace. The `sendMessage` action alone is ~150 lines of async orchestration.
 
 **Fix:**
-- [ ] Extract `sendMessage` + AI logic into `src/services/chatService.ts` — pure async function that takes state getters and returns results, no store coupling
+- [x] Extract `sendMessage` + AI logic into `src/services/chatService.ts` — pure async function that takes state getters and returns results, no store coupling
 - [ ] Create `src/store/slices/workbookSlice.ts` — cell mutations, sheet management, undo/redo
 - [ ] Create `src/store/slices/chatSlice.ts` — messages, chatInput, isProcessing, pinned
 - [ ] Create `src/store/slices/uiSlice.ts` — panel visibility, scroll state, dialogs, toasts

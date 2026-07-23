@@ -701,155 +701,35 @@ export const useStore = create<AppState>()(
           s.isAiProcessing = true;
         });
 
-        void (async () => {
-          const state = get();
-
-          // ─── @-mention sheet switching ──────────────────────────────────────
-          // If user writes "@SheetName" in their message, switch to that sheet
-          const sheetMention = input.match(/@([A-Za-z0-9_ -]+)/);
-          if (sheetMention) {
-            const mentionedName = sheetMention[1].trim();
-            const targetSheet = state.workbook.sheets.find(
-              (s) => s.name.toLowerCase() === mentionedName.toLowerCase()
-            );
-            if (targetSheet && targetSheet.id !== state.activeSheetId) {
-              set((s) => { s.activeSheetId = targetSheet.id; });
-            }
-          }
-
-          const sheet = state.getActiveSheet();
-          const history = state.messages
-            .filter((m) => m.role === 'user' || m.role === 'assistant')
-            .slice(0, -2)
-            .slice(-12)
-            .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }));
-
-          const priorInsights = state.messages
-            .filter((m) => m.role === 'assistant' && m.insightsSnapshot)
-            .at(-1)?.insightsSnapshot as SheetInsights | undefined;
-
-          const context = buildSpreadsheetContext(
-            state.workbook,
-            sheet,
-            state.selection,
-            state.getComputedValue,
-          );
-
-          // ─── Agent Parser (instant, no LLM) ─────────────────────────────────
-          const headerRowIdx = findHeaderRow(sheet);
-          const lastDataRowIdx = findLastDataRow(sheet);
-          let lastDataColIdx = 0;
-          const headers: string[] = [];
-          for (const cellId of Object.keys(sheet.cells)) {
-            lastDataColIdx = Math.max(lastDataColIdx, cellToRef(cellId).col);
-          }
-          for (let c = 0; c <= lastDataColIdx; c++) {
-            headers.push(state.getComputedValue(headerRowIdx, c));
-          }
-          const parsed = parseMessage(input, {
-            headerRow: headerRowIdx,
-            lastDataRow: lastDataRowIdx,
-            lastDataCol: lastDataColIdx,
-            headers,
-          });
-          if (parsed.understood && parsed.calls.length > 0) {
-            // Push a single undo point BEFORE the batch executes
-            get().pushHistory(`AI: ${parsed.explanation || parsed.calls.map(c => c.description).join(', ')}`);
-
-            // Shared execution context — suppress per-tool pushHistory since we already saved the undo point
-            const execCtx = buildExecutionContext(get, set, { suppressHistory: true });
-
-            // Execute all tool calls in sequence
-            const results = parsed.calls.map(call => executeTool(call, execCtx));
-            const allSuccess = results.every(r => r.success);
-            const totalModified = results.reduce((sum, r) => sum + r.modified, 0);
-
-            // Build response message
-            const messages = results.map(r => r.message);
-            const explanation = parsed.explanation || messages.join('. ');
-            const responseText = allSuccess
-              ? `✓ ${explanation}${totalModified > 0 ? ` (${totalModified} cell${totalModified === 1 ? '' : 's'} modified)` : ''}`
-              : `⚠️ ${messages.join('. ')}`;
-
-            const agentMsg: ChatMessage = {
-              id: streamingMsgId,
-              role: 'assistant',
-              content: responseText,
-              timestamp: Date.now(),
-            };
-
-            set((s) => {
-              const idx = s.messages.findIndex((m) => m.id === streamingMsgId);
-              if (idx >= 0) s.messages[idx] = agentMsg;
-              s.isAiProcessing = false;
-            });
-            return;
-          }
-
-          // ─── Gallery template prompt (instant build, no LLM) ────────────────
-          // Matches prompts/names from src/data/templates.ts so niche templates
-          // work from typed chat the same way they do from the gallery.
-          const galleryMatch = resolveGalleryTemplate(input);
-          if (galleryMatch) {
-            get().pushHistory(`Template: ${galleryMatch.label}`);
-            const execCtx = buildExecutionContext(get, set, { suppressHistory: true });
-            const result = executeTemplateTool(galleryMatch.tool, {}, execCtx);
-            const responseText = result.success
-              ? `✓ ${result.message}${result.modified > 0 ? ` (${result.modified} cell${result.modified === 1 ? '' : 's'} filled)` : ''}`
-              : `⚠️ ${result.message}`;
-
-            set((s) => {
-              const idx = s.messages.findIndex((m) => m.id === streamingMsgId);
-              if (idx >= 0) {
-                s.messages[idx] = {
-                  id: streamingMsgId,
-                  role: 'assistant',
-                  content: responseText,
-                  timestamp: Date.now(),
-                };
-              }
-              s.isAiProcessing = false;
-            });
-            return;
-          }
-
-          // ─── LLM Path (server-side AI for complex/open-ended requests) ──────
-          const result = await processMessage({
-            message: input,
-            workbook: state.workbook,
-            sheet,
-            selection: state.selection,
-            getComputedValue: state.getComputedValue,
-            attachedPreview: state.attachedFilePreview,
-            priorInsights: priorInsights ?? null,
-            history,
-            onToken: (token) => {
+        // Delegate to the chat service
+        void import('@/services/chatService').then(({ processChatMessage }) => {
+          processChatMessage(input, streamingMsgId, {
+            getWorkbook: () => get().workbook,
+            getActiveSheet: () => get().getActiveSheet(),
+            getComputedValue: (row, col) => get().getComputedValue(row, col),
+            getSelection: () => get().selection,
+            getActiveSheetId: () => get().activeSheetId,
+            getAttachedPreview: () => get().attachedFilePreview,
+            getMessages: () => get().messages,
+            setActiveSheet: (sheetId) => set((s) => { s.activeSheetId = sheetId; }),
+            pushHistory: (desc) => get().pushHistory(desc),
+            buildExecContext: (opts) => buildExecutionContext(get, set, opts),
+            appendToken: (msgId, token) => {
               set((s) => {
-                const msg = s.messages.find((m) => m.id === streamingMsgId);
+                const msg = s.messages.find((m) => m.id === msgId);
                 if (msg) msg.content += token;
               });
             },
-          });
-
-          let finalMsg = toolResultToChatMessage(result, {
-            id: streamingMsgId,
-            insightsSnapshot: context.insights as unknown as Record<string, unknown>,
-            previewContext: {
-              sheet,
-              getComputedValue: state.getComputedValue,
+            finalizeMessage: (msgId, msg) => {
+              set((s) => {
+                const idx = s.messages.findIndex((m) => m.id === msgId);
+                if (idx >= 0) s.messages[idx] = msg;
+              });
             },
+            setProcessing: (v) => set((s) => { s.isAiProcessing = v; }),
+            processLocalFallback: (input) => processAICommand(input, get),
           });
-
-          if (!result.success && !isLlmOnlyMode(classifyMode(input))) {
-            finalMsg = { ...processAICommand(input, get), id: streamingMsgId };
-          }
-
-          set((s) => {
-            const idx = s.messages.findIndex((m) => m.id === streamingMsgId);
-            if (idx >= 0) s.messages[idx] = finalMsg;
-            s.isAiProcessing = false;
-          });
-        })();
+        });
       },
 
       runTemplateTool: (tool) => {
