@@ -3,6 +3,7 @@ import { useStore } from '@/store/useStore'
 import { fetchServerHealth, type ServerHealth } from '@/ai/agentClient'
 import { Toolbar } from '@/components/Toolbar'
 import { SpreadsheetGrid } from '@/components/SpreadsheetGrid'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { ChatPanel } from '@/components/ChatPanel'
 import { SheetTabs } from '@/components/SheetTabs'
 import { FileExplorer } from '@/components/FileExplorer'
@@ -190,7 +191,9 @@ function App() {
         {/* Spreadsheet — always takes remaining space */}
         <div id="spreadsheet-main" className="flex-1 flex flex-col overflow-hidden min-w-0 relative">
           <div className="flex-1 flex flex-col overflow-hidden relative pb-[52px] md:pb-0">
-            <SpreadsheetGrid />
+            <ErrorBoundary scope="Spreadsheet Grid">
+              <SpreadsheetGrid />
+            </ErrorBoundary>
             <ChartOverlay />
             <EmptyGridGuide onOpenTemplates={() => setShowTemplates(true)} />
           </div>

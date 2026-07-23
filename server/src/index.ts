@@ -35,6 +35,9 @@ import { sharesRouter } from './routes/shares.js'
 import { templatesRouter } from './routes/templates.js'
 import { aiFunctionRouter } from './routes/aiFunction.js'
 import { requireAuth, getRequestUserId, getClerkClient, planFromPublicMetadata } from './auth/clerk.js'
+import { validateBody } from './middleware/validate.js'
+import { chatStreamBodySchema, chatBodySchema } from './schemas/index.js'
+import { chatRateLimiter, checkoutRateLimiter, globalRateLimiter } from './middleware/rateLimit.js'
 
 // ─── Pro plan cache (avoids hitting Clerk API on every chat message) ─────────
 const PRO_CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
@@ -94,6 +97,9 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
 
 app.use(clerkMiddleware())
 app.use(express.json({ limit: '1mb' }))
+
+// Global rate limiter — generous backstop (skips /health)
+app.use(globalRateLimiter)
 
 // ─── Cloud workbook routes (Clerk JWT required) ──────────────────────────────
 app.use('/api/workbooks', requireAuth, workbooksRouter)
@@ -330,7 +336,7 @@ app.get('/health', async (_req, res) => {
 
 // ─── Streaming SSE endpoint (primary) ────────────────────────────────────────
 
-app.post('/api/chat/stream', requireAuth, async (req, res) => {
+app.post('/api/chat/stream', requireAuth, chatRateLimiter, validateBody(chatStreamBodySchema), async (req, res) => {
   const body = req.body as ChatRequestBody
   const userMessage = body.message?.trim()
 
@@ -475,7 +481,7 @@ app.post('/api/chat/stream', requireAuth, async (req, res) => {
 
 // ─── Classic JSON endpoint (non-streaming, kept for compatibility) ────────────
 
-app.post('/api/chat', requireAuth, async (req, res) => {
+app.post('/api/chat', requireAuth, chatRateLimiter, validateBody(chatBodySchema), async (req, res) => {
   const body = req.body as ChatRequestBody
   const userMessage = body.message?.trim()
 
@@ -566,7 +572,7 @@ app.post('/api/usage', requireAuth, async (req, res) => {
 
 // ─── Stripe Checkout ─────────────────────────────────────────────────────────
 
-app.post('/api/checkout', requireAuth, async (req, res) => {
+app.post('/api/checkout', requireAuth, checkoutRateLimiter, async (req, res) => {
   const userId = getRequestUserId(req)
   if (!userId) {
     res.status(401).json({ error: 'Authentication required' })

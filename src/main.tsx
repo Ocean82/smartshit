@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App'
 import { SharedView } from '@/components/SharedView'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { AuthProvider, AuthGate, ClerkUserSync } from '@/auth'
 import { useStore } from '@/store/useStore'
 import { savePersistedState } from '@/lib/persistence'
@@ -44,15 +45,17 @@ if (importedShared && !sharedMatch) {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    {sharedMatch ? (
-      <SharedView token={sharedMatch[1]} />
-    ) : (
-      <AuthProvider>
-        <AuthGate>
-          <ClerkUserSync />
-          <App />
-        </AuthGate>
-      </AuthProvider>
-    )}
+    <ErrorBoundary scope="SmartSht">
+      {sharedMatch ? (
+        <SharedView token={sharedMatch[1]} />
+      ) : (
+        <AuthProvider>
+          <AuthGate>
+            <ClerkUserSync />
+            <App />
+          </AuthGate>
+        </AuthProvider>
+      )}
+    </ErrorBoundary>
   </StrictMode>,
 )
