@@ -56,6 +56,7 @@ import {
   type HistoryEntry,
   type WorkbookPatch,
 } from '@/lib/historyDiff';
+import { createUIState, createUIActions } from './slices';
 
 // Maximum undo stack depth — higher limit now that patches are lightweight
 const MAX_UNDO_STACK = 150;
@@ -280,12 +281,13 @@ export const useStore = create<AppState>()(
     };
 
     const storage = typeof localStorage !== 'undefined' ? localStorage : null
-    const storedChatWidth = Number(storage?.getItem('smartsht-chat-width') || 380)
-    const initialChatWidth = Number.isFinite(storedChatWidth)
-      ? Math.min(720, Math.max(280, storedChatWidth))
-      : 380
-    const storedShowChat = storage?.getItem('smartsht-show-chat') ?? null
-    const initialShowChat = storedShowChat === null ? true : storedShowChat !== '0'
+
+    // ─── UI state from slice ─────────────────────────────────────────────────
+    const uiState = createUIState()
+    const uiActions = createUIActions(
+      set as unknown as (fn: (s: typeof uiState) => void) => void,
+      () => get() as unknown as typeof uiState,
+    )
 
     return {
       workbook: initialWorkbook,
@@ -294,36 +296,12 @@ export const useStore = create<AppState>()(
       selection: null,
       editingCell: null,
       editValue: '',
-      showChat: initialShowChat,
-      chatWidth: initialChatWidth,
-      showFileExplorer: false,
-      showSkills: false,
-      showChartDialog: false,
-      showFormatPanel: false,
-      showToolbar: storage?.getItem('smartsht-show-toolbar') !== '0',
-      showVersionHistory: false,
-      showValidationDialog: false,
-      showPivotDialog: false,
-      setShowPivotDialog: (show) => set({ showPivotDialog: show }),
-      showFilterDialog: false,
-      setShowFilterDialog: (v) => set({ showFilterDialog: v }),
-      showConditionalFormatDialog: false,
-      setShowConditionalFormatDialog: (v) => set({ showConditionalFormatDialog: v }),
-      contextMenu: null,
+      // Spread UI state
+      ...uiState,
+      // Spread UI actions
+      ...uiActions,
 
-      // Panel system
-      activePanel: null,
-      panelWidths: JSON.parse(storage?.getItem('smartsht-panel-widths') || '{}'),
       lastAuditResult: null,
-      setActivePanel: (panel) => set({ activePanel: panel }),
-      setPanelWidth: (panel, width) => {
-        set((s) => { s.panelWidths[panel] = width })
-        try {
-          const current = JSON.parse(storage?.getItem('smartsht-panel-widths') || '{}')
-          current[panel] = width
-          storage?.setItem('smartsht-panel-widths', JSON.stringify(current))
-        } catch { /* ignore */ }
-      },
 
       undoStack: [],
       redoStack: [],
@@ -339,29 +317,6 @@ export const useStore = create<AppState>()(
       additionalSelections: [],
       activeFilters: [],
       activeSortConfig: null,
-      scrollRow: 0,
-      scrollCol: 0,
-
-      // Toast notifications
-      toasts: [],
-      showToast: (toast) => {
-        const id = uuid();
-        set((s) => {
-          s.toasts.push({ ...toast, id });
-          // Cap at 5 visible toasts — dismiss oldest when exceeded
-          if (s.toasts.length > 5) {
-            s.toasts = s.toasts.slice(-5);
-          }
-        });
-      },
-      dismissToast: (id) => {
-        set((s) => { s.toasts = s.toasts.filter((t) => t.id !== id); });
-      },
-
-      // Confirmation dialog
-      confirmDialog: null,
-      showConfirm: (dialog) => set({ confirmDialog: dialog }),
-      dismissConfirm: () => set({ confirmDialog: null }),
 
       initWorkbook: (name = 'Untitled Workbook') => {
         const wb = createEmptyWorkbook(name);
@@ -509,35 +464,6 @@ export const useStore = create<AppState>()(
       }),
       setEditingCell: (cellId) => set((s) => { s.editingCell = cellId; }),
       setEditValue: (val) => set((s) => { s.editValue = val; }),
-      toggleChat: () => set((s) => {
-        s.showChat = !s.showChat
-        try { localStorage.setItem('smartsht-show-chat', s.showChat ? '1' : '0') } catch { /* ignore */ }
-      }),
-      setShowChat: (v) => set((s) => {
-        s.showChat = v
-        try { localStorage.setItem('smartsht-show-chat', v ? '1' : '0') } catch { /* ignore */ }
-      }),
-      setChatWidth: (w) => set((s) => {
-        const clamped = Math.min(720, Math.max(280, Math.round(w)))
-        s.chatWidth = clamped
-        try { localStorage.setItem('smartsht-chat-width', String(clamped)) } catch { /* ignore */ }
-      }),
-      toggleFileExplorer: () => set((s) => { s.showFileExplorer = !s.showFileExplorer; }),
-      toggleSkills: () => set((s) => { s.showSkills = !s.showSkills; }),
-      setShowChartDialog: (v) => set((s) => { s.showChartDialog = v; }),
-      setShowFormatPanel: (v) => set((s) => { s.showFormatPanel = v; }),
-      setShowToolbar: (v) => {
-        set((s) => { s.showToolbar = v; });
-        storage?.setItem('smartsht-show-toolbar', v ? '1' : '0');
-      },
-      toggleToolbar: () => {
-        const next = !get().showToolbar;
-        set((s) => { s.showToolbar = next; });
-        storage?.setItem('smartsht-show-toolbar', next ? '1' : '0');
-      },
-      setShowVersionHistory: (v) => set((s) => { s.showVersionHistory = v; }),
-      setShowValidationDialog: (show) => set((s) => { s.showValidationDialog = show; }),
-      setContextMenu: (menu) => set((s) => { s.contextMenu = menu; }),
 
       setCellValidation: (cellId, validation) => {
         set((s) => {
@@ -1256,10 +1182,6 @@ export const useStore = create<AppState>()(
           s.undoStack = [];
           s.redoStack = [];
         });
-      },
-
-      setScrollPosition: (row, col) => {
-        set((s) => { s.scrollRow = row; s.scrollCol = col; });
       },
 
       getActiveSheet: () => {

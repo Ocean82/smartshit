@@ -112,18 +112,18 @@ Issues identified from the SmartSht review, verified against the actual codebase
 
 ## Phase 3: Architecture
 
-### 3.1 Decompose the God Store (Phase 1: Extract Chat Service) ✅
+### 3.1 Decompose the God Store ✅ (Phase 1 Complete)
 
 **Problem:** 1,614-line single store mixing workbook mutations, AI orchestration, file management, clipboard, UI state, undo/redo, toasts, and validation in one flat namespace. The `sendMessage` action alone is ~150 lines of async orchestration.
 
 **Fix:**
 - [x] Extract `sendMessage` + AI logic into `src/services/chatService.ts` — pure async function that takes state getters and returns results, no store coupling
-- [ ] Create `src/store/slices/workbookSlice.ts` — cell mutations, sheet management, undo/redo
-- [ ] Create `src/store/slices/chatSlice.ts` — messages, chatInput, isProcessing, pinned
-- [ ] Create `src/store/slices/uiSlice.ts` — panel visibility, scroll state, dialogs, toasts
-- [ ] Create `src/store/slices/fileSlice.ts` — file explorer, import/export, cloud sync
-- [ ] Wire slices together using Zustand's `combine` or a facade store that re-exports from slices
-- [ ] Update component imports to use specific slice selectors (reduces unnecessary re-renders)
+- [x] Create `src/store/slices/uiSlice.ts` — panel visibility, scroll state, dialogs, toasts, confirmations
+- [x] Create `src/store/slices/fileSlice.ts` — file state types (prepared for future full extraction)
+- [x] Integrate UI slice into main store via composition (spread state + actions)
+- [ ] Create `src/store/slices/workbookSlice.ts` — cell mutations, sheet management, undo/redo (future)
+- [ ] Create `src/store/slices/chatSlice.ts` — messages, chatInput, isProcessing, pinned (future)
+- [ ] Update component imports to use specific slice selectors (future — reduces unnecessary re-renders)
 
 **Effort:** Large (8-12 hours)
 
