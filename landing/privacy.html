@@ -4,90 +4,209 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Privacy Policy — smartsht</title>
+  <meta name="description" content="Privacy Policy for smartsht. Your spreadsheet data stays in your browser. We collect minimal data." />
   <link rel="canonical" href="https://smartsht.com/privacy" />
+  <link rel="icon" type="image/png" href="/smart-favicon.png" />
+  <link rel="apple-touch-icon" href="/smart-favicon.png" />
+  <meta name="robots" content="index, follow" />
+
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&family=General+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Space Grotesk', system-ui, sans-serif; background: #06080c; color: #f1f5f9; line-height: 1.8; }
-    .container { max-width: 720px; margin: 0 auto; padding: 80px 24px; }
-    h1 { font-size: 2rem; font-weight: 700; margin-bottom: 8px; }
-    .updated { color: #94a3b8; font-size: 0.85rem; margin-bottom: 40px; }
-    h2 { font-size: 1.2rem; font-weight: 600; margin-top: 32px; margin-bottom: 12px; color: #60a5fa; }
-    p, li { font-size: 0.95rem; color: #cbd5e1; margin-bottom: 12px; }
-    ul { padding-left: 20px; }
-    a { color: #60a5fa; }
-    .back { display: inline-block; margin-bottom: 24px; font-size: 0.85rem; color: #94a3b8; }
-    table { width: 100%; border-collapse: collapse; margin: 16px 0; }
-    th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #1e293b; font-size: 0.9rem; }
-    th { color: #94a3b8; font-weight: 500; }
-    td { color: #cbd5e1; }
+
+    :root {
+      --bg: oklch(0.985 0.005 250);
+      --surface: oklch(1 0 0);
+      --ink: oklch(0.18 0.03 250);
+      --ink-secondary: oklch(0.40 0.02 250);
+      --ink-muted: oklch(0.55 0.015 250);
+      --accent: oklch(0.50 0.20 250);
+      --border: oklch(0.90 0.008 250);
+      --radius: 12px;
+      --font-display: 'Bricolage Grotesque', system-ui, sans-serif;
+      --font-body: 'General Sans', system-ui, sans-serif;
+    }
+
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: var(--font-body);
+      background: var(--bg);
+      color: var(--ink);
+      line-height: 1.7;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    .container { max-width: 720px; margin: 0 auto; padding: 80px 24px 100px; }
+
+    .back {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.85rem;
+      color: var(--ink-muted);
+      margin-bottom: 32px;
+      text-decoration: none;
+    }
+    .back:hover { color: var(--accent); text-decoration: none; }
+
+    h1 {
+      font-family: var(--font-display);
+      font-size: clamp(1.8rem, 4vw, 2.4rem);
+      font-weight: 800;
+      letter-spacing: -1px;
+      margin-bottom: 8px;
+    }
+
+    .updated {
+      color: var(--ink-muted);
+      font-size: 0.85rem;
+      margin-bottom: 48px;
+    }
+
+    h2 {
+      font-family: var(--font-display);
+      font-size: 1.1rem;
+      font-weight: 700;
+      margin-top: 36px;
+      margin-bottom: 12px;
+      color: var(--ink);
+    }
+
+    p, li {
+      font-size: 0.92rem;
+      color: var(--ink-secondary);
+      margin-bottom: 12px;
+      line-height: 1.7;
+    }
+
+    ul { padding-left: 20px; margin-bottom: 16px; }
+    li { margin-bottom: 6px; }
+
+    strong { color: var(--ink); }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0 24px;
+      font-size: 0.88rem;
+    }
+    th, td {
+      text-align: left;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+    }
+    th {
+      color: var(--ink-muted);
+      font-weight: 600;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+    td { color: var(--ink-secondary); }
+
+    :focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+    }
+
+    @media (max-width: 600px) {
+      table { font-size: 0.82rem; }
+      th, td { padding: 8px 10px; }
+    }
   </style>
 </head>
 <body>
-  <div class="container">
+  <main class="container">
     <a href="/" class="back">← Back to smartsht.com</a>
     <h1>Privacy Policy</h1>
-    <p class="updated">Last updated: July 8, 2026</p>
+    <p class="updated">Last updated: July 23, 2026</p>
 
     <h2>Summary</h2>
-    <p>Your spreadsheet data stays in your browser. We collect minimal account info for authentication and billing. We don't sell your data. Period.</p>
+    <p>Your spreadsheet data stays in your browser. We collect minimal account info for authentication and billing. We don't sell your data.</p>
 
     <h2>What We Collect</h2>
     <table>
-      <tr><th>Data</th><th>Purpose</th><th>Stored where</th></tr>
-      <tr><td>Email address</td><td>Account creation, billing receipts</td><td>Clerk (auth provider)</td></tr>
-      <tr><td>Name (optional)</td><td>Account display</td><td>Clerk</td></tr>
-      <tr><td>Payment info</td><td>Subscription billing</td><td>Stripe (payment processor)</td></tr>
-      <tr><td>AI chat messages</td><td>Generate responses</td><td>Processed in memory, not stored</td></tr>
-      <tr><td>Usage counts</td><td>Free tier enforcement</td><td>Server-side, anonymized</td></tr>
+      <thead>
+        <tr><th>Data</th><th>Purpose</th><th>Stored Where</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Email address</td><td>Account creation, billing receipts</td><td>Clerk (auth provider)</td></tr>
+        <tr><td>Name (optional)</td><td>Account display</td><td>Clerk</td></tr>
+        <tr><td>Payment info</td><td>Subscription billing</td><td>Stripe (payment processor)</td></tr>
+        <tr><td>AI chat messages</td><td>Generate responses</td><td>Processed in memory, not stored</td></tr>
+        <tr><td>Usage counts</td><td>Free tier enforcement</td><td>Server-side, anonymized</td></tr>
+        <tr><td>Device/browser info</td><td>Security, compatibility</td><td>Server logs (30 day retention)</td></tr>
+      </tbody>
     </table>
 
     <h2>What We Don't Collect</h2>
     <ul>
       <li>Your spreadsheet data (stays in browser localStorage)</li>
       <li>Financial figures, budget amounts, or expense details</li>
-      <li>Browsing history or tracking cookies</li>
+      <li>Browsing history or third-party tracking cookies</li>
       <li>Data from other apps or services</li>
+      <li>Location data</li>
     </ul>
 
     <h2>How AI Queries Work</h2>
-    <p>When you ask the AI a question, your message and a summary of visible cells are sent to our server to generate a response. This data is processed in memory and discarded immediately after the response is sent. We do not log, store, or train on your queries.</p>
+    <p>When you send a message to the AI assistant, your message and a summary of visible cells are sent to our server to generate a response. This data is processed in memory and discarded immediately after the response is delivered. We do not log, store, or train on your queries or spreadsheet content.</p>
+
+    <h2>Cookies and Tracking</h2>
+    <p>We use essential cookies only for authentication sessions (via Clerk). We do not use:</p>
+    <ul>
+      <li>Advertising cookies</li>
+      <li>Third-party analytics trackers</li>
+      <li>Cross-site tracking pixels</li>
+      <li>Fingerprinting techniques</li>
+    </ul>
 
     <h2>Third-Party Services</h2>
     <ul>
       <li><strong>Clerk</strong> — Authentication. <a href="https://clerk.com/privacy" target="_blank" rel="noopener">Their privacy policy</a>.</li>
       <li><strong>Stripe</strong> — Payments. <a href="https://stripe.com/privacy" target="_blank" rel="noopener">Their privacy policy</a>.</li>
-      <li><strong>Cloudflare</strong> — CDN and DNS. <a href="https://www.cloudflare.com/privacypolicy/" target="_blank" rel="noopener">Their privacy policy</a>.</li>
+      <li><strong>Cloudflare</strong> — CDN and DDoS protection. <a href="https://www.cloudflare.com/privacypolicy/" target="_blank" rel="noopener">Their privacy policy</a>.</li>
     </ul>
-
-    <h2>Cookies</h2>
-    <p>We use essential cookies only (authentication session via Clerk). No tracking cookies, no analytics cookies, no advertising.</p>
 
     <h2>Data Retention</h2>
     <ul>
-      <li>Account data: retained while your account is active. Deleted within 30 days of account deletion request.</li>
-      <li>Payment records: retained as required by law (typically 7 years for tax purposes).</li>
-      <li>Spreadsheet data: stored only in your browser. We never have access to it.</li>
+      <li><strong>Account data:</strong> Retained while your account is active. Deleted within 30 days of account deletion request.</li>
+      <li><strong>Payment records:</strong> Retained as required by law (typically 7 years for tax purposes).</li>
+      <li><strong>Server logs:</strong> Automatically purged after 30 days.</li>
+      <li><strong>Spreadsheet data:</strong> Stored only in your browser. We never have access to it.</li>
     </ul>
 
     <h2>Your Rights</h2>
-    <p>You can:</p>
+    <p>You have the right to:</p>
     <ul>
-      <li>Export your spreadsheet data anytime (File → Export)</li>
-      <li>Delete your account by contacting support</li>
-      <li>Request a copy of any data we hold about you</li>
+      <li>Export your spreadsheet data at any time (File → Export)</li>
+      <li>Request deletion of your account and associated data</li>
+      <li>Request a copy of any personal data we hold about you</li>
+      <li>Opt out of non-essential communications</li>
+      <li>Lodge a complaint with a data protection authority</li>
     </ul>
+    <p>To exercise these rights, contact <a href="mailto:support@smartsht.com">support@smartsht.com</a>. We respond within 30 days.</p>
 
-    <h2>Children</h2>
-    <p>smartsht is not intended for children under 13. We do not knowingly collect data from children.</p>
+    <h2>International Users</h2>
+    <p>Our servers are located in the United States. If you access the Service from outside the US, your information may be transferred to and processed in the US. By using the Service, you consent to this transfer.</p>
 
-    <h2>Changes</h2>
-    <p>We'll notify you of material changes via email. Continued use after notification constitutes acceptance.</p>
+    <h2>Children's Privacy</h2>
+    <p>smartsht is not intended for children under 13. We do not knowingly collect personal information from children. If we discover we have collected data from a child under 13, we will delete it promptly.</p>
+
+    <h2>Changes to This Policy</h2>
+    <p>We may update this Privacy Policy from time to time. Material changes will be communicated via email at least 14 days in advance. Continued use after the effective date constitutes acceptance.</p>
 
     <h2>Contact</h2>
     <p>Privacy questions: <a href="mailto:support@smartsht.com">support@smartsht.com</a></p>
-  </div>
+  </main>
 </body>
 </html>

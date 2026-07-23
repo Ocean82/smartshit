@@ -33,6 +33,7 @@ import { workbooksRouter } from './routes/workbooks.js'
 import { versionsRouter } from './routes/versions.js'
 import { sharesRouter } from './routes/shares.js'
 import { templatesRouter } from './routes/templates.js'
+import { aiFunctionRouter } from './routes/aiFunction.js'
 import { requireAuth, getRequestUserId, getClerkClient, planFromPublicMetadata } from './auth/clerk.js'
 
 // ─── Pro plan cache (avoids hitting Clerk API on every chat message) ─────────
@@ -100,6 +101,9 @@ app.use('/api/workbooks', requireAuth, versionsRouter)
 app.use('/api/workbooks', requireAuth, sharesRouter)
 app.use('/api', sharesRouter)  // Public GET /api/shared/:token; mutating routes check auth in-handler
 app.use('/api/community-templates', templatesRouter)
+
+// ─── AI Function endpoint (formula-level AI calls) ───────────────────────────
+app.use('/api/ai-function', aiFunctionRouter)
 
 // Re-export for any modules that still import from index (backwards compat)
 export { providerOrder, providerIsConfigured, callProvider, callProviderStream }

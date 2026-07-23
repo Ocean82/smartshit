@@ -4,71 +4,173 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Terms of Service — smartsht</title>
+  <meta name="description" content="Terms of Service for smartsht, the AI-powered spreadsheet application." />
   <link rel="canonical" href="https://smartsht.com/terms" />
+  <link rel="icon" type="image/png" href="/smart-favicon.png" />
+  <link rel="apple-touch-icon" href="/smart-favicon.png" />
+  <meta name="robots" content="index, follow" />
+
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&family=General+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Space Grotesk', system-ui, sans-serif; background: #06080c; color: #f1f5f9; line-height: 1.8; }
-    .container { max-width: 720px; margin: 0 auto; padding: 80px 24px; }
-    h1 { font-size: 2rem; font-weight: 700; margin-bottom: 8px; }
-    .updated { color: #94a3b8; font-size: 0.85rem; margin-bottom: 40px; }
-    h2 { font-size: 1.2rem; font-weight: 600; margin-top: 32px; margin-bottom: 12px; color: #60a5fa; }
-    p, li { font-size: 0.95rem; color: #cbd5e1; margin-bottom: 12px; }
-    ul { padding-left: 20px; }
-    a { color: #60a5fa; }
-    .back { display: inline-block; margin-bottom: 24px; font-size: 0.85rem; color: #94a3b8; }
+
+    :root {
+      --bg: oklch(0.985 0.005 250);
+      --surface: oklch(1 0 0);
+      --ink: oklch(0.18 0.03 250);
+      --ink-secondary: oklch(0.40 0.02 250);
+      --ink-muted: oklch(0.55 0.015 250);
+      --accent: oklch(0.50 0.20 250);
+      --border: oklch(0.90 0.008 250);
+      --radius: 12px;
+      --font-display: 'Bricolage Grotesque', system-ui, sans-serif;
+      --font-body: 'General Sans', system-ui, sans-serif;
+    }
+
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: var(--font-body);
+      background: var(--bg);
+      color: var(--ink);
+      line-height: 1.7;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    .container { max-width: 720px; margin: 0 auto; padding: 80px 24px 100px; }
+
+    .back {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.85rem;
+      color: var(--ink-muted);
+      margin-bottom: 32px;
+      text-decoration: none;
+    }
+    .back:hover { color: var(--accent); text-decoration: none; }
+
+    h1 {
+      font-family: var(--font-display);
+      font-size: clamp(1.8rem, 4vw, 2.4rem);
+      font-weight: 800;
+      letter-spacing: -1px;
+      margin-bottom: 8px;
+    }
+
+    .updated {
+      color: var(--ink-muted);
+      font-size: 0.85rem;
+      margin-bottom: 48px;
+    }
+
+    h2 {
+      font-family: var(--font-display);
+      font-size: 1.1rem;
+      font-weight: 700;
+      margin-top: 36px;
+      margin-bottom: 12px;
+      color: var(--ink);
+    }
+
+    p, li {
+      font-size: 0.92rem;
+      color: var(--ink-secondary);
+      margin-bottom: 12px;
+      line-height: 1.7;
+    }
+
+    ul { padding-left: 20px; margin-bottom: 16px; }
+    li { margin-bottom: 6px; }
+
+    strong { color: var(--ink); }
+
+    :focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+    }
   </style>
 </head>
 <body>
-  <div class="container">
+  <main class="container">
     <a href="/" class="back">← Back to smartsht.com</a>
     <h1>Terms of Service</h1>
-    <p class="updated">Last updated: July 8, 2026</p>
+    <p class="updated">Last updated: July 23, 2026</p>
 
-    <h2>1. Acceptance</h2>
-    <p>By using smartsht ("the Service"), you agree to these terms. If you don't agree, don't use the Service.</p>
+    <h2>1. Acceptance of Terms</h2>
+    <p>By accessing or using smartsht ("the Service"), you agree to be bound by these Terms of Service. If you do not agree, do not use the Service.</p>
 
     <h2>2. Description of Service</h2>
     <p>smartsht is a web-based spreadsheet application with AI-assisted features for budgets, expenses, and data management. The Service includes a free tier with limited AI usage and a paid subscription ("Pro") with extended features.</p>
 
-    <h2>3. Accounts</h2>
-    <p>You must create an account to use smartsht. You are responsible for maintaining the security of your account credentials. You must provide accurate information when creating an account.</p>
+    <h2>3. Eligibility</h2>
+    <p>You must be at least 13 years old to use this Service. By using smartsht, you represent that you meet this age requirement. If you are under 18, you must have parental or guardian consent.</p>
 
-    <h2>4. Free and Paid Plans</h2>
+    <h2>4. Account Registration</h2>
+    <p>You must create an account to access certain features. You agree to:</p>
+    <ul>
+      <li>Provide accurate and complete registration information</li>
+      <li>Maintain the security of your account credentials</li>
+      <li>Notify us immediately of any unauthorized access</li>
+      <li>Accept responsibility for all activity under your account</li>
+    </ul>
+
+    <h2>5. Free and Paid Plans</h2>
     <ul>
       <li><strong>Free:</strong> Limited AI questions per day (currently 3). Core spreadsheet features are unrestricted.</li>
-      <li><strong>Pro ($7/month):</strong> Unlimited AI questions, all templates, priority support.</li>
+      <li><strong>Pro ($7/month):</strong> Unlimited AI questions, advanced analysis, priority support.</li>
     </ul>
     <p>We may change pricing or plan features with 30 days notice to existing subscribers.</p>
 
-    <h2>5. Payments and Billing</h2>
-    <p>Paid subscriptions are billed monthly via Stripe. You authorize us to charge your payment method on a recurring basis. You can cancel anytime from your account settings — access continues until the end of the billing period. No refunds for partial months.</p>
+    <h2>6. Payments and Billing</h2>
+    <p>Paid subscriptions are billed monthly via Stripe. You authorize us to charge your payment method on a recurring basis. You may cancel anytime from your account settings — access continues until the end of the current billing period. No refunds are provided for partial months.</p>
 
-    <h2>6. Your Data</h2>
-    <p>Spreadsheet data you create is stored in your browser's local storage by default. We do not access, sell, or share your spreadsheet content. AI queries are processed by our server to generate responses but are not stored after the response is delivered.</p>
+    <h2>7. Your Data and Content</h2>
+    <p>Spreadsheet data you create is stored in your browser's local storage by default. You retain all rights to your content. We do not access, sell, or share your spreadsheet data. AI queries are processed server-side to generate responses but are not stored after delivery.</p>
 
-    <h2>7. Acceptable Use</h2>
+    <h2>8. Acceptable Use</h2>
     <p>You agree not to:</p>
     <ul>
-      <li>Use the Service for illegal purposes</li>
-      <li>Attempt to bypass usage limits or security measures</li>
-      <li>Reverse-engineer the AI or automated systems</li>
-      <li>Use automated tools to send excessive requests</li>
+      <li>Use the Service for any unlawful purpose</li>
+      <li>Attempt to bypass usage limits, rate limits, or security measures</li>
+      <li>Reverse-engineer, decompile, or disassemble any part of the Service</li>
+      <li>Use automated tools to send excessive requests or scrape content</li>
+      <li>Interfere with or disrupt the Service or servers</li>
+      <li>Impersonate another person or entity</li>
     </ul>
 
-    <h2>8. Availability</h2>
-    <p>We aim for high availability but do not guarantee 100% uptime. The Service is provided "as is" without warranties of any kind. We are not liable for lost data or downtime.</p>
+    <h2>9. Intellectual Property</h2>
+    <p>The Service, including its design, code, branding, and AI models, is owned by smartsht. You are granted a limited, non-exclusive, non-transferable license to use the Service for its intended purpose. You may not copy, modify, or distribute any part of the Service without written consent.</p>
 
-    <h2>9. Limitation of Liability</h2>
-    <p>smartsht is not financial advice software. We are not responsible for decisions made based on AI-generated content. Our total liability is limited to the amount you paid us in the last 12 months.</p>
+    <h2>10. Availability and Warranties</h2>
+    <p>We strive for high availability but do not guarantee 100% uptime. The Service is provided "as is" and "as available" without warranties of any kind, express or implied, including merchantability, fitness for a particular purpose, or non-infringement.</p>
 
-    <h2>10. Changes to Terms</h2>
-    <p>We may update these terms. Continued use after changes constitutes acceptance. Material changes will be communicated via email or in-app notice.</p>
+    <h2>11. Limitation of Liability</h2>
+    <p>smartsht is not financial advice software. We are not responsible for decisions made based on AI-generated content. To the maximum extent permitted by law, our total liability is limited to the amount you have paid us in the preceding 12 months. We are not liable for any indirect, incidental, special, consequential, or punitive damages.</p>
 
-    <h2>11. Contact</h2>
-    <p>Questions about these terms: <a href="mailto:support@smartsht.com">support@smartsht.com</a></p>
-  </div>
+    <h2>12. Indemnification</h2>
+    <p>You agree to indemnify and hold smartsht harmless from any claims, damages, or expenses arising from your use of the Service, your content, or your violation of these Terms.</p>
+
+    <h2>13. Termination</h2>
+    <p>We may suspend or terminate your account if you violate these Terms. You may delete your account at any time by contacting support. Upon termination, your right to use the Service ceases immediately.</p>
+
+    <h2>14. Changes to Terms</h2>
+    <p>We may update these Terms at any time. Material changes will be communicated via email or in-app notice at least 14 days in advance. Continued use after the effective date constitutes acceptance of the updated Terms.</p>
+
+    <h2>15. Governing Law</h2>
+    <p>These Terms are governed by the laws of the United States. Any disputes will be resolved through binding arbitration, except where prohibited by law.</p>
+
+    <h2>16. Contact</h2>
+    <p>Questions about these Terms: <a href="mailto:support@smartsht.com">support@smartsht.com</a></p>
+  </main>
 </body>
 </html>

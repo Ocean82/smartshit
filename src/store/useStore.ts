@@ -239,6 +239,25 @@ export const useStore = create<AppState>()(
     const persisted = loadPersistedState();
     const initialWorkbook = persisted?.workbook ?? createEmptyWorkbook('My Budget');
 
+    // Wire AI function registry to push async results back into cells
+    engine.aiRegistry.setUpdateCallback((cellId, value) => {
+      // Schedule a state update to re-render cells with resolved AI values.
+      // The actual value is in the registry cache — this setState simply forces
+      // a re-render so getComputedValue picks up the cached result.
+      setTimeout(() => {
+        const state = useStore.getState();
+        const sheet = state.workbook.sheets.find((s) => s.id === state.activeSheetId);
+        if (sheet && sheet.cells[cellId]) {
+          useStore.setState((s) => {
+            const sh = s.workbook.sheets.find((sh: SheetData) => sh.id === s.activeSheetId);
+            if (sh && sh.cells[cellId]) {
+              sh.cells[cellId].displayValue = value === null ? undefined : String(value);
+            }
+          });
+        }
+      }, 0);
+    });
+
     const initialFile: FileItem = persisted?.files?.[0] ?? {
       id: uuid(),
       name: initialWorkbook.name,
@@ -399,7 +418,11 @@ export const useStore = create<AppState>()(
       setCellValue: (cellId, value, formula) => {
         const state = get();
         const ref = cellToRef(cellId);
-        state.engine.setCellValue(state.activeSheetId, ref.row, ref.col, formula || value);
+        // AI formulas are handled by our registry, not HyperFormula
+        const isAI = formula && state.engine.isAIFormula(formula);
+        if (!isAI) {
+          state.engine.setCellValue(state.activeSheetId, ref.row, ref.col, formula || value);
+        }
         set((s) => {
           const sheet = s.workbook.sheets.find((sh) => sh.id === s.activeSheetId);
           if (!sheet) return;
@@ -411,6 +434,10 @@ export const useStore = create<AppState>()(
             }
             sheet.cells[cellId].value = value;
             sheet.cells[cellId].formula = formula;
+            // Clear stale displayValue when formula changes
+            if (isAI) {
+              sheet.cells[cellId].displayValue = undefined;
+            }
           }
           s.workbook.updatedAt = Date.now();
         });
@@ -1205,6 +1232,8 @@ export const useStore = create<AppState>()(
       bulkSetCells: (cells) => {
         const state = get();
         for (const [cellId, data] of Object.entries(cells)) {
+          // Skip AI formulas — they're handled by the AI registry, not HyperFormula
+          if (data.formula && state.engine.isAIFormula(data.formula)) continue;
           const ref = cellToRef(cellId);
           state.engine.setCellValue(state.activeSheetId, ref.row, ref.col, data.formula || data.value);
         }
@@ -1307,7 +1336,29 @@ export const useStore = create<AppState>()(
       },
 
       getComputedValue: (row, col) => {
-        return get().engine.getComputedValue(get().activeSheetId, row, col);
+        const state = get();
+        const sheet = state.getActiveSheet();
+        const cellId = refToCell(row, col);
+        const cell = sheet.cells[cellId];
+
+        // Route AI formulas through the AI function registry
+        if (cell?.formula && state.engine.isAIFormula(cell.formula)) {
+          // If we already have a resolved displayValue, use it
+          if (cell.displayValue !== undefined) {
+            return cell.displayValue;
+          }
+          const result = state.engine.executeAIFormula(
+            cellId,
+            cell.formula,
+            (ref) => {
+              const refPos = cellToRef(ref);
+              return state.engine.getComputedValue(state.activeSheetId, refPos.row, refPos.col) || null;
+            },
+          );
+          return result === null ? '' : String(result);
+        }
+
+        return state.engine.getComputedValue(state.activeSheetId, row, col);
       },
     };
   })

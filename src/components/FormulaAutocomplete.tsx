@@ -17,7 +17,8 @@ export function FormulaAutocomplete({ visible, editValue, onSelect, position }: 
 
   const filtered = useMemo(() => {
     // Extract the current function name being typed (after =)
-    const match = editValue.match(/^=([A-Z_a-z][A-Z_a-z0-9]*?)$/i);
+    // Supports both regular functions and AI.* namespace
+    const match = editValue.match(/^=([A-Z_a-z][A-Z_a-z0-9.]*?)$/i);
     if (!match) return [];
     const typed = match[1].toUpperCase();
     return allFunctions
@@ -77,7 +78,11 @@ export function FormulaAutocomplete({ visible, editValue, onSelect, position }: 
             onMouseDown={(e) => { e.preventDefault(); onSelect(fn.name); }}
             onMouseEnter={() => setSelectedIndex(i)}
           >
-            <span className="font-mono font-semibold text-xs bg-blue-100/60 text-blue-600 px-1.5 py-0.5 rounded shrink-0">
+            <span className={`font-mono font-semibold text-xs px-1.5 py-0.5 rounded shrink-0 ${
+              fn.category.startsWith('AI') 
+                ? 'bg-purple-100/70 text-purple-600' 
+                : 'bg-blue-100/60 text-blue-600'
+            }`}>
               {fn.name}
             </span>
             <div className="min-w-0">

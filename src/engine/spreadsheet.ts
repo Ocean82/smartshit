@@ -1,6 +1,8 @@
 import HyperFormula from 'hyperformula';
 import type { SheetData, WorkbookData, PivotConfig, PivotResult } from '@/types';
 import { v4 as uuid } from 'uuid';
+import { aiFunctionRegistry, type AIFunctionRegistry } from './aiFunctions';
+import { registerBuiltinAIFunctions, getAIFunctionList } from './aiFunctionDefinitions';
 
 export function colToLetter(col: number): string {
   let result = '';
@@ -56,12 +58,21 @@ export function createEmptyWorkbook(name: string): WorkbookData {
 export class SpreadsheetEngine {
   private hf: HyperFormula;
   private sheetMapping: Map<string, number> = new Map();
+  private _aiRegistry: AIFunctionRegistry = aiFunctionRegistry;
+  private _disposeAIFunctions: (() => void) | null = null;
 
   constructor() {
     this.hf = HyperFormula.buildEmpty({
       licenseKey: 'gpl-v3',
       precisionRounding: 10,
     });
+    // Register built-in AI functions
+    this._disposeAIFunctions = registerBuiltinAIFunctions();
+  }
+
+  /** Access the AI function registry for custom function registration */
+  get aiRegistry(): AIFunctionRegistry {
+    return this._aiRegistry;
   }
 
   loadWorkbook(workbook: WorkbookData): void {
@@ -97,9 +108,14 @@ export class SpreadsheetEngine {
 
     for (const [cellId, cellData] of cellEntries) {
       const ref = cellToRef(cellId);
-      data[ref.row][ref.col] = cellData.formula
-        ? cellData.formula
-        : cellData.value;
+      // AI formulas are handled by the AI registry, not HyperFormula
+      if (cellData.formula && this.isAIFormula(cellData.formula)) {
+        data[ref.row][ref.col] = cellData.value;
+      } else {
+        data[ref.row][ref.col] = cellData.formula
+          ? cellData.formula
+          : cellData.value;
+      }
     }
 
     try {
@@ -148,13 +164,97 @@ export class SpreadsheetEngine {
     return String(val);
   }
 
+  /**
+   * Execute an AI formula function for a specific cell.
+   * Called when a cell contains a formula starting with =AI.
+   *
+   * @param cellId The cell reference (e.g., "A1")
+   * @param formulaText The full formula text (e.g., "=AI.CATEGORIZE(A1)")
+   * @param resolveArg Callback to resolve cell references to values
+   * @returns The AI function result (immediate or placeholder)
+   */
+  executeAIFormula(
+    cellId: string,
+    formulaText: string,
+    resolveArg: (ref: string) => string | number | boolean | null,
+  ): string | number | boolean | null {
+    // Parse: =AI.FUNCTION_NAME(arg1, arg2, ...)
+    const match = formulaText.match(/^=(AI\.[A-Z_]+)\((.*)?\)$/i);
+    if (!match) return '#NAME?';
+
+    const funcName = match[1].toUpperCase();
+    const argsStr = match[2] || '';
+
+    if (!this._aiRegistry.has(funcName)) return '#NAME?';
+
+    // Parse arguments (simple: split by comma, resolve cell refs)
+    const rawArgs = argsStr
+      ? argsStr.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map((a) => a.trim())
+      : [];
+
+    const resolvedArgs = rawArgs.map((arg) => {
+      // String literal
+      if (arg.startsWith('"') && arg.endsWith('"')) {
+        return arg.slice(1, -1);
+      }
+      // Number
+      if (/^-?\d+(\.\d+)?$/.test(arg)) {
+        return Number(arg);
+      }
+      // Cell reference — resolve it
+      if (/^[A-Z]+\d+$/i.test(arg)) {
+        return resolveArg(arg);
+      }
+      // Range reference (A1:B10) — resolve to 2D array
+      if (/^[A-Z]+\d+:[A-Z]+\d+$/i.test(arg)) {
+        return this._resolveRange(arg, resolveArg);
+      }
+      // Pass as string
+      return arg;
+    });
+
+    return this._aiRegistry.execute(funcName, cellId, resolvedArgs);
+  }
+
+  /** Check if a formula is an AI function */
+  isAIFormula(formula: string): boolean {
+    return /^=AI\.[A-Z_]+\(/i.test(formula);
+  }
+
+  private _resolveRange(
+    rangeRef: string,
+    resolveArg: (ref: string) => string | number | boolean | null,
+  ): (string | number | boolean | null)[][] {
+    const parts = rangeRef.split(':');
+    if (parts.length !== 2) return [];
+
+    const start = cellToRef(parts[0].toUpperCase());
+    const end = cellToRef(parts[1].toUpperCase());
+
+    const minRow = Math.min(start.row, end.row);
+    const maxRow = Math.max(start.row, end.row);
+    const minCol = Math.min(start.col, end.col);
+    const maxCol = Math.max(start.col, end.col);
+
+    const result: (string | number | boolean | null)[][] = [];
+    for (let r = minRow; r <= maxRow; r++) {
+      const row: (string | number | boolean | null)[] = [];
+      for (let c = minCol; c <= maxCol; c++) {
+        row.push(resolveArg(refToCell(r, c)));
+      }
+      result.push(row);
+    }
+    return result;
+  }
+
   getFunctionList(): Array<{ name: string; description: string; category: string; syntax: string }> {
     if (!this.hf) return [];
     try {
       // Get all registered function names from HyperFormula
       const registeredFunctions = HyperFormula.getRegisteredFunctionNames('enGB');
+      let baseFunctions: Array<{ name: string; description: string; category: string; syntax: string }> = [];
       if (registeredFunctions && registeredFunctions.length > 0) {
-        return registeredFunctions.map((name: string) => {
+        baseFunctions = registeredFunctions.map((name: string) => {
           // Try to get function metadata
           const info = this.getFallbackInfo(name);
           return {
@@ -164,10 +264,13 @@ export class SpreadsheetEngine {
             syntax: info?.syntax || name.toUpperCase() + '()',
           };
         });
+      } else {
+        baseFunctions = this.getFallbackFunctions();
       }
-      return this.getFallbackFunctions();
+      // Append AI functions
+      return [...baseFunctions, ...getAIFunctionList()];
     } catch {
-      return this.getFallbackFunctions();
+      return [...this.getFallbackFunctions(), ...getAIFunctionList()];
     }
   }
 
@@ -403,6 +506,11 @@ export class SpreadsheetEngine {
   }
 
   destroy(): void {
+    if (this._disposeAIFunctions) {
+      this._disposeAIFunctions();
+      this._disposeAIFunctions = null;
+    }
+    this._aiRegistry.dispose();
     this.hf.destroy();
   }
 }
