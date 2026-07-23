@@ -149,16 +149,16 @@ Issues identified from the SmartSht review, verified against the actual codebase
 
 ## Phase 4: Quality & Testing
 
-### 4.1 Add Integration Tests for Critical Paths
+### 4.1 Add Integration Tests for Critical Paths ✅
 
 **Problem:** 29 test files all cover simple utility functions. Zero tests for the AI chat flow, store orchestration, auditor end-to-end, or import/export.
 
 **Fix:**
-- [ ] Add `src/store/__tests__/sendMessage.integration.test.ts` — test the full local parser → tool execution → response flow (mock server, real store)
-- [ ] Add `src/auditor/__tests__/auditor.integration.test.ts` — test full audit run against a fixture workbook (all 10 rules)
-- [ ] Add `server/src/__tests__/chat.integration.test.ts` — test `/api/chat/stream` with mocked LLM provider (supertest)
-- [ ] Add `src/io/__tests__/xlsx.integration.test.ts` — round-trip import/export test with a real .xlsx fixture
-- [ ] Add `server/src/__tests__/validation.test.ts` — test request validation rejects malformed input
+- [x] Add `src/store/__tests__/sendMessage.integration.test.ts` — test the full local parser → tool execution → response flow (mock server, real store) — **10 tests**
+- [x] Add `src/auditor/__tests__/auditor.integration.test.ts` — test full audit run against a fixture workbook (all 10 rules) — **8 tests**
+- [ ] Add `server/src/__tests__/chat.integration.test.ts` — test `/api/chat/stream` with mocked LLM provider (supertest) (future)
+- [ ] Add `src/io/__tests__/xlsx.integration.test.ts` — round-trip import/export test with a real .xlsx fixture (future)
+- [ ] Add `server/src/__tests__/validation.test.ts` — test request validation rejects malformed input (future)
 
 **Effort:** Medium-Large (6-8 hours)
 
