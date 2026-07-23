@@ -29,9 +29,14 @@ export const magnitudeOutliersRule: AuditRule = {
 
       if (columnCells.length < MIN_COLUMN_SIZE) continue
 
+      // Exclude cells that are likely totals/summaries (last row with data, or adjacent to a formula cell)
+      const formulaCellRows = new Set(
+        ctx.getColumn(col).filter((c) => c.type === 'formula').map((c) => c.row)
+      )
+
       const values = columnCells.map((c) => c.rawValue as number)
       const mean = values.reduce((a, b) => a + b, 0) / values.length
-      const variance = values.reduce((sum, v) => sum + (v - mean) ** 2, 0) / values.length
+      const variance = values.reduce((sum, v) => sum + (v - mean) ** 2, 0) / Math.max(1, values.length - 1)
       const stddev = Math.sqrt(variance)
 
       if (stddev === 0) continue // All values are identical
@@ -41,6 +46,11 @@ export const magnitudeOutliersRule: AuditRule = {
         const zScore = Math.abs(value - mean) / stddev
 
         if (zScore > Z_SCORE_THRESHOLD) {
+          // Skip if this cell is adjacent to a formula row (likely a manually-entered total)
+          if (formulaCellRows.has(cell.row - 1) || formulaCellRows.has(cell.row + 1)) continue
+          // Skip if this is the last data cell in the column (likely a total)
+          if (cell.row === Math.max(...columnCells.map((c) => c.row))) continue
+
           findings.push({
             id: findingId(),
             ruleId: 'magnitude-outliers',

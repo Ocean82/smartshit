@@ -9,7 +9,7 @@ import type { CellFormat } from '@/types';
 import { formatCellValue, getBorderCSS, isNegativeRedFormat } from '@/lib/formatUtils';
 import { buildFilteredRowIndex } from '@/lib/rowFilter';
 import { findHeaderRow, findLastDataRow } from '@/lib/sheetSort';
-import { resolveCellFormat, getDataBarRule, dataBarWidthPercent, columnDataBarPeerValues } from '@/lib/conditionalFormat';
+import { resolveCellFormat, getDataBarRule, dataBarWidthPercent, columnDataBarPeerValues, getDataBarInfo, getColorScaleRule, columnColorScalePeerValues, computeColorScaleBg, getIconSetRule, columnIconSetPeerValues, computeIconForCell } from '@/lib/conditionalFormat';
 import { findActivePendingPreview } from '@/lib/pendingActionPreview';
 import { useTouch } from '@/hooks/useTouch';
 
@@ -64,6 +64,36 @@ export function SpreadsheetGrid() {
     }
     for (const col of cols) {
       map.set(col, columnDataBarPeerValues(sheet, col, getComputedValue))
+    }
+    return map
+  }, [sheet, getComputedValue]);
+
+  // Cache color-scale peer values per column
+  const colorScalePeersByCol = useMemo(() => {
+    const map = new Map<number, number[]>()
+    const cols = new Set<number>()
+    for (const cellId of Object.keys(sheet.cells)) {
+      const cell = sheet.cells[cellId]
+      if (!cell?.format?.conditionalRules?.some((r) => r.type === 'colorScale')) continue
+      cols.add(cellToRef(cellId).col)
+    }
+    for (const col of cols) {
+      map.set(col, columnColorScalePeerValues(sheet, col, getComputedValue))
+    }
+    return map
+  }, [sheet, getComputedValue]);
+
+  // Cache icon-set peer values per column
+  const iconSetPeersByCol = useMemo(() => {
+    const map = new Map<number, number[]>()
+    const cols = new Set<number>()
+    for (const cellId of Object.keys(sheet.cells)) {
+      const cell = sheet.cells[cellId]
+      if (!cell?.format?.conditionalRules?.some((r) => r.type === 'iconSet')) continue
+      cols.add(cellToRef(cellId).col)
+    }
+    for (const col of cols) {
+      map.set(col, columnIconSetPeerValues(sheet, col, getComputedValue))
     }
     return map
   }, [sheet, getComputedValue]);
@@ -747,8 +777,16 @@ export function SpreadsheetGrid() {
                     const colWidth = getColWidth(col);
                     const pendingChange = pendingPreview?.changeByCell.get(cellId) ?? null;
                     const dataBarRule = getDataBarRule(cellData?.format, computed);
-                    const dataBarPct = dataBarRule
-                      ? dataBarWidthPercent(computed, dataBarPeersByCol.get(col) ?? [])
+                    const dataBarInfo = dataBarRule
+                      ? getDataBarInfo(computed, dataBarPeersByCol.get(col) ?? [])
+                      : null;
+                    const colorScaleRule = getColorScaleRule(cellData?.format);
+                    const colorScaleBg = colorScaleRule?.colorScaleConfig
+                      ? computeColorScaleBg(computed, colorScalePeersByCol.get(col) ?? [], colorScaleRule.colorScaleConfig)
+                      : null;
+                    const iconSetRule = getIconSetRule(cellData?.format);
+                    const cellIcon = iconSetRule?.iconSetConfig
+                      ? computeIconForCell(computed, iconSetPeersByCol.get(col) ?? [], iconSetRule.iconSetConfig)
                       : null;
 
                     return (
@@ -770,6 +808,7 @@ export function SpreadsheetGrid() {
                           position: 'absolute',
                           left: visibleColOffsets.offsets[j],
                           ...getCellStyle(resolveCellFormat(cellData?.format, computed), rawValue),
+                          ...(colorScaleBg && !pendingChange ? { backgroundColor: colorScaleBg } : {}),
                           ...(pendingChange ? { backgroundColor: undefined } : {}),
                         }}
                         onMouseDown={(e) => handleMouseDown(row, col, e)}
@@ -777,14 +816,35 @@ export function SpreadsheetGrid() {
                         onDoubleClick={() => handleCellDoubleClick(row, col)}
                         onContextMenu={(e) => handleContextMenu(e, row, col)}
                       >
-                        {dataBarPct != null && dataBarRule && !pendingChange && (
+                        {dataBarInfo != null && dataBarRule && !pendingChange && (
                           <div
-                            className="absolute inset-y-1 left-0 rounded-sm pointer-events-none opacity-50"
+                            className="absolute inset-y-1 rounded-sm pointer-events-none opacity-50"
                             style={{
-                              width: `${dataBarPct}%`,
-                              backgroundColor: dataBarRule.dataBarColor || '#93C5FD',
+                              width: `${dataBarInfo.width}%`,
+                              left: dataBarInfo.isNegative
+                                ? `${dataBarInfo.startPoint - dataBarInfo.width}%`
+                                : `${dataBarInfo.startPoint}%`,
+                              backgroundColor: dataBarInfo.isNegative
+                                ? (dataBarRule.dataBarNegativeColor || '#F87171')
+                                : (dataBarRule.dataBarColor || '#93C5FD'),
+                              ...(dataBarRule.dataBarGradient ? {
+                                background: `linear-gradient(to right, ${
+                                  dataBarInfo.isNegative
+                                    ? (dataBarRule.dataBarNegativeColor || '#F87171')
+                                    : (dataBarRule.dataBarColor || '#93C5FD')
+                                }80, ${
+                                  dataBarInfo.isNegative
+                                    ? (dataBarRule.dataBarNegativeColor || '#F87171')
+                                    : (dataBarRule.dataBarColor || '#93C5FD')
+                                })`,
+                              } : {}),
                             }}
                           />
+                        )}
+                        {cellIcon && !pendingChange && (
+                          <span className="absolute left-0.5 top-1/2 -translate-y-1/2 text-[11px] pointer-events-none z-[1]" aria-hidden="true">
+                            {cellIcon}
+                          </span>
                         )}
                         {isEditing && cellData?.validation?.type === 'list' ? (
                           <select
@@ -810,11 +870,15 @@ export function SpreadsheetGrid() {
                         ) : (
                           <div className="flex items-center h-full">
                             <div
-                              className={`px-1.5 truncate text-[13px] w-full ${
-                                typeof cellData?.value === 'number' || (computed && !isNaN(Number(computed)) && computed !== '')
-                                  ? 'text-right'
-                                  : ''
-                              }`}
+                              className={`px-1.5 truncate w-full`}
+                              style={{
+                                fontSize: cellData?.format?.fontSize ? `${cellData.format.fontSize}px` : '13px',
+                                textAlign: cellData?.format?.textAlign
+                                  ? cellData.format.textAlign
+                                  : (typeof cellData?.value === 'number' || (computed && !isNaN(Number(computed)) && computed !== ''))
+                                    ? 'right'
+                                    : undefined,
+                              }}
                               title={hasFormula ? `${cellData?.formula} = ${formatCellValue(rawValue, cellData?.format?.numberFormat)}` : formatCellValue(rawValue, cellData?.format?.numberFormat)}
                             >
                               {pendingChange

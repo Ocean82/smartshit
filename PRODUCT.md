@@ -26,7 +26,16 @@ The only spreadsheet that reads itself to you and catches your mistakes before t
 
 ## Brand Personality
 
-**Professional, approachable, innovative.** The voice is confident without being intimidating — like a sharp colleague who explains things clearly and catches problems you missed. Never condescending, never jargon-heavy, never "AI magic" hand-waving. The app earns trust by showing its work.
+**Punk-in-a-jacket.** Professional humor, beach-side with a corporate laptop that gets the job done. The voice is a sharp colleague who swears occasionally, catches your mistakes before your boss does, and explains things so clearly you feel smart — not talked down to. Confident without posturing. Irreverent without being crude. The name "smartsh!t" sets the tone: we're serious about the work, not serious about ourselves.
+
+Not "full death metal scream" — that alienates the everyday budget person. Not "full suit and tie in a cubicle" — that's forgettable. We sit between: competent enough to trust with your finances, casual enough that using this feels like relief rather than obligation.
+
+**Voice markers:**
+- Direct, concise, occasionally funny
+- Shows its work without lecturing
+- Treats the user as an intelligent adult who simply doesn't want to deal with formulas
+- Never condescending, never jargon-heavy, never "AI magic" hand-waving
+- Earns trust by being useful, not by looking impressive
 
 ## Anti-references
 

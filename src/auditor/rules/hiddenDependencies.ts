@@ -25,6 +25,9 @@ export const hiddenDependenciesRule: AuditRule = {
   run(ctx: AuditContext): AuditFinding[] {
     const findings: AuditFinding[] = []
 
+    // Collect all cross-sheet references across the entire sheet
+    const crossSheetCells: Array<{ cell: typeof ctx.formulaCells[0]; sheets: Set<string> }> = []
+
     for (const cell of ctx.formulaCells) {
       if (!cell.formula) continue
 
@@ -40,10 +43,18 @@ export const hiddenDependenciesRule: AuditRule = {
         referencedSheets.add(sheetName)
       }
 
-      if (referencedSheets.size === 0) continue
+      if (referencedSheets.size > 0) {
+        crossSheetCells.push({ cell, sheets: referencedSheets })
+      }
+    }
 
-      const sheetList = [...referencedSheets].join(', ')
-      const plural = referencedSheets.size > 1
+    // Only flag if there are few cross-sheet references (likely accidental).
+    // In a multi-sheet workbook with many cross-refs, they're intentional architecture.
+    if (crossSheetCells.length > 5) return findings
+
+    for (const { cell, sheets } of crossSheetCells) {
+      const sheetList = [...sheets].join(', ')
+      const plural = sheets.size > 1
 
       findings.push({
         id: findingId(),

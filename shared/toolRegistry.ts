@@ -219,15 +219,34 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
     examples: ['sort by amount highest first', 'sort column A alphabetically'],
   },
   {
+    name: 'multi_sort',
+    category: 'mutate',
+    description: 'Sort the sheet by multiple columns (tiered sort)',
+    params: [
+      { name: 'rules', type: 'array', description: 'Array of {column, direction} objects in priority order', required: true },
+    ],
+    examples: ['sort by category then by amount descending', 'sort by date asc, then amount desc'],
+  },
+  {
     name: 'filter',
     category: 'mutate',
     description: 'Filter visible rows by a column condition',
     params: [
       { name: 'column', type: 'string', description: 'Column letter or header name', required: true },
-      { name: 'condition', type: 'string', description: 'gt, lt, eq, contains, not_empty', required: true },
-      { name: 'value', type: 'string', description: 'Comparison value (not needed for not_empty)' },
+      { name: 'condition', type: 'string', description: 'equals, notEquals, contains, notContains, startsWith, endsWith, gt, gte, lt, lte, between, notBetween, isEmpty, isNotEmpty, wildcard', required: true },
+      { name: 'value', type: 'string', description: 'Comparison value (not needed for isEmpty/isNotEmpty)' },
+      { name: 'value2', type: 'string', description: 'Second value for between/notBetween conditions' },
     ],
-    examples: ['filter rows where amount > 100', 'show only rows containing Rent'],
+    examples: ['filter rows where amount > 100', 'show only rows containing Rent', 'filter between 50 and 200'],
+  },
+  {
+    name: 'format_as_table',
+    category: 'mutate',
+    description: 'Auto-format the data range as a styled table with headers, banded rows, and filters',
+    params: [
+      { name: 'theme', type: 'string', description: 'Table theme: blue, green, purple, orange, slate, minimal (default: blue)' },
+    ],
+    examples: ['format this as a table', 'make it look like a proper table', 'apply table formatting with green theme'],
   },
   {
     name: 'clear_sheet',

@@ -13,6 +13,7 @@ import type {
   ChartConfig,
   FilterConfig,
   SortConfig,
+  SortRule,
   DataValidation,
   Toast,
   ConfirmDialogState,
@@ -42,8 +43,9 @@ import { resolveActTemplates } from '@shared/actTemplates';
 import { buildActionPreview } from '@/lib/previewBuilders';
 import type { SheetInsights } from '@/ai/sheetInsights';
 import type { AttachedFilePreview } from '@/ai/types';
-import { computeSortedCellUpdates, findHeaderRow, findLastDataRow, type SortPatch } from '@/lib/sheetSort';
+import { computeSortedCellUpdates, computeMultiSortedCellUpdates, findHeaderRow, findLastDataRow, type SortPatch } from '@/lib/sheetSort';
 import { conditionToRule, attachConditionalRuleToColumn } from '@/lib/conditionalFormat';
+import { getActionRecorder } from '@/lib/actionRecorder';
 import { v4 as uuid } from 'uuid';
 import { defaultSkills } from '@/data/chatPresets';
 import { validateCell } from '@/lib/validation';
@@ -198,6 +200,7 @@ interface AppState {
   setSortConfig: (config: SortConfig | null) => void;
   setFilters: (filters: FilterConfig[]) => void;
   sortByColumn: (column: number, direction: 'asc' | 'desc') => void;
+  multiSort: (rules: SortRule[]) => void;
   applySortPatch: (patch: SortPatch) => void;
   applyOuterBorders: (borderValue: string) => void;
   applyConditionalFormat: (
@@ -1021,6 +1024,7 @@ export const useStore = create<AppState>()(
 
       setFilters: (filters) => {
         set((s) => { s.activeFilters = filters; });
+        getActionRecorder().recordAction('filter', { filters }, `Set ${filters.length} filter(s)`);
       },
 
       sortByColumn: (column, direction) => {
@@ -1034,6 +1038,21 @@ export const useStore = create<AppState>()(
         );
         get().applySortPatch(patch);
         set((s) => { s.activeSortConfig = { column, direction }; });
+        getActionRecorder().recordAction('sort_sheet', { column, direction }, `Sort by column ${column} (${direction})`);
+      },
+
+      multiSort: (rules) => {
+        if (!rules.length) return;
+        const sheet = get().getActiveSheet();
+        get().pushHistory(`Multi-sort by ${rules.length} column(s)`);
+        const patch = computeMultiSortedCellUpdates(
+          sheet,
+          rules,
+          (row, col) => get().getComputedValue(row, col),
+        );
+        get().applySortPatch(patch);
+        set((s) => { s.activeSortConfig = { column: rules[0].column, direction: rules[0].direction }; });
+        getActionRecorder().recordAction('multi_sort', { rules }, `Multi-sort by ${rules.length} column(s)`);
       },
 
       applySortPatch: (patch) => {
@@ -1090,6 +1109,7 @@ export const useStore = create<AppState>()(
         attachConditionalRuleToColumn(sheet, column, rule, (cellId, format) => {
           get().setCellFormat(cellId, format);
         });
+        getActionRecorder().recordAction('conditional_format', { column, condition, color, threshold }, `Conditional format column ${column}`);
       },
 
       deleteSelectedCells: () => {

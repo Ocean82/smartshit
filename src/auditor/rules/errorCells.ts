@@ -43,6 +43,18 @@ export const errorCellsRule: AuditRule = {
       const getSuggestion = ERROR_SUGGESTIONS[errorType]
       const suggestion = getSuggestion ? getSuggestion(cell.formula) : 'Review and correct the formula'
 
+      // Severity depends on error type — #REF! and #DIV/0! are critical; #N/A is often expected
+      const errorSeverity: Record<string, 'critical' | 'high' | 'medium'> = {
+        '#REF!': 'critical',
+        '#DIV/0!': 'critical',
+        '#VALUE!': 'high',
+        '#NULL!': 'high',
+        '#NUM!': 'high',
+        '#NAME?': 'medium',
+        '#N/A': 'medium',
+      }
+      const severity = errorSeverity[errorType] ?? 'high'
+
       // Auto-fixable: #DIV/0! can be wrapped in IFERROR
       const autoFixable = errorType === '#DIV/0!' && !!cell.formula
       const fixAction = autoFixable && cell.formula
@@ -52,7 +64,7 @@ export const errorCellsRule: AuditRule = {
       findings.push({
         id: findingId(),
         ruleId: 'error-cells',
-        severity: 'critical',
+        severity,
         title: `${errorType} in ${cell.cellId}`,
         message: `Cell ${cell.cellId} contains ${errorType}. ${description}.${cell.formula ? ` Formula: =${cell.formula}` : ''}`,
         cells: [{ cellId: cell.cellId, row: cell.row, col: cell.col }],

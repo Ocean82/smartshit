@@ -6,7 +6,7 @@
  */
 
 import type { AuditRule, AuditFinding, AuditContext, CellInfo } from '../types'
-import { findingId, normalizeFormula, colToLetter } from '../utils'
+import { findingId, normalizeFormula, colToLetter, isSummaryCell } from '../utils'
 
 /** Minimum cells needed to establish a pattern before flagging outliers. */
 const MIN_PATTERN_SIZE = 3
@@ -72,6 +72,10 @@ function checkGroup(cells: CellInfo[], direction: 'row' | 'column', label: strin
   // Flag cells that deviate from the dominant pattern
   for (const { cell, pattern } of normalized) {
     if (pattern === dominantPattern) continue
+
+    // Skip summary/aggregate cells — a SUM at the bottom of a column of
+    // item-level formulas is expected to differ, not an error.
+    if (direction === 'column' && isSummaryCell(cell, cells)) continue
 
     const dirLabel = direction === 'column' ? `column ${label}` : `row ${label}`
 

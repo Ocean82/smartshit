@@ -130,3 +130,149 @@ describe('findConditionalFormatTargets', () => {
     expect(targets.sort()).toEqual(['B2', 'B4'])
   })
 })
+
+describe('ruleMatchesComputed — new rule types', () => {
+  it('matches notEquals', () => {
+    expect(ruleMatchesComputed({ type: 'notEquals', value: 5, style: {} }, '5')).toBe(false)
+    expect(ruleMatchesComputed({ type: 'notEquals', value: 5, style: {} }, '10')).toBe(true)
+  })
+
+  it('matches between', () => {
+    const rule = { type: 'between' as const, value: 10, value2: 50, style: {} }
+    expect(ruleMatchesComputed(rule, '25')).toBe(true)
+    expect(ruleMatchesComputed(rule, '5')).toBe(false)
+    expect(ruleMatchesComputed(rule, '60')).toBe(false)
+  })
+
+  it('matches notBetween', () => {
+    const rule = { type: 'notBetween' as const, value: 10, value2: 50, style: {} }
+    expect(ruleMatchesComputed(rule, '5')).toBe(true)
+    expect(ruleMatchesComputed(rule, '60')).toBe(true)
+    expect(ruleMatchesComputed(rule, '25')).toBe(false)
+  })
+
+  it('colorScale matches numeric values', () => {
+    const rule = { type: 'colorScale' as const, value: 0, style: {} }
+    expect(ruleMatchesComputed(rule, '42')).toBe(true)
+    expect(ruleMatchesComputed(rule, 'text')).toBe(false)
+  })
+
+  it('iconSet matches numeric values', () => {
+    const rule = { type: 'iconSet' as const, value: 0, style: {} }
+    expect(ruleMatchesComputed(rule, '100')).toBe(true)
+    expect(ruleMatchesComputed(rule, 'hello')).toBe(false)
+  })
+})
+
+describe('getColorScaleColor', () => {
+  it('interpolates 2-color scale', async () => {
+    const { getColorScaleColor } = await import('./conditionalFormat')
+    // Midpoint of white (#ffffff) to black (#000000) should be gray
+    const mid = getColorScaleColor(50, 0, 100, [
+      { type: 'min', color: '#ffffff' },
+      { type: 'max', color: '#000000' },
+    ])
+    expect(mid).toBe('#808080')
+  })
+
+  it('returns first color at min', async () => {
+    const { getColorScaleColor } = await import('./conditionalFormat')
+    const color = getColorScaleColor(0, 0, 100, [
+      { type: 'min', color: '#ff0000' },
+      { type: 'max', color: '#0000ff' },
+    ])
+    expect(color).toBe('#ff0000')
+  })
+
+  it('returns last color at max', async () => {
+    const { getColorScaleColor } = await import('./conditionalFormat')
+    const color = getColorScaleColor(100, 0, 100, [
+      { type: 'min', color: '#ff0000' },
+      { type: 'max', color: '#0000ff' },
+    ])
+    expect(color).toBe('#0000ff')
+  })
+})
+
+describe('getIconForValue', () => {
+  it('returns correct icon based on thresholds', async () => {
+    const { getIconForValue } = await import('./conditionalFormat')
+    const config = { iconSetType: '3Arrows' as const, thresholds: [67, 33] }
+    // High value → first icon (↑)
+    expect(getIconForValue(80, 0, 100, config)).toBe('↑')
+    // Mid value → second icon (→)
+    expect(getIconForValue(50, 0, 100, config)).toBe('→')
+    // Low value → third icon (↓)
+    expect(getIconForValue(10, 0, 100, config)).toBe('↓')
+  })
+
+  it('respects reverseOrder', async () => {
+    const { getIconForValue } = await import('./conditionalFormat')
+    const config = { iconSetType: '3Arrows' as const, thresholds: [67, 33], reverseOrder: true }
+    expect(getIconForValue(80, 0, 100, config)).toBe('↓')
+    expect(getIconForValue(10, 0, 100, config)).toBe('↑')
+  })
+})
+
+describe('getDataBarInfo — bidirectional', () => {
+  it('returns positive bar for positive values', async () => {
+    const { getDataBarInfo } = await import('./conditionalFormat')
+    const info = getDataBarInfo('50', [0, 50, 100])
+    expect(info).not.toBeNull()
+    expect(info!.isNegative).toBe(false)
+    expect(info!.startPoint).toBe(0)
+    expect(info!.width).toBeGreaterThan(0)
+  })
+
+  it('returns negative bar for negative values', async () => {
+    const { getDataBarInfo } = await import('./conditionalFormat')
+    const info = getDataBarInfo('-30', [-50, 0, 50])
+    expect(info).not.toBeNull()
+    expect(info!.isNegative).toBe(true)
+    expect(info!.startPoint).toBe(50) // zero is at 50%
+    expect(info!.width).toBeGreaterThan(0)
+  })
+
+  it('returns zero width for zero value', async () => {
+    const { getDataBarInfo } = await import('./conditionalFormat')
+    const info = getDataBarInfo('0', [-50, 0, 50])
+    expect(info).not.toBeNull()
+    expect(info!.width).toBe(0)
+  })
+})
+
+describe('findDuplicateValues / findUniqueValues', () => {
+  it('identifies duplicates', async () => {
+    const { findDuplicateValues } = await import('./conditionalFormat')
+    const dupes = findDuplicateValues(['apple', 'banana', 'apple', 'cherry'])
+    expect(dupes.has('apple')).toBe(true)
+    expect(dupes.has('banana')).toBe(false)
+  })
+
+  it('identifies uniques', async () => {
+    const { findUniqueValues } = await import('./conditionalFormat')
+    const uniques = findUniqueValues(['apple', 'banana', 'apple', 'cherry'])
+    expect(uniques.has('banana')).toBe(true)
+    expect(uniques.has('cherry')).toBe(true)
+    expect(uniques.has('apple')).toBe(false)
+  })
+})
+
+describe('getTopNValues / getBottomNValues', () => {
+  it('gets top 3', async () => {
+    const { getTopNValues } = await import('./conditionalFormat')
+    const top = getTopNValues([10, 50, 30, 80, 20], 3)
+    expect(top.has(80)).toBe(true)
+    expect(top.has(50)).toBe(true)
+    expect(top.has(30)).toBe(true)
+    expect(top.has(10)).toBe(false)
+  })
+
+  it('gets bottom 2', async () => {
+    const { getBottomNValues } = await import('./conditionalFormat')
+    const bottom = getBottomNValues([10, 50, 30, 80, 20], 2)
+    expect(bottom.has(10)).toBe(true)
+    expect(bottom.has(20)).toBe(true)
+    expect(bottom.has(30)).toBe(false)
+  })
+})

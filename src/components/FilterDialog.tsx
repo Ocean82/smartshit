@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { useStore } from '@/store/useStore'
 import { colToLetter } from '@/engine/spreadsheet'
-import type { FilterCondition } from '@/lib/rowFilter'
+import type { FilterConditionType } from '@/lib/rowFilter'
 
 interface Props {
   isOpen: boolean
@@ -9,16 +9,31 @@ interface Props {
 }
 
 function conditionLabel(condition: string | undefined): string {
-  if (condition === 'contains') return 'contains'
-  if (condition === 'gt') return '>'
-  if (condition === 'lt') return '<'
-  return '='
+  const labels: Record<string, string> = {
+    equals: '=',
+    notEquals: '≠',
+    contains: 'contains',
+    notContains: '!contains',
+    startsWith: 'starts',
+    endsWith: 'ends',
+    gt: '>',
+    gte: '≥',
+    lt: '<',
+    lte: '≤',
+    between: '↔',
+    notBetween: '!↔',
+    isEmpty: 'empty',
+    isNotEmpty: '!empty',
+    wildcard: '∗',
+  }
+  return labels[condition ?? ''] ?? '='
 }
 
 export function FilterDialog({ isOpen, onClose }: Props) {
   const { selection, activeFilters, setFilters } = useStore()
-  const [condition, setCondition] = useState<FilterCondition>('equals')
+  const [condition, setCondition] = useState<FilterConditionType>('equals')
   const [value, setValue] = useState('')
+  const [value2, setValue2] = useState('')
 
   if (!isOpen) return null
 
@@ -26,14 +41,20 @@ export function FilterDialog({ isOpen, onClose }: Props) {
     ? Math.min(selection.startCol, selection.endCol)
     : 0
 
-  const needsValue = condition !== 'equals'
-  const canApply = !!selection && (!needsValue || value !== '')
+  const noValueNeeded = condition === 'isEmpty' || condition === 'isNotEmpty'
+  const needsSecondValue = condition === 'between' || condition === 'notBetween'
+  const canApply = !!selection && (noValueNeeded || value !== '')
 
   const handleApply = () => {
     if (!selection || !canApply) return
     const next = [
       ...activeFilters.filter((f) => f.column !== column),
-      { column, condition, value },
+      {
+        column,
+        condition,
+        value: noValueNeeded ? undefined : value,
+        ...(needsSecondValue ? { value2 } : {}),
+      },
     ]
     setFilters(next)
     onClose()
@@ -95,13 +116,27 @@ export function FilterDialog({ isOpen, onClose }: Props) {
               Condition
               <select
                 value={condition}
-                onChange={(e) => setCondition(e.target.value as FilterCondition)}
+                onChange={(e) => {
+                  setCondition(e.target.value as FilterConditionType);
+                  setValue2('');
+                }}
                 className="mt-1 w-full border border-gray-200 rounded px-2 py-1.5 text-sm"
               >
                 <option value="equals">Equals</option>
+                <option value="notEquals">Does not equal</option>
                 <option value="contains">Contains</option>
+                <option value="notContains">Does not contain</option>
+                <option value="startsWith">Starts with</option>
+                <option value="endsWith">Ends with</option>
                 <option value="gt">Greater than</option>
+                <option value="gte">Greater than or equal</option>
                 <option value="lt">Less than</option>
+                <option value="lte">Less than or equal</option>
+                <option value="between">Between</option>
+                <option value="notBetween">Not between</option>
+                <option value="isEmpty">Is empty</option>
+                <option value="isNotEmpty">Is not empty</option>
+                <option value="wildcard">Wildcard (* and ?)</option>
               </select>
             </label>
             <label className="block text-xs text-gray-600">
@@ -111,8 +146,20 @@ export function FilterDialog({ isOpen, onClose }: Props) {
                 onChange={(e) => setValue(e.target.value)}
                 className="mt-1 w-full border border-gray-200 rounded px-2 py-1.5 text-sm"
                 placeholder={condition === 'equals' ? 'Leave empty for blanks' : 'Filter value'}
+                disabled={noValueNeeded}
               />
             </label>
+            {needsSecondValue && (
+              <label className="block text-xs text-gray-600">
+                Second value
+                <input
+                  value={value2}
+                  onChange={(e) => setValue2(e.target.value)}
+                  className="mt-1 w-full border border-gray-200 rounded px-2 py-1.5 text-sm"
+                  placeholder="Upper bound"
+                />
+              </label>
+            )}
           </>
         )}
 

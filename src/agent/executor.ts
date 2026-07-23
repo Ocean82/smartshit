@@ -8,8 +8,9 @@
 import type { ParsedToolCall } from './parser'
 import { refToCell, cellToRef, letterToCol } from '@/engine/spreadsheet'
 import type { SheetData, FilterConfig, CellFormat, ChartConfig } from '@/types'
-import { computeSortedCellUpdates, findHeaderRow, findLastDataRow, type SortPatch } from '@/lib/sheetSort'
+import { computeSortedCellUpdates, computeMultiSortedCellUpdates, findHeaderRow, findLastDataRow, type SortPatch } from '@/lib/sheetSort'
 import { applyFormatCells } from '@/lib/formatCellsTool'
+import { formatAsTable } from '@/lib/formatAsTable'
 import { resolveToolName, TEMPLATE_TOOL_NAMES } from '@shared/toolRegistry'
 
 export interface ExecutionContext {
@@ -226,10 +227,10 @@ export function executeTool(call: ParsedToolCall, ctx: ExecutionContext): Execut
       const condition = String(params.condition ?? 'equals').toLowerCase()
       if (condition === 'not_empty') {
         // Approximate not_empty: keep rows whose cell contains anything
-        ctx.setFilters([{ column: colIdx, condition: 'contains', value: '' }])
+        ctx.setFilters([{ column: colIdx, condition: 'isNotEmpty' }])
       } else {
         const mapped = condition === 'eq' ? 'equals' : condition
-        ctx.setFilters([{ column: colIdx, condition: mapped, value: params.value as string | number }])
+        ctx.setFilters([{ column: colIdx, condition: mapped as FilterConfig['condition'], value: params.value as string | number }])
       }
       return { success: true, message: `Filtered rows by column ${rawColumn.toUpperCase()} (${condition})`, modified: 0 }
     }
@@ -288,6 +289,46 @@ export function executeTool(call: ParsedToolCall, ctx: ExecutionContext): Execut
         return { success: true, message: `The ${desc} value in column ${col} is $${best.val.toLocaleString()} (${best.label}, row ${best.row + 1})`, modified: 0 }
       }
       return { success: false, message: `No numeric values found in column ${col}`, modified: 0 }
+    }
+
+    case 'multi_sort': {
+      const rules = params.rules as Array<{ column: string; direction?: string }>
+      if (!Array.isArray(rules) || rules.length === 0) {
+        return { success: false, message: 'multi_sort requires a rules array', modified: 0 }
+      }
+      const sortRules = rules.map((r) => {
+        const colIdx = resolveColumnIndex(String(r.column), sheet, ctx.getComputedValue)
+        return {
+          column: colIdx ?? 0,
+          direction: (r.direction === 'desc' ? 'desc' : 'asc') as 'asc' | 'desc',
+        }
+      }).filter((r) => r.column >= 0)
+
+      if (sortRules.length === 0) {
+        return { success: false, message: 'Could not resolve any columns for multi_sort', modified: 0 }
+      }
+
+      ctx.pushHistory(`Multi-sort by ${sortRules.length} column(s)`)
+      const patch = computeMultiSortedCellUpdates(sheet, sortRules, ctx.getComputedValue)
+      ctx.applySortPatch(patch)
+      const count = Object.keys(patch.writes).length + patch.deletes.length
+      return { success: true, message: `Sorted by ${sortRules.length} column(s)`, modified: count }
+    }
+
+    case 'format_as_table': {
+      const theme = (params.theme as string) ?? 'blue'
+      const result = formatAsTable(sheet, ctx.getComputedValue, theme)
+      if (!result) {
+        return { success: false, message: 'Could not detect a data range to format as table', modified: 0 }
+      }
+      ctx.pushHistory('Format as table')
+      let count = 0
+      for (const [cellId, fmt] of Object.entries(result.formatUpdates)) {
+        ctx.setCellFormat(cellId, fmt)
+        count++
+      }
+      ctx.setFilters(result.filters)
+      return { success: true, message: `Formatted ${count} cells as a table (${theme} theme)`, modified: count }
     }
 
     default:

@@ -26,13 +26,76 @@ export interface CellFormat {
 }
 
 export interface ConditionalRule {
-  type: 'greaterThan' | 'lessThan' | 'equals' | 'between' | 'text' | 'colorScale' | 'dataBar';
+  type: ConditionalRuleType;
   value: number | string;
   value2?: number | string;
   style: Partial<CellFormat>;
   /** Fill color for data-bar rules (defaults to a soft blue). */
   dataBarColor?: string;
+  /** Negative color for data bars (defaults to red). */
+  dataBarNegativeColor?: string;
+  /** Whether data bar shows gradient fill. */
+  dataBarGradient?: boolean;
+  /** Color scale configuration (2 or 3 color stops). */
+  colorScaleConfig?: ColorScaleStop[];
+  /** Icon set configuration. */
+  iconSetConfig?: IconSetConfig;
 }
+
+export type ConditionalRuleType =
+  | 'greaterThan'
+  | 'lessThan'
+  | 'equals'
+  | 'notEquals'
+  | 'between'
+  | 'notBetween'
+  | 'text'
+  | 'colorScale'
+  | 'dataBar'
+  | 'iconSet'
+  | 'duplicateValues'
+  | 'uniqueValues'
+  | 'top10'
+  | 'bottom10'
+  | 'aboveAverage'
+  | 'belowAverage';
+
+export interface ColorScaleStop {
+  /** Position type: 'min' | 'max' | 'percent' | 'percentile' | 'number' */
+  type: 'min' | 'max' | 'percent' | 'percentile' | 'number';
+  /** Value for 'percent', 'percentile', 'number' types. */
+  value?: number;
+  /** CSS color string. */
+  color: string;
+}
+
+export interface IconSetConfig {
+  /** Icon set type name (e.g., '3Arrows', '3TrafficLights', '5Rating'). */
+  iconSetType: IconSetType;
+  /** Thresholds (as percentages) for switching icons. Length = iconCount - 1. */
+  thresholds: number[];
+  /** Whether to show the cell value alongside the icon. */
+  showValue?: boolean;
+  /** Whether to reverse the icon order. */
+  reverseOrder?: boolean;
+}
+
+export type IconSetType =
+  | '3Arrows'
+  | '3ArrowsGray'
+  | '3TrafficLights'
+  | '3Signs'
+  | '3Flags'
+  | '3Stars'
+  | '3Symbols'
+  | '4Arrows'
+  | '4ArrowsGray'
+  | '4TrafficLights'
+  | '4Rating'
+  | '5Arrows'
+  | '5ArrowsGray'
+  | '5Rating'
+  | '5Quarters';
 
 export interface DataValidation {
   type: 'number' | 'text' | 'date' | 'list' | 'custom';
@@ -95,12 +158,46 @@ export interface FilterConfig {
   /** Allow-list of values (legacy / multi-select). */
   values?: (string | number)[];
   /** Comparison operator for dialog-driven filters. */
-  condition?: 'equals' | 'contains' | 'gt' | 'lt' | string;
-  /** Single comparison value for equals/contains/gt/lt. */
+  condition?: FilterConditionType;
+  /** Single comparison value for comparison filters. */
   value?: string | number;
+  /** Second value for 'between'/'notBetween' conditions. */
+  value2?: string | number;
+  /** Whether to include blank cells (defaults to false). */
+  includeBlank?: boolean;
+  /** Logical join when multiple conditions on same column: 'and' | 'or'. Default: 'and'. */
+  logic?: 'and' | 'or';
 }
 
+export type FilterConditionType =
+  | 'equals'
+  | 'notEquals'
+  | 'contains'
+  | 'notContains'
+  | 'startsWith'
+  | 'endsWith'
+  | 'gt'
+  | 'gte'
+  | 'lt'
+  | 'lte'
+  | 'between'
+  | 'notBetween'
+  | 'isEmpty'
+  | 'isNotEmpty'
+  | 'wildcard';
+
 export interface SortConfig {
+  column: number;
+  direction: 'asc' | 'desc';
+}
+
+/** Multi-column sort: ordered list of sort rules applied sequentially. */
+export interface MultiSortConfig {
+  rules: SortRule[];
+  hasHeader?: boolean;
+}
+
+export interface SortRule {
   column: number;
   direction: 'asc' | 'desc';
 }

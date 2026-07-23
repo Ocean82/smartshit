@@ -38,12 +38,20 @@ export const orphanedFormulasRule: AuditRule = {
       const colCells = ctx.getColumn(cell.col)
       if (isSummaryCell(cell, colCells)) continue
 
+      // Skip if the cell is in a row with other data (it's likely a user-facing output)
+      const rowCells = ctx.getRow(cell.row)
+      if (rowCells.length >= 2) continue
+
+      // Skip if it's surrounded by other formulas in the same column (part of a calculation series)
+      const colFormulas = colCells.filter((c) => c.type === 'formula')
+      if (colFormulas.length >= 2) continue
+
       findings.push({
         id: findingId(),
         ruleId: 'orphaned-formulas',
         severity: 'low',
         title: `Orphaned formula in ${cell.cellId}`,
-        message: `${cell.cellId} (=${cell.formula}) is not referenced by any other cell. It may be unused or a leftover from earlier work.`,
+        message: `${cell.cellId} (=${cell.formula}) is not referenced by any other cell and appears isolated. It may be unused or a leftover from earlier work.`,
         cells: [{ cellId: cell.cellId, row: cell.row, col: cell.col }],
         suggestion: 'Verify this formula is still needed, or remove it to reduce clutter',
         autoFixable: false,

@@ -53,7 +53,7 @@ export const rangeGapsRule: AuditRule = {
                 autoFixable: true,
                 fixAction: {
                   cellId: cell.cellId,
-                  formula: `=${cell.formula.replace(range, `${extendedStart}:${end}`)}`,
+                  formula: `=${cell.formula!.replace(range, `${extendedStart}:${end}`)}`,
                 },
               })
             }
@@ -78,7 +78,7 @@ export const rangeGapsRule: AuditRule = {
                 autoFixable: true,
                 fixAction: {
                   cellId: cell.cellId,
-                  formula: `=${cell.formula.replace(range, `${start}:${extendedEnd}`)}`,
+                  formula: `=${cell.formula!.replace(range, `${start}:${extendedEnd}`)}`,
                 },
               })
             }
