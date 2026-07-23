@@ -129,19 +129,19 @@ Issues identified from the SmartSht review, verified against the actual codebase
 
 ---
 
-### 3.2 Decompose SpreadsheetGrid
+### 3.2 Decompose SpreadsheetGrid ✅ (Phase 1: Extract Cell Renderer)
 
 **Problem:** ~1,008-line component handling 15+ distinct responsibilities. Impossible to test individual behaviors, optimize rendering, or onboard new developers.
 
 **Fix:**
-- [ ] Extract `src/components/grid/SelectionHandler.tsx` — mouse/touch/keyboard selection logic
-- [ ] Extract `src/components/grid/CellEditor.tsx` — inline editing, formula input, autocomplete
-- [ ] Extract `src/components/grid/CellRenderer.tsx` — individual cell rendering with conditional format evaluation
-- [ ] Extract `src/components/grid/ColumnResizer.tsx` — resize handles, auto-fit logic
-- [ ] Extract `src/components/grid/GridKeyboardHandler.ts` — keyboard shortcut mapping (non-component utility)
-- [ ] Extract `src/components/grid/FindReplaceOverlay.tsx` — find/replace UI (already partially separate?)
-- [ ] Extract `src/components/grid/TouchHandler.tsx` — tap, long-press, drag-select for mobile
-- [ ] Keep `SpreadsheetGrid.tsx` as an orchestrator that composes these pieces
+- [x] Extract `src/components/grid/GridCell.tsx` — memoized cell renderer with all visual states (conditional formatting, data bars, color scales, icon sets, editing, validation, checkboxes, notes, pending AI changes)
+- [x] `React.memo` on GridCell — prevents re-render when only unrelated cells change
+- [x] Remove 160+ lines of inline JSX from SpreadsheetGrid (now 846 lines, down from ~1,008)
+- [ ] Extract `src/components/grid/SelectionHandler.tsx` — mouse/touch/keyboard selection logic (future)
+- [ ] Extract `src/components/grid/CellEditor.tsx` — inline editing, formula input, autocomplete (future)
+- [ ] Extract `src/components/grid/ColumnResizer.tsx` — resize handles, auto-fit logic (future)
+- [ ] Extract `src/components/grid/GridKeyboardHandler.ts` — keyboard shortcut mapping (future)
+- [ ] Extract `src/components/grid/TouchHandler.tsx` — tap, long-press, drag-select for mobile (future)
 
 **Effort:** Large (6-10 hours)
 

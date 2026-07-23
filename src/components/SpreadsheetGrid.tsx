@@ -6,13 +6,14 @@ import { FormulaAutocomplete } from './FormulaAutocomplete';
 import { FindReplaceDialog } from './FindReplaceDialog';
 import { SelectionOverlay } from './SelectionOverlay';
 import type { CellFormat } from '@/types';
-import { formatCellValue, getBorderCSS, isNegativeRedFormat } from '@/lib/formatUtils';
+import { getBorderCSS, isNegativeRedFormat } from '@/lib/formatUtils';
 import { buildFilteredRowIndex } from '@/lib/rowFilter';
 import { findHeaderRow, findLastDataRow } from '@/lib/sheetSort';
-import { resolveCellFormat, getDataBarRule, dataBarWidthPercent, columnDataBarPeerValues, getDataBarInfo, getColorScaleRule, columnColorScalePeerValues, computeColorScaleBg, getIconSetRule, columnIconSetPeerValues, computeIconForCell } from '@/lib/conditionalFormat';
+import { columnDataBarPeerValues, columnColorScalePeerValues, columnIconSetPeerValues } from '@/lib/conditionalFormat';
 import { findActivePendingPreview } from '@/lib/pendingActionPreview';
 import { useTouch } from '@/hooks/useTouch';
 import { getCellNotesService } from '@/lib/cellNotes';
+import { GridCell } from './grid';
 
 /** Check if a cell value represents the "checked" state for a checkbox validation. */
 function isCellChecked(value: string | number | boolean | null | undefined, checkedValue?: string): boolean {
@@ -816,181 +817,49 @@ export function SpreadsheetGrid() {
                     const active = isActiveCell(row, col);
                     const crosshair = !active && !selected && selection != null &&
                       (row === selection.startRow || col === selection.startCol);
-                    const isEditing = editingCell === cellId;
+                    const isEditingCell = editingCell === cellId;
                     const computed = getComputedValue(row, col);
-                    const rawValue = (computed || cellData?.value) ?? null;
-                    const hasFormula = !!cellData?.formula;
-                    const colWidth = getColWidth(col);
                     const pendingChange = pendingPreview?.changeByCell.get(cellId) ?? null;
-                    const dataBarRule = getDataBarRule(cellData?.format, computed);
-                    const dataBarInfo = dataBarRule
-                      ? getDataBarInfo(computed, dataBarPeersByCol.get(col) ?? [])
-                      : null;
-                    const colorScaleRule = getColorScaleRule(cellData?.format);
-                    const colorScaleBg = colorScaleRule?.colorScaleConfig
-                      ? computeColorScaleBg(computed, colorScalePeersByCol.get(col) ?? [], colorScaleRule.colorScaleConfig)
-                      : null;
-                    const iconSetRule = getIconSetRule(cellData?.format);
-                    const cellIcon = iconSetRule?.iconSetConfig
-                      ? computeIconForCell(computed, iconSetPeersByCol.get(col) ?? [], iconSetRule.iconSetConfig)
-                      : null;
 
                     return (
-                      <div
-                        ref={isEditing ? editContainerRef : undefined}
+                      <GridCell
                         key={col}
-                        className={`border-b border-r shrink-0 relative transition-shadow group/cell ${
-                          pendingChange
-                            ? 'ring-2 ring-emerald-400 ring-inset z-10 bg-emerald-50/80'
-                            : active
-                              ? 'ring-2 ring-blue-500 ring-inset z-10 bg-white'
-                              : selected
-                                ? 'bg-blue-50/60 border-blue-200'
-                                : crosshair
-                                  ? 'bg-blue-50/30 border-gray-200'
-                                  : 'border-gray-200 hover:bg-blue-50/20'
-                        }`}
-                        style={{
-                          width: colWidth,
-                          height: CELL_HEIGHT,
-                          position: 'absolute',
-                          left: visibleColOffsets.offsets[j],
-                          ...getCellStyle(resolveCellFormat(cellData?.format, computed), rawValue),
-                          ...(colorScaleBg && !pendingChange ? { backgroundColor: colorScaleBg } : {}),
-                          ...(pendingChange ? { backgroundColor: undefined } : {}),
+                        row={row}
+                        col={col}
+                        cellId={cellId}
+                        cellData={cellData}
+                        computed={computed}
+                        colWidth={getColWidth(col)}
+                        cellHeight={CELL_HEIGHT}
+                        isEditing={isEditingCell}
+                        isActive={active}
+                        isSelected={selected}
+                        isCrosshair={crosshair}
+                        editValue={editValue}
+                        hasNote={notesService.hasNote(sheet.id, cellId)}
+                        noteText={notesService.getNote(sheet.id, cellId)?.text ?? ''}
+                        pendingChange={pendingChange}
+                        dataBarPeers={dataBarPeersByCol.get(col) ?? []}
+                        colorScalePeers={colorScalePeersByCol.get(col) ?? []}
+                        iconSetPeers={iconSetPeersByCol.get(col) ?? []}
+                        getCellStyle={getCellStyle}
+                        colOffset={visibleColOffsets.offsets[j]}
+                        editContainerRef={isEditingCell ? editContainerRef : undefined}
+                        inputRef={isEditingCell ? inputRef : undefined}
+                        onMouseDown={handleMouseDown}
+                        onMouseMove={handleMouseMove}
+                        onDoubleClick={handleCellDoubleClick}
+                        onContextMenu={handleContextMenu}
+                        onEditChange={setEditValue}
+                        onEditBlur={commitEdit}
+                        onCheckboxToggle={(cid, cd) => {
+                          const checked = cd.validation?.checkedValue ?? 'TRUE';
+                          const unchecked = cd.validation?.uncheckedValue ?? 'FALSE';
+                          const isChecked = isCellChecked(cd.value, checked);
+                          pushHistory('Toggle checkbox');
+                          setCellValue(cid, isChecked ? unchecked : checked);
                         }}
-                        onMouseDown={(e) => handleMouseDown(row, col, e)}
-                        onMouseMove={() => handleMouseMove(row, col)}
-                        onDoubleClick={() => handleCellDoubleClick(row, col)}
-                        onContextMenu={(e) => handleContextMenu(e, row, col)}
-                      >
-                        {dataBarInfo != null && dataBarRule && !pendingChange && (
-                          <div
-                            className="absolute inset-y-1 rounded-sm pointer-events-none opacity-50"
-                            style={{
-                              width: `${dataBarInfo.width}%`,
-                              left: dataBarInfo.isNegative
-                                ? `${dataBarInfo.startPoint - dataBarInfo.width}%`
-                                : `${dataBarInfo.startPoint}%`,
-                              backgroundColor: dataBarInfo.isNegative
-                                ? (dataBarRule.dataBarNegativeColor || '#F87171')
-                                : (dataBarRule.dataBarColor || '#93C5FD'),
-                              ...(dataBarRule.dataBarGradient ? {
-                                background: `linear-gradient(to right, ${
-                                  dataBarInfo.isNegative
-                                    ? (dataBarRule.dataBarNegativeColor || '#F87171')
-                                    : (dataBarRule.dataBarColor || '#93C5FD')
-                                }80, ${
-                                  dataBarInfo.isNegative
-                                    ? (dataBarRule.dataBarNegativeColor || '#F87171')
-                                    : (dataBarRule.dataBarColor || '#93C5FD')
-                                })`,
-                              } : {}),
-                            }}
-                          />
-                        )}
-                        {cellIcon && !pendingChange && (
-                          <span className="absolute left-0.5 top-1/2 -translate-y-1/2 text-[11px] pointer-events-none z-[1]" aria-hidden="true">
-                            {cellIcon}
-                          </span>
-                        )}
-                        {isEditing && cellData?.validation?.type === 'list' ? (
-                          <select
-                            className="absolute inset-0 w-full h-full px-1.5 text-[13px] border-0 outline-none bg-white z-20 font-sans"
-                            value={editValue}
-                            onChange={(e) => { setEditValue(e.target.value); }}
-                            onBlur={commitEdit}
-                            autoFocus
-                          >
-                            <option value="">(empty)</option>
-                            {cellData.validation.values?.map(v => (
-                              <option key={v} value={v}>{v}</option>
-                            ))}
-                          </select>
-                        ) : isEditing ? (
-                          <input
-                            ref={inputRef}
-                            className="absolute inset-0 w-full h-full px-1.5 text-[13px] border-0 outline-none bg-white z-20 font-sans"
-                            value={editValue}
-                            onChange={(e) => setEditValue(e.target.value)}
-                            onBlur={commitEdit}
-                          />
-                        ) : (
-                          <div className="flex items-center h-full">
-                            <div
-                              className={`px-1.5 truncate w-full`}
-                              style={{
-                                fontSize: cellData?.format?.fontSize ? `${cellData.format.fontSize}px` : '13px',
-                                textAlign: cellData?.format?.textAlign
-                                  ? cellData.format.textAlign
-                                  : (typeof cellData?.value === 'number' || (computed && !isNaN(Number(computed)) && computed !== ''))
-                                    ? 'right'
-                                    : undefined,
-                              }}
-                              title={hasFormula ? `${cellData?.formula} = ${formatCellValue(rawValue, cellData?.format?.numberFormat)}` : formatCellValue(rawValue, cellData?.format?.numberFormat)}
-                            >
-                              {pendingChange
-                                ? formatCellValue(pendingChange.newValue ?? pendingChange.newFormula ?? '', cellData?.format?.numberFormat)
-                                : formatCellValue(rawValue, cellData?.format?.numberFormat)}
-                            </div>
-                          </div>
-                        )}
-                        {pendingChange && !isEditing && (
-                          <>
-                            <span className="absolute top-0.5 right-0.5 text-[8px] leading-none bg-emerald-500 text-white font-bold px-0.5 rounded z-20">
-                              AI
-                            </span>
-                            <div className="absolute bottom-full right-0 mb-1 hidden group-hover/cell:block bg-gray-900 text-white p-2 rounded-lg shadow-xl border border-emerald-400 w-48 text-[10px] z-50 pointer-events-none">
-                              <div className="font-semibold text-emerald-300 mb-1">Proposed change</div>
-                              <div className="text-gray-400 line-through truncate">
-                                Old: {String(pendingChange.oldValue ?? pendingChange.oldFormula ?? '(empty)')}
-                              </div>
-                              <div className="text-emerald-200 font-mono mt-0.5 truncate">
-                                → {String(pendingChange.newValue ?? pendingChange.newFormula ?? '')}
-                              </div>
-                            </div>
-                          </>
-                        )}
-                        {cellData?.validationError && (
-                          <div className="absolute top-0 right-0 w-0 h-0 border-t-[6px] border-t-red-500 border-l-[6px] border-l-transparent z-10"
-                            title={cellData.validationError} />
-                        )}
-                        {notesService.hasNote(sheet.id, cellId) && (
-                          <div
-                            className="absolute top-0 right-0 w-0 h-0 border-t-[5px] border-t-purple-500 border-l-[5px] border-l-transparent z-[9] cursor-help"
-                            title={notesService.getNote(sheet.id, cellId)?.text ?? ''}
-                          />
-                        )}
-                        {cellData?.validation?.type === 'checkbox' && !isEditing && (
-                          <div
-                            className="absolute inset-0 flex items-center justify-center cursor-pointer z-[1]"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              const checked = cellData.validation?.checkedValue ?? 'TRUE';
-                              const unchecked = cellData.validation?.uncheckedValue ?? 'FALSE';
-                              const isChecked = isCellChecked(cellData.value, checked);
-                              pushHistory('Toggle checkbox');
-                              setCellValue(cellId, isChecked ? unchecked : checked);
-                            }}
-                          >
-                            <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${
-                              isCellChecked(cellData.value, cellData.validation?.checkedValue)
-                                ? 'bg-blue-600 border-blue-600 text-white'
-                                : 'border-gray-400 bg-white'
-                            }`}>
-                              {isCellChecked(cellData.value, cellData.validation?.checkedValue) && (
-                                <span className="text-[10px] font-bold">✓</span>
-                              )}
-                            </div>
-                          </div>
-                        )}
-                        {cellData?.validation?.type === 'list' && !isEditing && (
-                          <div className="absolute right-1 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 pointer-events-none">▾</div>
-                        )}
-                        {active && !isEditing && (
-                          <div className="absolute bottom-0 right-0 w-2 h-2 bg-blue-500 cursor-crosshair z-20" />
-                        )}
-                      </div>
+                      />
                     );
                   })}
                 </div>
