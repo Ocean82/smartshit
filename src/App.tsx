@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, lazy, Suspense } from 'react'
 import { useStore } from '@/store/useStore'
 import { fetchServerHealth, type ServerHealth } from '@/ai/agentClient'
 import { Toolbar } from '@/components/Toolbar'
@@ -8,27 +8,15 @@ import { ChatPanel } from '@/components/ChatPanel'
 import { SheetTabs } from '@/components/SheetTabs'
 import { FileExplorer } from '@/components/FileExplorer'
 import { ContextMenu } from '@/components/ContextMenu'
-import { ChartDialog } from '@/components/ChartDialog'
 import { ChartOverlay } from '@/components/ChartRenderer'
-import { ValidationDialog } from '@/components/ValidationDialog'
-import { PivotDialog } from '@/components/PivotDialog'
 import { FormatPanel } from '@/components/FormatPanel'
-import { FilterDialog } from '@/components/FilterDialog'
-import { ConditionalFormatDialog } from '@/components/ConditionalFormatDialog'
 import { StatusBar } from '@/components/StatusBar'
 import { WelcomeOverlay } from '@/components/WelcomeOverlay'
-import { TemplateGallery } from '@/components/TemplateGallery'
-import { CommandPalette } from '@/components/CommandPalette'
 import { MenuBar } from '@/components/MenuBar'
 import { MobileToolbar } from '@/components/MobileToolbar'
 import { MobileMenu } from '@/components/MobileMenu'
-import { TelemetryDebugPanel } from '@/components/TelemetryDebugPanel'
-import { WorkbookPicker } from '@/components/WorkbookPicker'
-import { VersionHistoryPanel } from '@/components/VersionHistoryPanel'
 import { PanelRail, DockPanel, AuditPanelContent, InsightsPanelContent, InspectorPanelContent } from '@/components/panels'
-import { ShareDialog } from '@/components/ShareDialog'
 import { FormulaBar } from '@/components/FormulaBar'
-import { GoToCellDialog } from '@/components/GoToCellDialog'
 import { ToastContainer } from '@/components/Toast'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { EmptyGridGuide } from '@/components/EmptyGridGuide'
@@ -44,6 +32,20 @@ import {
 import { exportWorkbookToJson, importWorkbookFromJsonFile, normalizeImportedWorkbook } from '@/io/workbookJson'
 import { exportWorkbookToXlsx } from '@/io/xlsx'
 import { refToCell } from '@/engine/spreadsheet'
+
+// ─── Lazy-loaded components (dialogs, overlays, and panels opened on demand) ─
+const ChartDialog = lazy(() => import('@/components/ChartDialog').then(m => ({ default: m.ChartDialog })))
+const ValidationDialog = lazy(() => import('@/components/ValidationDialog').then(m => ({ default: m.ValidationDialog })))
+const PivotDialog = lazy(() => import('@/components/PivotDialog').then(m => ({ default: m.PivotDialog })))
+const FilterDialog = lazy(() => import('@/components/FilterDialog').then(m => ({ default: m.FilterDialog })))
+const ConditionalFormatDialog = lazy(() => import('@/components/ConditionalFormatDialog').then(m => ({ default: m.ConditionalFormatDialog })))
+const TemplateGallery = lazy(() => import('@/components/TemplateGallery').then(m => ({ default: m.TemplateGallery })))
+const CommandPalette = lazy(() => import('@/components/CommandPalette').then(m => ({ default: m.CommandPalette })))
+const WorkbookPicker = lazy(() => import('@/components/WorkbookPicker').then(m => ({ default: m.WorkbookPicker })))
+const ShareDialog = lazy(() => import('@/components/ShareDialog').then(m => ({ default: m.ShareDialog })))
+const GoToCellDialog = lazy(() => import('@/components/GoToCellDialog').then(m => ({ default: m.GoToCellDialog })))
+const VersionHistoryPanel = lazy(() => import('@/components/VersionHistoryPanel').then(m => ({ default: m.VersionHistoryPanel })))
+const TelemetryDebugPanel = lazy(() => import('@/components/TelemetryDebugPanel').then(m => ({ default: m.TelemetryDebugPanel })))
 
 function App() {
   const {
@@ -215,7 +217,9 @@ function App() {
         </DockPanel>
 
         <FormatPanel />
-        <VersionHistoryPanel />
+        <Suspense fallback={null}>
+          <VersionHistoryPanel />
+        </Suspense>
 
         {/* Panel rail — rightmost edge (desktop only) */}
         <div className="hidden md:flex">
@@ -239,26 +243,30 @@ function App() {
 
       <StatusBar />
       <ContextMenu />
-      <ChartDialog />
-      <ValidationDialog isOpen={showValidationDialog} onClose={() => setShowValidationDialog(false)} />
-      <PivotDialog isOpen={showPivotDialog} onClose={() => setShowPivotDialog(false)} />
-      <FilterDialog isOpen={showFilterDialog} onClose={() => setShowFilterDialog(false)} />
-      <ConditionalFormatDialog isOpen={showConditionalFormatDialog} onClose={() => setShowConditionalFormatDialog(false)} />
+      <Suspense fallback={null}>
+        <ChartDialog />
+        <ValidationDialog isOpen={showValidationDialog} onClose={() => setShowValidationDialog(false)} />
+        <PivotDialog isOpen={showPivotDialog} onClose={() => setShowPivotDialog(false)} />
+        <FilterDialog isOpen={showFilterDialog} onClose={() => setShowFilterDialog(false)} />
+        <ConditionalFormatDialog isOpen={showConditionalFormatDialog} onClose={() => setShowConditionalFormatDialog(false)} />
+      </Suspense>
       <WelcomeOverlay onOpenTemplates={() => setShowTemplates(true)} />
-      <TemplateGallery open={showTemplates} onClose={() => setShowTemplates(false)} />
-      <CommandPalette
-        open={showCommandPalette}
-        onClose={() => setShowCommandPalette(false)}
-        onOpenTemplates={() => setShowTemplates(true)}
-        onFocusChat={() => {
-          setActivePanel('chat')
-          window.setTimeout(() => {
-            document.dispatchEvent(new Event('smartsht:focus-chat'))
-          }, 50)
-        }}
-        onExportJson={() => exportWorkbookToJson(workbook)}
-        onImportJson={() => jsonRestoreInputRef.current?.click()}
-      />
+      <Suspense fallback={null}>
+        <TemplateGallery open={showTemplates} onClose={() => setShowTemplates(false)} />
+        <CommandPalette
+          open={showCommandPalette}
+          onClose={() => setShowCommandPalette(false)}
+          onOpenTemplates={() => setShowTemplates(true)}
+          onFocusChat={() => {
+            setActivePanel('chat')
+            window.setTimeout(() => {
+              document.dispatchEvent(new Event('smartsht:focus-chat'))
+            }, 50)
+          }}
+          onExportJson={() => exportWorkbookToJson(workbook)}
+          onImportJson={() => jsonRestoreInputRef.current?.click()}
+        />
+      </Suspense>
       <input
         ref={jsonRestoreInputRef}
         type="file"
@@ -277,10 +285,12 @@ function App() {
           e.target.value = ''
         }}
       />
-      <WorkbookPicker open={showWorkbookPicker} onClose={() => setShowWorkbookPicker(false)} />
-      <ShareDialog open={showShareDialog} onClose={() => setShowShareDialog(false)} />
-      <GoToCellDialog open={showGoToCell} onClose={() => setShowGoToCell(false)} />
-      {import.meta.env.DEV ? <TelemetryDebugPanel /> : null}
+      <Suspense fallback={null}>
+        <WorkbookPicker open={showWorkbookPicker} onClose={() => setShowWorkbookPicker(false)} />
+        <ShareDialog open={showShareDialog} onClose={() => setShowShareDialog(false)} />
+        <GoToCellDialog open={showGoToCell} onClose={() => setShowGoToCell(false)} />
+      </Suspense>
+      {import.meta.env.DEV ? <Suspense fallback={null}><TelemetryDebugPanel /></Suspense> : null}
       <ToastContainer />
       <ConfirmDialog />
     </div>

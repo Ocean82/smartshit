@@ -62,50 +62,85 @@ export function SpreadsheetGrid() {
     [messages],
   );
 
-  // Cache data-bar peer values per column for proportional fills
-  const dataBarPeersByCol = useMemo(() => {
-    const map = new Map<number, number[]>()
-    const cols = new Set<number>()
+  // ─── Conditional format peer caches ─────────────────────────────────────────
+  // These caches compute column-level peer values for data bars, color scales,
+  // and icon sets. To avoid recomputing on every keystroke, we derive a stable
+  // fingerprint of only the cells in columns that have conditional rules.
+
+  /** Identify which columns have each rule type (stable unless rules are added/removed). */
+  const conditionalCols = useMemo(() => {
+    const dataBar = new Set<number>()
+    const colorScale = new Set<number>()
+    const iconSet = new Set<number>()
     for (const cellId of Object.keys(sheet.cells)) {
       const cell = sheet.cells[cellId]
-      if (!cell?.format?.conditionalRules?.some((r) => r.type === 'dataBar')) continue
-      cols.add(cellToRef(cellId).col)
+      const rules = cell?.format?.conditionalRules
+      if (!rules) continue
+      const col = cellToRef(cellId).col
+      for (const r of rules) {
+        if (r.type === 'dataBar') dataBar.add(col)
+        else if (r.type === 'colorScale') colorScale.add(col)
+        else if (r.type === 'iconSet') iconSet.add(col)
+      }
     }
-    for (const col of cols) {
+    return { dataBar, colorScale, iconSet }
+  }, [sheet.cells]);
+
+  /** Build a fingerprint of computed values for a set of columns. */
+  const buildColFingerprint = useCallback((cols: Set<number>) => {
+    if (cols.size === 0) return ''
+    const parts: string[] = []
+    for (const cellId of Object.keys(sheet.cells)) {
+      const ref = cellToRef(cellId)
+      if (cols.has(ref.col)) {
+        parts.push(`${cellId}:${getComputedValue(ref.row, ref.col)}`)
+      }
+    }
+    return parts.join('|')
+  }, [sheet.cells, getComputedValue]);
+
+  const dataBarFingerprint = useMemo(
+    () => buildColFingerprint(conditionalCols.dataBar),
+    [buildColFingerprint, conditionalCols.dataBar],
+  );
+  const colorScaleFingerprint = useMemo(
+    () => buildColFingerprint(conditionalCols.colorScale),
+    [buildColFingerprint, conditionalCols.colorScale],
+  );
+  const iconSetFingerprint = useMemo(
+    () => buildColFingerprint(conditionalCols.iconSet),
+    [buildColFingerprint, conditionalCols.iconSet],
+  );
+
+  // Cache data-bar peer values per column
+  const dataBarPeersByCol = useMemo(() => {
+    const map = new Map<number, number[]>()
+    for (const col of conditionalCols.dataBar) {
       map.set(col, columnDataBarPeerValues(sheet, col, getComputedValue))
     }
     return map
-  }, [sheet, getComputedValue]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dataBarFingerprint]);
 
   // Cache color-scale peer values per column
   const colorScalePeersByCol = useMemo(() => {
     const map = new Map<number, number[]>()
-    const cols = new Set<number>()
-    for (const cellId of Object.keys(sheet.cells)) {
-      const cell = sheet.cells[cellId]
-      if (!cell?.format?.conditionalRules?.some((r) => r.type === 'colorScale')) continue
-      cols.add(cellToRef(cellId).col)
-    }
-    for (const col of cols) {
+    for (const col of conditionalCols.colorScale) {
       map.set(col, columnColorScalePeerValues(sheet, col, getComputedValue))
     }
     return map
-  }, [sheet, getComputedValue]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [colorScaleFingerprint]);
 
   // Cache icon-set peer values per column
   const iconSetPeersByCol = useMemo(() => {
     const map = new Map<number, number[]>()
-    const cols = new Set<number>()
-    for (const cellId of Object.keys(sheet.cells)) {
-      const cell = sheet.cells[cellId]
-      if (!cell?.format?.conditionalRules?.some((r) => r.type === 'iconSet')) continue
-      cols.add(cellToRef(cellId).col)
-    }
-    for (const col of cols) {
+    for (const col of conditionalCols.iconSet) {
       map.set(col, columnIconSetPeerValues(sheet, col, getComputedValue))
     }
     return map
-  }, [sheet, getComputedValue]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [iconSetFingerprint]);
 
   const filteredRows = useMemo(() => {
     if (!activeFilters.length) return null;

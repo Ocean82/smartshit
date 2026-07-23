@@ -53,30 +53,30 @@ Issues identified from the SmartSht review, verified against the actual codebase
 
 ## Phase 2: Performance
 
-### 2.1 Replace Full-Snapshot Undo with Diff-Based History
+### 2.1 Replace Full-Snapshot Undo with Diff-Based History ✅
 
 **Problem:** Each undo entry is `JSON.stringify(entireWorkbook)`. A workbook with 5,000 cells with formatting = ~1-2MB per snapshot × 50 stack entries = 50-100MB in memory. CPU spikes on stringify/parse during undo/redo.
 
 **Fix:**
-- [ ] Create `src/lib/historyDiff.ts` — compute JSON patch (RFC 6902) between workbook states
-- [ ] Install `fast-json-patch` or implement minimal cell-level diffing
-- [ ] Change `HistoryEntry` from `{ workbook: string }` to `{ patch: Operation[], inversePatch: Operation[], description: string }`
-- [ ] On `pushHistory`: compute forward patch from previous state
-- [ ] On `undo`: apply inverse patch to current workbook
-- [ ] On `redo`: apply forward patch
-- [ ] Keep one full "base snapshot" at the bottom of the stack for recovery
-- [ ] Update stack cap logic (can increase from 50 since patches are tiny)
+- [x] Create `src/lib/historyDiff.ts` — compute JSON patch (RFC 6902) between workbook states
+- [x] Install `fast-json-patch` or implement minimal cell-level diffing
+- [x] Change `HistoryEntry` from `{ workbook: string }` to `{ patch: Operation[], inversePatch: Operation[], description: string }`
+- [x] On `pushHistory`: compute forward patch from previous state
+- [x] On `undo`: apply inverse patch to current workbook
+- [x] On `redo`: apply forward patch
+- [x] Keep one full "base snapshot" at the bottom of the stack for recovery
+- [x] Update stack cap logic (can increase from 50 since patches are tiny)
 
 **Effort:** Large (6-8 hours)
 
 ---
 
-### 2.2 Add Code Splitting / Lazy Loading
+### 2.2 Add Code Splitting / Lazy Loading ✅
 
 **Problem:** App.tsx imports 35+ components statically. Every dialog, panel, overlay, and debug tool loads eagerly in the initial bundle — even if the user never opens them.
 
 **Fix:**
-- [ ] Wrap infrequently-used components in `React.lazy()` + `<Suspense>`:
+- [x] Wrap infrequently-used components in `React.lazy()` + `<Suspense>`:
   - `TemplateGallery`
   - `CommandPalette`
   - `ChartDialog`
@@ -89,22 +89,22 @@ Issues identified from the SmartSht review, verified against the actual codebase
   - `VersionHistoryPanel`
   - `WorkbookPicker`
   - `TelemetryDebugPanel`
-- [ ] Add lightweight `<Suspense fallback>` spinners for each lazy component
-- [ ] Verify Vite/Rollup produces separate chunks (check build output)
+- [x] Add lightweight `<Suspense fallback>` spinners for each lazy component
+- [x] Verify Vite/Rollup produces separate chunks (check build output)
 
 **Effort:** Medium (2-3 hours)
 
 ---
 
-### 2.3 Improve Conditional Formatting Memoization
+### 2.3 Improve Conditional Formatting Memoization ✅
 
 **Problem:** `useMemo` for peer values depends on `[sheet, getComputedValue]` — since `sheet` is a new reference from immer on every cell change, the memoization busts on every keystroke. All color scales, data bars, and icon sets recompute even if unrelated cells changed.
 
 **Fix:**
-- [ ] Extract conditional formatting peer computation into a selector with fine-grained deps
-- [ ] Use a stable hash of the cells that actually participate in conditional rules (e.g., only cells in columns with rules)
-- [ ] Alternatively: move to `zustand` subscriptions with `shallow` equality for just the cells in rule columns
-- [ ] Add `React.memo` to the cell renderer component to prevent re-renders of cells without format changes
+- [x] Extract conditional formatting peer computation into a selector with fine-grained deps
+- [x] Use a stable hash of the cells that actually participate in conditional rules (e.g., only cells in columns with rules)
+- [x] Alternatively: move to `zustand` subscriptions with `shallow` equality for just the cells in rule columns
+- [x] Add `React.memo` to the cell renderer component to prevent re-renders of cells without format changes
 
 **Effort:** Medium (3-4 hours)
 

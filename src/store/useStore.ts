@@ -49,12 +49,16 @@ import { getActionRecorder } from '@/lib/actionRecorder';
 import { v4 as uuid } from 'uuid';
 import { defaultSkills } from '@/data/chatPresets';
 import { validateCell } from '@/lib/validation';
+import {
+  diffWorkbooks,
+  applyUndo,
+  applyRedo,
+  type HistoryEntry,
+  type WorkbookPatch,
+} from '@/lib/historyDiff';
 
-// History for undo/redo
-interface HistoryEntry {
-  workbook: string; // JSON snapshot
-  description: string;
-}
+// Maximum undo stack depth — higher limit now that patches are lightweight
+const MAX_UNDO_STACK = 150;
 
 interface AppState {
   // Workbook
@@ -554,43 +558,96 @@ export const useStore = create<AppState>()(
       },
 
       pushHistory: (desc) => {
-        const snap = JSON.stringify(get().workbook);
+        // Capture the current workbook state BEFORE the mutation that follows.
+        // We store it as a pending snapshot. When the NEXT state change occurs
+        // (detected via set() after this call returns), we compute the diff.
+        //
+        // Since callers always mutate the store immediately after pushHistory(),
+        // we use a synchronous approach: capture "before", then on the next
+        // undo/pushHistory call, compute the diff retrospectively.
+        //
+        // Implementation: store the before snapshot. The diff is computed when
+        // undo() is triggered (lazy diffing) or when the next pushHistory replaces it.
+        const beforeSnapshot = structuredClone(get().workbook);
+        
         set((s) => {
-          s.undoStack.push({ workbook: snap, description: desc });
-          if (s.undoStack.length > 50) s.undoStack.shift();
+          s.undoStack.push({ 
+            patch: {
+              sheets: [],
+              activeSheetIdBefore: beforeSnapshot.activeSheetId,
+              activeSheetIdAfter: beforeSnapshot.activeSheetId,
+              // Store the "before" state as structural so undo can restore it
+              structuralBefore: beforeSnapshot,
+              structuralAfter: undefined,
+            }, 
+            description: desc 
+          });
+          if (s.undoStack.length > MAX_UNDO_STACK) s.undoStack.shift();
           s.redoStack = [];
+        });
+
+        // After the mutation happens (synchronously by the caller), 
+        // we finalize the patch in a microtask to capture "after" state.
+        queueMicrotask(() => {
+          const afterWb = get().workbook;
+          const stack = get().undoStack;
+          if (stack.length === 0) return;
+          
+          const lastEntry = stack[stack.length - 1];
+          if (lastEntry.description !== desc) return; // Guard against interleaving
+          
+          const patch = diffWorkbooks(beforeSnapshot, afterWb);
+          set((s) => {
+            const entry = s.undoStack[s.undoStack.length - 1];
+            if (entry && entry.description === desc) {
+              entry.patch = patch;
+            }
+          });
         });
       },
 
       undo: () => {
         const stack = get().undoStack;
         if (stack.length === 0) return;
-        const currentSnap = JSON.stringify(get().workbook);
         const entry = stack[stack.length - 1];
-        const wb: WorkbookData = JSON.parse(entry.workbook);
+        
+        // If the patch still has structuralBefore but hasn't been finalized
+        // (microtask hasn't run yet), compute the diff now synchronously.
+        let finalEntry = entry;
+        if (entry.patch.structuralBefore && entry.patch.structuralAfter === undefined && entry.patch.sheets.length === 0) {
+          const afterWb = get().workbook;
+          const patch = diffWorkbooks(entry.patch.structuralBefore, afterWb);
+          finalEntry = { patch, description: entry.description };
+        }
+        
+        const currentWb = get().workbook;
+        const restored = applyUndo(currentWb, finalEntry);
         const eng = get().engine;
-        eng.loadWorkbook(wb);
+        eng.loadWorkbook(restored);
+        
         set((s) => {
-          s.redoStack.push({ workbook: currentSnap, description: entry.description });
+          s.redoStack.push(finalEntry);
           s.undoStack.pop();
-          s.workbook = wb;
-          s.activeSheetId = wb.activeSheetId;
+          s.workbook = restored;
+          s.activeSheetId = restored.activeSheetId;
         });
       },
 
       redo: () => {
         const stack = get().redoStack;
         if (stack.length === 0) return;
-        const currentSnap = JSON.stringify(get().workbook);
         const entry = stack[stack.length - 1];
-        const wb: WorkbookData = JSON.parse(entry.workbook);
+        const currentWb = get().workbook;
+        
+        const restored = applyRedo(currentWb, entry);
         const eng = get().engine;
-        eng.loadWorkbook(wb);
+        eng.loadWorkbook(restored);
+        
         set((s) => {
-          s.undoStack.push({ workbook: currentSnap, description: entry.description });
+          s.undoStack.push(entry);
           s.redoStack.pop();
-          s.workbook = wb;
-          s.activeSheetId = wb.activeSheetId;
+          s.workbook = restored;
+          s.activeSheetId = restored.activeSheetId;
         });
       },
 
