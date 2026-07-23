@@ -249,6 +249,35 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
     examples: ['format this as a table', 'make it look like a proper table', 'apply table formatting with green theme'],
   },
   {
+    name: 'add_note',
+    category: 'mutate',
+    description: 'Add a text note/annotation to a cell',
+    params: [
+      { name: 'cell', type: 'string', description: 'Cell reference (e.g., "B3")', required: true },
+      { name: 'text', type: 'string', description: 'Note content', required: true },
+    ],
+    examples: ['add a note to B3 saying "unexpected expense"', 'annotate this cell'],
+  },
+  {
+    name: 'remove_note',
+    category: 'mutate',
+    description: 'Remove a note from a cell',
+    params: [
+      { name: 'cell', type: 'string', description: 'Cell reference (e.g., "B3")', required: true },
+    ],
+    examples: ['remove the note on B3', 'clear annotation'],
+  },
+  {
+    name: 'set_checkbox',
+    category: 'mutate',
+    description: 'Set a cell as a checkbox (true/false toggle)',
+    params: [
+      { name: 'cell', type: 'string', description: 'Cell reference or range (e.g., "C2" or "C2:C10")', required: true },
+      { name: 'checked', type: 'boolean', description: 'Initial checked state (default: false)' },
+    ],
+    examples: ['make C2:C10 checkboxes', 'add a checkbox to D3', 'set D3 as a paid/unpaid toggle'],
+  },
+  {
     name: 'clear_sheet',
     category: 'mutate',
     description: 'Clear all data from the current sheet',

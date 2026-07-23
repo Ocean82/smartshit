@@ -1509,6 +1509,20 @@ function buildExecutionContext(
     getComputedValue: (row, col) => get().getComputedValue(row, col),
     setCellValue: (cellId, value, formula) => get().setCellValue(cellId, value, formula),
     setCellFormat: (cellId, format) => get().setCellFormat(cellId, format),
+    setCellValidation: (cellId, validation) => {
+      set((s: AppState) => {
+        const sheet = s.workbook.sheets.find((sh: { id: string }) => sh.id === s.activeSheetId);
+        if (!sheet) return;
+        if (!sheet.cells[cellId]) {
+          sheet.cells[cellId] = { value: null };
+        }
+        if (validation) {
+          sheet.cells[cellId].validation = validation;
+        } else {
+          delete sheet.cells[cellId].validation;
+        }
+      });
+    },
     bulkSetCells: (cells) => get().bulkSetCells(cells),
     applySortPatch: (patch) => get().applySortPatch(patch),
     setFilters: (filters) => get().setFilters(filters),

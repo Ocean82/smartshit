@@ -48,7 +48,7 @@ export function ValidationDialog({ isOpen, onClose }: Props) {
     if (!cellId) return;
     const validation: DataValidation = {
       type,
-      criteria: criteria || undefined,
+      criteria: type === 'checkbox' ? undefined : (criteria || undefined),
       values: type === 'list' ? valuesText.split(',').map(v => v.trim()).filter(Boolean) : undefined,
       min: min !== '' ? Number(min) : undefined,
       max: max !== '' ? Number(max) : undefined,
@@ -56,6 +56,8 @@ export function ValidationDialog({ isOpen, onClose }: Props) {
       containsText: (type === 'text' && (criteria === 'contains' || criteria === 'notContains' || criteria === 'startsWith' || criteria === 'endsWith'))
         ? containsText || undefined
         : undefined,
+      checkedValue: type === 'checkbox' ? (criteria || 'TRUE') : undefined,
+      uncheckedValue: type === 'checkbox' ? (containsText || 'FALSE') : undefined,
     };
     // Apply to all selected cells
     const minR = Math.min(selection.startRow, selection.endRow);
@@ -64,7 +66,15 @@ export function ValidationDialog({ isOpen, onClose }: Props) {
     const maxC = Math.max(selection.startCol, selection.endCol);
     for (let r = minR; r <= maxR; r++) {
       for (let c = minC; c <= maxC; c++) {
-        setCellValidation(refToCell(r, c), validation);
+        const id = refToCell(r, c);
+        setCellValidation(id, validation);
+        // For checkbox type, also initialize the cell value if empty
+        if (type === 'checkbox') {
+          const cell = sheet.cells[id];
+          if (!cell?.value) {
+            useStore.getState().setCellValue(id, validation.uncheckedValue || 'FALSE');
+          }
+        }
       }
     }
     onClose();
@@ -97,6 +107,7 @@ export function ValidationDialog({ isOpen, onClose }: Props) {
         >
           <option value="number">Number</option>
           <option value="list">List (dropdown)</option>
+          <option value="checkbox">Checkbox</option>
           <option value="text">Text</option>
           <option value="date">Date</option>
           <option value="custom">Custom formula</option>
@@ -124,6 +135,24 @@ export function ValidationDialog({ isOpen, onClose }: Props) {
             <label className="block text-xs text-gray-500 mb-1">Values (comma-separated)</label>
             <input value={valuesText} onChange={e => setValuesText(e.target.value)}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Option1, Option2, Option3" />
+          </div>
+        )}
+
+        {type === 'checkbox' && (
+          <div className="mb-3 p-3 bg-gray-50 rounded-lg">
+            <p className="text-xs text-gray-500 mb-2">Cells will display as clickable checkboxes.</p>
+            <div className="flex gap-2">
+              <div className="flex-1">
+                <label className="block text-xs text-gray-500 mb-1">Checked value</label>
+                <input value={criteria || 'TRUE'} onChange={e => setCriteria(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="TRUE" />
+              </div>
+              <div className="flex-1">
+                <label className="block text-xs text-gray-500 mb-1">Unchecked value</label>
+                <input value={containsText || 'FALSE'} onChange={e => setContainsText(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="FALSE" />
+              </div>
+            </div>
           </div>
         )}
 

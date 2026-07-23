@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useStore } from '@/store/useStore';
 import { cellToRef } from '@/engine/spreadsheet';
+import { getCellNotesService } from '@/lib/cellNotes';
 import {
   Copy, Scissors, ClipboardPaste, Trash2, Plus,
   ArrowDown, ArrowRight, Bold, Italic, Shield,
@@ -33,6 +34,10 @@ export function ContextMenu() {
   if (!contextMenu) return null;
 
   const ref = cellToRef(contextMenu.cell);
+  const notesService = getCellNotesService();
+  const sheetId = useStore.getState().activeSheetId;
+  const hasNote = notesService.hasNote(sheetId, contextMenu.cell);
+  const existingNote = hasNote ? notesService.getNote(sheetId, contextMenu.cell) : null;
 
   const menuItems = [
     { icon: <Copy size={13} />, label: 'Copy', shortcut: 'Ctrl+C', action: () => { copy(); } },
@@ -51,6 +56,20 @@ export function ContextMenu() {
     { icon: <Trash2 size={13} />, label: 'Clear Cell', action: () => { pushHistory('Clear'); setCellValue(contextMenu.cell, null); } },
     null,
     { icon: <Shield size={13} />, label: 'Data Validation', action: () => { useStore.getState().setShowValidationDialog(true); setContextMenu(null); } },
+    null,
+    { icon: <span className="text-xs">📝</span>, label: hasNote ? 'Edit Note' : 'Add Note', action: () => {
+      const text = prompt(hasNote ? 'Edit note:' : 'Add note:', existingNote?.text ?? '');
+      if (text !== null) {
+        if (text.trim()) {
+          getCellNotesService().setNote(useStore.getState().activeSheetId, contextMenu.cell, text.trim());
+        } else if (hasNote) {
+          getCellNotesService().removeNote(useStore.getState().activeSheetId, contextMenu.cell);
+        }
+      }
+    }},
+    ...(hasNote ? [{ icon: <Trash2 size={13} />, label: 'Remove Note', action: () => {
+      getCellNotesService().removeNote(useStore.getState().activeSheetId, contextMenu.cell);
+    }}] : []),
     null,
     { icon: <span className="text-xs">📊</span>, label: 'Pivot Table', action: () => { useStore.getState().setShowPivotDialog(true); setContextMenu(null); } },
   ];

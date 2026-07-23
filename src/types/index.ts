@@ -98,7 +98,7 @@ export type IconSetType =
   | '5Quarters';
 
 export interface DataValidation {
-  type: 'number' | 'text' | 'date' | 'list' | 'custom';
+  type: 'number' | 'text' | 'date' | 'list' | 'custom' | 'checkbox';
   /** Criteria/operator for the validation rule */
   criteria?: string;
   /** Allowed values for list type */
@@ -115,6 +115,10 @@ export interface DataValidation {
   dateMin?: string;
   /** Maximum date (ISO string) for date range validation */
   dateMax?: string;
+  /** Value when checkbox is checked (default: "TRUE"). Only for checkbox type. */
+  checkedValue?: string;
+  /** Value when checkbox is unchecked (default: "FALSE"). Only for checkbox type. */
+  uncheckedValue?: string;
 }
 
 export interface PivotField {

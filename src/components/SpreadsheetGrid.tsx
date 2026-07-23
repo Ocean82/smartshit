@@ -12,6 +12,14 @@ import { findHeaderRow, findLastDataRow } from '@/lib/sheetSort';
 import { resolveCellFormat, getDataBarRule, dataBarWidthPercent, columnDataBarPeerValues, getDataBarInfo, getColorScaleRule, columnColorScalePeerValues, computeColorScaleBg, getIconSetRule, columnIconSetPeerValues, computeIconForCell } from '@/lib/conditionalFormat';
 import { findActivePendingPreview } from '@/lib/pendingActionPreview';
 import { useTouch } from '@/hooks/useTouch';
+import { getCellNotesService } from '@/lib/cellNotes';
+
+/** Check if a cell value represents the "checked" state for a checkbox validation. */
+function isCellChecked(value: string | number | boolean | null | undefined, checkedValue?: string): boolean {
+  const checked = checkedValue ?? 'TRUE'
+  const current = String(value ?? '').toUpperCase()
+  return current === checked.toUpperCase() || current === '1' || current === 'YES' || current === 'TRUE'
+}
 
 const DEFAULT_CELL_WIDTH = 100;
 const CELL_HEIGHT = 28;
@@ -47,6 +55,7 @@ export function SpreadsheetGrid() {
   } = useStore();
 
   const sheet = getActiveSheet();
+  const notesService = getCellNotesService();
 
   const pendingPreview = useMemo(
     () => findActivePendingPreview(messages),
@@ -770,6 +779,8 @@ export function SpreadsheetGrid() {
                     const cellData = sheet.cells[cellId];
                     const selected = isSelected(row, col);
                     const active = isActiveCell(row, col);
+                    const crosshair = !active && !selected && selection != null &&
+                      (row === selection.startRow || col === selection.startCol);
                     const isEditing = editingCell === cellId;
                     const computed = getComputedValue(row, col);
                     const rawValue = (computed || cellData?.value) ?? null;
@@ -800,7 +811,9 @@ export function SpreadsheetGrid() {
                               ? 'ring-2 ring-blue-500 ring-inset z-10 bg-white'
                               : selected
                                 ? 'bg-blue-50/60 border-blue-200'
-                                : 'border-gray-200 hover:bg-blue-50/20'
+                                : crosshair
+                                  ? 'bg-blue-50/30 border-gray-200'
+                                  : 'border-gray-200 hover:bg-blue-50/20'
                         }`}
                         style={{
                           width: colWidth,
@@ -906,6 +919,35 @@ export function SpreadsheetGrid() {
                         {cellData?.validationError && (
                           <div className="absolute top-0 right-0 w-0 h-0 border-t-[6px] border-t-red-500 border-l-[6px] border-l-transparent z-10"
                             title={cellData.validationError} />
+                        )}
+                        {notesService.hasNote(sheet.id, cellId) && (
+                          <div
+                            className="absolute top-0 right-0 w-0 h-0 border-t-[5px] border-t-purple-500 border-l-[5px] border-l-transparent z-[9] cursor-help"
+                            title={notesService.getNote(sheet.id, cellId)?.text ?? ''}
+                          />
+                        )}
+                        {cellData?.validation?.type === 'checkbox' && !isEditing && (
+                          <div
+                            className="absolute inset-0 flex items-center justify-center cursor-pointer z-[1]"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const checked = cellData.validation?.checkedValue ?? 'TRUE';
+                              const unchecked = cellData.validation?.uncheckedValue ?? 'FALSE';
+                              const isChecked = isCellChecked(cellData.value, checked);
+                              pushHistory('Toggle checkbox');
+                              setCellValue(cellId, isChecked ? unchecked : checked);
+                            }}
+                          >
+                            <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${
+                              isCellChecked(cellData.value, cellData.validation?.checkedValue)
+                                ? 'bg-blue-600 border-blue-600 text-white'
+                                : 'border-gray-400 bg-white'
+                            }`}>
+                              {isCellChecked(cellData.value, cellData.validation?.checkedValue) && (
+                                <span className="text-[10px] font-bold">✓</span>
+                              )}
+                            </div>
+                          </div>
                         )}
                         {cellData?.validation?.type === 'list' && !isEditing && (
                           <div className="absolute right-1 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 pointer-events-none">▾</div>

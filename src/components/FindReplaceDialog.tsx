@@ -21,6 +21,9 @@ export function FindReplaceDialog({ isOpen, onClose }: Props) {
   const [replaceText, setReplaceText] = useState('')
   const [showReplace, setShowReplace] = useState(false)
   const [caseSensitive, setCaseSensitive] = useState(false)
+  const [useRegex, setUseRegex] = useState(false)
+  const [wholeCell, setWholeCell] = useState(false)
+  const [searchInFormulas, setSearchInFormulas] = useState(false)
   const [matches, setMatches] = useState<MatchResult[]>([])
   const [currentMatch, setCurrentMatch] = useState(-1)
   const [replaceCount, setReplaceCount] = useState<number | null>(null)
@@ -50,17 +53,45 @@ export function FindReplaceDialog({ isOpen, onClose }: Props) {
 
     const sheet = getActiveSheet()
     const results: MatchResult[] = []
-    const searchTerm = caseSensitive ? findText : findText.toLowerCase()
+
+    // Build the search pattern
+    let pattern: RegExp
+    try {
+      if (useRegex) {
+        pattern = new RegExp(findText, caseSensitive ? 'g' : 'gi')
+      } else if (wholeCell) {
+        const escaped = escapeRegex(findText)
+        pattern = new RegExp(`^${escaped}$`, caseSensitive ? '' : 'i')
+      } else {
+        const escaped = escapeRegex(findText)
+        pattern = new RegExp(escaped, caseSensitive ? 'g' : 'gi')
+      }
+    } catch {
+      // Invalid regex — show no results
+      setMatches([])
+      setCurrentMatch(-1)
+      return
+    }
 
     for (const [cellId, cellData] of Object.entries(sheet.cells)) {
       if (cellData.value === null && !cellData.formula) continue
       const ref = cellToRef(cellId)
       const displayValue = getComputedValue(ref.row, ref.col)
       const rawValue = String(cellData.value ?? '')
-      const searchIn = caseSensitive ? rawValue : rawValue.toLowerCase()
-      const searchInComputed = caseSensitive ? displayValue : displayValue.toLowerCase()
+      const formulaValue = cellData.formula ?? ''
 
-      if (searchIn.includes(searchTerm) || searchInComputed.includes(searchTerm)) {
+      // Determine what to search in
+      const searchTargets: string[] = [rawValue, displayValue]
+      if (searchInFormulas && formulaValue) {
+        searchTargets.push(formulaValue)
+      }
+
+      const matched = searchTargets.some((target) => {
+        pattern.lastIndex = 0 // Reset for global regexes
+        return pattern.test(target)
+      })
+
+      if (matched) {
         results.push({ cellId, row: ref.row, col: ref.col, value: rawValue })
       }
     }
@@ -74,7 +105,7 @@ export function FindReplaceDialog({ isOpen, onClose }: Props) {
     if (results.length > 0) {
       navigateToMatch(results[0])
     }
-  }, [findText, caseSensitive, getActiveSheet, getComputedValue])
+  }, [findText, caseSensitive, useRegex, wholeCell, searchInFormulas, getActiveSheet, getComputedValue])
 
   const navigateToMatch = useCallback((match: MatchResult) => {
     setSelection({ startRow: match.row, startCol: match.col, endRow: match.row, endCol: match.col })
@@ -100,16 +131,26 @@ export function FindReplaceDialog({ isOpen, onClose }: Props) {
     pushHistory('Find & Replace')
 
     const currentValue = String(match.value)
-    const newValue = caseSensitive
-      ? currentValue.replace(findText, replaceText)
-      : currentValue.replace(new RegExp(escapeRegex(findText), 'i'), replaceText)
+    let newValue: string
+    if (useRegex) {
+      try {
+        const pattern = new RegExp(findText, caseSensitive ? '' : 'i')
+        newValue = currentValue.replace(pattern, replaceText)
+      } catch {
+        newValue = currentValue
+      }
+    } else {
+      newValue = caseSensitive
+        ? currentValue.replace(findText, replaceText)
+        : currentValue.replace(new RegExp(escapeRegex(findText), 'i'), replaceText)
+    }
 
     setCellValue(match.cellId, newValue || null)
     setReplaceCount(1)
 
     // Re-run search to update matches
     setTimeout(doSearch, 50)
-  }, [currentMatch, matches, findText, replaceText, caseSensitive, pushHistory, setCellValue, doSearch])
+  }, [currentMatch, matches, findText, replaceText, caseSensitive, useRegex, pushHistory, setCellValue, doSearch])
 
   const handleReplaceAll = useCallback(() => {
     if (matches.length === 0) return
@@ -118,7 +159,14 @@ export function FindReplaceDialog({ isOpen, onClose }: Props) {
     let count = 0
     for (const match of matches) {
       const currentValue = String(match.value)
-      const regex = new RegExp(escapeRegex(findText), caseSensitive ? 'g' : 'gi')
+      let regex: RegExp
+      try {
+        regex = useRegex
+          ? new RegExp(findText, caseSensitive ? 'g' : 'gi')
+          : new RegExp(escapeRegex(findText), caseSensitive ? 'g' : 'gi')
+      } catch {
+        continue
+      }
       const newValue = currentValue.replace(regex, replaceText)
       if (newValue !== currentValue) {
         setCellValue(match.cellId, newValue || null)
@@ -128,7 +176,7 @@ export function FindReplaceDialog({ isOpen, onClose }: Props) {
 
     setReplaceCount(count)
     setTimeout(doSearch, 50)
-  }, [matches, findText, replaceText, caseSensitive, pushHistory, setCellValue, doSearch])
+  }, [matches, findText, replaceText, caseSensitive, useRegex, pushHistory, setCellValue, doSearch])
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
@@ -227,22 +275,51 @@ export function FindReplaceDialog({ isOpen, onClose }: Props) {
 
         {/* Options + status */}
         <div className="flex items-center justify-between">
-          <label className="flex items-center gap-1.5 text-[11px] text-gray-500 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={caseSensitive}
-              onChange={(e) => setCaseSensitive(e.target.checked)}
-              className="rounded border-gray-300 text-blue-600 w-3.5 h-3.5"
-            />
-            Match case
-          </label>
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-1.5 text-[11px] text-gray-500 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={caseSensitive}
+                onChange={(e) => setCaseSensitive(e.target.checked)}
+                className="rounded border-gray-300 text-blue-600 w-3.5 h-3.5"
+              />
+              Aa
+            </label>
+            <label className="flex items-center gap-1.5 text-[11px] text-gray-500 cursor-pointer" title="Use regular expressions">
+              <input
+                type="checkbox"
+                checked={useRegex}
+                onChange={(e) => setUseRegex(e.target.checked)}
+                className="rounded border-gray-300 text-blue-600 w-3.5 h-3.5"
+              />
+              .*
+            </label>
+            <label className="flex items-center gap-1.5 text-[11px] text-gray-500 cursor-pointer" title="Match whole cell">
+              <input
+                type="checkbox"
+                checked={wholeCell}
+                onChange={(e) => setWholeCell(e.target.checked)}
+                className="rounded border-gray-300 text-blue-600 w-3.5 h-3.5"
+              />
+              Cell
+            </label>
+            <label className="flex items-center gap-1.5 text-[11px] text-gray-500 cursor-pointer" title="Search in formulas">
+              <input
+                type="checkbox"
+                checked={searchInFormulas}
+                onChange={(e) => setSearchInFormulas(e.target.checked)}
+                className="rounded border-gray-300 text-blue-600 w-3.5 h-3.5"
+              />
+              fx
+            </label>
+          </div>
           <span className="text-[11px] text-gray-400">
             {matches.length > 0
-              ? `${currentMatch + 1} of ${matches.length} matches`
+              ? `${currentMatch + 1} of ${matches.length}`
               : findText.trim()
                 ? 'No matches'
                 : ''}
-            {replaceCount !== null && ` · Replaced ${replaceCount}`}
+            {replaceCount !== null && ` · ${replaceCount} replaced`}
           </span>
         </div>
       </div>

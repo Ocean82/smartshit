@@ -46,6 +46,8 @@ export function validateCell(
       return validateText(strVal, validation)
     case 'date':
       return validateDate(strVal, validation)
+    case 'checkbox':
+      return validateCheckbox(strVal, validation)
     case 'custom':
       return validateFormula(value, validation, context)
     default:
@@ -188,6 +190,28 @@ function validateDate(strVal: string, v: DataValidation): ValidationResult {
     default:
       return { valid: true }
   }
+}
+
+// ─── Checkbox validation ─────────────────────────────────────────────────────
+
+function validateCheckbox(strVal: string, v: DataValidation): ValidationResult {
+  // Empty is valid (unchecked state)
+  if (strVal === '') return { valid: true }
+
+  const checked = v.checkedValue ?? 'TRUE'
+  const unchecked = v.uncheckedValue ?? 'FALSE'
+
+  const upper = strVal.toUpperCase()
+  if (upper === checked.toUpperCase() || upper === unchecked.toUpperCase()) {
+    return { valid: true }
+  }
+
+  // Also allow boolean-like values
+  if (['1', '0', 'YES', 'NO', 'TRUE', 'FALSE'].includes(upper)) {
+    return { valid: true }
+  }
+
+  return { valid: false, message: v.message || `Must be "${checked}" or "${unchecked}"` }
 }
 
 // ─── Formula/Custom validation ──────────────────────────────────────────────

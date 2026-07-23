@@ -11,6 +11,7 @@ import type { SheetData, FilterConfig, CellFormat, ChartConfig } from '@/types'
 import { computeSortedCellUpdates, computeMultiSortedCellUpdates, findHeaderRow, findLastDataRow, type SortPatch } from '@/lib/sheetSort'
 import { applyFormatCells } from '@/lib/formatCellsTool'
 import { formatAsTable } from '@/lib/formatAsTable'
+import { getCellNotesService } from '@/lib/cellNotes'
 import { resolveToolName, TEMPLATE_TOOL_NAMES } from '@shared/toolRegistry'
 
 export interface ExecutionContext {
@@ -18,6 +19,7 @@ export interface ExecutionContext {
   getComputedValue: (row: number, col: number) => string
   setCellValue: (cellId: string, value: string | number | boolean | null, formula?: string) => void
   setCellFormat: (cellId: string, format: Partial<CellFormat>) => void
+  setCellValidation?: (cellId: string, validation: import('@/types').DataValidation | null) => void
   bulkSetCells: (cells: Record<string, { value: string | number | boolean | null; formula?: string }>) => void
   applySortPatch: (patch: SortPatch) => void
   setFilters: (filters: FilterConfig[]) => void
@@ -329,6 +331,53 @@ export function executeTool(call: ParsedToolCall, ctx: ExecutionContext): Execut
       }
       ctx.setFilters(result.filters)
       return { success: true, message: `Formatted ${count} cells as a table (${theme} theme)`, modified: count }
+    }
+
+    case 'add_note': {
+      const cell = String(params.cell ?? '').toUpperCase()
+      const text = String(params.text ?? '')
+      if (!cell || !text) return { success: false, message: 'add_note requires cell and text', modified: 0 }
+      getCellNotesService().setNote(sheet.id, cell, text)
+      return { success: true, message: `Added note to ${cell}`, modified: 0 }
+    }
+
+    case 'remove_note': {
+      const cell = String(params.cell ?? '').toUpperCase()
+      if (!cell) return { success: false, message: 'remove_note requires cell', modified: 0 }
+      getCellNotesService().removeNote(sheet.id, cell)
+      return { success: true, message: `Removed note from ${cell}`, modified: 0 }
+    }
+
+    case 'set_checkbox': {
+      const cellParam = String(params.cell ?? '').toUpperCase()
+      const checked = params.checked === true
+      if (!cellParam) return { success: false, message: 'set_checkbox requires cell', modified: 0 }
+      ctx.pushHistory('Set checkbox')
+
+      const checkboxValidation = { type: 'checkbox' as const, checkedValue: 'TRUE', uncheckedValue: 'FALSE' }
+
+      // Handle ranges like "C2:C10"
+      const rangeMatch = /^([A-Z]+)(\d+):([A-Z]+)(\d+)$/.exec(cellParam)
+      let count = 0
+      if (rangeMatch) {
+        const startCol = letterToCol(rangeMatch[1])
+        const startRow = parseInt(rangeMatch[2]) - 1
+        const endCol = letterToCol(rangeMatch[3])
+        const endRow = parseInt(rangeMatch[4]) - 1
+        for (let r = startRow; r <= endRow; r++) {
+          for (let c = startCol; c <= endCol; c++) {
+            const id = refToCell(r, c)
+            ctx.setCellValue(id, checked ? 'TRUE' : 'FALSE')
+            ctx.setCellValidation?.(id, checkboxValidation)
+            count++
+          }
+        }
+      } else {
+        ctx.setCellValue(cellParam, checked ? 'TRUE' : 'FALSE')
+        ctx.setCellValidation?.(cellParam, checkboxValidation)
+        count = 1
+      }
+      return { success: true, message: `Set ${count} checkbox cell(s)`, modified: count }
     }
 
     default:
