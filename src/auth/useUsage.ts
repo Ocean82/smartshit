@@ -126,11 +126,17 @@ function useTrackedUsage() {
  * Usage tracking hook — safe to call with or without Clerk configured.
  * When Clerk is not configured (dev mode), returns unlimited usage.
  */
-export function useUsage() {
-  // Hooks must be called unconditionally, but we can branch on which one is "active"
-  // Since CLERK_PUBLISHABLE_KEY is a build-time constant, only one path is ever reached.
-  if (!CLERK_PUBLISHABLE_KEY) {
-    return useUnlimitedUsage()
-  }
-  return useTrackedUsage()
-}
+/*
+ * `useUsage` is bound once at module load rather than branching inside the
+ * hook body.
+ *
+ * The two implementations cannot be merged: `useTrackedUsage` calls Clerk's
+ * `useAuth`, which throws when no ClerkProvider is mounted (the dev-mode path),
+ * so it must not run at all when Clerk is unconfigured. Selecting the
+ * implementation at module scope keeps hook order stable within whichever one
+ * is used, instead of calling a hook behind an `if`.
+ *
+ * CLERK_PUBLISHABLE_KEY is a build-time constant, so this binding never changes
+ * during a session.
+ */
+export const useUsage = CLERK_PUBLISHABLE_KEY ? useTrackedUsage : useUnlimitedUsage

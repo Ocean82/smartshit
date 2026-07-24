@@ -1,4 +1,4 @@
-import { ClerkProvider, Show, SignInButton, UserButton, useAuth } from '@clerk/react'
+import { ClerkProvider, Show, SignInButton, UserButton } from '@clerk/react'
 import type { ReactNode } from 'react'
 
 const CLERK_PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ?? ''
@@ -71,13 +71,13 @@ function SignInPrompt() {
   )
 }
 
-/** Hook to check auth state without Clerk dependency in components */
-export function useIsSignedIn(): boolean {
-  if (!CLERK_PUBLISHABLE_KEY) return true
-  try {
-    const { isSignedIn } = useAuth()
-    return isSignedIn ?? false
-  } catch {
-    return false
-  }
-}
+/*
+ * `useIsSignedIn` was removed here: it called `useAuth()` behind an early
+ * return (a rules-of-hooks violation) and wrapped it in try/catch because
+ * `useAuth` throws when no ClerkProvider is mounted — which is the dev-mode
+ * path. It had no callers.
+ *
+ * If a component needs this, read `isSignedIn` from Clerk's own `useAuth`
+ * inside the authenticated tree, or use the `<Show when="signed-in">` guard
+ * above, both of which keep hook order stable.
+ */

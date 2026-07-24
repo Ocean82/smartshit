@@ -198,8 +198,8 @@ export function applyFormatCells(
 
   const condition = normalizeCondition(params.condition)
 
-  // Resolve candidate cells
-  let candidates: string[] | null = null
+  // Resolve candidate cells (assigned on every branch below)
+  let candidates: string[] | null
   if (typeof params.range === 'string' && params.range.trim()) {
     candidates = expandRange(params.range, sheet)
     if (!candidates) {
