@@ -9,7 +9,7 @@ const API_BASE = import.meta.env.VITE_AI_API_URL ?? ''
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-export type SyncStatus = 'idle' | 'syncing' | 'saved' | 'offline' | 'error'
+export type SyncStatus = 'idle' | 'syncing' | 'saved' | 'offline' | 'error' | 'too-large'
 
 export interface CloudWorkbook {
   id: string
@@ -82,6 +82,31 @@ export function onSyncStatusChange(listener: (status: SyncStatus) => void): () =
 function setSyncStatus(status: SyncStatus): void {
   _syncStatus = status
   _listeners.forEach((l) => l(status))
+}
+
+/**
+ * Map a failed save response to a sync status.
+ *
+ * 413 is called out separately: the workbook exceeded the server's body limit,
+ * which is permanent until the sheet shrinks. Reporting it as a generic error
+ * left users retrying a save that could never succeed.
+ */
+function statusForFailedSave(res: Response): SyncStatus {
+  return res.status === 413 ? 'too-large' : 'error'
+}
+
+/** Human-readable explanation for the current sync status, if noteworthy. */
+export function describeSyncStatus(status: SyncStatus): string | null {
+  switch (status) {
+    case 'too-large':
+      return 'This workbook is too large to save to the cloud. Remove unused rows or split it across files.'
+    case 'error':
+      return 'Could not save to the cloud. Your work is still saved locally.'
+    case 'offline':
+      return 'You appear to be offline. Your work is saved locally and will sync later.'
+    default:
+      return null
+  }
 }
 
 // ─── Auth helper ─────────────────────────────────────────────────────────────
@@ -191,7 +216,7 @@ export async function createInCloud(workbook: WorkbookData): Promise<CreateResul
     })
 
     if (!res.ok) {
-      setSyncStatus('error')
+      setSyncStatus(statusForFailedSave(res))
       return null
     }
 
@@ -233,7 +258,7 @@ export async function saveToCloud(workbook: WorkbookData): Promise<SaveResult | 
     })
 
     if (!res.ok) {
-      setSyncStatus('error')
+      setSyncStatus(statusForFailedSave(res))
       return null
     }
 

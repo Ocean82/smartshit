@@ -56,13 +56,29 @@ interface CacheEntry {
   key: string
 }
 
+/** An async invocation shared by every cell that requested the same result. */
+interface PendingCall {
+  promise: Promise<string | number | boolean | null>
+  cellIds: Set<string>
+}
+
 const DEFAULT_CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
+/** Upper bound on cached results — evicted oldest-first once exceeded. */
+const DEFAULT_MAX_CACHE_ENTRIES = 500
+/** Argument payloads longer than this are hashed rather than stored verbatim. */
+const MAX_INLINE_KEY_LENGTH = 256
 
 export class AIFunctionRegistry {
   private _functions: Map<string, RegisteredAIFunction> = new Map()
   private _cache: Map<string, CacheEntry> = new Map()
-  private _pendingCalls: Map<string, Promise<string | number | boolean | null>> = new Map()
+  /**
+   * In-flight calls, keyed by function+args. Multiple cells can share one
+   * invocation (e.g. `=AI.CATEGORIZE` filled down a column with repeated
+   * values), so each entry tracks every cell awaiting the result.
+   */
+  private _pendingCalls: Map<string, PendingCall> = new Map()
   private _cacheTtl: number = DEFAULT_CACHE_TTL_MS
+  private _maxCacheEntries: number = DEFAULT_MAX_CACHE_ENTRIES
   private _onCellUpdate: ((cellId: string, value: string | number | boolean | null) => void) | null = null
 
   /** Set the callback that pushes resolved async values back into the sheet */
@@ -155,36 +171,41 @@ export class AIFunctionRegistry {
     // Async execution — check cache first
     const cacheKey = this._buildCacheKey(key, args)
     const cached = this._cache.get(cacheKey)
-    if (cached && Date.now() - cached.timestamp < this._cacheTtl) {
-      return cached.value
+    if (cached) {
+      if (Date.now() - cached.timestamp < this._cacheTtl) {
+        return cached.value
+      }
+      // Expired — drop it rather than leaving it resident forever
+      this._cache.delete(cacheKey)
     }
 
-    // Check if there's already a pending call for this exact invocation
-    if (this._pendingCalls.has(cacheKey)) {
+    // Join an in-flight call for this exact invocation. Every waiting cell must
+    // be recorded, otherwise only the first one ever receives the result and
+    // the rest stay on the loading placeholder permanently.
+    const pending = this._pendingCalls.get(cacheKey)
+    if (pending) {
+      pending.cellIds.add(cellId)
       return '⏳ Loading...'
     }
 
     // Fire async call
+    const cellIds = new Set<string>([cellId])
     const promise = (entry.executor as AsyncAIFunctionExecutor)(...args)
-    this._pendingCalls.set(cacheKey, promise)
+    this._pendingCalls.set(cacheKey, { promise, cellIds })
 
     promise
       .then((result) => {
         // Cache the result
-        this._cache.set(cacheKey, {
-          value: result,
-          key: cacheKey,
-          timestamp: Date.now(),
-        })
-        // Push result into the cell
+        this._setCacheEntry(cacheKey, result)
+        // Push the result into every cell that asked for it
         if (this._onCellUpdate) {
-          this._onCellUpdate(cellId, result)
+          for (const id of cellIds) this._onCellUpdate(id, result)
         }
       })
       .catch((err) => {
         console.error(`[AIFunction] Async error in ${key}:`, err)
         if (this._onCellUpdate) {
-          this._onCellUpdate(cellId, '#AI_ERROR!')
+          for (const id of cellIds) this._onCellUpdate(id, '#AI_ERROR!')
         }
       })
       .finally(() => {
@@ -222,6 +243,30 @@ export class AIFunctionRegistry {
     this._onCellUpdate = null
   }
 
+  /**
+   * Insert a cache entry, evicting the oldest entries once the cache exceeds
+   * its bound. Without this the map grows for the lifetime of the session —
+   * filling `=AI.CATEGORIZE` down 5,000 rows would retain 5,000 entries.
+   */
+  private _setCacheEntry(cacheKey: string, value: string | number | boolean | null): void {
+    this._cache.set(cacheKey, { value, key: cacheKey, timestamp: Date.now() })
+
+    if (this._cache.size <= this._maxCacheEntries) return
+
+    // First pass: drop anything already past its TTL.
+    const now = Date.now()
+    for (const [k, entry] of this._cache) {
+      if (now - entry.timestamp >= this._cacheTtl) this._cache.delete(k)
+    }
+
+    // Still over budget — evict oldest-first (Map preserves insertion order).
+    while (this._cache.size > this._maxCacheEntries) {
+      const oldest = this._cache.keys().next()
+      if (oldest.done) break
+      this._cache.delete(oldest.value)
+    }
+  }
+
   private _buildCacheKey(
     funcName: string,
     args: Array<string | number | boolean | null | (string | number | boolean | null)[][]>,
@@ -233,9 +278,31 @@ export class AIFunctionRegistry {
         return String(a)
       })
       .join('|')
-    return `${funcName}::${argStr}`
+    // Range arguments serialise to very large strings; hash them so the key
+    // does not retain a full copy of the referenced cells.
+    const suffix = argStr.length > MAX_INLINE_KEY_LENGTH ? `#${hashString(argStr)}` : argStr
+    return `${funcName}::${suffix}`
   }
 }
 
-/** Singleton registry instance */
+/**
+ * FNV-1a — a small, fast, non-cryptographic string hash. Used only to keep
+ * cache keys compact for large range arguments.
+ */
+function hashString(input: string): string {
+  let hash = 0x811c9dc5
+  for (let i = 0; i < input.length; i++) {
+    hash ^= input.charCodeAt(i)
+    hash = Math.imul(hash, 0x01000193)
+  }
+  return (hash >>> 0).toString(36) + ':' + input.length
+}
+
+/**
+ * Shared registry instance.
+ *
+ * Prefer `new AIFunctionRegistry()` when you need an isolated lifecycle —
+ * `SpreadsheetEngine` owns its own instance so that disposing one engine cannot
+ * unregister functions still in use by another.
+ */
 export const aiFunctionRegistry = new AIFunctionRegistry()

@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import cors from 'cors'
 import express from 'express'
 import { clerkMiddleware } from '@clerk/express'
@@ -34,35 +35,19 @@ import { versionsRouter } from './routes/versions.js'
 import { sharesRouter } from './routes/shares.js'
 import { templatesRouter } from './routes/templates.js'
 import { aiFunctionRouter } from './routes/aiFunction.js'
-import { requireAuth, getRequestUserId, getClerkClient, planFromPublicMetadata } from './auth/clerk.js'
+import { requireAuth, getRequestUserId, getClerkClient } from './auth/clerk.js'
+import { resolveIsPro, invalidateProCache } from './plan.js'
 import { validateBody } from './middleware/validate.js'
 import { chatStreamBodySchema, chatBodySchema } from './schemas/index.js'
 import { chatRateLimiter, checkoutRateLimiter, globalRateLimiter } from './middleware/rateLimit.js'
 
-// ─── Pro plan cache (avoids hitting Clerk API on every chat message) ─────────
-const PRO_CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
-const proCache = new Map<string, { isPro: boolean; expiresAt: number }>()
-
-async function resolveIsPro(userId: string | null): Promise<boolean> {
-  if (!userId || !config.clerkSecretKey) return false
-
-  const cached = proCache.get(userId)
-  if (cached && Date.now() < cached.expiresAt) {
-    return cached.isPro
-  }
-
-  try {
-    const user = await getClerkClient().users.getUser(userId)
-    const isPro = planFromPublicMetadata(user.publicMetadata as Record<string, unknown>) === 'pro'
-    proCache.set(userId, { isPro, expiresAt: Date.now() + PRO_CACHE_TTL_MS })
-    return isPro
-  } catch {
-    // On error, return cached value if available (even if expired), otherwise false
-    return cached?.isPro ?? false
-  }
-}
-
 const app = express()
+
+// Behind nginx (or any reverse proxy) req.ip is the proxy's address unless we
+// trust the X-Forwarded-For header. Without this every IP-derived rate-limit
+// key collapses to a single bucket shared by all clients.
+app.set('trust proxy', config.trustProxy)
+
 app.use(cors({ origin: config.corsOrigin }))
 
 // Stripe webhook needs raw body — register BEFORE express.json()
@@ -83,7 +68,7 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
         },
       })
       // Invalidate pro cache so the user sees the change immediately
-      proCache.delete(result.userId)
+      invalidateProCache(result.userId)
       console.log(`Stripe webhook: user ${result.userId} -> plan ${result.plan}`)
     }
 
@@ -96,6 +81,10 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
 })
 
 app.use(clerkMiddleware())
+// Workbook payloads carry the whole sheet as JSON and routinely exceed the
+// default 1mb budget (imports allow 5,000 rows x 200 cols), so those routes get
+// a larger cap. Everything else stays tight.
+app.use('/api/workbooks', express.json({ limit: config.workbookBodyLimit }))
 app.use(express.json({ limit: '1mb' }))
 
 // Global rate limiter — generous backstop (skips /health)
@@ -411,7 +400,7 @@ app.post('/api/chat/stream', requireAuth, chatRateLimiter, validateBody(chatStre
   const hasByok = Boolean(body.byok?.apiKey && body.byok?.baseUrl)
   const userId = getRequestUserId(req) ?? undefined
   const isPro = hasByok || await resolveIsPro(userId ?? null)
-  const usage = checkUsage(userId, isPro)
+  const usage = await checkUsage(userId, isPro)
 
   if (!usage.allowed) {
     sendSseComplete(res, {
@@ -457,7 +446,7 @@ app.post('/api/chat/stream', requireAuth, chatRateLimiter, validateBody(chatStre
 
     // Record usage for free-tier tracking (only after successful LLM response)
     if (result.source === 'llm') {
-      recordUsage(userId)
+      await recordUsage(userId)
     }
 
     if (!res.writableEnded) {
@@ -566,7 +555,7 @@ app.post('/api/chat', requireAuth, chatRateLimiter, validateBody(chatBodySchema)
 app.post('/api/usage', requireAuth, async (req, res) => {
   const userId = getRequestUserId(req)
   const isPro = await resolveIsPro(userId)
-  const stats = getUsageStats(userId ?? undefined, isPro)
+  const stats = await getUsageStats(userId ?? undefined, isPro)
   res.json(stats)
 })
 
@@ -598,9 +587,46 @@ app.post('/api/checkout', requireAuth, checkoutRateLimiter, async (req, res) => 
     const session = await createCheckoutSession(userId, email)
     res.json({ url: session.url })
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Checkout failed'
-    res.status(500).json({ error: message })
+    // Stripe errors can embed account/price details — log, don't echo
+    const errorId = randomUUID().slice(0, 8)
+    console.error(`[checkout] (${errorId})`, err)
+    res.status(500).json({ error: 'Could not start checkout. Please try again.', errorId })
   }
+})
+
+// ─── Error handler ───────────────────────────────────────────────────────────
+// Must be registered last. Without it Express falls back to its default HTML
+// handler, which renders a stack trace (absolute file paths and all) to the
+// client — most visibly on body-size 413s.
+
+app.use((err: unknown, _req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (res.headersSent) {
+    next(err)
+    return
+  }
+
+  const status = (err as { status?: number; statusCode?: number })?.status
+    ?? (err as { statusCode?: number })?.statusCode
+    ?? 500
+
+  if (status === 413) {
+    res.status(413).json({
+      error: 'Request too large. Try removing unused rows or splitting the workbook.',
+    })
+    return
+  }
+
+  if (status === 400 && err instanceof SyntaxError) {
+    res.status(400).json({ error: 'Malformed JSON body.' })
+    return
+  }
+
+  const errorId = randomUUID().slice(0, 8)
+  console.error(`[server] Unhandled error (${errorId})`, err)
+  res.status(status >= 400 && status < 600 ? status : 500).json({
+    error: 'Something went wrong on our end. Please try again.',
+    errorId,
+  })
 })
 
 // ─── Start ───────────────────────────────────────────────────────────────────

@@ -109,7 +109,7 @@ export function SharedView({ token }: SharedViewProps) {
       {/* Banner */}
       <div className="h-12 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 flex items-center px-4 gap-3 shrink-0">
         <div className="flex items-center gap-2">
-          <img src="/smartsht-favicon.PNG" alt="smartsh!t" className="w-6 h-6 rounded-lg" />
+          <img src="/pwa-icon-192.png" alt="smartsh!t" className="w-6 h-6 rounded-lg" />
           <span className="text-sm font-bold text-white tracking-tight">smartsh!t</span>
         </div>
 

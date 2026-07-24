@@ -184,6 +184,10 @@ See [docs/project_outline/roadmap-v1.md](docs/project_outline/roadmap-v1.md) for
 
 MIT License — Copyright (c) 2026 **[Ocean82](https://github.com/Ocean82)**.
 
+> **Note:** the formula engine (HyperFormula) is currently used under its GPLv3
+> option, which conflicts with the MIT declaration above. See
+> **[docs/LICENSING.md](docs/LICENSING.md)** — this is being resolved.
+
 See [LICENSE](LICENSE). Free to use, modify, and distribute with attribution.
 
 ---

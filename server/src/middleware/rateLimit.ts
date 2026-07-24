@@ -3,16 +3,29 @@
  * Uses express-rate-limit for standardized rate limiting with proper headers.
  */
 
-import rateLimit from 'express-rate-limit'
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit'
 import type { Request } from 'express'
 
 /**
- * Extract user ID from Clerk auth on the request, falling back to IP.
+ * Build a rate-limit key for an unauthenticated request.
+ *
+ * `ipKeyGenerator` normalises IPv6 addresses down to a /56 subnet. Keying on a
+ * raw IPv6 address lets a single client rotate through an effectively unlimited
+ * address space and bypass every limit, so this helper must be used for any
+ * IP-derived key.
+ */
+function ipKey(req: Request): string {
+  const ip = req.ip ?? req.socket.remoteAddress
+  return ip ? ipKeyGenerator(ip) : 'unknown'
+}
+
+/**
+ * Extract user ID from Clerk auth on the request, falling back to client IP.
  */
 function getUserKey(req: Request): string {
   // Clerk middleware attaches auth to the request
   const auth = (req as unknown as { auth?: { userId?: string } }).auth
-  return auth?.userId || req.ip || req.socket.remoteAddress || 'unknown'
+  return auth?.userId || ipKey(req)
 }
 
 /**
@@ -27,6 +40,23 @@ export const chatRateLimiter = rateLimit({
   message: {
     error: 'Too many requests. Please wait a moment before sending another message.',
     retryAfterSeconds: 60,
+  },
+  keyGenerator: getUserKey,
+})
+
+/**
+ * Rate limiter for the formula-level AI functions (/api/ai-function).
+ * 30 calls per minute per user — a filled-down column issues many small calls,
+ * so this is looser than chat while still capping runaway spend.
+ */
+export const aiFunctionRateLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: 'Rate limit exceeded. Maximum 30 AI function calls per minute.',
+    result: null,
   },
   keyGenerator: getUserKey,
 })
@@ -58,6 +88,7 @@ export const globalRateLimiter = rateLimit({
   message: {
     error: 'Too many requests from this IP. Please slow down.',
   },
+  keyGenerator: ipKey,
   // Skip health endpoint
   skip: (req) => req.path === '/health',
 })

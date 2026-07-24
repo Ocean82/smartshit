@@ -2,6 +2,7 @@ import { Router, type Request } from 'express'
 import { query } from '../db.js'
 import { uploadTemplate, downloadObject } from '../s3.js'
 import { getRequestUserId } from '../auth/clerk.js'
+import { sendServerError } from '../httpError.js'
 
 export const templatesRouter = Router()
 
@@ -84,8 +85,7 @@ templatesRouter.get('/', async (req, res) => {
       total: parseInt(countResult.rows[0].count, 10),
     })
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error'
-    res.status(500).json({ error: message })
+    sendServerError(res, 'templates', err)
   }
 })
 
@@ -103,8 +103,7 @@ templatesRouter.get('/categories', async (_req, res) => {
 
     res.json({ categories: result.rows })
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error'
-    res.status(500).json({ error: message })
+    sendServerError(res, 'templates', err)
   }
 })
 
@@ -161,8 +160,7 @@ templatesRouter.post('/', async (req, res) => {
 
     res.status(201).json({ id: templateId, published: true })
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error'
-    res.status(500).json({ error: message })
+    sendServerError(res, 'templates', err)
   }
 })
 
@@ -216,8 +214,7 @@ templatesRouter.post('/:id/install', async (req, res) => {
       templateData: templateData ? JSON.parse(templateData) : null,
     })
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error'
-    res.status(500).json({ error: message })
+    sendServerError(res, 'templates', err)
   }
 })
 
@@ -255,8 +252,7 @@ templatesRouter.post('/:id/rate', async (req, res) => {
 
     res.json({ rated: true })
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error'
-    res.status(500).json({ error: message })
+    sendServerError(res, 'templates', err)
   }
 })
 
@@ -294,7 +290,6 @@ templatesRouter.delete('/:id', async (req, res) => {
 
     res.json({ unpublished: true })
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error'
-    res.status(500).json({ error: message })
+    sendServerError(res, 'templates', err)
   }
 })

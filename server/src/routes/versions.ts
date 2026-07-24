@@ -3,6 +3,7 @@ import { query } from '../db.js'
 import { uploadWorkbook, downloadObject } from '../s3.js'
 import { config } from '../config.js'
 import { getRequestUserId } from '../auth/clerk.js'
+import { sendServerError } from '../httpError.js'
 
 export const versionsRouter = Router()
 
@@ -49,8 +50,7 @@ versionsRouter.get('/:id/versions', async (req, res) => {
 
     res.json({ versions: result.rows })
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error'
-    res.status(500).json({ error: message })
+    sendServerError(res, 'versions', err)
   }
 })
 
@@ -97,8 +97,7 @@ versionsRouter.get('/:id/versions/:versionId', async (req, res) => {
     res.setHeader('Content-Type', 'application/json')
     res.send(data)
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error'
-    res.status(500).json({ error: message })
+    sendServerError(res, 'versions', err)
   }
 })
 
@@ -158,7 +157,6 @@ versionsRouter.post('/:id/versions', async (req, res) => {
       description: description ?? 'Manual snapshot',
     })
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error'
-    res.status(500).json({ error: message })
+    sendServerError(res, 'versions', err)
   }
 })

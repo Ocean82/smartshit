@@ -25,6 +25,7 @@ import { UserNav } from '@/auth'
 import {
   getSyncStatus,
   onSyncStatusChange,
+  describeSyncStatus,
   scheduleSave,
   isCloudConfigured,
   type SyncStatus,
@@ -156,7 +157,7 @@ function App() {
     return (
       <div className="h-screen w-screen flex items-center justify-center" style={{ background: 'var(--surface-body)' }}>
         <div className="flex flex-col items-center gap-4">
-          <img src="/smartsht-favicon.PNG" alt="smartsh!t" className="w-14 h-14 rounded-2xl shadow-md" />
+          <img src="/pwa-icon-192.png" alt="smartsh!t" className="w-14 h-14 rounded-2xl shadow-md" />
           <div className="text-sm animate-pulse font-medium" style={{ color: 'var(--ink-secondary)' }}>Loading smartsh!t...</div>
         </div>
       </div>
@@ -340,9 +341,24 @@ function TitleBar({ onOpenTemplates, onOpenCloudPicker, onOpenShare, onOpenComma
             <span style={{ color: 'var(--success)' }}>Saved</span>
           </div>
         )
+      case 'too-large':
+        return (
+          <div
+            className="flex items-center gap-1.5 px-2 py-1 rounded-md"
+            style={{ background: 'var(--neutral-900)' }}
+            title={describeSyncStatus('too-large') ?? undefined}
+          >
+            <CloudOff size={11} style={{ color: 'var(--error)' }} />
+            <span style={{ color: 'var(--error)' }}>Too large</span>
+          </div>
+        )
       case 'error':
         return (
-          <div className="flex items-center gap-1.5 px-2 py-1 rounded-md" style={{ background: 'var(--neutral-900)' }}>
+          <div
+            className="flex items-center gap-1.5 px-2 py-1 rounded-md"
+            style={{ background: 'var(--neutral-900)' }}
+            title={describeSyncStatus('error') ?? undefined}
+          >
             <CloudOff size={11} style={{ color: 'var(--error)' }} />
             <span style={{ color: 'var(--error)' }}>Error</span>
           </div>
@@ -370,7 +386,7 @@ function TitleBar({ onOpenTemplates, onOpenCloudPicker, onOpenShare, onOpenComma
       <MobileMenu />
 
       <div className="flex items-center gap-2">
-        <img src="/smartsht-favicon.PNG" alt="smartsh!t" className="w-6 h-6 rounded-lg" />
+        <img src="/pwa-icon-192.png" alt="smartsh!t" className="w-6 h-6 rounded-lg" />
         <span className="text-sm font-semibold tracking-tight hidden sm:inline" style={{ color: 'var(--ink-on-dark)' }}>smartsh!t</span>
       </div>
 

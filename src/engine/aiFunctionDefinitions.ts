@@ -16,7 +16,7 @@
  *   =AI.EXPLAIN(A1)              → "This is a monthly subscription..."
  */
 
-import type { AIFunctionInfo, AsyncAIFunctionExecutor } from './aiFunctions'
+import type { AIFunctionInfo, AsyncAIFunctionExecutor, AIFunctionRegistry } from './aiFunctions'
 import { aiFunctionRegistry } from './aiFunctions'
 
 const API_BASE = import.meta.env.VITE_AI_API_URL ?? ''
@@ -29,11 +29,14 @@ async function callAIFunction(
 ): Promise<string | number | null> {
   try {
     const { getByokPayload } = await import('@/lib/userApiKey')
+    const { getAuthHeaders } = await import('@/lib/cloudSync')
     const byok = getByokPayload()
-    // Use the /api/ai-function endpoint
+    // The endpoint requires a Clerk session token — it performs billable LLM
+    // calls and enforces the free-tier quota per user.
+    const headers = await getAuthHeaders()
     const res = await fetch(`${API_BASE}/api/ai-function`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ function: functionName, args, byok }),
       signal: AbortSignal.timeout(30_000),
     })
@@ -367,18 +370,20 @@ const scoreExecutor: AsyncAIFunctionExecutor = async (...args) => {
  * Register all built-in AI functions into the registry.
  * Returns a dispose function that unregisters everything.
  */
-export function registerBuiltinAIFunctions(): () => void {
+export function registerBuiltinAIFunctions(
+  registry: AIFunctionRegistry = aiFunctionRegistry,
+): () => void {
   const disposers = [
-    aiFunctionRegistry.registerAsyncFunction(AI_CATEGORIZE, categorizeExecutor),
-    aiFunctionRegistry.registerAsyncFunction(AI_SENTIMENT, sentimentExecutor),
-    aiFunctionRegistry.registerAsyncFunction(AI_SUMMARIZE, summarizeExecutor),
-    aiFunctionRegistry.registerAsyncFunction(AI_EXTRACT, extractExecutor),
-    aiFunctionRegistry.registerAsyncFunction(AI_TRANSLATE, translateExecutor),
-    aiFunctionRegistry.registerAsyncFunction(AI_CLASSIFY, classifyExecutor),
-    aiFunctionRegistry.registerAsyncFunction(AI_TAG, tagExecutor),
-    aiFunctionRegistry.registerAsyncFunction(AI_EXPLAIN, explainExecutor),
-    aiFunctionRegistry.registerAsyncFunction(AI_PREDICT, predictExecutor),
-    aiFunctionRegistry.registerAsyncFunction(AI_SCORE, scoreExecutor),
+    registry.registerAsyncFunction(AI_CATEGORIZE, categorizeExecutor),
+    registry.registerAsyncFunction(AI_SENTIMENT, sentimentExecutor),
+    registry.registerAsyncFunction(AI_SUMMARIZE, summarizeExecutor),
+    registry.registerAsyncFunction(AI_EXTRACT, extractExecutor),
+    registry.registerAsyncFunction(AI_TRANSLATE, translateExecutor),
+    registry.registerAsyncFunction(AI_CLASSIFY, classifyExecutor),
+    registry.registerAsyncFunction(AI_TAG, tagExecutor),
+    registry.registerAsyncFunction(AI_EXPLAIN, explainExecutor),
+    registry.registerAsyncFunction(AI_PREDICT, predictExecutor),
+    registry.registerAsyncFunction(AI_SCORE, scoreExecutor),
   ]
 
   return () => {
@@ -387,13 +392,15 @@ export function registerBuiltinAIFunctions(): () => void {
 }
 
 /** Get all AI function infos formatted for the autocomplete component */
-export function getAIFunctionList(): Array<{
+export function getAIFunctionList(
+  registry: AIFunctionRegistry = aiFunctionRegistry,
+): Array<{
   name: string
   description: string
   category: string
   syntax: string
 }> {
-  return aiFunctionRegistry.getAllFunctions().map((info) => ({
+  return registry.getAllFunctions().map((info) => ({
     name: info.name,
     description: info.abstract,
     category: info.category,

@@ -89,9 +89,38 @@ function parseSheetRows(
   return { cells, importedRows, importedCols }
 }
 
+/** Keys that can poison Object.prototype if copied onto a plain object. */
+const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype'])
+
+/**
+ * Strip prototype-polluting keys from a parsed workbook.
+ *
+ * The pinned `xlsx@0.18.5` carries an unpatched prototype-pollution advisory
+ * (GHSA-4r6h-8v6p-xvw6, fixed in >=0.19.3, which is not published to npm —
+ * SheetJS moved to its own CDN after 0.18.5). Until the dependency is migrated,
+ * sanitise the parse output so a crafted file cannot reach Object.prototype
+ * through sheet names or cell addresses.
+ */
+function stripUnsafeKeys<T extends object>(value: T): T {
+  for (const key of UNSAFE_KEYS) {
+    if (Object.prototype.hasOwnProperty.call(value, key)) {
+      delete (value as Record<string, unknown>)[key]
+    }
+  }
+  return value
+}
+
 export async function importWorkbookFromFileWithMeta(file: File): Promise<WorkbookImportResult> {
   const buffer = await file.arrayBuffer()
   const book = XLSX.read(buffer, { type: 'array' })
+
+  // Harden the parsed structures before we iterate over them (see above).
+  stripUnsafeKeys(book.Sheets)
+  for (const sheetName of Object.keys(book.Sheets)) {
+    const parsedSheet = book.Sheets[sheetName]
+    if (parsedSheet && typeof parsedSheet === 'object') stripUnsafeKeys(parsedSheet)
+  }
+  book.SheetNames = book.SheetNames.filter((name) => !UNSAFE_KEYS.has(name))
   const baseName = file.name.replace(/\.(csv|xlsx|xls)$/i, '')
   const maxRows = AI_ANALYSIS_CONFIG.maxImportRows
   const maxCols = AI_ANALYSIS_CONFIG.maxImportCols

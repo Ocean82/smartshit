@@ -20,6 +20,7 @@ export interface ExecutionContext {
   setCellValue: (cellId: string, value: string | number | boolean | null, formula?: string) => void
   setCellFormat: (cellId: string, format: Partial<CellFormat>) => void
   setCellValidation?: (cellId: string, validation: import('@/types').DataValidation | null) => void
+  /** Batched cell write — strongly preferred over looping setCellValue. */
   bulkSetCells: (cells: Record<string, { value: string | number | boolean | null; formula?: string }>) => void
   applySortPatch: (patch: SortPatch) => void
   setFilters: (filters: FilterConfig[]) => void
@@ -44,8 +45,27 @@ export interface ExecutionResult {
 
 /**
  * Execute a single tool call against the spreadsheet.
+ *
+ * Never throws: tool params arrive from an LLM or a regex parser and are not
+ * guaranteed to be well-formed, so any unexpected error is converted into a
+ * failed ExecutionResult rather than propagating into the React tree (which
+ * would blank the app via the error boundary).
  */
 export function executeTool(call: ParsedToolCall, ctx: ExecutionContext): ExecutionResult {
+  try {
+    return executeToolInner(call, ctx)
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err)
+    console.error(`[executor] Tool "${call.tool}" failed:`, err)
+    return {
+      success: false,
+      message: `Could not complete "${call.tool}": ${detail}`,
+      modified: 0,
+    }
+  }
+}
+
+function executeToolInner(call: ParsedToolCall, ctx: ExecutionContext): ExecutionResult {
   const tool = resolveToolName(call.tool)
   const params = normalizeAliasParams(call.tool, call.params)
   const sheet = ctx.getActiveSheet()
@@ -58,24 +78,35 @@ export function executeTool(call: ParsedToolCall, ctx: ExecutionContext): Execut
 
   switch (tool) {
     case 'set_cell': {
-      const cell = (params.cell as string).toUpperCase()
-      const value = params.value as string
-      ctx.pushHistory(`Set ${cell}`)
+      const cell = requireCellRef(params.cell, 'set_cell')
+      if ('error' in cell) return cell.error
+      // `value` may arrive as a number/boolean from the parser or an LLM
+      const raw = params.value
+      ctx.pushHistory(`Set ${cell.ref}`)
+      if (typeof raw === 'number' || typeof raw === 'boolean') {
+        ctx.setCellValue(cell.ref, raw)
+        return { success: true, message: `Set ${cell.ref} to "${raw}"`, modified: 1 }
+      }
+      const value = String(raw ?? '')
       if (value.startsWith('=')) {
-        ctx.setCellValue(cell, null, value)
+        ctx.setCellValue(cell.ref, null, value)
       } else {
         const num = parseFloat(value.replace(/[$,]/g, ''))
-        ctx.setCellValue(cell, !isNaN(num) && /^[\$\d,.-]+$/.test(value) ? num : value)
+        ctx.setCellValue(cell.ref, !isNaN(num) && /^[$\d,.-]+$/.test(value) ? num : value)
       }
-      return { success: true, message: `Set ${cell} to "${value}"`, modified: 1 }
+      return { success: true, message: `Set ${cell.ref} to "${value}"`, modified: 1 }
     }
 
     case 'set_range': {
-      const startCell = (params.startCell as string).toUpperCase()
-      const values = params.values as unknown[][]
-      const ref = cellToRef(startCell)
+      const start = requireCellRef(params.startCell, 'set_range')
+      if ('error' in start) return start.error
+      const values = params.values
+      if (!Array.isArray(values)) {
+        return { success: false, message: 'set_range requires a 2D "values" array', modified: 0 }
+      }
+      const ref = cellToRef(start.ref)
       ctx.pushHistory('Set range')
-      let count = 0
+      const updates: BulkUpdates = {}
       for (let r = 0; r < values.length; r++) {
         const row = values[r]
         if (!Array.isArray(row)) continue
@@ -83,32 +114,35 @@ export function executeTool(call: ParsedToolCall, ctx: ExecutionContext): Execut
           const cellId = refToCell(ref.row + r, ref.col + c)
           const val = row[c]
           if (typeof val === 'string' && val.startsWith('=')) {
-            ctx.setCellValue(cellId, null, val)
+            updates[cellId] = { value: null, formula: val }
           } else {
-            ctx.setCellValue(cellId, val as string | number | null)
+            updates[cellId] = { value: (val ?? null) as string | number | boolean | null }
           }
-          count++
         }
       }
+      const count = applyBulk(ctx, updates)
       return { success: true, message: `Filled ${count} cells`, modified: count }
     }
 
     case 'add_row': {
-      const values = params.values as (string | number)[]
+      const values = params.values
+      if (!Array.isArray(values) || values.length === 0) {
+        return { success: false, message: 'add_row requires a non-empty "values" array', modified: 0 }
+      }
       const lastRow = findLastDataRow(sheet)
       const targetRow = (params.afterRow as number | undefined) ?? lastRow + 1
       ctx.pushHistory('Add row')
-      let count = 0
+      const updates: BulkUpdates = {}
       for (let c = 0; c < values.length; c++) {
         const cellId = refToCell(targetRow, c)
         const val = values[c]
         if (typeof val === 'string' && val.startsWith('=')) {
-          ctx.setCellValue(cellId, null, val)
+          updates[cellId] = { value: null, formula: val }
         } else {
-          ctx.setCellValue(cellId, val)
+          updates[cellId] = { value: (val ?? null) as string | number | boolean | null }
         }
-        count++
       }
+      const count = applyBulk(ctx, updates)
       return { success: true, message: `Added row ${targetRow + 1} with ${count} values`, modified: count }
     }
 
@@ -133,60 +167,85 @@ export function executeTool(call: ParsedToolCall, ctx: ExecutionContext): Execut
     }
 
     case 'rename_header': {
-      const col = (params.column as string).toUpperCase()
-      const newName = params.newName as string
-      const colIdx = col.charCodeAt(0) - 65
+      const col = requireColumn(params.column, sheet, ctx, 'rename_header')
+      if ('error' in col) return col.error
+      const newName = String(params.newName ?? '').trim()
+      if (!newName) {
+        return { success: false, message: 'rename_header requires a "newName"', modified: 0 }
+      }
       // Find the header row (usually row 0 or first row with content)
       const headerRow = findHeaderRow(sheet)
-      const cellId = refToCell(headerRow, colIdx)
-      ctx.pushHistory(`Rename column ${col}`)
+      const cellId = refToCell(headerRow, col.index)
+      ctx.pushHistory(`Rename column ${col.label}`)
       ctx.setCellValue(cellId, newName)
-      return { success: true, message: `Renamed column ${col} to "${newName}"`, modified: 1 }
+      return { success: true, message: `Renamed column ${col.label} to "${newName}"`, modified: 1 }
     }
 
     case 'apply_formula': {
       // Accept legacy {column} param alongside canonical {cell}
-      const target = String((params.cell ?? params.column ?? '') as string).toUpperCase()
+      const target = String((params.cell ?? params.column ?? '')).trim().toUpperCase()
       if (!target) return { success: false, message: 'No target cell or column specified', modified: 0 }
       let formula = String(params.formula ?? '=SUM')
       if (!formula.startsWith('=')) formula = `=${formula}`
-      ctx.pushHistory(`Apply formula`)
 
-      // If target is a single column letter (e.g., "B"), put formula at bottom
-      if (target.length === 1 && /^[A-Z]$/.test(target)) {
-        const colIdx = target.charCodeAt(0) - 65
+      // If target is a bare column letter (e.g. "B" or "AA"), put the formula
+      // below the last populated cell in that column.
+      if (/^[A-Z]{1,3}$/.test(target)) {
+        const colIdx = letterToCol(target)
         const lastRow = findLastDataRowInCol(sheet, colIdx)
+        if (lastRow < 0) {
+          return { success: false, message: `Column ${target} has no data to summarise`, modified: 0 }
+        }
+        // Derive the real data range instead of assuming a header on row 1.
+        // findHeaderRow returns the header row index; data starts on the next
+        // row when a header exists, otherwise at the first populated row.
+        const headerRow = findHeaderRow(sheet)
+        const firstDataRow = findFirstDataRowInCol(sheet, colIdx, headerRow)
+        if (firstDataRow < 0 || firstDataRow > lastRow) {
+          return { success: false, message: `Column ${target} has no data to summarise`, modified: 0 }
+        }
         const targetRow = lastRow + 1
         const cellId = refToCell(targetRow, colIdx)
-        // Build full formula if just function name
+        // Build the full formula if only a function name was supplied
         const fullFormula = formula.includes('(')
           ? formula
-          : `${formula}(${target}2:${target}${lastRow + 1})`
+          : `${formula}(${target}${firstDataRow + 1}:${target}${lastRow + 1})`
+        ctx.pushHistory('Apply formula')
         ctx.setCellValue(cellId, null, fullFormula)
         return { success: true, message: `Added ${formula} formula in ${cellId}`, modified: 1 }
       }
 
-      // Otherwise target is a cell reference
+      // Otherwise target must be a cell reference
+      if (!/^[A-Z]{1,3}\d+$/.test(target)) {
+        return { success: false, message: `"${target}" is not a valid cell or column reference`, modified: 0 }
+      }
+      ctx.pushHistory('Apply formula')
       ctx.setCellValue(target, null, formula)
       return { success: true, message: `Set formula in ${target}`, modified: 1 }
     }
 
     case 'modify_column': {
-      const col = (params.column as string).toUpperCase()
-      const operation = params.operation as string
-      const factor = params.factor as number
+      const col = requireColumn(params.column, sheet, ctx, 'modify_column')
+      if ('error' in col) return col.error
+      const operation = String(params.operation ?? 'multiply')
+      const factor = params.factor
       if (typeof factor !== 'number' || !Number.isFinite(factor)) {
         return { success: false, message: 'modify_column needs a numeric factor', modified: 0 }
       }
-      const colIdx = col.charCodeAt(0) - 65
-      ctx.pushHistory(`Modify column ${col}`)
+      if (!['multiply', 'add', 'subtract', 'divide'].includes(operation)) {
+        return { success: false, message: `Unsupported operation "${operation}"`, modified: 0 }
+      }
+      if (operation === 'divide' && factor === 0) {
+        return { success: false, message: 'Cannot divide by zero', modified: 0 }
+      }
+      ctx.pushHistory(`Modify column ${col.label}`)
 
-      let count = 0
-      for (const [cellId, cell] of Object.entries(sheet.cells)) {
+      const updates: BulkUpdates = {}
+      for (const cellId of Object.keys(sheet.cells)) {
         const ref = cellToRef(cellId)
-        if (ref.col !== colIdx) continue
+        if (ref.col !== col.index) continue
         const computed = ctx.getComputedValue(ref.row, ref.col)
-        const num = parseFloat(computed)
+        const num = parseFloat(computed.replace(/[$,]/g, ''))
         if (isNaN(num)) continue
 
         let newVal: number
@@ -194,26 +253,26 @@ export function executeTool(call: ParsedToolCall, ctx: ExecutionContext): Execut
           case 'multiply': newVal = num * factor; break
           case 'add': newVal = num + factor; break
           case 'subtract': newVal = num - factor; break
-          case 'divide': newVal = factor !== 0 ? num / factor : num; break
+          case 'divide': newVal = num / factor; break
           default: newVal = num
         }
-        ctx.setCellValue(cellId, Math.round(newVal * 100) / 100)
-        count++
+        updates[cellId] = { value: Math.round(newVal * 100) / 100 }
       }
-      return { success: true, message: `Modified ${count} cells in column ${col}`, modified: count }
+      const count = applyBulk(ctx, updates)
+      return { success: true, message: `Modified ${count} cells in column ${col.label}`, modified: count }
     }
 
     case 'sort_sheet': {
-      const col = (params.column as string).toUpperCase()
+      const col = requireColumn(params.column, sheet, ctx, 'sort_sheet')
+      if ('error' in col) return col.error
       const direction = ((params.direction as string) || 'asc') === 'desc' ? 'desc' : 'asc'
-      const colIdx = col.charCodeAt(0) - 65
-      ctx.pushHistory(`Sort by column ${col}`)
+      ctx.pushHistory(`Sort by column ${col.label}`)
 
-      const patch = computeSortedCellUpdates(sheet, colIdx, direction, ctx.getComputedValue)
+      const patch = computeSortedCellUpdates(sheet, col.index, direction, ctx.getComputedValue)
       ctx.applySortPatch(patch)
       const count = Object.keys(patch.writes).length + patch.deletes.length
 
-      return { success: true, message: `Sorted rows by column ${col} (${direction})`, modified: count }
+      return { success: true, message: `Sorted rows by column ${col.label} (${direction})`, modified: count }
     }
 
     case 'format_cells': {
@@ -240,41 +299,66 @@ export function executeTool(call: ParsedToolCall, ctx: ExecutionContext): Execut
     case 'clear_sheet': {
       ctx.pushHistory('Clear sheet')
       const cellIds = Object.keys(sheet.cells)
+      const updates: BulkUpdates = {}
       for (const cellId of cellIds) {
-        ctx.setCellValue(cellId, null)
+        updates[cellId] = { value: null }
       }
-      return { success: true, message: 'Sheet cleared', modified: cellIds.length }
+      const count = applyBulk(ctx, updates)
+      return { success: true, message: 'Sheet cleared', modified: count }
     }
 
     case 'rename_sheet': {
-      const name = params.name as string
+      const name = String(params.name ?? '').trim()
+      if (!name) {
+        return { success: false, message: 'rename_sheet requires a "name"', modified: 0 }
+      }
       ctx.renameSheet(sheet.id, name)
       return { success: true, message: `Sheet renamed to "${name}"`, modified: 0 }
     }
 
     case 'find_and_replace': {
-      const find = (params.find as string).toLowerCase()
-      const replace = params.replace as string
-      ctx.pushHistory(`Replace "${find}" → "${replace}"`)
-      let count = 0
-      for (const [cellId, cell] of Object.entries(sheet.cells)) {
-        if (cell.value != null && String(cell.value).toLowerCase().includes(find)) {
-          const newVal = String(cell.value).replace(new RegExp(find, 'gi'), replace)
-          ctx.setCellValue(cellId, newVal)
-          count++
-        }
+      const find = String(params.find ?? '')
+      const replace = String(params.replace ?? '')
+      if (!find) {
+        return { success: false, message: 'find_and_replace requires a "find" value', modified: 0 }
       }
-      return { success: true, message: `Replaced ${count} occurrence(s)`, modified: count }
+      // Escape the needle: user text like "(" or "+" is not a regex.
+      const pattern = new RegExp(escapeRegExp(find), 'gi')
+      ctx.pushHistory(`Replace "${find}" → "${replace}"`)
+
+      const updates: BulkUpdates = {}
+      let skippedFormulas = 0
+      for (const [cellId, cell] of Object.entries(sheet.cells)) {
+        // Never overwrite a formula with its rendered text — that would
+        // silently destroy the formula.
+        if (cell.formula) {
+          if (cell.value != null && String(cell.value).toLowerCase().includes(find.toLowerCase())) {
+            skippedFormulas++
+          }
+          continue
+        }
+        if (cell.value == null) continue
+        const original = String(cell.value)
+        pattern.lastIndex = 0
+        const next = original.replace(pattern, replace)
+        if (next !== original) updates[cellId] = { value: next }
+      }
+      const count = applyBulk(ctx, updates)
+      const note = skippedFormulas > 0
+        ? ` (skipped ${skippedFormulas} formula cell${skippedFormulas === 1 ? '' : 's'})`
+        : ''
+      return { success: true, message: `Replaced in ${count} cell(s)${note}`, modified: count }
     }
 
     case 'find_max':
     case 'find_min': {
-      const col = (params.column as string).toUpperCase()
-      const colIdx = col.charCodeAt(0) - 65
+      const col = requireColumn(params.column, sheet, ctx, tool)
+      if ('error' in col) return col.error
+      const colIdx = col.index
       const isMax = tool === 'find_max'
       let best: { val: number; row: number; label: string } | null = null
 
-      for (const [cellId] of Object.entries(sheet.cells)) {
+      for (const cellId of Object.keys(sheet.cells)) {
         const ref = cellToRef(cellId)
         if (ref.col !== colIdx) continue
         const computed = ctx.getComputedValue(ref.row, ref.col)
@@ -387,6 +471,70 @@ export function executeTool(call: ParsedToolCall, ctx: ExecutionContext): Execut
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+type BulkUpdates = Record<string, { value: string | number | boolean | null; formula?: string }>
+
+/**
+ * Apply a batch of cell writes in a single store transaction.
+ *
+ * Each individual `setCellValue` triggers a HyperFormula recalculation, an
+ * immer produce, a Zustand notification and a React render, so looping over
+ * thousands of cells is pathologically slow. `bulkSetCells` collapses that into
+ * one update. Returns the number of cells written.
+ */
+function applyBulk(ctx: ExecutionContext, updates: BulkUpdates): number {
+  const count = Object.keys(updates).length
+  if (count === 0) return 0
+  if (ctx.bulkSetCells) {
+    ctx.bulkSetCells(updates)
+  } else {
+    for (const [cellId, { value, formula }] of Object.entries(updates)) {
+      ctx.setCellValue(cellId, value, formula)
+    }
+  }
+  return count
+}
+
+/** Escape a user-supplied string so it can be embedded literally in a RegExp. */
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+/** Validate a cell-reference param, returning either the normalised ref or a failure result. */
+function requireCellRef(
+  raw: unknown,
+  toolName: string,
+): { ref: string } | { error: ExecutionResult } {
+  const ref = String(raw ?? '').trim().toUpperCase()
+  if (!ref) {
+    return { error: { success: false, message: `${toolName} requires a cell reference`, modified: 0 } }
+  }
+  if (!/^[A-Z]{1,3}\d{1,7}$/.test(ref)) {
+    return { error: { success: false, message: `"${ref}" is not a valid cell reference`, modified: 0 } }
+  }
+  return { ref }
+}
+
+/**
+ * Validate a column param, accepting either a letter ("B", "AA") or a header
+ * name ("Amount"). Returns the resolved 0-based index plus a display label.
+ */
+function requireColumn(
+  raw: unknown,
+  sheet: SheetData,
+  ctx: ExecutionContext,
+  toolName: string,
+): { index: number; label: string } | { error: ExecutionResult } {
+  const value = String(raw ?? '').trim()
+  if (!value) {
+    return { error: { success: false, message: `${toolName} requires a column`, modified: 0 } }
+  }
+  const index = resolveColumnIndex(value, sheet, ctx.getComputedValue)
+  if (index == null || index < 0) {
+    return { error: { success: false, message: `Could not find column "${value}"`, modified: 0 } }
+  }
+  return { index, label: /^[A-Z]{1,3}$/i.test(value) ? value.toUpperCase() : value }
+}
+
 /** Translate legacy alias params (format_range passthrough, conditional_format column/color) into format_cells params. */
 function normalizeAliasParams(originalTool: string, params: Record<string, unknown>): Record<string, unknown> {
   if (originalTool === 'conditional_format') {
@@ -422,13 +570,44 @@ function resolveColumnIndex(
   return null
 }
 
+/** Last populated row index in a column, or -1 when the column is empty. */
 function findLastDataRowInCol(sheet: SheetData, colIdx: number): number {
-  let max = 0
-  for (const cellId of Object.keys(sheet.cells)) {
+  let max = -1
+  for (const [cellId, cell] of Object.entries(sheet.cells)) {
+    if (cell.value == null && !cell.formula) continue
     const ref = cellToRef(cellId)
     if (ref.col === colIdx && ref.row > max) max = ref.row
   }
   return max
+}
+
+/**
+ * First populated row index in a column at or below `headerRow + 1`.
+ *
+ * Used to build aggregate ranges. Assuming data always starts on row 2 would
+ * exclude the first value on header-less sheets — the very "range gap" defect
+ * the auditor flags as high severity.
+ */
+function findFirstDataRowInCol(sheet: SheetData, colIdx: number, headerRow: number): number {
+  let min = -1
+  for (const [cellId, cell] of Object.entries(sheet.cells)) {
+    if (cell.value == null && !cell.formula) continue
+    const ref = cellToRef(cellId)
+    if (ref.col !== colIdx) continue
+    // Skip the header cell itself, but keep everything below it
+    if (ref.row <= headerRow && isHeaderLikeCell(cell.value)) continue
+    if (min === -1 || ref.row < min) min = ref.row
+  }
+  return min
+}
+
+/** A cell that looks like a column heading (non-numeric text). */
+function isHeaderLikeCell(value: string | number | boolean | null | undefined): boolean {
+  if (typeof value === 'number' || typeof value === 'boolean') return false
+  if (value == null) return false
+  const text = String(value).trim()
+  if (!text) return false
+  return isNaN(parseFloat(text.replace(/[$,%]/g, '')))
 }
 
 function findRowByContent(sheet: SheetData, text: string): number {

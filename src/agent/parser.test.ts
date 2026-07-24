@@ -94,3 +94,69 @@ describe('parseMessage — existing behavior stays intact', () => {
     expect(result.understood).toBe(false)
   })
 })
+
+/**
+ * Regression cases from the 2026-07-24 review — see
+ * docs/agent-engine-code-review.md (M1). The fast path must not hijack
+ * messages it cannot handle correctly: returning `understood: false` lets the
+ * request reach the LLM instead of silently mutating the wrong data.
+ */
+describe('parseMessage — does not hijack unrelated phrasing', () => {
+  it('ignores "sort" appearing inside another word', () => {
+    // Previously parsed as sort_sheet on column "T", scraped out of "the"
+    expect(parseMessage('resort the data').understood).toBe(false)
+    expect(parseMessage('assorted expenses').understood).toBe(false)
+  })
+
+  it('does not treat operational deletes as row deletions', () => {
+    for (const message of [
+      'remove formatting',
+      'remove all the duplicate rows',
+      'delete empty rows',
+      'remove the filters',
+    ]) {
+      expect(parseMessage(message).understood, message).toBe(false)
+    }
+  })
+
+  it('does not guess a column when the sort target is ambiguous', () => {
+    expect(parseMessage('sort').understood).toBe(false)
+    expect(parseMessage('sort the sheet').understood).toBe(false)
+  })
+})
+
+describe('parseMessage — column and phrasing coverage', () => {
+  it('sorts by a header name', () => {
+    const result = parseMessage('sort by amount highest first')
+    expect(result.calls[0].tool).toBe('sort_sheet')
+    expect(result.calls[0].params).toMatchObject({ column: 'amount', direction: 'desc' })
+  })
+
+  it('prefers an exact header from sheet context', () => {
+    const result = parseMessage('sort by amount', {
+      headerRow: 0,
+      lastDataRow: 5,
+      lastDataCol: 2,
+      headers: ['Item', 'Amount'],
+    })
+    expect(result.calls[0].params).toMatchObject({ column: 'Amount' })
+  })
+
+  it('handles multi-letter columns', () => {
+    expect(parseMessage('sort by column AA').calls[0].params).toMatchObject({ column: 'AA' })
+    expect(parseMessage('sum column AA').calls[0].params).toMatchObject({ cell: 'AA' })
+  })
+
+  it('supports "set <cell> to <value>" phrasing', () => {
+    const result = parseMessage('set A1 to 5')
+    expect(result.understood).toBe(true)
+    expect(result.calls[0].tool).toBe('set_cell')
+    expect(result.calls[0].params).toMatchObject({ cell: 'A1', value: '5' })
+  })
+
+  it('still deletes a named row', () => {
+    const result = parseMessage('remove Netflix')
+    expect(result.understood).toBe(true)
+    expect(result.calls[0].tool).toBe('delete_row')
+  })
+})

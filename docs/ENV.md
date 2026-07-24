@@ -11,7 +11,12 @@ See also `docs/NAMING.md` and `.env.example`.
 | `STRIPE_SECRET_KEY`, `STRIPE_PRICE_ID`, `STRIPE_WEBHOOK_SECRET`, `APP_URL` | Yes | Use **live** keys in production |
 | `SMARTSHIT_MODEL`, `OLLAMA_BASE_URL`, `NUM_CTX`, `NUM_PREDICT` | Yes | Local Ollama; model id spelling is intentional |
 | `LLM_PROVIDER_ORDER`, `GROQ_*`, `OPENROUTER_*`, `HUGGINGFACE_*` | Yes | Optional cloud LLM failover |
-| `PORT`, `HOST`, `CORS_ORIGIN` | Yes | Server bind |
+| `PORT`, `HOST` | Yes | Server bind |
+| `TRUST_PROXY` | Yes | Express `trust proxy`. Default `loopback` (nginx on 127.0.0.1). Required for correct client IPs and rate limiting |
+| `CORS_ORIGIN` | Yes | Comma-separated allowlist. Defaults to `APP_URL` + www variant + localhost dev origins. `*` opts into a public API |
+| `FREE_DAILY_LIMIT` | No | Free-tier daily AI quota per user (default 3, persisted in Postgres) |
+| `WORKBOOK_BODY_LIMIT` | No | Max body size for workbook save routes (default `25mb`) |
+| `MAX_WORKBOOK_VERSIONS` | No | Versions retained per workbook before pruning from RDS + S3 (default 50) |
 | `INTENT_CONFIDENCE_THRESHOLD` | Yes | Optional; default 0.6 |
 | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER` | No | Docs only — server reads `DATABASE_URL` |
 | `S3_ENABLED`, `S3_PREFIX=stems`, `S3_DELETE_LOCAL_AFTER_UPLOAD` | No | BurntBeats leftovers |

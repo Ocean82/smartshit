@@ -12,8 +12,17 @@
 import { Router } from 'express'
 import { config } from '../config.js'
 import { providerOrder, providerIsConfigured, callProvider } from '../providers.js'
+import { requireAuth, getRequestUserId } from '../auth/clerk.js'
+import { resolveIsPro } from '../plan.js'
+import { checkUsage, recordUsage } from '../usage.js'
+import { aiFunctionRateLimiter } from '../middleware/rateLimit.js'
 
 export const aiFunctionRouter = Router()
+
+// Every route below is an LLM-backed, billable call. Without authentication
+// this endpoint is an open inference proxy that bills the app owner, so the
+// gate is applied at the router level rather than per-route.
+aiFunctionRouter.use(requireAuth)
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -175,38 +184,11 @@ function parseResult(funcName: string, raw: string): string | number | null {
   return trimmed
 }
 
-// ─── Rate limiting (simple in-memory) ────────────────────────────────────────
-
-const rateLimiter = new Map<string, { count: number; resetAt: number }>()
-const RATE_LIMIT_WINDOW_MS = 60_000 // 1 minute
-const RATE_LIMIT_MAX = 30 // 30 AI function calls per minute per IP
-
-function checkRateLimit(ip: string): boolean {
-  const now = Date.now()
-  const entry = rateLimiter.get(ip)
-
-  if (!entry || now > entry.resetAt) {
-    rateLimiter.set(ip, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS })
-    return true
-  }
-
-  if (entry.count >= RATE_LIMIT_MAX) return false
-
-  entry.count++
-  return true
-}
-
-// Periodic cleanup of expired entries
-setInterval(() => {
-  const now = Date.now()
-  for (const [key, entry] of rateLimiter) {
-    if (now > entry.resetAt) rateLimiter.delete(key)
-  }
-}, 60_000)
-
 // ─── Route Handler ───────────────────────────────────────────────────────────
 
-aiFunctionRouter.post('/', async (req, res) => {
+// Rate limiting is handled by the shared express-rate-limit middleware, which
+// keys on the Clerk user id and falls back to an IPv6-safe address key.
+aiFunctionRouter.post('/', aiFunctionRateLimiter, async (req, res) => {
   const body = req.body as AIFunctionRequest
 
   // Validate request
@@ -221,20 +203,25 @@ aiFunctionRouter.post('/', async (req, res) => {
     return
   }
 
-  // Rate limit
-  const clientIp = (req.ip || req.socket.remoteAddress || 'unknown')
-  if (!checkRateLimit(clientIp)) {
-    res.status(429).json({
-      error: 'Rate limit exceeded. Maximum 30 AI function calls per minute.',
-      result: null,
-    })
-    return
-  }
-
   // Validate input isn't empty
   const input = String(body.args.input ?? body.args.text ?? body.args.values ?? '')
   if (!input.trim() && funcName !== 'AI.PREDICT') {
     res.json({ result: '' } satisfies AIFunctionResponse)
+    return
+  }
+
+  // ─── Usage gate (free tier enforcement) ────────────────────────────────────
+  // BYOK callers pay for their own tokens, so they bypass the quota.
+  const hasByok = Boolean(body.byok?.apiKey && body.byok?.baseUrl)
+  const userId = getRequestUserId(req) ?? undefined
+  const isPro = hasByok || (await resolveIsPro(userId))
+  const usage = await checkUsage(userId, isPro)
+
+  if (!usage.allowed) {
+    res.status(429).json({
+      error: `You've used all ${usage.limit} free AI requests for today. Upgrade to Pro for unlimited access.`,
+      result: null,
+    })
     return
   }
 
@@ -281,12 +268,17 @@ aiFunctionRouter.post('/', async (req, res) => {
   }
 
   if (rawResult === null) {
+    console.error(`[ai-function] All providers failed for ${funcName}:`, lastError)
     res.status(502).json({
-      error: `AI providers failed: ${lastError ?? 'unknown error'}`,
+      // Don't echo provider internals back to the client
+      error: 'AI providers are currently unavailable. Please try again shortly.',
       result: null,
     })
     return
   }
+
+  // Only count a request that actually consumed server-side inference
+  if (!hasByok) await recordUsage(userId)
 
   const result = parseResult(funcName, rawResult)
   res.json({ result } satisfies AIFunctionResponse)

@@ -4,6 +4,7 @@ import { uploadWorkbook, downloadObject, deleteObject } from '../s3.js'
 import { config } from '../config.js'
 import { getRequestUserId } from '../auth/clerk.js'
 import { syncWorkbookCells } from '../cellStore.js'
+import { sendServerError } from '../httpError.js'
 
 export const workbooksRouter = Router()
 
@@ -31,8 +32,7 @@ workbooksRouter.get('/', async (req, res) => {
 
     res.json({ workbooks: result.rows })
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error'
-    res.status(500).json({ error: message })
+    sendServerError(res, 'workbooks', err)
   }
 })
 
@@ -111,8 +111,7 @@ workbooksRouter.post('/', async (req, res) => {
       }
     } catch { /* non-critical */ }
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error'
-    res.status(500).json({ error: message })
+    sendServerError(res, 'workbooks', err)
   }
 })
 
@@ -148,8 +147,7 @@ workbooksRouter.get('/:id', async (req, res) => {
     res.setHeader('Content-Type', 'application/json')
     res.send(data)
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error'
-    res.status(500).json({ error: message })
+    sendServerError(res, 'workbooks', err)
   }
 })
 
@@ -212,6 +210,10 @@ workbooksRouter.put('/:id', async (req, res) => {
       [id, nextVersion, versionUpload.key, sizeBytes, 'Auto-save'],
     )
 
+    // Autosave fires every few seconds while editing, so history would grow
+    // without bound (one S3 object + one row each time). Keep a rolling window.
+    void pruneOldVersions(id)
+
     // Update workbook metadata
     const updateFields: string[] = ['s3_key = $1', 'size_bytes = $2', 'last_saved_at = NOW()']
     const updateParams: unknown[] = [key, sizeBytes]
@@ -254,8 +256,7 @@ workbooksRouter.put('/:id', async (req, res) => {
       }
     } catch { /* non-critical */ }
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error'
-    res.status(500).json({ error: message })
+    sendServerError(res, 'workbooks', err)
   }
 })
 
@@ -289,7 +290,53 @@ workbooksRouter.delete('/:id', async (req, res) => {
     await query(`UPDATE smartsht.workbooks SET is_deleted = TRUE WHERE id = $1`, [id])
     res.json({ deleted: true })
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error'
-    res.status(500).json({ error: message })
+    sendServerError(res, 'workbooks', err)
   }
 })
+
+// ─── Version retention ───────────────────────────────────────────────────────
+
+/** How many historical versions to keep per workbook. */
+const MAX_VERSIONS_PER_WORKBOOK = Number(process.env.MAX_WORKBOOK_VERSIONS ?? 50)
+
+/**
+ * Drop the oldest versions beyond the retention window, removing both the DB
+ * row and the backing S3 object.
+ *
+ * Best-effort and fire-and-forget: a pruning failure must never fail the user's
+ * save. Errors are logged instead.
+ */
+async function pruneOldVersions(workbookId: string): Promise<void> {
+  try {
+    const stale = await query<{ id: string; s3_key: string }>(
+      `SELECT id, s3_key FROM smartsht.workbook_versions
+       WHERE workbook_id = $1
+       ORDER BY version_number DESC
+       OFFSET $2`,
+      [workbookId, MAX_VERSIONS_PER_WORKBOOK],
+    )
+
+    if (stale.rows.length === 0) return
+
+    await query(
+      `DELETE FROM smartsht.workbook_versions WHERE id = ANY($1::uuid[])`,
+      [stale.rows.map((row) => row.id)],
+    )
+
+    await Promise.all(
+      stale.rows.map((row) =>
+        deleteObject(row.s3_key).catch((err) =>
+          console.warn(
+            `[workbooks] Could not delete version object ${row.s3_key}:`,
+            err instanceof Error ? err.message : err,
+          ),
+        ),
+      ),
+    )
+  } catch (err) {
+    console.warn(
+      '[workbooks] Version pruning failed:',
+      err instanceof Error ? err.message : err,
+    )
+  }
+}

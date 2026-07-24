@@ -35,7 +35,8 @@ export function ShareDialog({ open, onClose }: ShareDialogProps) {
   const [loading, setLoading] = useState(false)
   const [creating, setCreating] = useState(false)
   const [copiedToken, setCopiedToken] = useState<string | null>(null)
-  const [permission, setPermission] = useState<'view' | 'edit'>('view')
+  // Shared links are read-only until collaborative editing is implemented.
+  const permission = 'view' as const
   const [expiresIn, setExpiresIn] = useState<'24h' | '7d' | '30d' | 'never'>('never')
   const containerRef = useFocusTrap<HTMLDivElement>(open)
 
@@ -169,15 +170,13 @@ export function ShareDialog({ open, onClose }: ShareDialogProps) {
                 Create a link anyone can use to view this workbook.
               </p>
               <div className="flex gap-2 mb-3">
-                <select
-                  value={permission}
-                  onChange={(e) => setPermission(e.target.value as 'view' | 'edit')}
-                  className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-200"
-                  aria-label="Permission"
-                >
-                  <option value="view">View only</option>
-                  <option value="edit">Can edit</option>
-                </select>
+                {/*
+                  Shared editing is not implemented server-side — GET
+                  /api/shared/:token is read-only and no write path consults the
+                  share permission. Offering "Can edit" produced links that
+                  silently did not grant editing, so the choice is hidden until
+                  collaborative editing ships.
+                */}
                 <select
                   value={expiresIn}
                   onChange={(e) => setExpiresIn(e.target.value as '24h' | '7d' | '30d' | 'never')}
