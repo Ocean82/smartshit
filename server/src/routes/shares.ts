@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { query } from '../db.js'
 import { downloadObject } from '../s3.js'
 import { getRequestUserId } from '../auth/clerk.js'
+import { sendServerError } from '../httpError.js'
 
 export const sharesRouter = Router()
 
@@ -20,10 +21,21 @@ sharesRouter.post('/:id/share', async (req, res) => {
   }
 
   const { id } = req.params
-  const { permission, expiresIn } = req.body as {
+  const { permission: requestedPermission, expiresIn } = req.body as {
     permission?: 'view' | 'edit'
     expiresIn?: '24h' | '7d' | '30d' | 'never'
   }
+
+  // Shared editing is not implemented: GET /api/shared/:token only reads, and
+  // no write path consults this column. Persisting 'edit' would advertise a
+  // capability that does not exist, so coerce to 'view' until it does.
+  if (requestedPermission === 'edit') {
+    res.status(400).json({
+      error: 'Editable share links are not supported yet. Create a view-only link instead.',
+    })
+    return
+  }
+  const permission = 'view'
 
   try {
     // Verify ownership
@@ -65,18 +77,17 @@ sharesRouter.post('/:id/share', async (req, res) => {
     await query(
       `INSERT INTO smartsht.shares (workbook_id, shared_by, share_token, permission, expires_at)
        VALUES ($1, $2, $3, $4, $5)`,
-      [id, userId, shareToken, permission ?? 'view', expiresAt],
+      [id, userId, shareToken, permission, expiresAt],
     )
 
     res.status(201).json({
       token: shareToken,
-      permission: permission ?? 'view',
+      permission,
       expiresAt: expiresAt?.toISOString() ?? null,
       workbookName: workbook.rows[0].name,
     })
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error'
-    res.status(500).json({ error: message })
+    sendServerError(res, 'shares', err)
   }
 })
 
@@ -118,8 +129,7 @@ sharesRouter.get('/:id/shares', async (req, res) => {
 
     res.json({ shares: result.rows })
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error'
-    res.status(500).json({ error: message })
+    sendServerError(res, 'shares', err)
   }
 })
 
@@ -154,8 +164,7 @@ sharesRouter.delete('/shares/:token', async (req, res) => {
     await query(`DELETE FROM smartsht.shares WHERE share_token = $1`, [token])
     res.json({ revoked: true })
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error'
-    res.status(500).json({ error: message })
+    sendServerError(res, 'shares', err)
   }
 })
 
@@ -222,7 +231,6 @@ sharesRouter.get('/shared/:token', async (req, res) => {
       },
     })
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error'
-    res.status(500).json({ error: message })
+    sendServerError(res, 'shares', err)
   }
 })

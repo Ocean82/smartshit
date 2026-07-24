@@ -25,6 +25,7 @@ import { UserNav } from '@/auth'
 import {
   getSyncStatus,
   onSyncStatusChange,
+  describeSyncStatus,
   scheduleSave,
   isCloudConfigured,
   type SyncStatus,
@@ -340,9 +341,24 @@ function TitleBar({ onOpenTemplates, onOpenCloudPicker, onOpenShare, onOpenComma
             <span style={{ color: 'var(--success)' }}>Saved</span>
           </div>
         )
+      case 'too-large':
+        return (
+          <div
+            className="flex items-center gap-1.5 px-2 py-1 rounded-md"
+            style={{ background: 'var(--neutral-900)' }}
+            title={describeSyncStatus('too-large') ?? undefined}
+          >
+            <CloudOff size={11} style={{ color: 'var(--error)' }} />
+            <span style={{ color: 'var(--error)' }}>Too large</span>
+          </div>
+        )
       case 'error':
         return (
-          <div className="flex items-center gap-1.5 px-2 py-1 rounded-md" style={{ background: 'var(--neutral-900)' }}>
+          <div
+            className="flex items-center gap-1.5 px-2 py-1 rounded-md"
+            style={{ background: 'var(--neutral-900)' }}
+            title={describeSyncStatus('error') ?? undefined}
+          >
             <CloudOff size={11} style={{ color: 'var(--error)' }} />
             <span style={{ color: 'var(--error)' }}>Error</span>
           </div>

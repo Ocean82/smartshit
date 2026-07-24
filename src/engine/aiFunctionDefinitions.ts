@@ -29,11 +29,14 @@ async function callAIFunction(
 ): Promise<string | number | null> {
   try {
     const { getByokPayload } = await import('@/lib/userApiKey')
+    const { getAuthHeaders } = await import('@/lib/cloudSync')
     const byok = getByokPayload()
-    // Use the /api/ai-function endpoint
+    // The endpoint requires a Clerk session token — it performs billable LLM
+    // calls and enforces the free-tier quota per user.
+    const headers = await getAuthHeaders()
     const res = await fetch(`${API_BASE}/api/ai-function`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ function: functionName, args, byok }),
       signal: AbortSignal.timeout(30_000),
     })
