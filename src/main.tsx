@@ -8,6 +8,10 @@ import { AuthProvider, AuthGate, ClerkUserSync } from '@/auth'
 import { useStore } from '@/store/useStore'
 import { savePersistedState } from '@/lib/persistence'
 import { migrateLegacyStorageKeys } from '@/lib/storageKeys'
+import { initErrorReporting } from '@/lib/errorReporting'
+
+// Initialize error reporting (no-op if VITE_SENTRY_DSN is not set)
+initErrorReporting()
 
 migrateLegacyStorageKeys()
 

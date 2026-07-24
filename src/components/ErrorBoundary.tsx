@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
+import { captureError } from '@/lib/errorReporting'
 
 interface Props {
   children: ReactNode
@@ -29,8 +30,13 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    // Log to console — replace with Sentry/reporting when available
+    // Log to console for dev visibility
     console.error('[ErrorBoundary] Caught error:', error, errorInfo)
+    // Report to Sentry (no-op if not configured)
+    captureError(error, {
+      component: this.props.scope || 'Unknown',
+      extra: { componentStack: errorInfo.componentStack },
+    })
   }
 
   private handleReload = () => {

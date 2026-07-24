@@ -695,6 +695,10 @@ export function SpreadsheetGrid() {
     <div
       ref={gridRef}
       data-spreadsheet-grid
+      role="grid"
+      aria-label="Spreadsheet grid"
+      aria-rowcount={TOTAL_ROWS}
+      aria-colcount={TOTAL_COLS}
       className="flex-1 overflow-auto relative touch-pan-x touch-pan-y"
       tabIndex={0}
       onKeyDown={handleKeyDown}
@@ -741,11 +745,13 @@ export function SpreadsheetGrid() {
           />
         )}
         {/* Column headers - sticky */}
-        <div className="flex sticky top-0 z-20" style={{ height: COL_HEADER_HEIGHT }}>
+        <div className="flex sticky top-0 z-20" role="row" aria-rowindex={1} style={{ height: COL_HEADER_HEIGHT }}>
           <div
+            role="columnheader"
             className="bg-gradient-to-b from-gray-100 to-gray-150 border-b border-r border-gray-300 flex items-center justify-center text-[10px] text-gray-400 font-medium shrink-0 sticky left-0 z-30"
             style={{ width: ROW_HEADER_WIDTH, height: COL_HEADER_HEIGHT }}
             onClick={() => setSelection({ startRow: 0, startCol: 0, endRow: TOTAL_ROWS - 1, endCol: TOTAL_COLS - 1 })}
+            aria-label="Select all cells"
           >
             ▾
           </div>
@@ -759,6 +765,8 @@ export function SpreadsheetGrid() {
                 return (
                   <div
                     key={col}
+                    role="columnheader"
+                    aria-colindex={col + 2}
                     className={`border-b border-r border-gray-300 flex items-center justify-center text-[11px] font-medium shrink-0 relative group cursor-pointer transition-colors ${
                       isColSelected
                         ? 'bg-blue-100 text-blue-700 border-blue-300'
@@ -796,8 +804,10 @@ export function SpreadsheetGrid() {
               row >= Math.min(selection.startRow, selection.endRow) &&
               row <= Math.max(selection.startRow, selection.endRow);
             return (
-              <div key={`${displayIndex}-${row}`} className="flex absolute" style={{ height: CELL_HEIGHT, top: displayIndex * CELL_HEIGHT }}>
+              <div key={`${displayIndex}-${row}`} className="flex absolute" role="row" aria-rowindex={row + 2} style={{ height: CELL_HEIGHT, top: displayIndex * CELL_HEIGHT }}>
                 <div
+                  role="rowheader"
+                  aria-colindex={1}
                   className={`border-b border-r border-gray-300 flex items-center justify-center text-[11px] font-medium shrink-0 sticky left-0 z-10 cursor-pointer transition-colors ${
                     isRowSelected
                       ? 'bg-blue-100 text-blue-700 border-blue-300'
@@ -907,6 +917,16 @@ export function SpreadsheetGrid() {
           </div>
         </div>
       )}
+
+      {/* Screen reader live region — announces selection changes */}
+      <div
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        className="sr-only"
+      >
+        {selection && `Cell ${colToLetter(selection.startCol)}${selection.startRow + 1} selected`}
+      </div>
     </div>
   );
 }

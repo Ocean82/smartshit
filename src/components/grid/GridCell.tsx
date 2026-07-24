@@ -119,6 +119,10 @@ export const GridCell = memo(function GridCell({
   return (
     <div
       ref={isEditing ? editContainerRef : undefined}
+      role="gridcell"
+      aria-colindex={col + 2}
+      aria-selected={isActive || isSelected}
+      aria-readonly={!isEditing}
       className={`border-b border-r shrink-0 relative transition-shadow group/cell ${
         pendingChange
           ? 'ring-2 ring-emerald-400 ring-inset z-10 bg-emerald-50/80'

@@ -164,37 +164,38 @@ Issues identified from the SmartSht review, verified against the actual codebase
 
 ---
 
-### 4.2 Add Error Reporting
+### 4.2 Add Error Reporting ✅
 
 **Problem:** Production errors are invisible. No telemetry on crashes, unhandled rejections, or failed AI calls.
 
 **Fix:**
-- [ ] Add Sentry (or equivalent) to the client: `Sentry.init()` in main.tsx
-- [ ] Wrap error boundary with `Sentry.captureException()`
-- [ ] Add Sentry to the server: catch unhandled rejections and express error middleware
-- [ ] Tag errors with user context (anonymous ID, plan tier, workbook size)
-- [ ] Add breadcrumbs for key actions (send message, import file, undo/redo)
+- [x] Add Sentry (or equivalent) to the client: `Sentry.init()` in main.tsx
+- [x] Wrap error boundary with `Sentry.captureException()`
+- [x] Add breadcrumb and context helpers for key actions
+- [x] Tag errors with workbook context (anonymous — plan tier, sheet count)
+- [x] Filter noisy errors (ResizeObserver, offline health checks)
+- [x] Add `VITE_SENTRY_DSN` to `.env.example`
+- [ ] Add Sentry to the server: catch unhandled rejections and express error middleware (future)
 
 **Effort:** Small-Medium (2-3 hours)
 
 ---
 
-## Phase 5: Accessibility
+## Phase 5: Accessibility ✅
 
-### 5.1 Grid ARIA Semantics
+### 5.1 Grid ARIA Semantics ✅
 
 **Problem:** The grid has `tabIndex={0}` and keyboard nav but zero ARIA roles. Screen readers cannot interpret the spreadsheet structure.
 
 **Fix:**
-- [ ] Add `role="grid"` to the grid container
-- [ ] Add `role="row"` to each rendered row
-- [ ] Add `role="columnheader"` to column headers, `role="rowheader"` to row headers
-- [ ] Add `role="gridcell"` to each cell
-- [ ] Add `aria-colindex`, `aria-rowindex` to each cell
-- [ ] Add `aria-selected="true"` to selected cells
-- [ ] Add `aria-readonly` where cells are not editable
-- [ ] Add a live region (`aria-live="polite"`) for announcing selection changes and action results
-- [ ] Test with VoiceOver/NVDA
+- [x] Add `role="grid"` to the grid container with `aria-rowcount` and `aria-colcount`
+- [x] Add `role="row"` to each rendered row with `aria-rowindex`
+- [x] Add `role="columnheader"` to column headers with `aria-colindex`
+- [x] Add `role="rowheader"` to row headers with `aria-colindex`
+- [x] Add `role="gridcell"` to each cell with `aria-colindex`, `aria-selected`, `aria-readonly`
+- [x] Add a live region (`aria-live="polite"`) for announcing selection changes
+- [x] Add `aria-label` to the grid container and select-all button
+- [ ] Test with VoiceOver/NVDA (manual testing required)
 
 **Effort:** Medium (4-5 hours)
 
