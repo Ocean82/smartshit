@@ -17,13 +17,27 @@ export interface ParseResult {
   explanation?: string  // Friendly message to show the user
 }
 
-const CELL_REF = /\b([A-Z])(\d{1,3})\b/i
-const COL_REF = /\bcolumn\s+([A-Z])\b/i
-const RANGE_REF = /\b([A-Z]\d{1,3}):([A-Z]\d{1,3})\b/i
-const NUMBER = /\$?([\d,]+(?:\.\d+)?)/
-const PERCENT = /(\d+)\s*%/
-
 const COLOR_WORD_RE = /\b(red|blue|green|yellow|orange|purple|pink|black|white|gray|grey)\b/
+
+/** Sort-direction words that must never be mistaken for a column reference. */
+const DIRECTION_WORDS = new Set([
+  'asc', 'ascending', 'desc', 'descending', 'highest', 'lowest', 'a-z', 'z-a', 'up', 'down',
+])
+
+/**
+ * Phrases that follow "delete"/"remove" but refer to an operation rather than
+ * to row content. Without this guard "remove formatting" deletes a data row.
+ */
+const NON_ROW_DELETE_TARGETS = [
+  'format', 'formatting', 'duplicate', 'duplicates', 'blank', 'empty',
+  'column', 'columns', 'sheet', 'tab', 'chart', 'filter', 'filters',
+  'note', 'notes', 'comment', 'comments', 'validation', 'everything', 'all',
+]
+
+function isNonRowDeleteTarget(text: string): boolean {
+  const t = text.toLowerCase()
+  return NON_ROW_DELETE_TARGETS.some((word) => new RegExp(`\\b${word}\\b`).test(t))
+}
 
 /**
  * Parse a user message into zero or more tool calls.
@@ -58,6 +72,16 @@ export function parseMessage(message: string, sheetContext?: SheetContext): Pars
     const numVal = parseFloat(value.replace(/[$,]/g, ''))
     const finalVal = !isNaN(numVal) && !/[a-z]/i.test(value.replace(/[$,.\d\s]/g, '')) ? String(numVal) : value
     calls.push({ tool: 'set_cell', params: { cell, value: finalVal }, description: `Set ${cell} to ${value}` })
+    return { calls, understood: true, explanation: `Setting ${cell} to "${value}".` }
+  }
+
+  // "set A1 to 500" / "change B2 to hello" — cell first, value second.
+  // (The `putIn` pattern above only covers "put <value> in <cell>".)
+  const setCellTo = message.match(/(?:set|change|update)\s+(?:cell\s+)?([a-z]{1,3}\d{1,4})\s+to\s+(.+)/i)
+  if (setCellTo) {
+    const cell = setCellTo[1].toUpperCase()
+    const value = setCellTo[2].replace(/^["']|["']$/g, '').trim()
+    calls.push({ tool: 'set_cell', params: { cell, value }, description: `Set ${cell} to ${value}` })
     return { calls, understood: true, explanation: `Setting ${cell} to "${value}".` }
   }
 
@@ -101,16 +125,18 @@ export function parseMessage(message: string, sheetContext?: SheetContext): Pars
     return { calls, understood: true, explanation: `Deleting row ${row}.` }
   }
 
-  const deleteRowMatch = lower.match(/(?:delete|remove)\s+(?:the\s+)?(.+?)\s+(?:row|entry|line)/i)
-  if (deleteRowMatch) {
+  const deleteRowMatch = lower.match(/(?:delete|remove)\s+(?:the\s+)?(.+?)\s+(?:row|entry|line)\b/i)
+  if (deleteRowMatch && !isNonRowDeleteTarget(deleteRowMatch[1])) {
     const match = deleteRowMatch[1].trim()
     calls.push({ tool: 'delete_row', params: { match }, description: `Delete row containing "${match}"` })
     return { calls, understood: true, explanation: `Removing the row containing "${match}".` }
   }
 
-  // "remove Netflix" (without "row" keyword)
+  // "remove Netflix" (without "row" keyword). Guarded so that operational
+  // phrases like "remove formatting" or "remove duplicates" fall through to the
+  // LLM instead of deleting an unrelated data row.
   const removeSimple = lower.match(/(?:delete|remove)\s+(?:the\s+)?([a-z][\w\s]{2,})/i)
-  if (removeSimple && !lower.includes('column') && !lower.includes('sheet')) {
+  if (removeSimple && !isNonRowDeleteTarget(lower)) {
     const match = removeSimple[1].trim()
     if (!['all', 'everything', 'data'].includes(match)) {
       calls.push({ tool: 'delete_row', params: { match }, description: `Delete row: ${match}` })
@@ -128,17 +154,45 @@ export function parseMessage(message: string, sheetContext?: SheetContext): Pars
   }
 
   // ─── Sort ───────────────────────────────────────────────────────────────────
-  const sortCol = lower.match(/sort\s+(?:by\s+)?(?:column\s+)?([a-z])?\s*(?:(asc|desc|highest|lowest|a-z|z-a)(?:ending)?)?/i)
-  if (lower.includes('sort') && sortCol) {
-    const column = (sortCol[1] || 'B').toUpperCase()
-    const dirHint = (sortCol[2] || '').toLowerCase()
-    const direction = ['desc', 'highest', 'z-a'].includes(dirHint) ? 'desc' : 'asc'
+  // Anchored on the whole word "sort" so "resort"/"assorted" do not trigger it.
+  if (/\bsort\b/.test(lower)) {
+    const dirHint = lower.match(/\b(asc|ascending|desc|descending|highest|lowest|a-z|z-a)\b/)?.[1] ?? ''
+    const direction = ['desc', 'descending', 'highest', 'z-a'].includes(dirHint) ? 'desc' : 'asc'
+
+    // Accept an explicit column letter ("sort by column B", "sort by B") or a
+    // header name ("sort by amount"). Never guess a default column — a silent
+    // sort on the wrong column reorders the user's data destructively.
+    const explicitCol = message.match(/\bsort\s+(?:by\s+|on\s+)?column\s+([A-Za-z]{1,3})\b/i)?.[1]
+      ?? message.match(/\bsort\s+(?:by|on)\s+([A-Za-z]{1,3})\b(?!\w)/i)?.[1]
+
+    // Header-name form: "sort by amount", "sort by amount highest first".
+    // Trailing direction/ordering words are not part of the column name.
+    const rawName = message.match(/\bsort\s+(?:by|on)\s+(?:the\s+)?["']?([\w ]+?)["']?\s*$/i)?.[1]
+    const byName = rawName
+      ?.replace(/\b(asc|ascending|desc|descending|highest|lowest|a-z|z-a|first|last|order|column)\b/gi, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+
+    let column: string | undefined
+    if (explicitCol && !DIRECTION_WORDS.has(explicitCol.toLowerCase())) {
+      column = explicitCol.toUpperCase()
+    } else if (byName && !DIRECTION_WORDS.has(byName.toLowerCase())) {
+      // Prefer a matching header name; the executor resolves names to indices.
+      const header = sheetContext?.headers?.find((h) => h.toLowerCase() === byName.toLowerCase())
+      column = header ?? byName
+    }
+
+    if (!column) {
+      // Ambiguous — let the LLM ask a clarifying question instead of guessing.
+      return { calls: [], understood: false }
+    }
+
     calls.push({ tool: 'sort_sheet', params: { column, direction }, description: `Sort by column ${column} ${direction}` })
-    return { calls, understood: true, explanation: `Sorting by column ${column} (${direction === 'desc' ? 'highest first' : 'lowest first'}).` }
+    return { calls, understood: true, explanation: `Sorting by ${column} (${direction === 'desc' ? 'highest first' : 'lowest first'}).` }
   }
 
   // ─── Percentage operations ──────────────────────────────────────────────────
-  const pctAdd = lower.match(/(?:add|increase|raise|markup)\s+(\d+)\s*%\s+(?:to\s+)?(?:column\s+)?([a-z])?/i)
+  const pctAdd = lower.match(/(?:add|increase|raise|markup)\s+(\d+)\s*%\s+(?:to\s+)?(?:column\s+)?([a-z]{1,3})?\b/i)
   if (pctAdd) {
     const pct = parseInt(pctAdd[1])
     const col = (pctAdd[2] || 'B').toUpperCase()
@@ -146,7 +200,7 @@ export function parseMessage(message: string, sheetContext?: SheetContext): Pars
     return { calls, understood: true, explanation: `Increasing all values in column ${col} by ${pct}%.` }
   }
 
-  const pctReduce = lower.match(/(?:reduce|decrease|discount|subtract)\s+(\d+)\s*%\s+(?:from\s+)?(?:column\s+)?([a-z])?/i)
+  const pctReduce = lower.match(/(?:reduce|decrease|discount|subtract)\s+(\d+)\s*%\s+(?:from\s+)?(?:column\s+)?([a-z]{1,3})?\b/i)
   if (pctReduce) {
     const pct = parseInt(pctReduce[1])
     const col = (pctReduce[2] || 'B').toUpperCase()
@@ -155,14 +209,14 @@ export function parseMessage(message: string, sheetContext?: SheetContext): Pars
   }
 
   // ─── Formula: "sum/total/average column X" ──────────────────────────────────
-  const formulaCol = lower.match(/(?:sum|total|add up)\s+(?:of\s+)?(?:column\s+)?([a-z])/i)
+  const formulaCol = lower.match(/\b(?:sum|total|add up)\s+(?:of\s+)?(?:column\s+)?([a-z]{1,3})\b/i)
   if (formulaCol) {
     const col = formulaCol[1].toUpperCase()
     calls.push({ tool: 'apply_formula', params: { cell: col, formula: '=SUM' }, description: `Sum column ${col}` })
     return { calls, understood: true, explanation: `Adding a SUM formula for column ${col}.` }
   }
 
-  const avgCol = lower.match(/(?:average|avg|mean)\s+(?:of\s+)?(?:column\s+)?([a-z])/i)
+  const avgCol = lower.match(/\b(?:average|avg|mean)\s+(?:of\s+)?(?:column\s+)?([a-z]{1,3})\b/i)
   if (avgCol) {
     const col = avgCol[1].toUpperCase()
     calls.push({ tool: 'apply_formula', params: { cell: col, formula: '=AVERAGE' }, description: `Average column ${col}` })
@@ -171,13 +225,13 @@ export function parseMessage(message: string, sheetContext?: SheetContext): Pars
 
   // ─── Find max/min ───────────────────────────────────────────────────────────
   if (lower.match(/(?:biggest|largest|highest|max|most expensive)/)) {
-    const col = lower.match(/column\s+([a-z])/i)?.[1]?.toUpperCase() || 'B'
+    const col = lower.match(/\bcolumn\s+([a-z]{1,3})\b/i)?.[1]?.toUpperCase() || 'B'
     calls.push({ tool: 'find_max', params: { column: col }, description: `Find max in column ${col}` })
     return { calls, understood: true, explanation: `Finding the highest value in column ${col}.` }
   }
 
   if (lower.match(/(?:smallest|lowest|min|cheapest|least)/)) {
-    const col = lower.match(/column\s+([a-z])/i)?.[1]?.toUpperCase() || 'B'
+    const col = lower.match(/\bcolumn\s+([a-z]{1,3})\b/i)?.[1]?.toUpperCase() || 'B'
     calls.push({ tool: 'find_min', params: { column: col }, description: `Find min in column ${col}` })
     return { calls, understood: true, explanation: `Finding the lowest value in column ${col}.` }
   }
@@ -239,7 +293,7 @@ export function parseMessage(message: string, sheetContext?: SheetContext): Pars
 
   // ─── Highlight negatives (requires the word "negative") ────────────────────
   if (lower.match(/(?:highlight|colou?r|mark|shade)/) && lower.includes('negative')) {
-    const col = lower.match(/column\s+([a-z])/i)?.[1]?.toUpperCase()
+    const col = lower.match(/\bcolumn\s+([a-z]{1,3})\b/i)?.[1]?.toUpperCase()
     calls.push({
       tool: 'format_cells',
       params: { range: col, condition: { operator: 'negative' }, bgColor: '#FEE2E2' },

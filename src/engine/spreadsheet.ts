@@ -1,7 +1,7 @@
 import HyperFormula from 'hyperformula';
 import type { SheetData, WorkbookData, PivotConfig, PivotResult } from '@/types';
 import { v4 as uuid } from 'uuid';
-import { aiFunctionRegistry, type AIFunctionRegistry } from './aiFunctions';
+import { AIFunctionRegistry, aiFunctionRegistry } from './aiFunctions';
 import { registerBuiltinAIFunctions, getAIFunctionList } from './aiFunctionDefinitions';
 
 export function colToLetter(col: number): string {
@@ -15,21 +15,65 @@ export function colToLetter(col: number): string {
 }
 
 export function letterToCol(letter: string): number {
+  const upper = letter.toUpperCase();
   let result = 0;
-  for (let i = 0; i < letter.length; i++) {
-    result = result * 26 + (letter.charCodeAt(i) - 64);
+  for (let i = 0; i < upper.length; i++) {
+    result = result * 26 + (upper.charCodeAt(i) - 64);
   }
   return result - 1;
 }
 
+const CELL_ID_RE = /^([A-Za-z]{1,3})(\d{1,7})$/;
+
+/**
+ * Parse a cell id ("A1", "bc23") into 0-based coordinates, or `null` when the
+ * input is not a valid reference.
+ *
+ * Prefer this over `cellToRef` wherever a malformed id should be handled
+ * explicitly — `cellToRef` collapses bad input to A1, which silently writes to
+ * the wrong cell.
+ */
+export function tryCellToRef(cellId: string): { row: number; col: number } | null {
+  const match = typeof cellId === 'string' ? cellId.match(CELL_ID_RE) : null;
+  if (!match) return null;
+  const row = parseInt(match[2], 10) - 1;
+  if (row < 0) return null;
+  return { row, col: letterToCol(match[1]) };
+}
+
+/**
+ * Parse a cell id into 0-based coordinates, falling back to A1 for malformed
+ * input. Retained for the many call sites that cannot meaningfully handle a
+ * failure; new code should use {@link tryCellToRef}.
+ */
 export function cellToRef(cellId: string): { row: number; col: number } {
-  const match = cellId.match(/^([A-Z]+)(\d+)$/);
-  if (!match) return { row: 0, col: 0 };
-  return { row: parseInt(match[2]) - 1, col: letterToCol(match[1]) };
+  return tryCellToRef(cellId) ?? { row: 0, col: 0 };
 }
 
 export function refToCell(row: number, col: number): string {
   return `${colToLetter(col)}${row + 1}`;
+}
+
+/**
+ * Convert a raw HyperFormula cell value into the display string used everywhere
+ * in the app (grid, auditor, AI context).
+ *
+ * HyperFormula returns a `DetailedCellError` object for failed formulas, whose
+ * `.value` carries the real Excel error code (`#DIV/0!`, `#NAME?`, `#REF!`, …).
+ * Previously every error object was flattened to the literal `'#ERROR!'`, which
+ * no consumer recognised — in particular `auditor/utils.ts#isErrorValue` tests
+ * for the specific Excel codes, so the auditor silently reported broken
+ * spreadsheets as clean. Preserve `.value` so error detection works.
+ */
+export function computedValueToString(val: unknown): string {
+  if (val === null || val === undefined) return '';
+  if (typeof val === 'object') {
+    const detailed = val as { value?: unknown };
+    // DetailedCellError#value is the Excel error code, e.g. "#DIV/0!"
+    if (typeof detailed.value === 'string' && detailed.value) return detailed.value;
+    return '#ERROR!';
+  }
+  return String(val);
 }
 
 export function createEmptySheet(name: string): SheetData {
@@ -55,19 +99,30 @@ export function createEmptyWorkbook(name: string): WorkbookData {
   };
 }
 
+/** Shared HyperFormula construction options — keep both build sites in sync. */
+const HF_OPTIONS = {
+  licenseKey: 'gpl-v3',
+  precisionRounding: 10,
+} as const;
+
 export class SpreadsheetEngine {
   private hf: HyperFormula;
   private sheetMapping: Map<string, number> = new Map();
-  private _aiRegistry: AIFunctionRegistry = aiFunctionRegistry;
+  private _aiRegistry: AIFunctionRegistry;
   private _disposeAIFunctions: (() => void) | null = null;
 
-  constructor() {
-    this.hf = HyperFormula.buildEmpty({
-      licenseKey: 'gpl-v3',
-      precisionRounding: 10,
-    });
-    // Register built-in AI functions
-    this._disposeAIFunctions = registerBuiltinAIFunctions();
+  /**
+   * @param aiRegistry Optional registry override. Defaults to a registry owned
+   * by this engine so that disposing one engine cannot unregister the AI
+   * functions still in use by another instance (tests, preview panes, a second
+   * workbook tab). Pass the shared `aiFunctionRegistry` explicitly to opt into
+   * the previous global behaviour.
+   */
+  constructor(aiRegistry?: AIFunctionRegistry) {
+    this._aiRegistry = aiRegistry ?? new AIFunctionRegistry();
+    this.hf = HyperFormula.buildEmpty(HF_OPTIONS);
+    // Register built-in AI functions into this engine's registry
+    this._disposeAIFunctions = registerBuiltinAIFunctions(this._aiRegistry);
   }
 
   /** Access the AI function registry for custom function registration */
@@ -78,10 +133,7 @@ export class SpreadsheetEngine {
   loadWorkbook(workbook: WorkbookData): void {
     // Rebuild from scratch
     this.hf.destroy();
-    this.hf = HyperFormula.buildEmpty({
-      licenseKey: 'gpl-v3',
-      precisionRounding: 10,
-    });
+    this.hf = HyperFormula.buildEmpty(HF_OPTIONS);
     this.sheetMapping.clear();
 
     for (const sheet of workbook.sheets) {
@@ -118,16 +170,34 @@ export class SpreadsheetEngine {
       }
     }
 
+    // HyperFormula rejects duplicate sheet names. Previously the resulting
+    // throw was swallowed, leaving the sheet unmapped so every read returned
+    // "" with no error anywhere. Resolve collisions up front instead, and use
+    // the name HyperFormula actually assigned.
     try {
-      const sheetName = this.hf.addSheet(sheet.name);
-      const hfId = this.hf.getSheetId(sheetName);
-      if (hfId !== undefined) {
-        this.hf.setSheetContent(hfId, data);
-        this.sheetMapping.set(sheet.id, hfId);
+      const requestedName = this.uniqueSheetName(sheet.name);
+      const assignedName = this.hf.addSheet(requestedName);
+      const hfId = this.hf.getSheetId(assignedName);
+      if (hfId === undefined) {
+        console.error(`[engine] Could not resolve a HyperFormula id for sheet "${sheet.name}"`);
+        return;
       }
-    } catch {
-      // Sheet might already exist
+      this.hf.setSheetContent(hfId, data);
+      this.sheetMapping.set(sheet.id, hfId);
+    } catch (err) {
+      console.error(`[engine] Failed to load sheet "${sheet.name}":`, err);
     }
+  }
+
+  /** Suffix a sheet name until it no longer collides inside HyperFormula. */
+  private uniqueSheetName(name: string): string {
+    const base = name.trim() || 'Sheet';
+    if (this.hf.getSheetId(base) === undefined) return base;
+    for (let i = 2; i < 1000; i++) {
+      const candidate = `${base} (${i})`;
+      if (this.hf.getSheetId(candidate) === undefined) return candidate;
+    }
+    return `${base} (${Date.now()})`;
   }
 
   getCellValue(sheetId: string, row: number, col: number): unknown {
@@ -159,9 +229,7 @@ export class SpreadsheetEngine {
 
   getComputedValue(sheetId: string, row: number, col: number): string {
     const val = this.getCellValue(sheetId, row, col);
-    if (val === null || val === undefined) return '';
-    if (typeof val === 'object') return '#ERROR!';
-    return String(val);
+    return computedValueToString(val);
   }
 
   /**
@@ -268,9 +336,9 @@ export class SpreadsheetEngine {
         baseFunctions = this.getFallbackFunctions();
       }
       // Append AI functions
-      return [...baseFunctions, ...getAIFunctionList()];
+      return [...baseFunctions, ...getAIFunctionList(this._aiRegistry)];
     } catch {
-      return [...this.getFallbackFunctions(), ...getAIFunctionList()];
+      return [...this.getFallbackFunctions(), ...getAIFunctionList(this._aiRegistry)];
     }
   }
 
@@ -295,8 +363,23 @@ export class SpreadsheetEngine {
   }
 
   getFunctionInfo(name: string): { name: string; description: string; category: string; syntax: string } | null {
-    const fns = this.getFunctionList();
-    return fns.find(f => f.name === name.toUpperCase()) || null;
+    const key = name.toUpperCase();
+    // Check the memoized built-in map first — getFunctionList() rebuilds the
+    // full catalogue on every call, which is far too slow for a per-keystroke
+    // autocomplete lookup.
+    const info = this.buildFunctionMap().get(key);
+    if (info) return { name: key, ...info };
+
+    const aiInfo = this._aiRegistry.getFunctionInfo(key);
+    if (aiInfo) {
+      return {
+        name: aiInfo.name,
+        description: aiInfo.abstract,
+        category: aiInfo.category,
+        syntax: aiInfo.syntax,
+      };
+    }
+    return null;
   }
 
   private getFallbackFunctions(): Array<{ name: string; description: string; category: string; syntax: string }> {
