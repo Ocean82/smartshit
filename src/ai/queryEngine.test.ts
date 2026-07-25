@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { queryTopN, queryFilter, queryAggregate } from './queryEngine'
+import { queryTopN, queryFilter, queryAggregate, runQueryFromIntent } from './queryEngine'
+import { parseUserIntent } from '@/ai/intentParser'
+import { computeSheetInsights } from '@/ai/sheetInsights'
 import type { SheetData } from '@/types'
 
 const getter = (sheet: SheetData) => (row: number, col: number) => {
@@ -80,5 +82,48 @@ describe('queryFilter', () => {
     const result = queryAggregate(sheet, 'MissingColumn', 'sum', getter(sheet))
     expect(result.success).toBe(false)
     expect(result.message).toMatch(/Could not find|No numeric values found/i)
+  })
+
+  it('uses computed formula values and excludes totals rows', () => {
+    const formulaSheet: SheetData = {
+      ...sheet,
+      id: 'formula',
+      cells: {
+        A1: { value: 'Category' }, B1: { value: 'Amount' },
+        A2: { value: 'Rent' }, B2: { value: null, formula: '=100+25' },
+        A3: { value: 'Food' }, B3: { value: 25 },
+        A4: { value: 'Total Expenses' }, B4: { value: null, formula: '=SUM(B2:B3)' },
+      },
+    }
+    const computed = (row: number, col: number) => {
+      if (col === 1 && row === 1) return '125'
+      if (col === 1 && row === 3) return '150'
+      return getter(formulaSheet)(row, col)
+    }
+    const result = queryAggregate(formulaSheet, 'Amount', 'sum', computed)
+    expect(result.data).toMatchObject({ result: 150, count: 2 })
+    const top = queryTopN(formulaSheet, 'Amount', 1, false, computed)
+    expect((top.data as Array<{ value: number }>)[0].value).toBe(125)
+  })
+
+  it('uses detected numeric insights instead of defaulting top-N queries to B', () => {
+    const amountInD: SheetData = {
+      ...sheet,
+      id: 'amount-d',
+      cells: {
+        A1: { value: 'Category' }, B1: { value: 'Quantity' }, D1: { value: 'Amount' },
+        A2: { value: 'Rent' }, B2: { value: 1 }, D2: { value: 1500 },
+        A3: { value: 'Food' }, B3: { value: 20 }, D3: { value: 400 },
+      },
+    }
+    const getValue = getter(amountInD)
+    const insights = computeSheetInsights(amountInD, getValue)
+    const result = runQueryFromIntent(
+      amountInD,
+      parseUserIntent('Show top 1 expenses'),
+      getValue,
+      insights,
+    )
+    expect((result?.data as Array<{ value: number }>)[0].value).toBe(1500)
   })
 })

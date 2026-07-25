@@ -24,7 +24,7 @@ import { cellToRef } from '@/engine/spreadsheet'
 import type { SheetInsights } from '@/ai/sheetInsights'
 import type { AttachedFilePreview } from '@/ai/types'
 import { getToolDefinition } from '@shared/toolRegistry'
-import { resolveDeleteRow } from '@/lib/deleteRowPreview'
+import { findDeleteRowMatches, resolveDeleteRow } from '@/lib/deleteRowPreview'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -151,7 +151,22 @@ export async function processChatMessage(
     // match is resolved to an exact row now, so a later edit cannot make Apply
     // delete a different row than the one shown in the preview.
     if (parsed.understood && parsed.calls.length === 1 && parsed.calls[0].tool === 'delete_row') {
-      const resolved = resolveDeleteRow(sheet, parsed.calls[0].params, getComputedValue)
+      const deleteParams = parsed.calls[0].params
+      if (typeof deleteParams.match === 'string') {
+        const matches = findDeleteRowMatches(sheet, deleteParams.match, getComputedValue)
+        if (matches.length > 1) {
+          finalizeMessage(streamingMsgId, {
+            id: streamingMsgId,
+            role: 'assistant',
+            content: `I found ${matches.length} rows containing **${deleteParams.match}** (rows ${matches.map((row) => row + 1).join(', ')}). Which exact row should I remove? Nothing was deleted.`,
+            timestamp: Date.now(),
+          })
+          setProcessing(false)
+          return
+        }
+      }
+
+      const resolved = resolveDeleteRow(sheet, deleteParams, getComputedValue)
       if (!resolved) {
         finalizeMessage(streamingMsgId, {
           id: streamingMsgId,

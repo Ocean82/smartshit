@@ -11,6 +11,25 @@ export interface ResolvedDeleteRow {
   changes: CellChange[]
 }
 
+export function findDeleteRowMatches(
+  sheet: SheetData,
+  match: string,
+  getComputedValue: (row: number, col: number) => string,
+): number[] {
+  const needle = match.trim().toLowerCase()
+  if (!needle) return []
+  const headerRow = findHeaderRow(sheet)
+  const matchingRows = new Set<number>()
+  for (const [cellId, cell] of Object.entries(sheet.cells)) {
+    const { row, col } = cellToRef(cellId)
+    if (row <= headerRow) continue
+    const displayed = getComputedValue(row, col)
+    const value = displayed || (cell.value == null ? '' : String(cell.value))
+    if (value.toLowerCase().includes(needle)) matchingRows.add(row)
+  }
+  return [...matchingRows].sort((a, b) => a - b)
+}
+
 /** Resolve the exact row once so preview and Apply cannot target different rows. */
 export function resolveDeleteRow(
   sheet: SheetData,
@@ -25,19 +44,9 @@ export function resolveDeleteRow(
     rowIndex = rowNumber - 1
     if (rowIndex > findLastDataRow(sheet)) return null
   } else if (typeof params.match === 'string' && params.match.trim()) {
-    const needle = params.match.trim().toLowerCase()
-    const headerRow = findHeaderRow(sheet)
-    // Named deletion should never accidentally remove a matching header. An
-    // explicit "delete row 1" can still remove the header after confirmation.
-    const matchingRows = new Set<number>()
-    for (const [cellId, cell] of Object.entries(sheet.cells)) {
-      const { row, col } = cellToRef(cellId)
-      if (row <= headerRow) continue
-      const displayed = getComputedValue(row, col)
-      const value = displayed || (cell.value == null ? '' : String(cell.value))
-      if (value.toLowerCase().includes(needle)) matchingRows.add(row)
-    }
-    rowIndex = [...matchingRows].sort((a, b) => a - b)[0] ?? -1
+    // A content-based delete is only safe when it identifies exactly one row.
+    const matchingRows = findDeleteRowMatches(sheet, params.match, getComputedValue)
+    rowIndex = matchingRows.length === 1 ? matchingRows[0] : -1
   }
 
   if (rowIndex < 0) return null

@@ -45,6 +45,13 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
+function columnLetterToIndex(letter: string): number {
+  return letter.toUpperCase().split('').reduce(
+    (result, char) => result * 26 + char.charCodeAt(0) - 64,
+    0,
+  ) - 1
+}
+
 function columnMentioned(message: string, column: ColumnProfile): boolean {
   const lower = message.toLowerCase()
   const header = column.name.trim().toLowerCase()
@@ -62,13 +69,20 @@ function resolveSmartColumn(
   sheetContext?: SheetContext,
   options?: { preferAmount?: boolean; allowNumericFallback?: boolean },
 ): string | undefined {
-  const explicit = message.match(/\\bcolumn\\s+([a-z]{1,3})\\b/i)?.[1]
-    ?? message.match(/\\b(?:in|from|of)\\s+([a-z]{1,3})\\s*[?.!]*$/i)?.[1]
-  if (explicit && !DIRECTION_WORDS.has(explicit.toLowerCase())) return explicit.toUpperCase()
-
   const columns = sheetContext?.columns ?? []
   const mentioned = columns.filter((column) => columnMentioned(message, column))
   if (mentioned.length === 1) return mentioned[0].column
+
+  const explicitColumn = message.match(/\bcolumn\s+([a-z]{1,3})\b/i)?.[1]
+  if (explicitColumn && !DIRECTION_WORDS.has(explicitColumn.toLowerCase())) {
+    return explicitColumn.toUpperCase()
+  }
+
+  const bareColumn = message.match(/\b(?:in|from|of)\s+([a-z]{1,3})\s*[?.!]*$/i)?.[1]
+  if (bareColumn && !DIRECTION_WORDS.has(bareColumn.toLowerCase())) {
+    const index = columnLetterToIndex(bareColumn)
+    if (!sheetContext || index <= sheetContext.lastDataCol) return bareColumn.toUpperCase()
+  }
 
   if (options?.preferAmount) {
     const amountColumns = columns.filter((column) => column.role === 'amount' && column.nonNullCount > 0)
@@ -265,8 +279,8 @@ export function parseMessage(message: string, sheetContext?: SheetContext): Pars
     // Accept an explicit column letter ("sort by column B", "sort by B") or a
     // header name ("sort by amount"). Never guess a default column — a silent
     // sort on the wrong column reorders the user's data destructively.
-    const explicitCol = message.match(/\bsort\s+(?:(?:my|the|this)\s+(?:data|sheet)\s+)?(?:by\s+|on\s+)?column\s+([A-Za-z]{1,3})\b/i)?.[1]
-      ?? message.match(/\bsort\s+(?:(?:my|the|this)\s+(?:data|sheet)\s+)?(?:by|on)\s+([A-Za-z]{1,3})\b(?!\w)/i)?.[1]
+    const explicitColumn = message.match(/\bsort\s+(?:(?:my|the|this)\s+(?:data|sheet)\s+)?(?:by\s+|on\s+)?column\s+([A-Za-z]{1,3})\b/i)?.[1]
+    const shortTarget = message.match(/\bsort\s+(?:(?:my|the|this)\s+(?:data|sheet)\s+)?(?:by|on)\s+([A-Za-z]{1,3})\b(?!\w)/i)?.[1]
 
     // Header-name form: "sort by amount", "sort my data by amount".
     // Trailing direction/ordering words are not part of the column name.
@@ -277,12 +291,22 @@ export function parseMessage(message: string, sheetContext?: SheetContext): Pars
       .trim()
 
     let column: string | undefined
-    if (explicitCol && !DIRECTION_WORDS.has(explicitCol.toLowerCase())) {
-      column = explicitCol.toUpperCase()
+    const matchingHeader = byName
+      ? sheetContext?.headers?.find((header) => header.toLowerCase() === byName.toLowerCase())
+      : undefined
+    if (matchingHeader) {
+      // A short header such as Tax or ID must win over interpreting TAX/ID as
+      // a distant spreadsheet column reference.
+      column = matchingHeader
+    } else if (explicitColumn && !DIRECTION_WORDS.has(explicitColumn.toLowerCase())) {
+      column = explicitColumn.toUpperCase()
+    } else if (shortTarget && !DIRECTION_WORDS.has(shortTarget.toLowerCase())) {
+      const index = columnLetterToIndex(shortTarget)
+      column = !sheetContext || index <= sheetContext.lastDataCol
+        ? shortTarget.toUpperCase()
+        : byName
     } else if (byName && !DIRECTION_WORDS.has(byName.toLowerCase())) {
-      // Prefer a matching header name; the executor resolves names to indices.
-      const header = sheetContext?.headers?.find((h) => h.toLowerCase() === byName.toLowerCase())
-      column = header ?? byName
+      column = byName
     }
 
     if (!column) {
@@ -302,18 +326,34 @@ export function parseMessage(message: string, sheetContext?: SheetContext): Pars
   }
 
   // ─── Percentage operations ──────────────────────────────────────────────────
-  const pctAdd = lower.match(/(?:add|increase|raise|markup)\s+(\d+)\s*%\s+(?:to\s+)?(?:column\s+)?([a-z]{1,3})?\b/i)
+  const pctAdd = lower.match(/(?:add|increase|raise|markup)\s+(\d+)\s*%\s*(?:to\s+)?(?:column\s+)?([a-z]{1,3})?(?=\s|$)/i)
   if (pctAdd) {
     const pct = parseInt(pctAdd[1])
-    const col = (pctAdd[2] || 'B').toUpperCase()
+    const col = resolveSmartColumn(message, sheetContext, { preferAmount: true })
+      ?? pctAdd[2]?.toUpperCase()
+    if (!col) {
+      return {
+        calls: [],
+        understood: true,
+        explanation: `Which numeric column should I increase by ${pct}%?${describeColumnChoices(sheetContext)}`,
+      }
+    }
     calls.push({ tool: 'modify_column', params: { column: col, operation: 'multiply', factor: 1 + pct / 100 }, description: `Add ${pct}% to column ${col}` })
     return { calls, understood: true, explanation: `Increasing all values in column ${col} by ${pct}%.` }
   }
 
-  const pctReduce = lower.match(/(?:reduce|decrease|discount|subtract)\s+(\d+)\s*%\s+(?:from\s+)?(?:column\s+)?([a-z]{1,3})?\b/i)
+  const pctReduce = lower.match(/(?:reduce|decrease|discount|subtract)\s+(\d+)\s*%\s*(?:from\s+)?(?:column\s+)?([a-z]{1,3})?(?=\s|$)/i)
   if (pctReduce) {
     const pct = parseInt(pctReduce[1])
-    const col = (pctReduce[2] || 'B').toUpperCase()
+    const col = resolveSmartColumn(message, sheetContext, { preferAmount: true })
+      ?? pctReduce[2]?.toUpperCase()
+    if (!col) {
+      return {
+        calls: [],
+        understood: true,
+        explanation: `Which numeric column should I decrease by ${pct}%?${describeColumnChoices(sheetContext)}`,
+      }
+    }
     calls.push({ tool: 'modify_column', params: { column: col, operation: 'multiply', factor: 1 - pct / 100 }, description: `Reduce column ${col} by ${pct}%` })
     return { calls, understood: true, explanation: `Decreasing all values in column ${col} by ${pct}%.` }
   }
@@ -321,14 +361,16 @@ export function parseMessage(message: string, sheetContext?: SheetContext): Pars
   // ─── Formula: "sum/total/average column X" ──────────────────────────────────
   const formulaCol = lower.match(/\b(?:sum|total|add up)\s+(?:of\s+)?(?:column\s+)?([a-z]{1,3})\b/i)
   if (formulaCol) {
-    const col = formulaCol[1].toUpperCase()
+    const col = resolveSmartColumn(message, sheetContext, { preferAmount: true })
+      ?? formulaCol[1].toUpperCase()
     calls.push({ tool: 'apply_formula', params: { cell: col, formula: '=SUM' }, description: `Sum column ${col}` })
     return { calls, understood: true, explanation: `Adding a SUM formula for column ${col}.` }
   }
 
   const avgCol = lower.match(/\b(?:average|avg|mean)\s+(?:of\s+)?(?:column\s+)?([a-z]{1,3})\b/i)
   if (avgCol) {
-    const col = avgCol[1].toUpperCase()
+    const col = resolveSmartColumn(message, sheetContext, { preferAmount: true })
+      ?? avgCol[1].toUpperCase()
     calls.push({ tool: 'apply_formula', params: { cell: col, formula: '=AVERAGE' }, description: `Average column ${col}` })
     return { calls, understood: true, explanation: `Adding an AVERAGE formula for column ${col}.` }
   }
@@ -337,7 +379,8 @@ export function parseMessage(message: string, sheetContext?: SheetContext): Pars
   // read-only and return the answer without writing into the sheet.
   const countFormulaCol = lower.match(/\b(?:add|create|insert)\s+(?:a\s+)?counta?\s+formula\s+(?:for|to|of)\s+(?:column\s+)?([a-z]{1,3})\b/i)
   if (countFormulaCol) {
-    const col = countFormulaCol[1].toUpperCase()
+    const col = resolveSmartColumn(message, sheetContext)
+      ?? countFormulaCol[1].toUpperCase()
     const fn = /\bcounta\b/i.test(lower) ? '=COUNTA' : '=COUNT'
     calls.push({ tool: 'apply_formula', params: { cell: col, formula: fn }, description: `Count column ${col}` })
     return { calls, understood: true, explanation: `Adding a ${fn.slice(1)} formula for column ${col}.` }

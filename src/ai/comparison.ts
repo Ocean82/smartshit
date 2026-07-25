@@ -1,8 +1,9 @@
 import type { ColumnProfile, ToolResult } from '@/ai/types'
 import { buildSheetProfile } from '@/ai/sheetProfile'
 import type { SheetData, WorkbookData } from '@/types'
-import { cellToRef, refToCell } from '@/engine/spreadsheet'
+import { refToCell } from '@/engine/spreadsheet'
 import { findHeaderRow, findLastDataRow } from '@/lib/sheetSort'
+import { findSummaryRowIndexes } from '@/lib/sheetRows'
 
 export type SheetValueGetter = (sheetId: string, row: number, col: number) => string
 
@@ -39,29 +40,6 @@ function sheetGetter(getValue: SheetValueGetter, sheet: SheetData) {
   return (row: number, col: number) => getValue(sheet.id, row, col)
 }
 
-function maxColumn(sheet: SheetData): number {
-  let max = 0
-  for (const cellId of Object.keys(sheet.cells)) max = Math.max(max, cellToRef(cellId).col)
-  return max
-}
-
-function totalRowIndexes(sheet: SheetData, getValue: SheetValueGetter): Set<number> {
-  const totals = new Set<number>()
-  const lastCol = maxColumn(sheet)
-  const lastRow = findLastDataRow(sheet)
-  for (let row = 0; row <= lastRow; row++) {
-    for (let col = 0; col <= lastCol; col++) {
-      const displayed = getValue(sheet.id, row, col)
-        || String(sheet.cells[refToCell(row, col)]?.value ?? '')
-      if (/^(?:grand\s+)?totals?\s*:?$/i.test(displayed.trim())) {
-        totals.add(row)
-        break
-      }
-    }
-  }
-  return totals
-}
-
 function aggregateColumn(
   sheet: SheetData,
   column: ColumnProfile,
@@ -74,7 +52,7 @@ function aggregateColumn(
   const lastRow = findLastDataRow(sheet)
   let sum = 0
   let count = 0
-  const totalRows = totalRowIndexes(sheet, getValue)
+  const totalRows = findSummaryRowIndexes(sheet, sheetGetter(getValue, sheet))
 
   for (let row = headerRow + 1; row <= lastRow; row++) {
     // Do not double count a displayed totals row alongside its source values.
@@ -279,7 +257,7 @@ function compareRows(
   const labels = new Map<string, { label: string; total: number }>()
   const headerRow = findHeaderRow(sheet)
   const lastRow = findLastDataRow(sheet)
-  const totalRows = totalRowIndexes(sheet, getValue)
+  const totalRows = findSummaryRowIndexes(sheet, sheetGetter(getValue, sheet))
 
   for (let row = headerRow + 1; row <= lastRow; row++) {
     if (totalRows.has(row)) continue

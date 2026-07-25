@@ -2,6 +2,7 @@ import type { SheetData } from '@/types'
 import { cellToRef, colToLetter, refToCell } from '@/engine/spreadsheet'
 import { cellScalar } from '@/lib/formatUtils'
 import type { ColumnProfile, ColumnRole, SheetProfile, SheetPurpose } from '@/ai/types'
+import { findSummaryRowIndexes } from '@/lib/sheetRows'
 
 function parseNumeric(value: string | number | boolean | null | undefined): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) return value
@@ -71,6 +72,7 @@ export function buildSheetProfile(
     headers.push(header)
   }
 
+  const summaryRows = findSummaryRowIndexes(sheet, getComputedValue)
   const columns: ColumnProfile[] = []
   for (let c = 0; c <= maxCol; c++) {
     const values: (string | number | null)[] = []
@@ -79,6 +81,7 @@ export function buildSheetProfile(
     const uniques = new Set<string>()
 
     for (let r = headerRow + 1; r <= maxRow; r++) {
+      if (summaryRows.has(r)) continue
       const cellId = refToCell(r, c)
       const cell = sheet.cells[cellId]
       const computed = getComputedValue(r, c)
@@ -122,16 +125,7 @@ export function buildSheetProfile(
     columns.push(profile)
   }
 
-  let hasTotalsRow = false
-  if (maxRow > 0) {
-    for (let c = 0; c <= maxCol; c++) {
-      const val = sheet.cells[refToCell(maxRow, c)]?.value
-      if (typeof val === 'string' && /total/i.test(val)) {
-        hasTotalsRow = true
-        break
-      }
-    }
-  }
+  const hasTotalsRow = summaryRows.size > 0
 
   return {
     name: sheet.name,

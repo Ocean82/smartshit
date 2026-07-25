@@ -78,5 +78,6 @@ describe('buildSheetProfile', () => {
 
     const profile = buildSheetProfile(sheet, getter(sheet))
     expect(profile.hasTotalsRow).toBe(true)
+    expect(profile.columns.find((column) => column.name === 'Amount')?.sumVal).toBe(10)
   })
 })

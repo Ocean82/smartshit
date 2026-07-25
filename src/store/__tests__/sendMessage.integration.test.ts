@@ -150,6 +150,25 @@ describe('sendMessage integration — local parser path', () => {
     expect(formulas).toHaveLength(0)
   })
 
+  it('routes CSV export through the existing download handler', async () => {
+    seedBudgetData()
+    const click = vi.fn()
+    const createObjectURL = vi.spyOn(URL, 'createObjectURL')
+    vi.stubGlobal('document', {
+      createElement: vi.fn(() => ({ href: '', download: '', click })),
+    })
+
+    try {
+      await sendAndWait('export this as CSV')
+      expect(createObjectURL).toHaveBeenCalledOnce()
+      expect(click).toHaveBeenCalledOnce()
+      expect(useStore.getState().messages.at(-1)?.content).toMatch(/CSV download/i)
+    } finally {
+      createObjectURL.mockRestore()
+      vi.unstubAllGlobals()
+    }
+  })
+
   it('uses the detected amount column and returns the actual max result', async () => {
     const store = useStore.getState()
     store.setCellValue('A1', 'Item')
@@ -185,6 +204,20 @@ describe('sendMessage integration — local parser path', () => {
     const response = useStore.getState().messages.at(-1)?.content ?? ''
     expect(response).toContain('| Amount | $100 | $125 |')
     expect(response).toContain('$25 (25.0%) higher than January')
+  })
+
+  it('clarifies a named deletion when multiple rows match', async () => {
+    seedBudgetData()
+    useStore.getState().setCellValue('A6', 'Netflix')
+    useStore.getState().setCellValue('B6', 20)
+    await sendAndWait('remove Netflix')
+
+    const response = useStore.getState().messages.at(-1)
+    expect(response?.content).toMatch(/found 2 rows/i)
+    expect(response?.content).toContain('rows 5, 6')
+    expect(response?.actions).toBeUndefined()
+    expect(useStore.getState().getActiveSheet().cells.A5?.value).toBe('Netflix')
+    expect(useStore.getState().getActiveSheet().cells.A6?.value).toBe('Netflix')
   })
 
   it('stages a named row deletion and only deletes it after Apply', async () => {

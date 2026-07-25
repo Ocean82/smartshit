@@ -149,6 +149,19 @@ describe('multi-letter columns', () => {
     expect(result.message).not.toContain('[object Object]')
   })
 
+  it('find_max excludes aggregate total rows', () => {
+    const h = harness({
+      A1: { value: 'Item' }, B1: { value: 'Amount' },
+      A2: { value: 'Rent' }, B2: { value: 1500 },
+      A3: { value: 'Food' }, B3: { value: 400 },
+      A4: { value: 'Total Expenses' }, B4: { value: 1900, formula: '=SUM(B2:B3)' },
+    })
+    const result = run(h, 'find_max', { column: 'Amount' })
+    expect(result.message).toContain('$1,500')
+    expect(result.message).toContain('Rent')
+    expect(result.message).not.toContain('$1,900')
+  })
+
   it('resolves a column by header name', () => {
     const h = harness({
       A1: { value: 'Item' }, B1: { value: 'Amount' },
@@ -157,6 +170,16 @@ describe('multi-letter columns', () => {
     const result = run(h, 'modify_column', { column: 'Amount', operation: 'add', factor: 5 })
     expect(result.success).toBe(true)
     expect(h.writes).toContainEqual({ cell: 'B2', value: 105, formula: undefined })
+  })
+
+  it('resolves a short header before interpreting it as a column letter', () => {
+    const h = harness({
+      A1: { value: 'Item' }, B1: { value: 'Tax' },
+      A2: { value: 'rent' }, B2: { value: 10 },
+    })
+    const result = run(h, 'modify_column', { column: 'Tax', operation: 'add', factor: 5 })
+    expect(result.success).toBe(true)
+    expect(h.writes).toContainEqual({ cell: 'B2', value: 15, formula: undefined })
   })
 
   it('fails clearly when a column cannot be resolved', () => {
@@ -242,12 +265,13 @@ describe('read-only local tools', () => {
     expect(result.modified).toBe(0)
   })
 
-  it('counts numeric comparisons in a resolved column', () => {
+  it('counts numeric comparisons in a resolved column without counting totals', () => {
     const h = harness({
       A1: { value: 'Item' }, D1: { value: 'Amount' },
       A2: { value: 'A' }, D2: { value: 100 },
       A3: { value: 'B' }, D3: { value: 600 },
       A4: { value: 'C' }, D4: { value: 900 },
+      A5: { value: 'Total' }, D5: { value: 1600 },
     })
     const result = run(h, 'count_rows', { column: 'Amount', operator: 'gt', value: 500 })
     expect(result.message).toContain('Found 2 matching rows in Amount')
@@ -291,6 +315,15 @@ describe('delete row validation', () => {
     expect(result.success).toBe(false)
     expect(result.message).toMatch(/changed after the preview/i)
     expect(h.deletions).toEqual([])
+  })
+})
+
+describe('multi-sort validation', () => {
+  it('does not silently map an unknown sort column to column A', () => {
+    const h = harness({ A1: { value: 'Item' }, A2: { value: 'Rent' } })
+    const result = run(h, 'multi_sort', { rules: [{ column: 'Missing', direction: 'asc' }] })
+    expect(result.success).toBe(false)
+    expect(result.message).toMatch(/Could not resolve/i)
   })
 })
 

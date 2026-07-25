@@ -39,6 +39,31 @@ const expenseContext = context([
 ])
 
 describe('reported agent gap regressions', () => {
+  it('prefers short header names over treating them as distant column letters', () => {
+    const shortHeaderContext = context([
+      column('Item', 'A', 'text', 'category'),
+      column('Note', 'B', 'text', 'label'),
+      column('Tax', 'C', 'number', 'amount', [10, 20]),
+    ])
+    expect(parseMessage('sort by Tax', shortHeaderContext).calls[0].params).toMatchObject({ column: 'Tax' })
+    expect(parseMessage('sort by column Tax', shortHeaderContext).calls[0].params).toMatchObject({ column: 'Tax' })
+    expect(parseMessage('sum column Tax', shortHeaderContext).calls[0].params).toMatchObject({ cell: 'C' })
+    expect(parseMessage('increase 10% to Tax', shortHeaderContext).calls[0].params).toMatchObject({ column: 'C' })
+    expect(parseMessage('find the highest Tax', shortHeaderContext).calls[0].params).toMatchObject({ column: 'C' })
+    expect(parseMessage('find the highest value in C', shortHeaderContext).calls[0].params).toMatchObject({ column: 'C' })
+  })
+
+  it('uses the detected amount role for percentage changes instead of defaulting to B', () => {
+    expect(parseMessage('increase 10%', expenseContext).calls[0]).toMatchObject({
+      tool: 'modify_column',
+      params: { column: 'D', operation: 'multiply', factor: 1.1 },
+    })
+    expect(parseMessage('decrease 20%', expenseContext).calls[0]).toMatchObject({
+      tool: 'modify_column',
+      params: { column: 'D', operation: 'multiply', factor: 0.8 },
+    })
+  })
+
   it('uses the detected amount role for max/min rather than defaulting to B', () => {
     expect(parseMessage("what's my biggest expense?", expenseContext).calls[0]).toMatchObject({
       tool: 'find_max',

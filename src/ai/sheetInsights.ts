@@ -3,6 +3,7 @@ import { cellToRef, colToLetter, refToCell } from '@/engine/spreadsheet'
 import { cellScalar } from '@/lib/formatUtils'
 import { AI_ANALYSIS_CONFIG } from '@/ai/config'
 import { detectOutliers, type OutlierItem } from '@/ai/outliers'
+import { findSummaryRowIndexes } from '@/lib/sheetRows'
 
 export interface ColumnStat {
   column: string
@@ -149,6 +150,7 @@ export function computeSheetInsights(
   }
 
   const headerRow = detectHeaderRow(matrix)
+  const summaryRows = findSummaryRowIndexes(sheet, getComputedValue)
   const headers = (matrix[headerRow] ?? []).map((h) => (h === null ? '' : String(h)))
   const normalizedHeaders = headers.map(normalizeHeader)
 
@@ -156,6 +158,7 @@ export function computeSheetInsights(
   for (let c = 0; c <= maxCol; c++) {
     const values: number[] = []
     for (let r = headerRow + 1; r <= maxRow; r++) {
+      if (summaryRows.has(r)) continue
       const num = parseNumeric(matrix[r]?.[c] ?? null)
       if (num !== null) values.push(num)
     }
@@ -190,6 +193,7 @@ export function computeSheetInsights(
     const expenses: ExpenseItem[] = []
 
     for (let r = headerRow + 1; r <= maxRow; r++) {
+      if (summaryRows.has(r)) continue
       const category = String(matrix[r]?.[categoryCol] ?? '').trim()
       const amount = parseNumeric(matrix[r]?.[amountCol] ?? null)
       if (!category || amount === null) continue
@@ -217,6 +221,7 @@ export function computeSheetInsights(
     const labelCol = categoryCol >= 0 ? categoryCol : 0
 
     for (let r = headerRow + 1; r <= maxRow; r++) {
+      if (summaryRows.has(r)) continue
       const label = String(matrix[r]?.[labelCol] ?? `Row ${r + 1}`).trim()
       const budget = parseNumeric(matrix[r]?.[budgetCol] ?? null)
       const actual = actualCol >= 0 ? parseNumeric(matrix[r]?.[actualCol] ?? null) : null
@@ -242,6 +247,7 @@ export function computeSheetInsights(
   if (incomeCol >= 0) {
     let incomeTotal = 0
     for (let r = headerRow + 1; r <= maxRow; r++) {
+      if (summaryRows.has(r)) continue
       const num = parseNumeric(matrix[r]?.[incomeCol] ?? null)
       if (num !== null) incomeTotal += num
     }
@@ -258,6 +264,7 @@ export function computeSheetInsights(
     const label = headers[c] || `Column ${letter}`
     const values: Array<{ row: number; value: number }> = []
     for (let r = headerRow + 1; r <= effectiveMaxRow; r++) {
+      if (summaryRows.has(r)) continue
       const num = parseNumeric(matrix[r]?.[c] ?? null)
       if (num !== null) values.push({ row: r + 1, value: num })
     }
