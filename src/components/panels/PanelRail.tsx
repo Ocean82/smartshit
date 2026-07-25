@@ -16,6 +16,14 @@ const PANEL_ICONS: Record<PanelId, React.ReactNode> = {
   inspector: <Microscope size={16} />,
 }
 
+/** Per-panel accent colors for active state */
+const PANEL_COLORS: Record<PanelId, { bg: string; text: string; ring: string }> = {
+  chat: { bg: 'var(--accent-50)', text: 'var(--accent-700)', ring: 'var(--accent-200)' },
+  insights: { bg: 'oklch(0.95 0.04 155)', text: 'oklch(0.35 0.12 155)', ring: 'oklch(0.85 0.08 155)' },
+  auditor: { bg: 'oklch(0.95 0.04 70)', text: 'oklch(0.40 0.12 70)', ring: 'oklch(0.85 0.08 70)' },
+  inspector: { bg: 'oklch(0.95 0.04 300)', text: 'oklch(0.38 0.14 300)', ring: 'oklch(0.85 0.08 300)' },
+}
+
 export function PanelRail() {
   const activePanel = useStore((s) => s.activePanel)
   const setActivePanel = useStore((s) => s.setActivePanel)
@@ -40,13 +48,15 @@ export function PanelRail() {
     <div
       className="flex flex-col items-center border-l py-2.5 gap-1 shrink-0 transition-all"
       style={{
-        background: 'var(--surface-secondary)',
+        background: 'var(--neutral-50)',
         borderColor: 'var(--neutral-200)',
         width: showLabels ? '72px' : '44px',
+        boxShadow: 'inset 1px 0 0 var(--neutral-200)',
       }}
     >
       {PANELS.map((panel) => {
         const isActive = activePanel === panel.id
+        const colors = PANEL_COLORS[panel.id]
         return (
           <button
             key={panel.id}
@@ -55,10 +65,10 @@ export function PanelRail() {
             className={`
               rounded-lg flex items-center transition-all duration-150 relative group
               ${showLabels ? 'w-[60px] h-8 gap-1.5 px-2 justify-start' : 'w-8 h-8 justify-center'}
-              ${isActive ? 'ring-1 ring-blue-200' : 'hover:text-slate-700'}
+              ${isActive ? '' : 'hover:text-slate-700'}
             `}
             style={isActive
-              ? { background: 'var(--accent-50)', color: 'var(--accent-700)' }
+              ? { background: colors.bg, color: colors.text, boxShadow: `inset 0 0 0 1px ${colors.ring}` }
               : { color: 'var(--neutral-500)' }
             }
             aria-label={`${isActive ? 'Close' : 'Open'} ${panel.label} panel`}

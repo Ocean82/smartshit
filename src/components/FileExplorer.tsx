@@ -66,25 +66,31 @@ export function FileExplorer() {
   return (
     <div className="w-56 border-r border-gray-200 flex flex-col bg-white shrink-0">
       {/* Header */}
-      <div className="px-3 py-2.5 border-b border-gray-200 flex items-center justify-between">
-        <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Files</h3>
+      <div className="px-3 py-2.5 border-b border-gray-200 flex items-center justify-between" style={{ background: 'var(--accent-50)' }}>
+        <h3 className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--accent-700)' }}>Files</h3>
         <div className="flex items-center gap-0.5">
           <button
-            className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded"
+            className="p-1 rounded transition-colors"
+            style={{ color: 'var(--neutral-400)' }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--accent-600)'; e.currentTarget.style.background = 'var(--accent-50)' }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--neutral-400)'; e.currentTarget.style.background = '' }}
             onClick={() => setShowNewInput('file')}
             title="New File"
           >
             <FilePlus size={14} />
           </button>
           <button
-            className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded"
+            className="p-1 rounded transition-colors"
+            style={{ color: 'var(--neutral-400)' }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--accent-600)'; e.currentTarget.style.background = 'var(--accent-50)' }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--neutral-400)'; e.currentTarget.style.background = '' }}
             onClick={() => setShowNewInput('folder')}
             title="New Folder"
           >
             <FolderPlus size={14} />
           </button>
           <button
-            className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded"
+            className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
             onClick={toggleFileExplorer}
           >
             <X size={14} />

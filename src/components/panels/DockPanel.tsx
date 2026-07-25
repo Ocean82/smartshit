@@ -8,6 +8,14 @@ import { useStore } from '@/store/useStore'
 import { getPanelDef, type PanelId } from './panelTypes'
 import { X } from 'lucide-react'
 
+/** Per-panel header accent: subtle tinted background for visual identity */
+const PANEL_HEADER_STYLES: Record<string, { bg: string; iconColor: string }> = {
+  chat: { bg: 'var(--accent-50)', iconColor: 'var(--accent-600)' },
+  insights: { bg: 'oklch(0.96 0.03 155)', iconColor: 'oklch(0.45 0.14 155)' },
+  auditor: { bg: 'oklch(0.96 0.03 70)', iconColor: 'oklch(0.50 0.14 70)' },
+  inspector: { bg: 'oklch(0.96 0.03 300)', iconColor: 'oklch(0.42 0.14 300)' },
+}
+
 interface DockPanelProps {
   panelId: PanelId
   children: React.ReactNode
@@ -129,9 +137,15 @@ export function DockPanel({ panelId, children, title, headerActions }: DockPanel
       </div>
 
       {/* Header */}
-      <div className="px-3 py-2.5 border-b flex items-center justify-between shrink-0" style={{ borderColor: 'var(--neutral-200)' }}>
+      <div
+        className="px-3 py-2.5 border-b flex items-center justify-between shrink-0"
+        style={{
+          borderColor: 'var(--neutral-200)',
+          background: PANEL_HEADER_STYLES[panelId]?.bg ?? 'transparent',
+        }}
+      >
         <div className="flex items-center gap-2 min-w-0">
-          <span className="text-sm" aria-hidden="true">{def.icon}</span>
+          <span className="text-sm" aria-hidden="true" style={{ color: PANEL_HEADER_STYLES[panelId]?.iconColor }}>{def.icon}</span>
           <h3 className="text-xs font-semibold uppercase tracking-wider truncate" style={{ color: 'var(--neutral-700)' }}>
             {title ?? def.label}
           </h3>

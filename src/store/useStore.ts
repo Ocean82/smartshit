@@ -1193,7 +1193,7 @@ export const useStore = create<AppState>()(
           .join(', ');
         const importMessage = multi
           ? `Imported **${fileLabel}** with **${workbook.sheets.length} sheets**: ${sheetList}.\n\nYou're on **${sheet?.name ?? 'Sheet1'}**. Use the sheet tabs at the bottom to switch — I analyze the active sheet.`
-          : `Imported **${fileLabel}** — ${activeRows} rows on **${sheet?.name ?? 'Sheet 1'}**. Analyzing your data now…`;
+          : `Imported **${fileLabel}** — ${activeRows} rows on **${sheet?.name ?? 'Sheet 1'}**. Ready to analyze.\n\nAsk me anything about this data — try *"Explain this spreadsheet"* or *"Where am I overspending?"*`;
 
         set((s) => {
           s.workbook = workbook;

@@ -249,18 +249,30 @@ export function ChatPanel({ isMobileOpen, onCloseMobile, embedded }: { isMobileO
 
       <div className="px-3 py-2.5 border-b border-gray-100 overflow-x-auto scrollbar-hide">
         <div className="flex gap-1.5 md:flex-wrap">
-          {skills.slice(0, 6).map((skill) => (
-            <button
-              key={skill.id}
-              type="button"
-              className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs bg-slate-50 rounded-lg border border-slate-200 hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700 transition-colors whitespace-nowrap shrink-0"
-              onClick={() => handleSkillClick(skill.prompt)}
-              title={skill.description}
-            >
-              <span>{skill.icon}</span>
-              <span className="font-medium">{skill.name}</span>
-            </button>
-          ))}
+          {skills.slice(0, 6).map((skill) => {
+            const cat = skill.category?.toLowerCase() ?? ''
+            const tint = cat === 'finance'
+              ? 'bg-emerald-50/80 border-emerald-200/70 text-emerald-800 hover:bg-emerald-100 hover:border-emerald-300'
+              : cat === 'business'
+                ? 'bg-blue-50/80 border-blue-200/70 text-blue-800 hover:bg-blue-100 hover:border-blue-300'
+                : cat === 'hr'
+                  ? 'bg-violet-50/80 border-violet-200/70 text-violet-800 hover:bg-violet-100 hover:border-violet-300'
+                  : cat === 'management'
+                    ? 'bg-amber-50/80 border-amber-200/70 text-amber-800 hover:bg-amber-100 hover:border-amber-300'
+                    : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700'
+            return (
+              <button
+                key={skill.id}
+                type="button"
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-lg border transition-colors whitespace-nowrap shrink-0 ${tint}`}
+                onClick={() => handleSkillClick(skill.prompt)}
+                title={skill.description}
+              >
+                <span>{skill.icon}</span>
+                <span className="font-medium">{skill.name}</span>
+              </button>
+            )
+          })}
         </div>
       </div>
 

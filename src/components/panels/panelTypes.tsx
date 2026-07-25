@@ -18,10 +18,10 @@ export interface PanelDef {
 }
 
 export const PANELS: PanelDef[] = [
-  { id: 'chat', icon: <MessageSquare size={15} strokeWidth={1.8} />, label: 'Chat', defaultWidth: 360, minWidth: 280, maxWidth: 500 },
-  { id: 'insights', icon: <BarChart3 size={15} strokeWidth={1.8} />, label: 'Insights', defaultWidth: 320, minWidth: 260, maxWidth: 480 },
-  { id: 'auditor', icon: <Shield size={15} strokeWidth={1.8} />, label: 'Auditor', defaultWidth: 300, minWidth: 260, maxWidth: 440 },
-  { id: 'inspector', icon: <Microscope size={15} strokeWidth={1.8} />, label: 'Inspector', defaultWidth: 300, minWidth: 260, maxWidth: 440 },
+  { id: 'chat', icon: <MessageSquare size={15} strokeWidth={1.8} className="text-[var(--accent-600)]" />, label: 'Chat', defaultWidth: 360, minWidth: 280, maxWidth: 500 },
+  { id: 'insights', icon: <BarChart3 size={15} strokeWidth={1.8} style={{ color: 'oklch(0.45 0.14 155)' }} />, label: 'Insights', defaultWidth: 320, minWidth: 260, maxWidth: 480 },
+  { id: 'auditor', icon: <Shield size={15} strokeWidth={1.8} style={{ color: 'oklch(0.50 0.14 70)' }} />, label: 'Auditor', defaultWidth: 300, minWidth: 260, maxWidth: 440 },
+  { id: 'inspector', icon: <Microscope size={15} strokeWidth={1.8} style={{ color: 'oklch(0.42 0.14 300)' }} />, label: 'Inspector', defaultWidth: 300, minWidth: 260, maxWidth: 440 },
 ]
 
 /**
