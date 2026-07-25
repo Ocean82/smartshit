@@ -215,3 +215,35 @@ body {
     transform: scale(0.90);
   }
 }
+
+/* Spreadsheet-first workspace: docked tools never float over the grid. */
+#spreadsheet-main {
+  min-width: 320px;
+  background: var(--surface-panel);
+}
+
+@media (max-width: 900px) and (min-width: 769px) {
+  #spreadsheet-main {
+    min-width: 240px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
+/* On phones the active tool becomes a deliberate full-screen workspace, rather
+   than squeezing the sheet into an unusable column. The close button returns
+   users to the sheet. */
+@media (max-width: 767px) {
+  .dock-panel {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: none !important;
+  }
+}
