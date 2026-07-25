@@ -24,6 +24,12 @@ export const PANELS: PanelDef[] = [
   { id: 'inspector', icon: <Microscope size={15} strokeWidth={1.8} />, label: 'Inspector', defaultWidth: 300, minWidth: 260, maxWidth: 440 },
 ]
 
+/**
+ * Retrieves the definition for a panel identifier.
+ *
+ * @param id - The identifier of the panel to retrieve
+ * @returns The matching panel definition
+ */
 export function getPanelDef(id: PanelId): PanelDef {
   return PANELS.find((p) => p.id === id)!
 }
