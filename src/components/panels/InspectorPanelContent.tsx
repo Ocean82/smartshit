@@ -12,8 +12,7 @@ import { useMemo } from 'react'
 import { useStore } from '@/store/useStore'
 import { cellToRef, refToCell, colToLetter } from '@/engine/spreadsheet'
 import { explainFormula, describeCellValue } from '@/lib/formulaExplainer'
-import { computeSheetInsights } from '@/ai/sheetInsights'
-import { ArrowDownRight, ArrowUpLeft, AlertTriangle, Hash, Type, Search } from 'lucide-react'
+import { ArrowDownRight, ArrowUpLeft, Hash, Type, Search } from 'lucide-react'
 
 export function InspectorPanelContent() {
   const { selection, getActiveSheet, getComputedValue, setSelection, setChatInput, sendMessage, setActivePanel } = useStore()

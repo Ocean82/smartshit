@@ -387,7 +387,7 @@ export function SpreadsheetGrid() {
           }
         }
     }
-  }, [editingCell, selection, sheet.cells, commitEdit, pushHistory, setCellValue, setSelection, setEditingCell, setEditValue]);
+  }, [editingCell, selection, sheet, commitEdit, pushHistory, setCellValue, setSelection, setEditingCell, setEditValue, TOTAL_ROWS, TOTAL_COLS]);
 
   const handleAutocompleteSelect = useCallback((functionName: string) => {
     if (!functionName) return;
@@ -551,12 +551,12 @@ export function SpreadsheetGrid() {
   // Select all cells in a row
   const handleRowSelect = useCallback((row: number) => {
     setSelection({ startRow: row, startCol: 0, endRow: row, endCol: TOTAL_COLS - 1 });
-  }, [setSelection]);
+  }, [setSelection, TOTAL_COLS]);
 
   // Select all cells in a column
   const handleColSelect = useCallback((col: number) => {
     setSelection({ startRow: 0, startCol: col, endRow: TOTAL_ROWS - 1, endCol: col });
-  }, [setSelection]);
+  }, [setSelection, TOTAL_ROWS]);
 
   // Virtual scrolling state
   const [scrollState, setScrollState] = useState({ scrollTop: 0, scrollLeft: 0, viewportHeight: 600, viewportWidth: 800 });
@@ -595,7 +595,7 @@ export function SpreadsheetGrid() {
     }
     
     return { startRow, endRow, startCol: colStart, endCol: colEnd };
-  }, [scrollState, getColWidth, displayRowCount]);
+  }, [scrollState, getColWidth, displayRowCount, TOTAL_COLS]);
 
   // Calculate total dimensions
   const totalWidth = useMemo(() => {
@@ -604,7 +604,7 @@ export function SpreadsheetGrid() {
       width += getColWidth(i);
     }
     return width;
-  }, [getColWidth]);
+  }, [getColWidth, TOTAL_COLS]);
 
   const totalHeight = displayRowCount * CELL_HEIGHT;
 

@@ -35,8 +35,6 @@ export function useTouch({
   colHeaderHeight,
   getColWidth,
   getScrollOffset,
-  visibleRange,
-  colOffsets,
 }: UseTouchOptions) {
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastTapTime = useRef(0);

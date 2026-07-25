@@ -79,16 +79,22 @@ export async function importWorkbookFromJsonFile(file: File): Promise<WorkbookDa
 /** Soft-validate after import; fills missing arrays so the engine can load. */
 export function normalizeImportedWorkbook(workbook: WorkbookData): WorkbookData {
   const fallback = createEmptyWorkbook(workbook.name || 'Imported')
+  const sheets = (workbook.sheets || []).map((sheet) => ({
+    ...sheet,
+    cells: sheet.cells ?? {},
+    columnWidths: sheet.columnWidths ?? {},
+    rowHeights: sheet.rowHeights ?? {},
+    charts: sheet.charts ?? [],
+  }))
+  const validSheets = sheets.length > 0 ? sheets : fallback.sheets
+  const activeSheetId = validSheets.some((s) => s.id === workbook.activeSheetId)
+    ? workbook.activeSheetId
+    : validSheets[0].id
   return {
     ...fallback,
     ...workbook,
-    sheets: workbook.sheets.map((sheet) => ({
-      ...sheet,
-      cells: sheet.cells ?? {},
-      columnWidths: sheet.columnWidths ?? {},
-      rowHeights: sheet.rowHeights ?? {},
-      charts: sheet.charts ?? [],
-    })),
+    sheets: validSheets,
+    activeSheetId,
     updatedAt: Date.now(),
   }
 }

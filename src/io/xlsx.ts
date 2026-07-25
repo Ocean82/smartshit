@@ -210,7 +210,9 @@ export function exportSheetToCsv(sheet: SheetData, filename: string): void {
     row
       .map((cell) => {
         const val = cell == null ? '' : String(cell)
-        return val.includes(',') || val.includes('"') ? `"${val.replace(/"/g, '""')}"` : val
+        return val.includes(',') || val.includes('"') || val.includes('\n') || val.includes('\r')
+          ? `"${val.replace(/"/g, '""')}"`
+          : val
       })
       .join(','),
   ).join('\n')

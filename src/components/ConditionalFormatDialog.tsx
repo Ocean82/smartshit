@@ -4,7 +4,7 @@ import { colToLetter, refToCell } from '@/engine/spreadsheet'
 import type { ConditionalFormatCondition } from '@/lib/conditionalFormat'
 import { PRESET_COLOR_SCALES } from '@/lib/colorScale'
 import { ICON_SETS } from '@/lib/conditionalFormat'
-import type { CellFormat, ColorScaleStop, IconSetConfig, IconSetType } from '@/types'
+import type { IconSetConfig, IconSetType } from '@/types'
 import { findHeaderRow, findLastDataRow } from '@/lib/sheetSort'
 
 interface Props {

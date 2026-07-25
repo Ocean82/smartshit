@@ -8,9 +8,6 @@ interface ExplanationResult {
   confidence: 'high' | 'medium' | 'low'
 }
 
-const RANGE_RE = /([A-Z]+\d+):([A-Z]+\d+)/g
-const CELL_RE = /([A-Z]+)(\d+)/g
-
 function describeRange(range: string, headers?: string[]): string {
   const match = range.match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/)
   if (!match) return range
@@ -130,7 +127,7 @@ const patterns: PatternHandler[] = [
   },
 
   // IFERROR
-  (formula, headers) => {
+  (formula) => {
     const match = formula.match(/^IFERROR\((.+?),\s*(.+?)\)$/i)
     if (!match) return null
     return {
@@ -140,7 +137,7 @@ const patterns: PatternHandler[] = [
   },
 
   // ROUND
-  (formula, headers) => {
+  (formula) => {
     const match = formula.match(/^ROUND\((.+?),\s*(\d+)\)$/i)
     if (!match) return null
     return { explanation: `Rounds ${match[1]} to ${match[2]} decimal places`, confidence: 'high' }

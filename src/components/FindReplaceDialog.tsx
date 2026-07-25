@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { useStore } from '@/store/useStore'
-import { refToCell, cellToRef } from '@/engine/spreadsheet'
+import { cellToRef } from '@/engine/spreadsheet'
 import { Search, Replace, X, ArrowDown, ArrowUp } from 'lucide-react'
 
 interface Props {
@@ -43,6 +43,10 @@ export function FindReplaceDialog({ isOpen, onClose }: Props) {
       setReplaceCount(null)
     }
   }, [isOpen])
+
+  const navigateToMatch = useCallback((match: MatchResult) => {
+    setSelection({ startRow: match.row, startCol: match.col, endRow: match.row, endCol: match.col })
+  }, [setSelection])
 
   const doSearch = useCallback(() => {
     if (!findText.trim()) {
@@ -105,11 +109,7 @@ export function FindReplaceDialog({ isOpen, onClose }: Props) {
     if (results.length > 0) {
       navigateToMatch(results[0])
     }
-  }, [findText, caseSensitive, useRegex, wholeCell, searchInFormulas, getActiveSheet, getComputedValue])
-
-  const navigateToMatch = useCallback((match: MatchResult) => {
-    setSelection({ startRow: match.row, startCol: match.col, endRow: match.row, endCol: match.col })
-  }, [setSelection])
+  }, [findText, caseSensitive, useRegex, wholeCell, searchInFormulas, getActiveSheet, getComputedValue, navigateToMatch])
 
   const goToNext = useCallback(() => {
     if (matches.length === 0) return

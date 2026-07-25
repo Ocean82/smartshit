@@ -184,7 +184,7 @@ export function SharedView({ token }: SharedViewProps) {
 // ─── Read-Only Grid ──────────────────────────────────────────────────────────
 
 function ReadOnlyGrid({ sheet }: { sheet: SheetData }) {
-  const { maxRow, maxCol, grid } = useMemo(() => {
+  const { maxCol, grid } = useMemo(() => {
     const cellIds = Object.keys(sheet.cells).filter((id) => sheet.cells[id]?.value != null || sheet.cells[id]?.formula)
 
     if (cellIds.length === 0) {

@@ -33,7 +33,6 @@ export function MobileMenu() {
     setShowFilterDialog,
     setShowPivotDialog,
     sortByColumn,
-    activeSortConfig,
     initWorkbook,
     addMessage,
     showVersionHistory,

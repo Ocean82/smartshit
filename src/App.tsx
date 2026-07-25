@@ -146,12 +146,12 @@ function App() {
         }
       }
       if (e.key === 'Escape' && useStore.getState().activePanel) {
-        setActivePanel(null)
+        useStore.getState().setActivePanel(null)
       }
     }
     document.addEventListener('keydown', handler)
     return () => document.removeEventListener('keydown', handler)
-  }, [])
+  }, [toggleToolbar])
 
   if (!isLoaded) {
     return (

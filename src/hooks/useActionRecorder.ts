@@ -3,7 +3,7 @@
  * Provides reactive state binding for the macro recording/replay system.
  */
 
-import { useCallback, useEffect, useSyncExternalStore } from 'react'
+import { useCallback, useSyncExternalStore } from 'react'
 import {
   getActionRecorder,
   type ActionRecording,

@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { useStore } from '@/store/useStore'
 import { MessageSquare, Zap, LayoutTemplate, ArrowRight, X, Shield, Search } from 'lucide-react'
 
 interface WelcomeOverlayProps {
