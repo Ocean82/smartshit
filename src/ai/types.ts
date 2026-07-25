@@ -48,6 +48,7 @@ export interface ToolResult {
   suggestions?: string[]
   chartConfig?: ChartConfig
   toolUsed?: string
+  reasoning?: string
   actions?: Array<{
     tool: string
     params: Record<string, unknown>

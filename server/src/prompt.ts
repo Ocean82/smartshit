@@ -79,6 +79,7 @@ export interface SpreadsheetContextInput {
   insights?: SheetInsightsInput
   profile?: SheetProfileInput
   deterministicSummary?: string
+  userPreferences?: Record<string, string>
   /** @deprecated legacy flat cell map */
   cellSummary?: Record<string, string | number | boolean | null>
 }
@@ -108,6 +109,7 @@ export interface ChatResponseBody {
   message: string
   actions: AgentActionInput[]
   source: 'llm' | 'fallback' | 'template' | 'clarification'
+  reasoning?: string
   suggestions?: string[]
 }
 
@@ -167,6 +169,13 @@ function formatContextBlock(context?: SpreadsheetContextInput): string {
 
   if (context.deterministicSummary?.trim()) {
     lines.push(`Pre-computed analysis (cite these numbers):\n${context.deterministicSummary}`)
+  }
+
+  if (context.userPreferences && Object.keys(context.userPreferences).length > 0) {
+    const prefs = Object.entries(context.userPreferences)
+      .map(([k, v]) => `  - ${k}: ${v}`)
+      .join('\n')
+    lines.push(`User preferences (respect these):\n${prefs}`)
   }
 
   if (context.profile) {
@@ -261,7 +270,9 @@ export function buildActionPrompt(context?: SpreadsheetContextInput): string {
 
   return `You are smartsh!t, a spreadsheet AI assistant. Respond ONLY with valid JSON.
 
-Format: {"message":"explanation","actions":[{"tool":"name","params":{},"description":"label"}]}
+Format: {"reasoning":"thought process","message":"explanation","actions":[{"tool":"name","params":{},"description":"label"}]}
+
+Reasoning traces: Use the "reasoning" field to explain your step-by-step logic BEFORE deciding on the actions. This is for your internal Chain-of-Thought and will be shown to the user as a transparency log.
 
 Available tools and their params:
 ${formatToolsForPrompt()}

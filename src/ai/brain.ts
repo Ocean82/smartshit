@@ -26,6 +26,7 @@ export interface ProcessMessageInput {
   getSheetComputedValue?: (sheetId: string, row: number, col: number) => string
   attachedPreview?: AttachedFilePreview | null
   priorInsights?: SheetInsights | null
+  userPreferences?: Record<string, string>
   history?: Array<{ role: 'user' | 'assistant'; content: string }>
   onToken?: (token: string) => void
 }
@@ -109,9 +110,24 @@ function runDeterministicSkills(
   mode: ReturnType<typeof classifyMode>,
   intent: ReturnType<typeof parseUserIntent>,
   priorInsights?: SheetInsights | null,
+  userPreferences?: Record<string, string>,
 ): ToolResult | null {
   const profile = buildSheetProfile(target.sheet, target.getComputedValue)
   const insights = target.context.insights
+
+  // ─── Long-term Memory (User Preferences) ──────────────────────────────────
+  if (message.toLowerCase().includes('remember') || message.toLowerCase().includes('my preference')) {
+    const prefMatch = message.match(/remember that I (?:like|prefer) (.*?)(?: for|$)/i) || 
+                     message.match(/my preference is (.*?)(?: for|$)/i)
+    if (prefMatch) {
+      const pref = prefMatch[1].trim()
+      return withTool({
+        success: true,
+        message: `I've noted that preference: "${pref}". I'll keep it in mind for future operations.`,
+        actions: [{ tool: 'save_preference', params: { preference: pref }, description: 'Save user preference' }]
+      }, 'preference-save')
+    }
+  }
 
   // Follow-ups about "unusual values" — answer from stats, no LLM required
   if (isOutlierFollowUp(message)) {
@@ -250,6 +266,7 @@ export async function processMessage(input: ProcessMessageInput): Promise<ToolRe
     input.message,
     {
       ...target.context,
+      userPreferences: input.userPreferences,
       deterministicSummary: buildDeterministicSummary(
         insightsBlock,
         deterministicText,
@@ -306,6 +323,7 @@ export async function processMessage(input: ProcessMessageInput): Promise<ToolRe
       success: true,
       message: combined || 'I looked at your sheet but didn\'t find enough to go on. Try selecting a range or asking a more specific question.',
       toolUsed: deterministic?.toolUsed ?? (finalLlmText ? 'llm' : 'insights'),
+      reasoning: serverResult.reasoning,
       suggestions: contextualSuggestions.length > 0
         ? contextualSuggestions
         : (deterministic?.suggestions ?? serverResult.suggestions),

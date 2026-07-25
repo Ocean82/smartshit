@@ -406,6 +406,36 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
     ],
     examples: ['chart my expenses', 'make a pie chart'],
   },
+  {
+    name: 'formula_analyzer',
+    category: 'read',
+    description: 'Debug and explain a complex formula. Breaks down the logic and identifies potential errors or improvements.',
+    params: [
+      { name: 'cell', type: 'string', description: 'Cell reference containing the formula to analyze', required: true },
+    ],
+    examples: ['analyze the formula in C10', 'why is this formula returning an error?', 'explain the logic of this calculation'],
+  },
+  {
+    name: 'multi_sheet_join',
+    category: 'mutate',
+    description: 'Join data from another sheet into the current sheet based on a common key (like an ID or Name).',
+    params: [
+      { name: 'sourceSheet', type: 'string', description: 'Name of the sheet to pull data from', required: true },
+      { name: 'sourceKey', type: 'string', description: 'Column in the source sheet to match on (e.g. "A")', required: true },
+      { name: 'targetKey', type: 'string', description: 'Column in the current sheet to match from (e.g. "A")', required: true },
+      { name: 'columnsToCopy', type: 'array', description: 'Array of column letters from source sheet to copy (e.g. ["B", "C"])', required: true },
+    ],
+    examples: ['pull prices from the Inventory sheet', 'join customer names from the Users tab based on ID'],
+  },
+  {
+    name: 'save_preference',
+    category: 'mutate',
+    description: 'Save a user preference or instruction for future reference.',
+    params: [
+      { name: 'preference', type: 'string', description: 'The preference text to remember', required: true },
+    ],
+    hidden: true,
+  },
   // ─── Sandbox script execution ──────────────────────────────────────────────
   {
     name: 'execute_script',

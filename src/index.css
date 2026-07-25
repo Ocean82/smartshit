@@ -1,3 +1,4 @@
+@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Fira+Sans:wght@300;400;500;600;700&display=swap');
 @import "tailwindcss";
 
 /* ========================================
@@ -59,6 +60,12 @@
   --ink-muted: var(--neutral-400);
   --ink-on-dark: oklch(0.92 0.01 250);
   --ink-on-accent: oklch(0.98 0 0);
+
+  /* Design System Overrides */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --radius-xl: 0.75rem;
+  --radius-2xl: 1rem;
 }
 
 /* Scrollbar styling — brand-tinted neutrals */
@@ -135,7 +142,7 @@
 body {
   margin: 0;
   padding: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  font-family: 'Fira Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
   overflow: hidden;
   background: var(--surface-body);
   color: var(--ink-primary);

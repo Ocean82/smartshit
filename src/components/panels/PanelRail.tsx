@@ -7,20 +7,20 @@
 import { useState } from 'react'
 import { useStore } from '@/store/useStore'
 import { PANELS, type PanelId } from './panelTypes'
-import { MessageSquare, BarChart3, Shield, Microscope } from 'lucide-react'
+import { MessageSquare, BarChart3, ShieldCheck, Microscope } from 'lucide-react'
 
 const PANEL_ICONS: Record<PanelId, React.ReactNode> = {
-  chat: <MessageSquare size={16} />,
-  insights: <BarChart3 size={16} />,
-  auditor: <Shield size={16} />,
-  inspector: <Microscope size={16} />,
+  chat: <MessageSquare size={18} />,
+  insights: <BarChart3 size={18} />,
+  auditor: <ShieldCheck size={18} />,
+  inspector: <Microscope size={18} />,
 }
 
 /** Per-panel accent colors for active state */
 const PANEL_COLORS: Record<PanelId, { bg: string; text: string; ring: string }> = {
   chat: { bg: 'var(--accent-50)', text: 'var(--accent-700)', ring: 'var(--accent-200)' },
   insights: { bg: 'oklch(0.95 0.04 155)', text: 'oklch(0.35 0.12 155)', ring: 'oklch(0.85 0.08 155)' },
-  auditor: { bg: 'oklch(0.95 0.04 70)', text: 'oklch(0.40 0.12 70)', ring: 'oklch(0.85 0.08 70)' },
+  auditor: { bg: 'oklch(0.95 0.04 250)', text: 'oklch(0.40 0.20 250)', ring: 'oklch(0.85 0.10 250)' },
   inspector: { bg: 'oklch(0.95 0.04 300)', text: 'oklch(0.38 0.14 300)', ring: 'oklch(0.85 0.08 300)' },
 }
 

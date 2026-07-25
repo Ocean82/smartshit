@@ -284,47 +284,50 @@ export function ChatPanel({ isMobileOpen, onCloseMobile, embedded }: { isMobileO
           }} />
         )}
         {messages.map((msg, idx) => {
-          const isStreamingMsg = isAiProcessing && msg.role === 'assistant' && idx === messages.length - 1
+          const isAssistant = msg.role === 'assistant'
+          const isUser = msg.role === 'user'
+          const isStreamingMsg = isAiProcessing && isAssistant && idx === messages.length - 1
           return (
-          <div key={msg.id} id={`msg-${msg.id}`} className={`flex gap-2 ${msg.role === 'user' ? 'justify-end' : ''}${msg.pinned ? ' ring-1 ring-amber-200 rounded-xl bg-amber-50/30' : ''}`}>
-            {msg.role === 'assistant' && (
-              <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 mt-0.5" style={{ background: 'linear-gradient(135deg, var(--neutral-950), var(--accent-600))' }}>
-                <Bot size={14} className="text-white" />
+          <div key={msg.id} id={`msg-${msg.id}`} className={`flex gap-3 ${isUser ? 'justify-end' : ''}${msg.pinned ? ' ring-1 ring-amber-200 rounded-2xl bg-amber-50/40 p-1' : ''}`}>
+            {isAssistant && (
+              <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-1 shadow-md transition-transform hover:scale-105" style={{ background: 'linear-gradient(135deg, var(--neutral-950), var(--accent-600))' }}>
+                <Bot size={16} className="text-white" />
               </div>
             )}
-            <div className={`max-w-[90%] ${msg.role === 'user' ? 'order-first' : ''}`}>
+            <div className={`max-w-[85%] ${isUser ? 'order-first' : ''}`}>
               <div
-                className={`rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
-                  msg.role === 'user'
-                    ? 'text-white rounded-tr-sm'
-                    : 'text-gray-800 rounded-tl-sm'
+                className={`rounded-2xl px-4 py-3 text-[13px] leading-relaxed shadow-sm transition-shadow hover:shadow-md ${
+                  isUser
+                    ? 'text-white rounded-tr-none'
+                    : 'text-slate-800 rounded-tl-none border border-slate-100'
                 }`}
-                style={msg.role === 'user' ? { background: 'var(--accent-600)' } : { background: 'var(--neutral-100)' }}
+                style={isUser ? { background: 'linear-gradient(135deg, var(--accent-600), var(--accent-700))' } : { background: 'white' }}
               >
                 <MessageContent content={msg.content} role={msg.role} isStreaming={isStreamingMsg} />
               </div>
-              {msg.role === 'assistant' && msg.suggestions && msg.suggestions.length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-1.5">
+              {isAssistant && msg.suggestions && msg.suggestions.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-2">
                   {msg.suggestions.map((suggestion) => (
                     <button
                       key={suggestion}
                       type="button"
-                      className="px-2.5 py-1 text-[11px] rounded-full border border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100 transition-colors text-left"
+                      className="px-3 py-1.5 text-[11px] font-semibold rounded-lg border border-blue-100 bg-white text-blue-700 hover:bg-blue-50 hover:border-blue-300 hover:shadow-sm transition-all text-left active:scale-95"
                       onClick={() => setChatInput(suggestion)}
                     >
+                      <Sparkles size={10} className="inline mr-1 text-blue-400" />
                       {suggestion}
                     </button>
                   ))}
                 </div>
               )}
-              {msg.role === 'assistant' && (
-                <div className="mt-1.5 flex items-center gap-1">
+              {isAssistant && (
+                <div className="mt-2 flex items-center gap-2 px-1">
                   <button
                     type="button"
                     title="Copy message"
                     aria-label="Copy message to clipboard"
                     onClick={() => { void navigator.clipboard.writeText(msg.content) }}
-                    className="p-1 rounded hover:bg-gray-200 text-gray-400 hover:text-gray-600"
+                    className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
                   >
                     <Copy size={12} />
                   </button>
@@ -333,16 +336,17 @@ export function ChatPanel({ isMobileOpen, onCloseMobile, embedded }: { isMobileO
                     title={msg.pinned ? 'Unpin message' : 'Pin message'}
                     aria-label={msg.pinned ? 'Unpin this message' : 'Pin this message for reference'}
                     onClick={() => togglePinMessage(msg.id)}
-                    className={`p-1 rounded hover:bg-gray-200 ${msg.pinned ? 'text-amber-500' : 'text-gray-400 hover:text-gray-600'}`}
+                    className={`p-1.5 rounded-lg hover:bg-slate-100 transition-colors ${msg.pinned ? 'text-amber-500 bg-amber-50' : 'text-slate-400 hover:text-slate-600'}`}
                   >
                     {msg.pinned ? <PinOff size={12} /> : <Pin size={12} />}
                   </button>
+                  <div className="h-3 w-px bg-slate-200 mx-1" />
                   <button
                     type="button"
                     title="Helpful"
                     aria-label="Mark response helpful"
                     onClick={() => handleFeedback(msg.id, 'up')}
-                    className={`p-1 rounded hover:bg-gray-200 ${feedbackById[msg.id] === 'up' ? 'text-green-600' : 'text-gray-400'}`}
+                    className={`p-1.5 rounded-lg hover:bg-emerald-50 transition-colors ${feedbackById[msg.id] === 'up' ? 'text-emerald-600 bg-emerald-50' : 'text-slate-400 hover:text-emerald-500'}`}
                   >
                     <ThumbsUp size={12} />
                   </button>
@@ -351,7 +355,7 @@ export function ChatPanel({ isMobileOpen, onCloseMobile, embedded }: { isMobileO
                     title="Not helpful"
                     aria-label="Mark response not helpful"
                     onClick={() => handleFeedback(msg.id, 'down')}
-                    className={`p-1 rounded hover:bg-gray-200 ${feedbackById[msg.id] === 'down' ? 'text-red-600' : 'text-gray-400'}`}
+                    className={`p-1.5 rounded-lg hover:bg-rose-50 transition-colors ${feedbackById[msg.id] === 'down' ? 'text-rose-600 bg-rose-50' : 'text-slate-400 hover:text-rose-500'}`}
                   >
                     <ThumbsDown size={12} />
                   </button>
@@ -378,13 +382,13 @@ export function ChatPanel({ isMobileOpen, onCloseMobile, embedded }: { isMobileO
           </div>
         )})}
         {isAiProcessing && (
-          <div className="flex gap-2" role="status" aria-live="polite" aria-busy="true">
-            <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0" style={{ background: 'linear-gradient(135deg, var(--neutral-950), var(--accent-600))' }}>
-              <Bot size={14} className="text-white" aria-hidden="true" />
+          <div className="flex gap-3" role="status" aria-live="polite" aria-busy="true">
+            <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-1 shadow-md animate-pulse" style={{ background: 'linear-gradient(135deg, var(--neutral-950), var(--accent-600))' }}>
+              <Bot size={16} className="text-white" aria-hidden="true" />
             </div>
-            <div className="bg-gray-100 rounded-2xl rounded-tl-sm px-4 py-3">
-              <div className="flex items-center gap-2 text-sm text-gray-500">
-                <Loader2 size={14} className="animate-spin" aria-hidden="true" />
+            <div className="bg-white border border-slate-100 rounded-2xl rounded-tl-none px-4 py-3 shadow-sm">
+              <div className="flex items-center gap-2 text-[13px] text-slate-500 font-medium">
+                <Loader2 size={14} className="animate-spin text-blue-500" aria-hidden="true" />
                 <span>
                   {messages[messages.length - 1]?.role === 'assistant' && messages[messages.length - 1]?.content
                     ? 'Finishing up…'
@@ -399,10 +403,10 @@ export function ChatPanel({ isMobileOpen, onCloseMobile, embedded }: { isMobileO
                 </span>
               </div>
               {waitSeconds >= 3 && waitSeconds < 15 && !messages[messages.length - 1]?.content && (
-                <div className="mt-1.5 flex flex-wrap gap-1">
-                  {waitSeconds >= 3 && <span className="inline-flex items-center gap-1 text-[10px] text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full">✓ Sheet context loaded</span>}
-                  {waitSeconds >= 5 && <span className="inline-flex items-center gap-1 text-[10px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-full">✓ Auditor checked</span>}
-                  {waitSeconds >= 8 && <span className="inline-flex items-center gap-1 text-[10px] text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded-full">⟳ Waiting for AI…</span>}
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {waitSeconds >= 3 && <span className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">✓ Context</span>}
+                  {waitSeconds >= 5 && <span className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">✓ Auditor</span>}
+                  {waitSeconds >= 8 && <span className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-100 animate-pulse">⟳ AI Model</span>}
                 </div>
               )}
               {waitSeconds >= 15 && !messages[messages.length - 1]?.content && (

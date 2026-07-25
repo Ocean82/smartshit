@@ -36,6 +36,7 @@ export interface SpreadsheetContextPayload {
   insights: SheetInsights
   profile?: SheetProfile
   deterministicSummary?: string
+  userPreferences?: Record<string, string>
   /** @deprecated kept for backward compatibility */
   cellSummary?: Record<string, string | number | boolean | null>
 }

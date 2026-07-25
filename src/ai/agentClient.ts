@@ -16,6 +16,7 @@ export interface ServerChatResponse {
   message: string
   actions: ServerAgentAction[]
   source: 'llm' | 'fallback' | 'template'
+  reasoning?: string
   suggestions?: string[]
 }
 
@@ -107,7 +108,7 @@ export async function chatWithAgentServerStream(
         try {
           const event = JSON.parse(jsonStr) as
             | { type: 'token'; content: string }
-            | { type: 'complete'; message: string; actions: ServerAgentAction[]; source: string; suggestions?: string[] }
+            | { type: 'complete'; message: string; actions: ServerAgentAction[]; source: string; reasoning?: string; suggestions?: string[] }
 
           if (event.type === 'token') {
             onToken(event.content)
@@ -116,6 +117,7 @@ export async function chatWithAgentServerStream(
               message: event.message,
               actions: event.actions,
               source: event.source as ServerChatResponse['source'],
+              reasoning: event.reasoning,
               suggestions: event.suggestions,
             }
           }

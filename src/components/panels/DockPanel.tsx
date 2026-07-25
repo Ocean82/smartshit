@@ -12,7 +12,7 @@ import { X } from 'lucide-react'
 const PANEL_HEADER_STYLES: Record<string, { bg: string; iconColor: string }> = {
   chat: { bg: 'var(--accent-50)', iconColor: 'var(--accent-600)' },
   insights: { bg: 'oklch(0.96 0.03 155)', iconColor: 'oklch(0.45 0.14 155)' },
-  auditor: { bg: 'oklch(0.96 0.03 70)', iconColor: 'oklch(0.50 0.14 70)' },
+  auditor: { bg: 'oklch(0.96 0.03 250)', iconColor: 'oklch(0.50 0.20 250)' },
   inspector: { bg: 'oklch(0.96 0.03 300)', iconColor: 'oklch(0.42 0.14 300)' },
 }
 

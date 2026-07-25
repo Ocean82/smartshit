@@ -285,6 +285,7 @@ export interface ChatMessage {
   status?: 'pending' | 'applied' | 'rejected';
   toolUsed?: string;
   insightsSnapshot?: Record<string, unknown>;
+  reasoning?: string;
   suggestions?: string[];
   /** Whether this message is pinned/bookmarked by the user */
   pinned?: boolean;

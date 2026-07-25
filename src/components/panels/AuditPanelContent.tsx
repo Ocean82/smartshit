@@ -80,86 +80,101 @@ export function AuditPanelContent() {
   const scoreColor = result
     ? result.score >= 80 ? 'text-emerald-600'
       : result.score >= 50 ? 'text-amber-600'
-        : 'text-red-600'
+        : 'text-rose-600'
     : ''
 
   const scoreBarColor = result
-    ? result.score >= 80 ? 'bg-emerald-500'
-      : result.score >= 50 ? 'bg-amber-500'
-        : 'bg-red-500'
+    ? result.score >= 80 ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.3)]'
+      : result.score >= 50 ? 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.3)]'
+        : 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.3)]'
     : ''
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full bg-slate-50/20">
       {/* Score display */}
-      <div className="px-3 py-3 border-b border-gray-100 shrink-0">
+      <div className="px-4 py-4 border-b border-slate-100 shrink-0 bg-white shadow-sm">
         {!result && !loading && (
           <button
             type="button"
-            className="w-full py-2.5 px-3 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-xs font-semibold hover:from-blue-700 hover:to-indigo-700 transition-all shadow-sm flex items-center justify-center gap-2"
+            className="w-full py-3 px-4 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 text-white text-xs font-bold hover:shadow-lg hover:-translate-y-0.5 transition-all active:scale-95 flex items-center justify-center gap-2 uppercase tracking-wider"
             onClick={handleRunAudit}
           >
-            <ShieldCheck size={13} />
-            Run Audit
+            <ShieldCheck size={14} />
+            Scan Spreadsheet
           </button>
         )}
 
         {loading && (
-          <div className="flex items-center justify-center gap-2 py-2 text-xs text-gray-500">
-            <Loader2 size={14} className="animate-spin text-blue-600" />
-            Analyzing spreadsheet…
+          <div className="flex flex-col items-center justify-center gap-3 py-4">
+            <Loader2 size={24} className="animate-spin text-blue-600 opacity-80" />
+            <span className="text-[11px] font-medium text-slate-500 uppercase tracking-widest">Auditing formulas…</span>
           </div>
         )}
 
         {result && !loading && (
-          <div className="space-y-2">
-            <div className="flex items-baseline justify-between">
-              <span className="text-[11px] text-gray-500">Health Score</span>
-              <div className="flex items-center gap-2">
-                <span className={`text-lg font-bold tabular-nums ${scoreColor}`}>
-                  {result.score}<span className="text-xs font-normal text-gray-400">/100</span>
-                </span>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-0.5">Health Score</span>
+                <p className="text-[10px] text-slate-400 font-medium">
+                  {result.totalCells} cells scanned
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="text-right">
+                  <span className={`text-2xl font-black tabular-nums leading-none ${scoreColor}`}>
+                    {result.score}<span className="text-xs font-bold opacity-40">/100</span>
+                  </span>
+                </div>
                 <button
                   type="button"
-                  className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                  className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all active:scale-90 shadow-sm border border-slate-100"
                   onClick={handleRunAudit}
                   title="Re-run audit"
                 >
-                  <RefreshCw size={12} />
+                  <RefreshCw size={14} />
                 </button>
               </div>
             </div>
-            <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+            <div className="h-2 bg-slate-100 rounded-full overflow-hidden p-0.5 border border-slate-50">
               <div
-                className={`h-full rounded-full transition-all duration-500 ease-out ${scoreBarColor}`}
+                className={`h-full rounded-full transition-all duration-1000 ease-out ${scoreBarColor}`}
                 style={{ width: `${result.score}%` }}
               />
             </div>
-            <p className="text-[10px] text-gray-400 leading-snug">
-              {result.summary} • {result.totalCells} cells ({result.formulaCells} formulas) in {result.durationMs}ms
-            </p>
+            <div className="flex items-center gap-2 bg-slate-50 rounded-lg px-2 py-1.5 border border-slate-100">
+              <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+              <p className="text-[10px] text-slate-600 font-medium leading-tight">
+                {result.summary}
+              </p>
+            </div>
           </div>
         )}
       </div>
 
       {/* Filter tabs */}
       {result && result.findings.length > 0 && (
-        <div className="px-3 py-2 flex gap-1 flex-wrap border-b border-gray-100 shrink-0">
+        <div className="px-3 py-2.5 flex gap-1.5 flex-wrap border-b border-slate-100 shrink-0 bg-white/50 backdrop-blur-sm">
           {SEVERITY_FILTERS.map((sev) => {
             const count = sev === 'all' ? result.findings.length : severityCounts[sev]
             if (sev !== 'all' && count === 0) return null
+            
+            const activeColors = sev === 'critical' ? 'bg-rose-100 border-rose-200 text-rose-700'
+              : sev === 'high' ? 'bg-orange-100 border-orange-200 text-orange-700'
+              : 'bg-blue-100 border-blue-200 text-blue-700'
+
             return (
               <button
                 key={sev}
                 type="button"
-                className={`px-2 py-0.5 text-[10px] rounded-full border transition-colors ${
+                className={`px-2.5 py-1 text-[10px] font-bold rounded-lg border transition-all uppercase tracking-tight ${
                   filter === sev
-                    ? 'bg-blue-100 border-blue-200 text-blue-700'
-                    : 'bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100'
+                    ? activeColors
+                    : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50 hover:border-slate-300 shadow-sm'
                 }`}
                 onClick={() => setFilter(sev)}
               >
-                {sev === 'all' ? 'All' : sev.charAt(0).toUpperCase() + sev.slice(1)} ({count})
+                {sev === 'all' ? 'All' : sev} <span className="opacity-50 ml-0.5">{count}</span>
               </button>
             )
           })}
@@ -167,7 +182,7 @@ export function AuditPanelContent() {
       )}
 
       {/* Findings list */}
-      <div className="flex-1 overflow-y-auto px-2 py-2 space-y-1.5">
+      <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2.5 scrollbar-thin">
         {!result && !loading && (
           <div className="text-center text-[11px] text-gray-400 mt-8 px-4 leading-relaxed">
             Click "Run Audit" to scan your spreadsheet for formula errors, inconsistencies, and potential problems.

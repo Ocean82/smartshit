@@ -266,6 +266,83 @@ function executeToolInner(call: ParsedToolCall, ctx: ExecutionContext): Executio
       return { success: true, message: `Renamed column ${col.label} to "${newName}"`, modified: 1 }
     }
 
+    case 'formula_analyzer': {
+      const cell = requireCellRef(params.cell, 'formula_analyzer')
+      if ('error' in cell) return cell.error
+      const ref = cellToRef(cell.ref)
+      const cellData = sheet.cells[cell.ref]
+      if (!cellData?.formula) {
+        return { success: false, message: `No formula found in ${cell.ref}. Current value: "${ctx.getComputedValue(ref.row, ref.col)}"`, modified: 0 }
+      }
+      // Read-only analysis — handled by the response builder/prose
+      return { success: true, message: `Formula in ${cell.ref}: ${cellData.formula}`, modified: 0 }
+    }
+
+    case 'multi_sheet_join': {
+      const sourceName = String(params.sourceSheet ?? '')
+      const sourceSheet = ctx.workbook.sheets.find((s) => s.name === sourceName)
+      if (!sourceSheet) {
+        return { success: false, message: `Source sheet "${sourceName}" not found. Available: ${ctx.workbook.sheets.map((s) => s.name).join(', ')}`, modified: 0 }
+      }
+
+      const sourceKeyIdx = resolveColumnIndex(params.sourceKey, sourceSheet, ctx.getComputedValue)
+      const targetKeyIdx = resolveColumnIndex(params.targetKey, sheet, ctx.getComputedValue)
+      const colsToCopy = (params.columnsToCopy as string[]) || []
+
+      if (sourceKeyIdx === -1) return { success: false, message: `Source key column "${params.sourceKey}" not found in ${sourceName}`, modified: 0 }
+      if (targetKeyIdx === -1) return { success: false, message: `Target key column "${params.targetKey}" not found in current sheet`, modified: 0 }
+
+      const sourceRows = findLastDataRow(sourceSheet) + 1
+      const targetRows = findLastDataRow(sheet) + 1
+
+      // Build a map of the source data
+      const sourceMap = new Map<string, Record<string, string | number | boolean | null>>()
+      for (let r = 1; r < sourceRows; r++) {
+        const key = String(ctx.getComputedValue(r, sourceKeyIdx, sourceSheet.id) ?? '').trim()
+        if (!key) continue
+        const data: Record<string, string | number | boolean | null> = {}
+        colsToCopy.forEach((colLetter) => {
+          const cIdx = resolveColumnIndex(colLetter, sourceSheet, ctx.getComputedValue)
+          if (cIdx !== -1) {
+            data[colLetter] = ctx.getComputedValue(r, cIdx, sourceSheet.id)
+          }
+        })
+        sourceMap.set(key, data)
+      }
+
+      // Apply to target
+      ctx.pushHistory(`Join from ${sourceName}`)
+      const updates: BulkUpdates = {}
+      let modified = 0
+      
+      // Determine next empty columns in target to place the joined data
+      const targetColCount = findLastDataCol(sheet) + 1
+      const colLetterToTargetIdx = new Map<string, number>()
+      colsToCopy.forEach((letter, i) => {
+        colLetterToTargetIdx.set(letter, targetColCount + i)
+        // Add headers
+        const headerCellId = refToCell(0, targetColCount + i)
+        updates[headerCellId] = { value: `${sourceName} ${letter}` }
+      })
+
+      for (let r = 1; r < targetRows; r++) {
+        const key = String(ctx.getComputedValue(r, targetKeyIdx) ?? '').trim()
+        if (!key) continue
+        const sourceData = sourceMap.get(key)
+        if (sourceData) {
+          colsToCopy.forEach((letter) => {
+            const tIdx = colLetterToTargetIdx.get(letter)!
+            const cellId = refToCell(r, tIdx)
+            updates[cellId] = { value: sourceData[letter] }
+            modified++
+          })
+        }
+      }
+
+      applyBulk(ctx, updates)
+      return { success: true, message: `Joined ${modified} data points from "${sourceName}"`, modified }
+    }
+
     case 'apply_formula': {
       // Accept legacy {column} param alongside canonical {cell}
       const target = String((params.cell ?? params.column ?? '')).trim().toUpperCase()
