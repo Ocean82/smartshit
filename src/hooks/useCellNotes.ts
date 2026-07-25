@@ -3,7 +3,7 @@
  */
 
 import { useCallback, useSyncExternalStore } from 'react'
-import { getCellNotesService, type CellNote, type NoteMap } from '@/lib/cellNotes'
+import { getCellNotesService } from '@/lib/cellNotes'
 import { useStore } from '@/store/useStore'
 
 export function useCellNotes() {

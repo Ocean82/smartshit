@@ -74,7 +74,7 @@ export function PivotDialog({ isOpen, onClose }: Props) {
     onClose();
   };
 
-  const FieldPill = ({ col, header, onRemove }: { col: string; header: string; onRemove: () => void }) => (
+  const FieldPill = ({ _col, header, onRemove }: { _col?: string; header: string; onRemove: () => void }) => (
     <div className="bg-white border border-gray-200 rounded px-2 py-1 text-xs flex items-center gap-1 shadow-sm">
       <span className="font-medium">{header}</span>
       <button onClick={onRemove} className="text-gray-400 hover:text-red-500 text-[10px] ml-1">✕</button>
@@ -98,7 +98,7 @@ export function PivotDialog({ isOpen, onClose }: Props) {
       <div className="flex flex-wrap gap-1">
         {items.length === 0 && <span className="text-[11px] text-gray-400">Drag fields here</span>}
         {items.map(item => (
-          <FieldPill key={item.col} col={item.col} header={item.header} onRemove={() => onRemove(item.col)} />
+          <FieldPill key={item.col} header={item.header} onRemove={() => onRemove(item.col)} />
         ))}
       </div>
     </div>

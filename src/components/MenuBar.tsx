@@ -5,7 +5,6 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { useStore } from '@/store/useStore'
-import { createEmptyWorkbook, refToCell } from '@/engine/spreadsheet'
 import { exportWorkbookToXlsx, exportSheetToCsv, importWorkbookFromFileWithMeta } from '@/io/xlsx'
 import { exportWorkbookToJson, importWorkbookFromJsonFile, normalizeImportedWorkbook } from '@/io/workbookJson'
 import { v4 as uuid } from 'uuid'
@@ -28,7 +27,6 @@ export function MenuBar() {
 
   const {
     workbook,
-    engine,
     undo,
     redo,
     undoStack,
@@ -179,7 +177,6 @@ export function MenuBar() {
     setOpenMenu(null)
   }
 
-  const sheet = getActiveSheet()
   const col = selection ? Math.min(selection.startCol, selection.endCol) : 0
 
   const menus: Record<string, { label: string; items: MenuItem[] }> = {

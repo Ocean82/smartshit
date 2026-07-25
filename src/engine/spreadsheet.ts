@@ -1,7 +1,7 @@
 import HyperFormula from 'hyperformula';
 import type { SheetData, WorkbookData, PivotConfig, PivotResult } from '@/types';
 import { v4 as uuid } from 'uuid';
-import { AIFunctionRegistry, aiFunctionRegistry } from './aiFunctions';
+import { AIFunctionRegistry } from './aiFunctions';
 import { registerBuiltinAIFunctions, getAIFunctionList } from './aiFunctionDefinitions';
 
 export function colToLetter(col: number): string {
@@ -545,19 +545,18 @@ export class SpreadsheetEngine {
       const colKey = colKeyParts.join('||');
       if (!colKeyMap.has(colKey)) colKeyMap.set(colKey, colKeyParts);
 
-      const aggKey = `${rowKey}||${colKey}`;
-      const existing = valueAggMap.get(aggKey) || [];
-
-      for (const vf of config.values) {
+      for (let vfIdx = 0; vfIdx < config.values.length; vfIdx++) {
+        const vf = config.values[vfIdx];
+        const vfKey = `${rowKey}||${colKey}||${vfIdx}`;
+        const existing = valueAggMap.get(vfKey) || [];
         const rawVal = sourceRow[vf.sourceColumn]?.[0];
         const numVal = typeof rawVal === 'number' ? rawVal : parseFloat(String(rawVal));
         if (!isNaN(numVal)) existing.push(numVal);
+        valueAggMap.set(vfKey, existing);
       }
-      valueAggMap.set(aggKey, existing);
     }
 
     const rowFieldLabels = config.rows.map(f => f.label || f.sourceColumn);
-    const colFieldLabels = config.columns.map(f => f.label || f.sourceColumn);
     const valueLabels = config.values.map(f => f.label || `${f.aggregation}(${f.sourceColumn})`);
 
     const colKeys = Array.from(colKeyMap.keys());
@@ -570,8 +569,10 @@ export class SpreadsheetEngine {
     for (const [rowKey, rowParts] of rowKeyMap) {
       const row: (string | number)[] = [...rowParts];
       for (const colKey of colKeys) {
-        const values = valueAggMap.get(`${rowKey}||${colKey}`) || [];
-        for (const vf of config.values) {
+        for (let vfIdx = 0; vfIdx < config.values.length; vfIdx++) {
+          const vf = config.values[vfIdx];
+          const vfKey = `${rowKey}||${colKey}||${vfIdx}`;
+          const values = valueAggMap.get(vfKey) || [];
           switch (vf.aggregation) {
             case 'sum': row.push(values.reduce((a, b) => a + b, 0)); break;
             case 'average': row.push(values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0); break;

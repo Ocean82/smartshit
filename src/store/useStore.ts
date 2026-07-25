@@ -1073,6 +1073,7 @@ export const useStore = create<AppState>()(
             }
           }
         });
+        get().engine.loadWorkbook(get().workbook);
       },
 
       insertRow: (afterRow) => {
@@ -1091,6 +1092,7 @@ export const useStore = create<AppState>()(
           }
           sheet.cells = newCells;
         });
+        get().engine.loadWorkbook(get().workbook);
       },
 
       insertColumn: (afterCol) => {
@@ -1108,6 +1110,7 @@ export const useStore = create<AppState>()(
           }
           sheet.cells = newCells;
         });
+        get().engine.loadWorkbook(get().workbook);
       },
 
       deleteRow: (row) => {
@@ -1126,6 +1129,7 @@ export const useStore = create<AppState>()(
           }
           sheet.cells = newCells;
         });
+        get().engine.loadWorkbook(get().workbook);
       },
 
       deleteColumn: (col) => {
@@ -1144,6 +1148,7 @@ export const useStore = create<AppState>()(
           }
           sheet.cells = newCells;
         });
+        get().engine.loadWorkbook(get().workbook);
       },
 
       bulkSetCells: (cells) => {

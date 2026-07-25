@@ -298,7 +298,7 @@ function ChartCard({ chart, onRemove }: { chart: ChartConfig; onRemove: () => vo
 
 // --- Bar/Column Chart ---
 
-function BarChart({ data, maxVal, horizontal, trendLine, axisConfig }: { data: MultiSeriesChartData; maxVal: number; horizontal: boolean; trendLine?: TrendLineConfig; axisConfig?: AxisConfig }) {
+function BarChart({ data, maxVal, horizontal, trendLine: _trendLine, axisConfig: _axisConfig }: { data: MultiSeriesChartData; maxVal: number; horizontal: boolean; trendLine?: TrendLineConfig; axisConfig?: AxisConfig }) {
   const seriesCount = data.series.length;
 
   if (horizontal) {

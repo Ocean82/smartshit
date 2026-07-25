@@ -9,7 +9,6 @@ import type {
   CellFormat,
   ColorScaleStop,
   ConditionalRule,
-  ConditionalRuleType,
   IconSetConfig,
   IconSetType,
   SheetData,

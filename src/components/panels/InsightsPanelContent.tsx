@@ -10,7 +10,6 @@ import { useMemo } from 'react'
 import { useStore } from '@/store/useStore'
 import { computeSheetInsights } from '@/ai/sheetInsights'
 import { buildSheetProfile } from '@/ai/sheetProfile'
-import { refToCell, cellToRef } from '@/engine/spreadsheet'
 import { TrendingUp, TrendingDown, PiggyBank, AlertTriangle, BarChart3 } from 'lucide-react'
 
 const CHART_COLORS = [

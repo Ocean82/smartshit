@@ -18,7 +18,7 @@ import { resolveIntent, isWeakResponse } from './intent.js'
 import { classifyMode, isLlmOnlyMode } from './mode.js'
 import { parseUserIntent as parseIntentWithKeyword } from './intentParser.js'
 import type { UserIntent } from '../../shared/intentTypes.js'
-import { getSuggestions, getContextualServerSuggestions } from './suggestions.js'
+import { getContextualServerSuggestions } from './suggestions.js'
 import {
   type ProviderName,
   providerOrder,
@@ -335,7 +335,6 @@ app.post('/api/chat/stream', requireAuth, chatRateLimiter, validateBody(chatStre
   }
 
   const mode = classifyMode(userMessage)
-  const history = (body.history ?? []).filter((m) => m.role === 'user' || m.role === 'assistant')
   const userIntent = parseIntentWithKeyword(userMessage)
 
   // Generate contextual suggestions using sheet metadata when available
@@ -480,7 +479,6 @@ app.post('/api/chat', requireAuth, chatRateLimiter, validateBody(chatBodySchema)
   }
 
   const mode = classifyMode(userMessage)
-  const history = (body.history ?? []).filter((m) => m.role === 'user' || m.role === 'assistant')
   const userIntent = parseIntentWithKeyword(userMessage)
 
   // Generate contextual suggestions using sheet metadata when available

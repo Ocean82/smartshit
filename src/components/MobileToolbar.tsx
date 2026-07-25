@@ -8,7 +8,7 @@ import { useStore } from '@/store/useStore';
 import { refToCell } from '@/engine/spreadsheet';
 import {
   Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight,
-  Undo2, Redo2, Type, BarChart3, ChevronUp, ChevronDown,
+  Undo2, Redo2, Type, BarChart3,
   Filter, Paintbrush, X,
 } from 'lucide-react';
 import { BG_COLORS } from '@/data/colors';

@@ -10,7 +10,6 @@
  */
 
 import { Router } from 'express'
-import { config } from '../config.js'
 import { providerOrder, providerIsConfigured, callProvider } from '../providers.js'
 import { requireAuth, getRequestUserId } from '../auth/clerk.js'
 import { resolveIsPro } from '../plan.js'

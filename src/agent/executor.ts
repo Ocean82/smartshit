@@ -720,7 +720,6 @@ function resolveColumnIndex(
   getComputedValue: (row: number, col: number) => string,
 ): number | null {
   const headerRow = findHeaderRow(sheet)
-  // Derive actual last column from sheet data instead of a magic constant.
   let maxCol = -1
   for (const cellId of Object.keys(sheet.cells)) {
     const ref = cellToRef(cellId)
@@ -733,7 +732,7 @@ function resolveColumnIndex(
   }
   if (/^[A-Z]{1,3}$/i.test(column)) {
     const index = letterToCol(column.toUpperCase())
-    return index <= maxCol ? index : null
+    return index >= 0 && index < 1000 ? index : null
   }
   return null
 }

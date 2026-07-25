@@ -14,8 +14,8 @@ import type { Selection } from '@/types';
 interface SelectionOverlayProps {
   /** Column width getter */
   getColWidth: (col: number) => number;
-  /** Total number of columns */
-  totalCols: number;
+  /** Total number of columns (optional) */
+  totalCols?: number;
   /** Cell height constant */
   cellHeight: number;
   /** Row header width constant */
@@ -51,7 +51,6 @@ function computeRect(
 
 export function SelectionOverlay({
   getColWidth,
-  totalCols,
   cellHeight,
   rowHeaderWidth,
   colHeaderHeight,

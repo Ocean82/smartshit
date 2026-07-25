@@ -1,7 +1,6 @@
 import { Router, type Request } from 'express'
 import { query } from '../db.js'
 import { uploadWorkbook, downloadObject } from '../s3.js'
-import { config } from '../config.js'
 import { getRequestUserId } from '../auth/clerk.js'
 import { sendServerError } from '../httpError.js'
 

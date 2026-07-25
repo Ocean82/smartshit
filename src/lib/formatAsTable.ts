@@ -5,9 +5,9 @@
  * Provides one-shot "Format as Table" functionality for the AI chat or toolbar.
  */
 
-import type { CellData, CellFormat, ConditionalRule, FilterConfig, SheetData } from '@/types'
+import type { CellData, CellFormat, FilterConfig, SheetData } from '@/types'
 import { cellToRef, refToCell } from '@/engine/spreadsheet'
-import { findHeaderRow, findLastDataRow } from '@/lib/sheetSort'
+import { findHeaderRow } from '@/lib/sheetSort'
 
 // ─── Table Styles ───────────────────────────────────────────────────────────
 
@@ -170,7 +170,7 @@ export function formatAsTable(
   const theme = TABLE_THEMES[themeName] ?? TABLE_THEMES.blue
   const formatUpdates: Record<string, Partial<CellFormat>> = {}
 
-  const { startRow, endRow, startCol, endCol, headerRow } = tableRange
+  const { endRow, startCol, endCol, headerRow } = tableRange
 
   // Style header row
   for (let c = startCol; c <= endCol; c++) {

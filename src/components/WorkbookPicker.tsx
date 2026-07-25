@@ -17,7 +17,7 @@ interface WorkbookPickerProps {
 }
 
 export function WorkbookPicker({ open, onClose }: WorkbookPickerProps) {
-  const { workbook, initWorkbook, showConfirm, showToast } = useStore()
+  const { workbook, showConfirm, showToast } = useStore()
   const [workbooks, setWorkbooks] = useState<CloudWorkbook[]>([])
   const [loading, setLoading] = useState(false)
   const [actionId, setActionId] = useState<string | null>(null)
