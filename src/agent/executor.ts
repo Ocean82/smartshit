@@ -13,6 +13,7 @@ import { applyFormatCells } from '@/lib/formatCellsTool'
 import { formatAsTable } from '@/lib/formatAsTable'
 import { getCellNotesService } from '@/lib/cellNotes'
 import { resolveToolName, TEMPLATE_TOOL_NAMES } from '@shared/toolRegistry'
+import { runScript } from '@/sandbox'
 
 export interface ExecutionContext {
   getActiveSheet: () => SheetData
@@ -60,6 +61,77 @@ export function executeTool(call: ParsedToolCall, ctx: ExecutionContext): Execut
     return {
       success: false,
       message: `Could not complete "${call.tool}": ${detail}`,
+      modified: 0,
+    }
+  }
+}
+
+/**
+ * Execute a tool call that may be async (e.g., sandbox script execution).
+ * Falls back to the synchronous `executeTool` for non-async tools.
+ */
+export async function executeToolAsync(call: ParsedToolCall, ctx: ExecutionContext): Promise<ExecutionResult> {
+  const tool = resolveToolName(call.tool)
+
+  if (tool === 'execute_script') {
+    return executeScript(call, ctx)
+  }
+
+  // All other tools are synchronous
+  return executeTool(call, ctx)
+}
+
+/** Execute an agent-generated script in the sandbox. */
+async function executeScript(call: ParsedToolCall, ctx: ExecutionContext): Promise<ExecutionResult> {
+  const params = call.params
+  const code = String(params.code ?? '')
+  if (!code.trim()) {
+    return { success: false, message: 'execute_script requires code', modified: 0 }
+  }
+
+  const description = String(params.description ?? 'Script execution')
+  ctx.pushHistory(description)
+
+  try {
+    const result = await runScript(code, {
+      sheet: ctx.getActiveSheet(),
+      getComputedValue: ctx.getComputedValue,
+    })
+
+    if (!result.success) {
+      return { success: false, message: result.error, modified: 0 }
+    }
+
+    // Apply collected mutations
+    const cellCount = Object.keys(result.cellUpdates).length
+    if (cellCount > 0) {
+      ctx.bulkSetCells(result.cellUpdates)
+    }
+    for (const [cellId, fmt] of Object.entries(result.formatUpdates)) {
+      ctx.setCellFormat(cellId, fmt)
+    }
+    // Apply row deletions (already sorted descending by the sandbox)
+    for (const row of result.rowDeletions) {
+      ctx.deleteRow(row)
+    }
+    // Apply row insertions
+    for (const afterRow of result.rowInsertions) {
+      ctx.insertRow(afterRow)
+    }
+
+    const totalModified = cellCount + Object.keys(result.formatUpdates).length +
+      result.rowDeletions.length + result.rowInsertions.length
+
+    return {
+      success: true,
+      message: result.summary || `Script executed: ${cellCount} cells modified`,
+      modified: totalModified,
+    }
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err)
+    return {
+      success: false,
+      message: `Script execution failed: ${detail}`,
       modified: 0,
     }
   }

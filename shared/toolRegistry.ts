@@ -386,6 +386,23 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
     ],
     examples: ['chart my expenses', 'make a pie chart'],
   },
+  // ─── Sandbox script execution ──────────────────────────────────────────────
+  {
+    name: 'execute_script',
+    category: 'mutate',
+    description: 'Execute a JavaScript script against the spreadsheet. Use for complex operations needing loops, conditions, or multi-step logic that cannot be expressed as a single tool call.',
+    params: [
+      { name: 'code', type: 'string', description: 'JavaScript code to execute in the sandbox', required: true },
+      { name: 'description', type: 'string', description: 'Human-readable description of what the script does', required: true },
+    ],
+    examples: [
+      'fill blanks with the value above',
+      'calculate a running total',
+      'apply a custom formula to every row based on conditions',
+      'transpose selected rows into columns',
+      'find duplicates and highlight them',
+    ],
+  },
   // ─── Niche gallery templates (hidden from the LLM prompt) ──────────────────
   // Launched from the template gallery; executable everywhere, but excluded
   // from formatToolsForPrompt() to keep the LLM system prompt compact.

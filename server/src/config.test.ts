@@ -4,6 +4,10 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 
+// Mock loadEnv so dotenv doesn't override our test env vars (the real .env
+// sets APP_URL=http://localhost:5173 with override:true, clobbering the test).
+vi.mock('./loadEnv.js', () => ({ loadEnv: () => {} }))
+
 const ORIGINAL_ENV = { ...process.env }
 
 async function loadConfig() {
