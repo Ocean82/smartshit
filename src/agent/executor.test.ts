@@ -11,6 +11,8 @@ import type { SheetData } from '@/types'
 interface Harness {
   ctx: ExecutionContext
   writes: Array<{ cell: string; value: unknown; formula?: string }>
+  deletions: number[]
+  exports: string[]
   bulkCalls: () => number
 }
 
@@ -25,6 +27,8 @@ function harness(cells: SheetData['cells'] = {}): Harness {
   } as SheetData
 
   const writes: Harness['writes'] = []
+  const deletions: number[] = []
+  const exports: string[] = []
   let bulkCalls = 0
 
   const ctx = {
@@ -43,14 +47,15 @@ function harness(cells: SheetData['cells'] = {}): Harness {
     setCellFormat: () => {},
     applySortPatch: () => {},
     setFilters: () => {},
-    deleteRow: () => {},
+    deleteRow: (row) => deletions.push(row),
     insertRow: () => {},
     addSheet: () => {},
     renameSheet: () => {},
     pushHistory: () => {},
+    exportData: (format) => exports.push(format),
   } as ExecutionContext
 
-  return { ctx, writes, bulkCalls: () => bulkCalls }
+  return { ctx, writes, deletions, exports, bulkCalls: () => bulkCalls }
 }
 
 const run = (h: Harness, tool: string, params: Record<string, unknown>) =>
@@ -139,7 +144,9 @@ describe('multi-letter columns', () => {
     const h = harness({ AA1: { value: 5 }, AA2: { value: 9 } })
     const result = run(h, 'find_max', { column: 'AA' })
     expect(result.success).toBe(true)
+    expect(result.message).toContain('column AA')
     expect(result.message).toContain('9')
+    expect(result.message).not.toContain('[object Object]')
   })
 
   it('resolves a column by header name', () => {
@@ -218,6 +225,72 @@ describe('batched writes', () => {
     run(h2, 'set_range', { startCell: 'A1', values: [[1, 2], [3, 4]] })
     expect(h2.bulkCalls()).toBe(1)
     expect(h2.writes).toHaveLength(4)
+  })
+})
+
+describe('read-only local tools', () => {
+  it('counts matching rows once even when searching the whole row', () => {
+    const h = harness({
+      A1: { value: 'Task' }, B1: { value: 'Status' }, C1: { value: 'Note' },
+      A2: { value: 'Invoice' }, B2: { value: 'Overdue' }, C2: { value: 'overdue' },
+      A3: { value: 'Report' }, B3: { value: 'Done' },
+      A4: { value: 'Tax' }, B4: { value: 'Overdue' },
+    })
+    const result = run(h, 'count_rows', { operator: 'equals', value: 'overdue' })
+    expect(result.success).toBe(true)
+    expect(result.message).toContain('Found 2 matching rows')
+    expect(result.modified).toBe(0)
+  })
+
+  it('counts numeric comparisons in a resolved column', () => {
+    const h = harness({
+      A1: { value: 'Item' }, D1: { value: 'Amount' },
+      A2: { value: 'A' }, D2: { value: 100 },
+      A3: { value: 'B' }, D3: { value: 600 },
+      A4: { value: 'C' }, D4: { value: 900 },
+    })
+    const result = run(h, 'count_rows', { column: 'Amount', operator: 'gt', value: 500 })
+    expect(result.message).toContain('Found 2 matching rows in Amount')
+  })
+
+  it('delegates export to the existing application handler', () => {
+    const h = harness()
+    const result = run(h, 'export_data', { format: 'csv' })
+    expect(result.success).toBe(true)
+    expect(h.exports).toEqual(['csv'])
+  })
+})
+
+describe('delete row validation', () => {
+  it('resolves a named row, skips the matching header, and deletes exact preview row', () => {
+    const h = harness({
+      A1: { value: 'Netflix' }, B1: { value: 'Amount' },
+      A2: { value: 'Netflix' }, B2: { value: 15 },
+    })
+    const result = run(h, 'delete_row', { match: 'Netflix' })
+    expect(result.success).toBe(true)
+    expect(h.deletions).toEqual([1])
+  })
+
+  it('rejects a row outside the populated sheet', () => {
+    const h = harness({ A1: { value: 'Header' }, A2: { value: 'Value' } })
+    expect(run(h, 'delete_row', { row: 99 }).success).toBe(false)
+    expect(h.deletions).toEqual([])
+  })
+
+  it('refuses a confirmed deletion when the previewed row has changed', () => {
+    const cells: SheetData['cells'] = {
+      A1: { value: 'Item' }, B1: { value: 'Amount' },
+      A2: { value: 'Netflix' }, B2: { value: 15 },
+    }
+    const h = harness(cells)
+    const signature = JSON.stringify(['Netflix', '15'])
+    cells.B2.value = 25
+
+    const result = run(h, 'delete_row', { row: 2, expectedRowSignature: signature })
+    expect(result.success).toBe(false)
+    expect(result.message).toMatch(/changed after the preview/i)
+    expect(h.deletions).toEqual([])
   })
 })
 

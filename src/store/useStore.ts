@@ -25,13 +25,12 @@ import {
   cellToRef,
   SpreadsheetEngine,
 } from '@/engine/spreadsheet';
-import { parseMessage, executeTool, executeToolAsync, type ExecutionContext } from '@/agent';
+import { executeTool, executeToolAsync, type ExecutionContext, type ExecutionResult } from '@/agent';
 import { executeTemplateTool, resolveGalleryTemplate } from '@/templates';
 import { MUTATION_TOOL_NAMES } from '@shared/toolRegistry';
 import { loadPersistedState } from '@/lib/persistence';
-import { processMessage } from '@/ai/brain';
 import { buildSpreadsheetContext } from '@/ai/buildContext';
-import { toolResultToChatMessage, toolResultToMessage } from '@/ai/responseBuilder';
+import { toolResultToMessage } from '@/ai/responseBuilder';
 import { buildFilePreview } from '@/ai/filePreview';
 import { recordTelemetry } from '@/ai/telemetry';
 import { classifyMode, isLlmOnlyMode, isBudgetExplainQuery } from '@/ai/mode';
@@ -41,9 +40,8 @@ import { parseUserIntent } from '@/ai/intentParser';
 import { AI_ANALYSIS_CONFIG } from '@/ai/config';
 import { resolveActTemplates } from '@shared/actTemplates';
 import { buildActionPreview } from '@/lib/previewBuilders';
-import type { SheetInsights } from '@/ai/sheetInsights';
 import type { AttachedFilePreview } from '@/ai/types';
-import { computeSortedCellUpdates, computeMultiSortedCellUpdates, findHeaderRow, findLastDataRow, type SortPatch } from '@/lib/sheetSort';
+import { computeSortedCellUpdates, computeMultiSortedCellUpdates, type SortPatch } from '@/lib/sheetSort';
 import { conditionToRule, attachConditionalRuleToColumn } from '@/lib/conditionalFormat';
 import { getActionRecorder } from '@/lib/actionRecorder';
 import { v4 as uuid } from 'uuid';
@@ -54,9 +52,10 @@ import {
   applyUndo,
   applyRedo,
   type HistoryEntry,
-  type WorkbookPatch,
 } from '@/lib/historyDiff';
 import { createUIState, createUIActions } from './slices';
+import { exportSheetToCsv, exportWorkbookToXlsx } from '@/io/xlsx';
+import { exportWorkbookToJson } from '@/io/workbookJson';
 
 // Maximum undo stack depth — higher limit now that patches are lightweight
 const MAX_UNDO_STACK = 150;
@@ -279,8 +278,6 @@ export const useStore = create<AppState>()(
       content: `Welcome to **smartsh!t** — your budgeting copilot.\n\nStart by importing a spreadsheet, then ask:\n- *"Explain this spreadsheet I just loaded"*\n- *"Where am I overspending?"*\n- *"What should I cut first to save more?"*\n\nI only apply changes after you review and approve them.`,
       timestamp: Date.now(),
     };
-
-    const storage = typeof localStorage !== 'undefined' ? localStorage : null
 
     // ─── UI state from slice ─────────────────────────────────────────────────
     const uiState = createUIState()
@@ -657,6 +654,15 @@ export const useStore = create<AppState>()(
             getWorkbook: () => get().workbook,
             getActiveSheet: () => get().getActiveSheet(),
             getComputedValue: (row, col) => get().getComputedValue(row, col),
+            getSheetComputedValue: (sheetId, row, col) => {
+              const state = get();
+              const targetSheet = state.workbook.sheets.find((candidate) => candidate.id === sheetId);
+              const cell = targetSheet?.cells[refToCell(row, col)];
+              if (cell?.formula && state.engine.isAIFormula(cell.formula)) {
+                return cell.displayValue == null ? String(cell.value ?? '') : String(cell.displayValue);
+              }
+              return state.engine.getComputedValue(sheetId, row, col);
+            },
             getSelection: () => get().selection,
             getActiveSheetId: () => get().activeSheetId,
             getAttachedPreview: () => get().attachedFilePreview,
@@ -751,6 +757,7 @@ export const useStore = create<AppState>()(
         const highImpactTools = new Set([
           'clear_sheet',
           'clean_sheet_data',
+          'delete_row',
           'modify_column',
         ]);
         // Find the action
@@ -775,15 +782,38 @@ export const useStore = create<AppState>()(
                 ? `AI Action: ${action.description} (~${estimatedChanges} changes)`
                 : `AI Action: ${action.description}`;
               get().pushHistory(historyLabel);
-              executeAction(action, get, set);
-              set((s) => {
-                for (const m of s.messages) {
-                  if (m.actions) {
-                    const a = m.actions.find((act) => act.id === actionId);
-                    if (a) a.status = 'applied';
+
+              const finishAction = (result: ExecutionResult) => {
+                set((s) => {
+                  for (const m of s.messages) {
+                    if (m.actions) {
+                      const a = m.actions.find((act) => act.id === actionId);
+                      if (a) a.status = result.success ? 'applied' : 'rejected';
+                    }
                   }
+                });
+                if (!result.success) {
+                  get().addMessage({
+                    id: uuid(),
+                    role: 'assistant',
+                    content: `⚠️ ${result.message}`,
+                    timestamp: Date.now(),
+                  });
                 }
-              });
+              };
+
+              const execution = executeAction(action, get, set);
+              if (execution instanceof Promise) {
+                void execution
+                  .then(finishAction)
+                  .catch((err) => finishAction({
+                    success: false,
+                    message: err instanceof Error ? err.message : 'The action failed unexpectedly.',
+                    modified: 0,
+                  }));
+              } else {
+                finishAction(execution);
+              }
               break;
             }
           }
@@ -1254,7 +1284,6 @@ function processAICommand(
 ): ChatMessage {
   const mode = classifyMode(input);
   const lower = input.toLowerCase();
-  const actions: AgentAction[] = [];
 
   if (mode === 'help') {
     return {
@@ -1473,6 +1502,16 @@ function buildExecutionContext(
       return [...new Set([...primary, ...additional])];
     },
     addChart: (chart) => get().addChart(chart),
+    exportData: (format) => {
+      const state = get();
+      if (format === 'csv') {
+        exportSheetToCsv(state.getActiveSheet(), state.workbook.name.replace(/\s+/g, '_'));
+      } else if (format === 'xlsx') {
+        exportWorkbookToXlsx(state.workbook);
+      } else {
+        exportWorkbookToJson(state.workbook);
+      }
+    },
   };
   ctx.executeTemplate = (tool, params) => executeTemplateTool(tool, params, ctx);
   return ctx;
@@ -1485,20 +1524,17 @@ function executeAction(
   get: () => AppState,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   set: any
-) {
+): ExecutionResult | Promise<ExecutionResult> {
   const ctx = buildExecutionContext(get, set, { suppressHistory: true });
   if (action.tool === 'execute_script') {
-    // Sandbox scripts require async execution — fire and forget with error handling
-    executeToolAsync({ tool: action.tool, params: action.params, description: action.description }, ctx)
-      .catch((err) => {
-        console.error('[executeAction] Script execution failed:', err)
-      })
-    return;
+    return executeToolAsync(
+      { tool: action.tool, params: action.params, description: action.description },
+      ctx,
+    );
   }
   if (MUTATION_TOOL_NAMES.includes(action.tool)) {
     // applyAction already pushed a single undo point for this action
-    executeTool({ tool: action.tool, params: action.params, description: action.description }, ctx);
-    return;
+    return executeTool({ tool: action.tool, params: action.params, description: action.description }, ctx);
   }
-  executeTemplateTool(action.tool, action.params, ctx);
+  return executeTemplateTool(action.tool, action.params, ctx);
 }

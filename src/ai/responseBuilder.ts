@@ -5,6 +5,7 @@ import type { SheetProfile, ToolResult } from '@/ai/types'
 import { AI_ANALYSIS_CONFIG } from '@/ai/config'
 import type { OutlierItem } from '@/ai/outliers'
 import { buildActionPreview } from '@/lib/previewBuilders'
+import { resolveDeleteRow } from '@/lib/deleteRowPreview'
 
 function formatMoney(n: number): string {
   return `$${n.toFixed(2)}`
@@ -154,13 +155,30 @@ export function toolResultToChatMessage(
   },
 ): ChatMessage {
   const actions = (result.actions ?? []).map((action) => {
-    const previewChanges = Array.isArray(action.params.previewChanges)
-      ? action.params.previewChanges as CellChange[]
+    let params = action.params
+    if (action.tool === 'delete_row' && meta?.previewContext) {
+      const resolved = resolveDeleteRow(
+        meta.previewContext.sheet,
+        action.params,
+        meta.previewContext.getComputedValue,
+      )
+      if (resolved) {
+        params = {
+          ...action.params,
+          row: resolved.rowNumber,
+          expectedRowSignature: resolved.signature,
+        }
+        delete params.match
+      }
+    }
+
+    const previewChanges = Array.isArray(params.previewChanges)
+      ? params.previewChanges as CellChange[]
       : undefined
     const built = !previewChanges && meta?.previewContext
       ? buildActionPreview(
         action.tool,
-        action.params,
+        params,
         meta.previewContext.sheet,
         meta.previewContext.getComputedValue,
       )
@@ -173,7 +191,7 @@ export function toolResultToChatMessage(
     return {
       id: uuid(),
       tool: action.tool,
-      params: action.params,
+      params,
       description: `${action.description}${changeLabel}`,
       status: 'pending' as const,
       preview,

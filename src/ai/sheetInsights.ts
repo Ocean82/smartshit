@@ -86,9 +86,14 @@ function buildMatrix(
   for (const [cellId, cell] of Object.entries(sheet.cells)) {
     const { row, col } = cellToRef(cellId)
     const computed = getComputedValue(row, col)
-    const raw = cell.formula ?? cell.value
+    // Analyze the rendered result of formulas. Treating "=SUM(...)" as text
+    // makes numeric formula columns disappear from stats and comparisons.
+    const raw = cell.formula
+      ? (computed !== '' ? computed : cell.value)
+      : cell.value
     if (raw !== null && raw !== undefined && raw !== '') {
-      matrix[row][col] = cellScalar(raw)
+      const numeric = parseNumeric(raw)
+      matrix[row][col] = numeric ?? cellScalar(raw)
     } else if (computed) {
       const num = parseNumeric(computed)
       matrix[row][col] = num ?? computed

@@ -174,9 +174,10 @@ export function getHelpResponse(): string {
 - "Make an invoice template"
 
 **Work with your sheet**
-- Add formulas (SUM, AVERAGE)
-- Create charts
-- Format cells
+- Add formulas (SUM, AVERAGE, COUNT, IF, COUNTIF, SUMIF, VLOOKUP)
+- Count matching rows and compare sheets, columns, or periods
+- Create charts and format cells
+- Export as CSV, Excel, or JSON
 
 Import a file with the toolbar, then ask me to explain it or find overspending.`
 }

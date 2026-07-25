@@ -4,6 +4,8 @@
  */
 
 import { FONT_COLOR_HEX, HIGHLIGHT_BG_HEX } from '../../shared/colorMaps'
+import type { ColumnProfile } from '@/ai/types'
+import { parseAdvancedFormula } from './formulaPatterns'
 
 export interface ParsedToolCall {
   tool: string
@@ -39,6 +41,73 @@ function isNonRowDeleteTarget(text: string): boolean {
   return NON_ROW_DELETE_TARGETS.some((word) => new RegExp(`\\b${word}\\b`).test(t))
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function columnMentioned(message: string, column: ColumnProfile): boolean {
+  const lower = message.toLowerCase()
+  const header = column.name.trim().toLowerCase()
+  if (header && new RegExp(`\\b${escapeRegExp(header)}\\b`, 'i').test(lower)) return true
+  return new RegExp(`\\bcolumn\\s+${escapeRegExp(column.column)}\\b`, 'i').test(message)
+}
+
+/**
+ * Resolve a natural-language column without silently picking an arbitrary
+ * spreadsheet position. Detected amount roles are preferred for financial
+ * superlatives; a sole numeric column is a safe final fallback.
+ */
+function resolveSmartColumn(
+  message: string,
+  sheetContext?: SheetContext,
+  options?: { preferAmount?: boolean; allowNumericFallback?: boolean },
+): string | undefined {
+  const explicit = message.match(/\\bcolumn\\s+([a-z]{1,3})\\b/i)?.[1]
+    ?? message.match(/\\b(?:in|from|of)\\s+([a-z]{1,3})\\s*[?.!]*$/i)?.[1]
+  if (explicit && !DIRECTION_WORDS.has(explicit.toLowerCase())) return explicit.toUpperCase()
+
+  const columns = sheetContext?.columns ?? []
+  const mentioned = columns.filter((column) => columnMentioned(message, column))
+  if (mentioned.length === 1) return mentioned[0].column
+
+  if (options?.preferAmount) {
+    const amountColumns = columns.filter((column) => column.role === 'amount' && column.nonNullCount > 0)
+    if (amountColumns.length === 1) return amountColumns[0].column
+
+    // If several columns have amount-like roles (for example Budget + Actual),
+    // only choose when the wording clearly singles one out.
+    if (amountColumns.length > 1) {
+      const lower = message.toLowerCase()
+      const scored = amountColumns.map((column) => {
+        const header = column.name.toLowerCase()
+        let score = 0
+        if (/expense|expensive/.test(lower) && /expense|amount|cost|price|spent/.test(header)) score += 3
+        if (/actual/.test(lower) && /actual/.test(header)) score += 4
+        if (/budget|planned/.test(lower) && /budget|plan/.test(header)) score += 4
+        if (/revenue|income/.test(lower) && /revenue|income/.test(header)) score += 4
+        if (/amount/.test(header)) score += 1
+        return { column, score }
+      }).sort((a, b) => b.score - a.score)
+      if (scored[0].score > 0 && scored[0].score > (scored[1]?.score ?? -1)) {
+        return scored[0].column.column
+      }
+    }
+  }
+
+  const numericColumns = columns.filter((column) => column.dtype === 'number' && column.nonNullCount > 0)
+  if (options?.allowNumericFallback !== false && numericColumns.length === 1) return numericColumns[0].column
+  return undefined
+}
+
+function describeColumnChoices(sheetContext?: SheetContext): string {
+  const columns = (sheetContext?.columns ?? [])
+    .filter((column) => column.nonNullCount > 0)
+    .slice(0, 5)
+    .map((column) => `${column.name} (${column.column})`)
+  if (columns.length === 0) return ''
+  return ` Available columns: ${columns.join(', ')}.`
+}
+
 /**
  * Parse a user message into zero or more tool calls.
  * Returns { understood: false } if no patterns match (should fallback to LLM).
@@ -62,6 +131,19 @@ export function parseMessage(message: string, sheetContext?: SheetContext): Pars
     if (calls.length > 1) {
       return { calls, understood: true, explanation: 'I\'ll clear the sheet and build a fresh template for you.' }
     }
+  }
+
+  // ─── Advanced formulas (explicit destination + operands required) ───────────
+  // This must run before the generic "put X in Y" matcher, which would
+  // otherwise write the words "a COUNTIF formula" into the destination cell.
+  const advancedFormula = parseAdvancedFormula(message)
+  if (advancedFormula) {
+    calls.push({
+      tool: 'apply_formula',
+      params: { cell: advancedFormula.cell, formula: advancedFormula.formula },
+      description: advancedFormula.description,
+    })
+    return { calls, understood: true, explanation: advancedFormula.explanation }
   }
 
   // ─── Set cell: "put X in Y" / "set Y to X" ─────────────────────────────────
@@ -92,6 +174,27 @@ export function parseMessage(message: string, sheetContext?: SheetContext): Pars
     const value = cellEquals[2].trim()
     calls.push({ tool: 'set_cell', params: { cell, value }, description: `Set ${cell} to ${value}` })
     return { calls, understood: true, explanation: `Setting ${cell} to "${value}".` }
+  }
+
+  // ─── Export (uses the same browser exporters as File > Save as) ─────────────
+  if (/\b(?:export|download|save\s+(?:this|it|the\s+(?:sheet|workbook))?\s*as|convert\s+(?:this|it|the\s+(?:sheet|workbook))?\s*to)\b/i.test(message)) {
+    const format = /\bcsv\b/i.test(message) ? 'csv'
+      : /\b(?:xlsx|excel)\b/i.test(message) ? 'xlsx'
+      : /\bjson\b/i.test(message) ? 'json'
+      : undefined
+    if (!format) {
+      return {
+        calls: [],
+        understood: true,
+        explanation: 'Which format should I export: CSV, Excel (.xlsx), or JSON?',
+      }
+    }
+    calls.push({
+      tool: 'export_data',
+      params: { format },
+      description: `Export as ${format.toUpperCase()}`,
+    })
+    return { calls, understood: true, explanation: `Exporting ${format === 'xlsx' ? 'an Excel workbook' : `as ${format.toUpperCase()}`}.` }
   }
 
   // ─── Add row: "add [items]" ─────────────────────────────────────────────────
@@ -162,12 +265,12 @@ export function parseMessage(message: string, sheetContext?: SheetContext): Pars
     // Accept an explicit column letter ("sort by column B", "sort by B") or a
     // header name ("sort by amount"). Never guess a default column — a silent
     // sort on the wrong column reorders the user's data destructively.
-    const explicitCol = message.match(/\bsort\s+(?:by\s+|on\s+)?column\s+([A-Za-z]{1,3})\b/i)?.[1]
-      ?? message.match(/\bsort\s+(?:by|on)\s+([A-Za-z]{1,3})\b(?!\w)/i)?.[1]
+    const explicitCol = message.match(/\bsort\s+(?:(?:my|the|this)\s+(?:data|sheet)\s+)?(?:by\s+|on\s+)?column\s+([A-Za-z]{1,3})\b/i)?.[1]
+      ?? message.match(/\bsort\s+(?:(?:my|the|this)\s+(?:data|sheet)\s+)?(?:by|on)\s+([A-Za-z]{1,3})\b(?!\w)/i)?.[1]
 
-    // Header-name form: "sort by amount", "sort by amount highest first".
+    // Header-name form: "sort by amount", "sort my data by amount".
     // Trailing direction/ordering words are not part of the column name.
-    const rawName = message.match(/\bsort\s+(?:by|on)\s+(?:the\s+)?["']?([\w ]+?)["']?\s*$/i)?.[1]
+    const rawName = message.match(/\bsort\s+(?:(?:my|the|this)\s+(?:data|sheet)\s+)?(?:by|on)\s+(?:the\s+)?["']?([\w ]+?)["']?\s*$/i)?.[1]
     const byName = rawName
       ?.replace(/\b(asc|ascending|desc|descending|highest|lowest|a-z|z-a|first|last|order|column)\b/gi, ' ')
       .replace(/\s+/g, ' ')
@@ -183,8 +286,15 @@ export function parseMessage(message: string, sheetContext?: SheetContext): Pars
     }
 
     if (!column) {
-      // Ambiguous — let the LLM ask a clarifying question instead of guessing.
-      return { calls: [], understood: false }
+      // Sorting reorders complete rows, so a guessed column is destructive.
+      // Handle the ambiguity locally instead of spending an LLM round trip.
+      return {
+        calls: [],
+        understood: true,
+        explanation: dirHint
+          ? `Which column should I sort by? I'll use ${direction === 'desc' ? 'descending' : 'ascending'} order.${describeColumnChoices(sheetContext)}`
+          : `Which column should I sort by, and should it be ascending or descending?${describeColumnChoices(sheetContext)}`,
+      }
     }
 
     calls.push({ tool: 'sort_sheet', params: { column, direction }, description: `Sort by column ${column} ${direction}` })
@@ -223,15 +333,121 @@ export function parseMessage(message: string, sheetContext?: SheetContext): Pars
     return { calls, understood: true, explanation: `Adding an AVERAGE formula for column ${col}.` }
   }
 
+  // Explicit formula creation remains a mutation; count questions below are
+  // read-only and return the answer without writing into the sheet.
+  const countFormulaCol = lower.match(/\b(?:add|create|insert)\s+(?:a\s+)?counta?\s+formula\s+(?:for|to|of)\s+(?:column\s+)?([a-z]{1,3})\b/i)
+  if (countFormulaCol) {
+    const col = countFormulaCol[1].toUpperCase()
+    const fn = /\bcounta\b/i.test(lower) ? '=COUNTA' : '=COUNT'
+    calls.push({ tool: 'apply_formula', params: { cell: col, formula: fn }, description: `Count column ${col}` })
+    return { calls, understood: true, explanation: `Adding a ${fn.slice(1)} formula for column ${col}.` }
+  }
+
+  // ─── Read-only row counts ───────────────────────────────────────────────────
+  const conditionalCount = lower.match(/^(?:how\s+many|count\s+how\s+many)\s+(?:(?:rows?|entries|items|records|cells?)\s+)?(?:are|have|contain(?:ing)?|with)\s+(.+?)\s*[?]*$/i)
+    ?? lower.match(/^count\s+(?:the\s+)?(.+?)\s+(?:rows?|entries|items|records)\s*[?]*$/i)
+  if (conditionalCount) {
+    let criterion = conditionalCount[1].trim()
+    let column = resolveSmartColumn(message, sheetContext, { allowNumericFallback: false })
+
+    if (column) {
+      const profile = sheetContext?.columns?.find((item) => item.column === column)
+      if (profile) {
+        criterion = criterion
+          .replace(new RegExp(`^(?:an?\\s+|the\\s+)?${escapeRegExp(profile.name)}\\s+(?:of|is|=|are)?\\s*`, 'i'), '')
+          .replace(new RegExp(`\\s+in\\s+(?:the\\s+)?(?:${escapeRegExp(profile.name)}|column\\s+${escapeRegExp(profile.column)})$`, 'i'), '')
+          .replace(new RegExp(`\\s+${escapeRegExp(profile.name)}$`, 'i'), '')
+          .replace(/^(?:an?|the)\s+/i, '')
+          .trim()
+      }
+    }
+
+    const numeric = criterion.match(/^(?:values?\s+)?(over|above|greater\s+than|more\s+than|under|below|less\s+than|at\s+least|at\s+most|>=|<=|>|<)\s*\$?([\d,.]+)$/i)
+    let operator = 'equals'
+    let value: string | number = criterion.replace(/^(?:value|status)\s+/, '').trim()
+    if (numeric) {
+      const operatorMap: Record<string, string> = {
+        over: 'gt', above: 'gt', 'greater than': 'gt', 'more than': 'gt', '>': 'gt',
+        under: 'lt', below: 'lt', 'less than': 'lt', '<': 'lt',
+        'at least': 'gte', '>=': 'gte', 'at most': 'lte', '<=': 'lte',
+      }
+      operator = operatorMap[numeric[1].toLowerCase()] ?? 'equals'
+      value = parseFloat(numeric[2].replace(/,/g, ''))
+      column ??= resolveSmartColumn(message, sheetContext, { preferAmount: true })
+    } else if (/\bcontain/.test(lower)) {
+      operator = 'contains'
+    }
+
+    if (String(value).trim()) {
+      calls.push({
+        tool: 'count_rows',
+        params: { column, operator, value },
+        description: `Count rows matching ${value}`,
+      })
+      return { calls, understood: true, explanation: `Counting rows matching "${value}".` }
+    }
+  }
+
+  const countColumn = lower.match(/^count\s+(?:(?:the\s+)?(?:values|entries|cells)\s+)?(?:in\s+)?(?:column\s+)?([a-z]{1,3})\s*[?.]*$/i)
+  if (countColumn) {
+    const column = countColumn[1].toUpperCase()
+    calls.push({ tool: 'count_rows', params: { column, operator: 'not_empty' }, description: `Count entries in column ${column}` })
+    return { calls, understood: true, explanation: `Counting non-empty entries in column ${column}.` }
+  }
+
+  // ─── Comparative highlighting ───────────────────────────────────────────────
+  // Handles "highlight over 500" and "highlight anything above $1,000".
+  // When a target is named ("expenses" / a header), constrain the range;
+  // otherwise scan numeric cells in the selection or populated sheet.
+  const comparativeHighlight = lower.match(/\b(?:highlight|colou?r|mark|shade)\s+(?:all\s+)?(.+?)?\s*(over|above|greater\s+than|more\s+than|under|below|less\s+than|at\s+least|at\s+most|>=|<=|>|<)\s*\$?([\d,.]+)\b/i)
+  if (comparativeHighlight) {
+    const targetText = (comparativeHighlight[1] ?? '').trim()
+    const operatorMap: Record<string, 'gt' | 'lt' | 'gte' | 'lte'> = {
+      over: 'gt', above: 'gt', 'greater than': 'gt', 'more than': 'gt', '>': 'gt',
+      under: 'lt', below: 'lt', 'less than': 'lt', '<': 'lt',
+      'at least': 'gte', '>=': 'gte', 'at most': 'lte', '<=': 'lte',
+    }
+    const operator = operatorMap[comparativeHighlight[2].toLowerCase()]
+    const value = parseFloat(comparativeHighlight[3].replace(/,/g, ''))
+    const range = /\b(?:anything|cells?|values?|numbers?)\b/.test(targetText)
+      ? resolveSmartColumn(targetText, sheetContext, { allowNumericFallback: false })
+      : resolveSmartColumn(targetText, sheetContext, {
+        preferAmount: /expense|amount|cost|price|spend/.test(targetText),
+        allowNumericFallback: false,
+      })
+    const colorWord = lower.slice((comparativeHighlight.index ?? 0) + comparativeHighlight[0].length).match(COLOR_WORD_RE)?.[1]
+    const bgColor = (colorWord && HIGHLIGHT_BG_HEX[colorWord]) || '#FFF9C4'
+    calls.push({
+      tool: 'format_cells',
+      params: { range, condition: { operator, value }, bgColor },
+      description: `Highlight values ${comparativeHighlight[2]} ${value}`,
+    })
+    return { calls, understood: true, explanation: `Highlighting values ${comparativeHighlight[2]} ${value}${range ? ` in column ${range}` : ''}.` }
+  }
+
   // ─── Find max/min ───────────────────────────────────────────────────────────
-  if (lower.match(/(?:biggest|largest|highest|max|most expensive)/)) {
-    const col = lower.match(/\bcolumn\s+([a-z]{1,3})\b/i)?.[1]?.toUpperCase() || 'B'
+  if (/\b(?:biggest|largest|highest|maximum|max|most\s+expensive)\b/i.test(lower)) {
+    const col = resolveSmartColumn(message, sheetContext, { preferAmount: true })
+    if (!col) {
+      return {
+        calls: [],
+        understood: true,
+        explanation: `Which numeric column should I use to find the highest value?${describeColumnChoices(sheetContext)}`,
+      }
+    }
     calls.push({ tool: 'find_max', params: { column: col }, description: `Find max in column ${col}` })
     return { calls, understood: true, explanation: `Finding the highest value in column ${col}.` }
   }
 
-  if (lower.match(/(?:smallest|lowest|min|cheapest|least)/)) {
-    const col = lower.match(/\bcolumn\s+([a-z]{1,3})\b/i)?.[1]?.toUpperCase() || 'B'
+  if (/\b(?:smallest|lowest|minimum|min|cheapest|least\s+expensive)\b/i.test(lower)) {
+    const col = resolveSmartColumn(message, sheetContext, { preferAmount: true })
+    if (!col) {
+      return {
+        calls: [],
+        understood: true,
+        explanation: `Which numeric column should I use to find the lowest value?${describeColumnChoices(sheetContext)}`,
+      }
+    }
     calls.push({ tool: 'find_min', params: { column: col }, description: `Find min in column ${col}` })
     return { calls, understood: true, explanation: `Finding the lowest value in column ${col}.` }
   }
@@ -344,4 +560,6 @@ export interface SheetContext {
   lastDataRow: number
   lastDataCol: number
   headers: string[]
+  /** Profile metadata powers safe defaults (roles, numeric columns, samples). */
+  columns?: ColumnProfile[]
 }

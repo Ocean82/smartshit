@@ -15,6 +15,7 @@ import { getCellNotesService } from '@/lib/cellNotes'
 import { resolveToolName, TEMPLATE_TOOL_NAMES } from '@shared/toolRegistry'
 import { runScript } from '@/sandbox'
 import { recordTelemetry } from '@/ai/telemetry'
+import { resolveDeleteRow } from '@/lib/deleteRowPreview'
 
 export interface ExecutionContext {
   getActiveSheet: () => SheetData
@@ -37,6 +38,8 @@ export interface ExecutionContext {
   addChart?: (chart: ChartConfig) => void
   /** Runs a create_* template via the template module (src/templates). */
   executeTemplate?: (tool: string, params: Record<string, unknown>) => ExecutionResult
+  /** Trigger the application's existing browser download handlers. */
+  exportData?: (format: 'csv' | 'xlsx' | 'json') => void
 }
 
 export interface ExecutionResult {
@@ -224,23 +227,24 @@ function executeToolInner(call: ParsedToolCall, ctx: ExecutionContext): Executio
     }
 
     case 'delete_row': {
-      if (params.row != null) {
-        const row = (params.row as number) - 1 // Convert 1-indexed to 0-indexed
-        ctx.pushHistory(`Delete row ${params.row}`)
-        ctx.deleteRow(row)
-        return { success: true, message: `Deleted row ${params.row}`, modified: 1 }
-      }
-      if (params.match) {
-        const matchText = (params.match as string).toLowerCase()
-        const row = findRowByContent(sheet, matchText)
-        if (row >= 0) {
-          ctx.pushHistory(`Delete row containing "${params.match}"`)
-          ctx.deleteRow(row)
-          return { success: true, message: `Deleted row containing "${params.match}"`, modified: 1 }
+      const resolved = resolveDeleteRow(sheet, params, ctx.getComputedValue)
+      if (!resolved) {
+        if (typeof params.expectedRowSignature === 'string' && params.row != null) {
+          const current = resolveDeleteRow(sheet, { row: params.row }, ctx.getComputedValue)
+          if (current) {
+            return {
+              success: false,
+              message: `Row ${params.row} changed after the preview. Nothing was deleted; please ask again to review the current row.`,
+              modified: 0,
+            }
+          }
         }
-        return { success: false, message: `Could not find a row containing "${params.match}"`, modified: 0 }
+        const target = params.row != null ? `row ${params.row}` : `a row containing "${String(params.match ?? '')}"`
+        return { success: false, message: `Could not find ${target}`, modified: 0 }
       }
-      return { success: false, message: 'No row specified', modified: 0 }
+      ctx.pushHistory(`Delete row ${resolved.rowNumber}`)
+      ctx.deleteRow(resolved.rowIndex)
+      return { success: true, message: `Deleted row ${resolved.rowNumber}`, modified: 1 }
     }
 
     case 'rename_header': {
@@ -427,6 +431,66 @@ function executeToolInner(call: ParsedToolCall, ctx: ExecutionContext): Executio
       return { success: true, message: `Replaced in ${count} cell(s)${note}`, modified: count }
     }
 
+    case 'count_rows': {
+      const rawColumn = String(params.column ?? '').trim()
+      const colIdx = rawColumn ? resolveColumnIndex(rawColumn, sheet, ctx.getComputedValue) : null
+      if (rawColumn && colIdx == null) {
+        return { success: false, message: `Could not find column "${rawColumn}"`, modified: 0 }
+      }
+
+      const operator = String(params.operator ?? 'equals').toLowerCase()
+      const supported = new Set(['equals', 'contains', 'gt', 'gte', 'lt', 'lte', 'not_empty'])
+      if (!supported.has(operator)) {
+        return { success: false, message: `Unsupported count condition "${operator}"`, modified: 0 }
+      }
+      if (operator !== 'not_empty' && params.value == null) {
+        return { success: false, message: 'count_rows requires a comparison value', modified: 0 }
+      }
+
+      const headerRow = findHeaderRow(sheet)
+      const lastRow = findLastDataRow(sheet)
+      let maxCol = 0
+      for (const cellId of Object.keys(sheet.cells)) maxCol = Math.max(maxCol, cellToRef(cellId).col)
+      const matchingRows: number[] = []
+
+      for (let row = headerRow + 1; row <= lastRow; row++) {
+        const columns = colIdx == null
+          ? Array.from({ length: maxCol + 1 }, (_, index) => index)
+          : [colIdx]
+        if (columns.some((column) => countValueMatches(
+          ctx.getComputedValue(row, column),
+          operator,
+          params.value,
+        ))) {
+          matchingRows.push(row + 1)
+        }
+      }
+
+      const scope = rawColumn ? ` in ${rawColumn}` : ''
+      const rows = matchingRows.length > 0 ? ` (rows ${matchingRows.slice(0, 8).join(', ')}${matchingRows.length > 8 ? ', …' : ''})` : ''
+      return {
+        success: true,
+        message: `Found ${matchingRows.length} matching row${matchingRows.length === 1 ? '' : 's'}${scope}${rows}`,
+        modified: 0,
+      }
+    }
+
+    case 'export_data': {
+      const format = String(params.format ?? '').toLowerCase()
+      if (!['csv', 'xlsx', 'json'].includes(format)) {
+        return { success: false, message: 'Export format must be CSV, XLSX, or JSON', modified: 0 }
+      }
+      if (!ctx.exportData) {
+        return { success: false, message: 'Export is not available in this context', modified: 0 }
+      }
+      ctx.exportData(format as 'csv' | 'xlsx' | 'json')
+      return {
+        success: true,
+        message: `Started the ${format.toUpperCase()} download`,
+        modified: 0,
+      }
+    }
+
     case 'find_max':
     case 'find_min': {
       const col = requireColumn(params.column, sheet, ctx, tool)
@@ -449,9 +513,16 @@ function executeToolInner(call: ParsedToolCall, ctx: ExecutionContext): Executio
 
       if (best) {
         const desc = isMax ? 'highest' : 'lowest'
-        return { success: true, message: `The ${desc} value in column ${col} is $${best.val.toLocaleString()} (${best.label}, row ${best.row + 1})`, modified: 0 }
+        const header = ctx.getComputedValue(findHeaderRow(sheet), colIdx)
+        const isCurrency = /amount|expense|cost|price|total|spent|budget|income|revenue|salary/i.test(header)
+        const formatted = `${isCurrency ? '$' : ''}${best.val.toLocaleString()}`
+        return {
+          success: true,
+          message: `The ${desc} value in column ${col.label} is ${formatted} (${best.label}, row ${best.row + 1})`,
+          modified: 0,
+        }
       }
-      return { success: false, message: `No numeric values found in column ${col}`, modified: 0 }
+      return { success: false, message: `No numeric values found in column ${col.label}`, modified: 0 }
     }
 
     case 'multi_sort': {
@@ -687,12 +758,28 @@ function isHeaderLikeCell(value: string | number | boolean | null | undefined): 
   return isNaN(parseFloat(text.replace(/[$,%]/g, '')))
 }
 
-function findRowByContent(sheet: SheetData, text: string): number {
-  for (const [cellId, cell] of Object.entries(sheet.cells)) {
-    if (cell.value != null && String(cell.value).toLowerCase().includes(text)) {
-      return cellToRef(cellId).row
+function countValueMatches(displayed: string, operator: string, rawTarget: unknown): boolean {
+  const value = displayed.trim()
+  if (operator === 'not_empty') return value !== ''
+
+  const targetText = String(rawTarget ?? '').trim()
+  if (operator === 'contains') return value.toLowerCase().includes(targetText.toLowerCase())
+  if (operator === 'equals') {
+    const leftNumber = Number(value.replace(/[$,%\s]/g, ''))
+    const rightNumber = Number(targetText.replace(/[$,%\s]/g, ''))
+    if (value !== '' && targetText !== '' && Number.isFinite(leftNumber) && Number.isFinite(rightNumber)) {
+      return leftNumber === rightNumber
     }
+    return value.toLowerCase() === targetText.toLowerCase()
   }
-  return -1
+
+  const left = Number(value.replace(/[$,%\s]/g, ''))
+  const right = Number(targetText.replace(/[$,%\s]/g, ''))
+  if (!Number.isFinite(left) || !Number.isFinite(right)) return false
+  if (operator === 'gt') return left > right
+  if (operator === 'gte') return left >= right
+  if (operator === 'lt') return left < right
+  if (operator === 'lte') return left <= right
+  return false
 }
 

@@ -82,7 +82,11 @@ export function buildSheetProfile(
       const cellId = refToCell(r, c)
       const cell = sheet.cells[cellId]
       const computed = getComputedValue(r, c)
-      const raw = cell?.formula ?? cell?.value ?? (computed || null)
+      // Profiles describe displayed data, not formula source text. A formula
+      // such as =SUM(...) must still classify its column as numeric.
+      const raw = cell?.formula
+        ? (computed !== '' ? computed : (cell.value ?? null))
+        : (cell?.value ?? (computed || null))
       if (raw === null || raw === '') {
         nullCount++
         continue

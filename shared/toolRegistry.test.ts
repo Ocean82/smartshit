@@ -45,6 +45,8 @@ describe('shared toolRegistry', () => {
   it('excludes read-only and query tools from action tool names', () => {
     expect(ACTION_TOOL_NAMES).not.toContain('find_max')
     expect(ACTION_TOOL_NAMES).not.toContain('find_min')
+    expect(ACTION_TOOL_NAMES).not.toContain('count_rows')
+    expect(ACTION_TOOL_NAMES).not.toContain('export_data')
     expect(ACTION_TOOL_NAMES).not.toContain('analyze_data')
     expect(ACTION_TOOL_NAMES).not.toContain('aggregate')
     expect(ACTION_TOOL_NAMES).not.toContain('top_n')

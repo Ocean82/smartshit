@@ -127,6 +127,98 @@ describe('sendMessage integration — local parser path', () => {
     expect(userMsg?.content).toBe('hello')
     expect(assistantMsg?.content).toBeTruthy()
   })
+
+  it('clarifies a column-less sort locally without changing row order', async () => {
+    seedBudgetData()
+    const before = useStore.getState().getActiveSheet().cells.B2?.value
+    await sendAndWait('sort my data')
+
+    expect(useStore.getState().getActiveSheet().cells.B2?.value).toBe(before)
+    const response = useStore.getState().messages.at(-1)
+    expect(response?.content).toMatch(/which column/i)
+  })
+
+  it('answers natural row counts without writing a formula', async () => {
+    seedBudgetData()
+    useStore.getState().setCellValue('C2', 'Overdue')
+    useStore.getState().setCellValue('C3', 'Paid')
+    useStore.getState().setCellValue('C4', 'Overdue')
+    await sendAndWait('count how many are overdue')
+
+    expect(useStore.getState().messages.at(-1)?.content).toContain('Found 2 matching rows')
+    const formulas = Object.values(useStore.getState().getActiveSheet().cells).filter((cell) => cell.formula)
+    expect(formulas).toHaveLength(0)
+  })
+
+  it('uses the detected amount column and returns the actual max result', async () => {
+    const store = useStore.getState()
+    store.setCellValue('A1', 'Item')
+    store.setCellValue('B1', 'Quantity')
+    store.setCellValue('D1', 'Amount')
+    store.setCellValue('A2', 'Rent')
+    store.setCellValue('B2', 1)
+    store.setCellValue('D2', 1500)
+    store.setCellValue('A3', 'Food')
+    store.setCellValue('B3', 20)
+    store.setCellValue('D3', 400)
+
+    await sendAndWait("what's my biggest expense?")
+    const response = useStore.getState().messages.at(-1)?.content ?? ''
+    expect(response).toContain('$1,500')
+    expect(response).toContain('Rent')
+  })
+
+  it('compares totals across workbook sheets without the LLM', async () => {
+    const store = useStore.getState()
+    store.renameSheet(store.getActiveSheet().id, 'January')
+    store.setCellValue('A1', 'Category')
+    store.setCellValue('B1', 'Amount')
+    store.setCellValue('A2', 'Rent')
+    store.setCellValue('B2', 100)
+    store.addSheet('February')
+    useStore.getState().setCellValue('A1', 'Category')
+    useStore.getState().setCellValue('B1', 'Amount')
+    useStore.getState().setCellValue('A2', 'Rent')
+    useStore.getState().setCellValue('B2', null, '=100+25')
+
+    await sendAndWait('Compare January and February totals')
+    const response = useStore.getState().messages.at(-1)?.content ?? ''
+    expect(response).toContain('| Amount | $100 | $125 |')
+    expect(response).toContain('$25 (25.0%) higher than January')
+  })
+
+  it('stages a named row deletion and only deletes it after Apply', async () => {
+    seedBudgetData()
+    await sendAndWait('remove Netflix')
+
+    let sheet = useStore.getState().getActiveSheet()
+    expect(sheet.cells.A5?.value).toBe('Netflix')
+    const action = useStore.getState().messages.at(-1)?.actions?.[0]
+    expect(action?.status).toBe('pending')
+    expect(action?.params).toMatchObject({ row: 5 })
+    expect(action?.description).toContain('Netflix')
+
+    useStore.getState().applyAction(action!.id)
+    sheet = useStore.getState().getActiveSheet()
+    expect(Object.values(sheet.cells).some((cell) => cell.value === 'Netflix')).toBe(false)
+  })
+
+  it('refuses delete Apply if the previewed row changed', async () => {
+    seedBudgetData()
+    await sendAndWait('remove Netflix')
+    const action = useStore.getState().messages.at(-1)?.actions?.[0]
+
+    useStore.getState().setCellValue('B5', 20)
+    useStore.getState().applyAction(action!.id)
+
+    expect(useStore.getState().getActiveSheet().cells.A5?.value).toBe('Netflix')
+    expect(action?.id).toBeTruthy()
+    const storedAction = useStore.getState().messages
+      .flatMap((message) => message.actions ?? [])
+      .find((candidate) => candidate.id === action?.id)
+    expect(storedAction?.status).toBe('rejected')
+    expect(useStore.getState().messages.at(-1)?.content).toMatch(/changed after the preview/i)
+  })
 })
 
 describe('sendMessage integration — gallery template path', () => {

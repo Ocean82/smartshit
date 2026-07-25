@@ -119,9 +119,13 @@ describe('parseMessage — does not hijack unrelated phrasing', () => {
     }
   })
 
-  it('does not guess a column when the sort target is ambiguous', () => {
-    expect(parseMessage('sort').understood).toBe(false)
-    expect(parseMessage('sort the sheet').understood).toBe(false)
+  it('asks a local clarification instead of guessing an ambiguous sort column', () => {
+    for (const message of ['sort', 'sort the sheet']) {
+      const result = parseMessage(message)
+      expect(result.understood).toBe(true)
+      expect(result.calls).toHaveLength(0)
+      expect(result.explanation).toMatch(/which column/i)
+    }
   })
 })
 
@@ -130,6 +134,9 @@ describe('parseMessage — column and phrasing coverage', () => {
     const result = parseMessage('sort by amount highest first')
     expect(result.calls[0].tool).toBe('sort_sheet')
     expect(result.calls[0].params).toMatchObject({ column: 'amount', direction: 'desc' })
+
+    const natural = parseMessage('sort my data by amount highest first')
+    expect(natural.calls[0].params).toMatchObject({ column: 'amount', direction: 'desc' })
   })
 
   it('prefers an exact header from sheet context', () => {
