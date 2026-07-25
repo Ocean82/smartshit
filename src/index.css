@@ -222,11 +222,6 @@ body {
   background: var(--surface-panel);
 }
 
-/* Give the dock resize affordance a predictable hit area without adding visual noise. */
-[role="separator"][aria-orientation="vertical"] {
-  touch-action: none;
-}
-
 @media (max-width: 900px) and (min-width: 769px) {
   #spreadsheet-main {
     min-width: 240px;
@@ -238,6 +233,7 @@ body {
     scroll-behavior: auto !important;
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
   }
 }
 
