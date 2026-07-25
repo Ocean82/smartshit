@@ -92,23 +92,90 @@
 
     :root {
       /* Light mode — warm confidence */
-      --bg: oklch(0.985 0.005 250);
+      --bg: oklch(0.99 0.005 250);
       --surface: oklch(1 0 0);
-      --surface-tint: oklch(0.97 0.012 250);
-      --ink: oklch(0.18 0.03 250);
-      --ink-secondary: oklch(0.40 0.02 250);
-      --ink-muted: oklch(0.55 0.015 250);
-      --accent: oklch(0.50 0.20 250);
-      --accent-hover: oklch(0.45 0.22 250);
-      --accent-soft: oklch(0.94 0.04 250);
-      --warm: oklch(0.65 0.18 45);
-      --warm-soft: oklch(0.94 0.06 45);
-      --border: oklch(0.90 0.008 250);
-      --border-strong: oklch(0.82 0.012 250);
-      --radius: 12px;
-      --radius-lg: 20px;
+      --surface-tint: oklch(0.98 0.01 250);
+      --ink: oklch(0.15 0.02 250);
+      --ink-secondary: oklch(0.35 0.015 250);
+      --ink-muted: oklch(0.50 0.01 250);
+      --accent: oklch(0.55 0.18 250);
+      --accent-hover: oklch(0.50 0.20 250);
+      --accent-soft: oklch(0.96 0.03 250);
+      --warm: oklch(0.60 0.15 45);
+      --warm-soft: oklch(0.97 0.04 45);
+      --border: oklch(0.92 0.005 250);
+      --border-strong: oklch(0.88 0.01 250);
+      --radius: 14px;
+      --radius-lg: 24px;
       --font-display: 'Bricolage Grotesque', system-ui, sans-serif;
       --font-body: 'General Sans', system-ui, sans-serif;
+
+      /* New: Enterprise depth */
+      --shadow-sm: 0 2px 4px oklch(0.1 0.01 250 / 0.03);
+      --shadow-md: 0 4px 12px oklch(0.1 0.01 250 / 0.06);
+      --shadow-lg: 0 12px 32px oklch(0.1 0.01 250 / 0.08);
+      --glass: blur(12px) saturate(1.4);
+    }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    @keyframes slideRight {
+      from { opacity: 0; transform: translateX(-20px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+
+    .animate-fade-up { animation: fadeUp 0.8s cubic-bezier(0.2, 1, 0.3, 1) forwards; opacity: 0; }
+    .animate-fade-in { animation: fadeIn 1s ease forwards; opacity: 0; }
+    .animate-slide-right { animation: slideRight 0.8s cubic-bezier(0.2, 1, 0.3, 1) forwards; opacity: 0; }
+    .delay-100 { animation-delay: 100ms; }
+    .delay-200 { animation-delay: 200ms; }
+    .delay-300 { animation-delay: 300ms; }
+    .delay-400 { animation-delay: 400ms; }
+    .delay-500 { animation-delay: 500ms; }
+
+    .feature-card {
+      padding: 24px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      transition: all 0.3s ease;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .feature-card:hover {
+      border-color: var(--accent);
+      box-shadow: var(--shadow-md);
+      transform: translateY(-2px);
+    }
+    .feature-icon {
+      font-size: 1.5rem;
+      width: 48px;
+      height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--surface-tint);
+      border-radius: 12px;
+      margin-bottom: 4px;
+    }
+    .feature-title {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--ink);
+    }
+    .feature-desc {
+      font-size: 0.8rem;
+      color: var(--ink-secondary);
+      line-height: 1.5;
     }
 
     html { scroll-behavior: smooth; }
@@ -130,10 +197,11 @@
       position: sticky;
       top: 0;
       z-index: 50;
-      padding: 14px 0;
-      background: oklch(0.985 0.005 250 / 0.85);
-      backdrop-filter: blur(12px) saturate(1.2);
+      padding: 16px 0;
+      background: oklch(0.99 0.005 250 / 0.8);
+      backdrop-filter: var(--glass);
       border-bottom: 1px solid var(--border);
+      transition: background 0.3s;
     }
     .nav .container {
       display: flex;
@@ -169,26 +237,27 @@
     .btn {
       display: inline-flex;
       align-items: center;
-      gap: 8px;
-      padding: 11px 22px;
-      border-radius: 10px;
+      justify-content: center;
+      gap: 10px;
+      padding: 14px 28px;
+      border-radius: 12px;
       font-weight: 600;
-      font-size: 0.9rem;
+      font-size: 0.95rem;
       border: none;
       cursor: pointer;
       text-decoration: none;
-      transition: transform 0.15s cubic-bezier(0.2, 1, 0.3, 1), box-shadow 0.15s;
+      transition: all 0.2s cubic-bezier(0.2, 1, 0.3, 1);
     }
-    .btn:hover { text-decoration: none; }
+    .btn:active { transform: scale(0.96); }
     .btn-primary {
       background: var(--accent);
       color: white;
-      box-shadow: 0 2px 12px oklch(0.5 0.2 250 / 0.2);
+      box-shadow: 0 4px 14px oklch(0.55 0.18 250 / 0.25);
     }
     .btn-primary:hover {
       background: var(--accent-hover);
-      transform: translateY(-1px);
-      box-shadow: 0 4px 20px oklch(0.5 0.2 250 / 0.25);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px oklch(0.55 0.18 250 / 0.3);
     }
     .btn-secondary {
       background: var(--surface);
@@ -252,12 +321,11 @@
       position: relative;
     }
     .product-shot-frame {
-      border-radius: 16px;
+      border-radius: 20px;
       overflow: hidden;
       border: 1px solid var(--border-strong);
-      box-shadow:
-        0 20px 60px oklch(0.2 0.02 250 / 0.1),
-        0 4px 16px oklch(0.2 0.02 250 / 0.06);
+      box-shadow: var(--shadow-lg), 0 0 0 4px oklch(1 0 0 / 0.5);
+      background: var(--surface);
     }
     .product-shot img {
       width: 100%;
@@ -303,15 +371,21 @@
       border: 1px solid var(--border);
       border-radius: var(--radius-lg);
       overflow: hidden;
-      box-shadow: 0 8px 32px oklch(0.2 0.02 250 / 0.06);
+      box-shadow: var(--shadow-md);
+      transition: all 0.4s cubic-bezier(0.2, 1, 0.3, 1);
+    }
+    .chat-mockup:hover {
+      transform: translateY(-8px) scale(1.01);
+      box-shadow: var(--shadow-lg), 0 20px 40px oklch(0.1 0.01 250 / 0.05);
     }
     .chat-mockup-header {
-      padding: 12px 16px;
+      padding: 14px 20px;
+      background: var(--surface-tint);
       border-bottom: 1px solid var(--border);
       display: flex;
       align-items: center;
-      gap: 10px;
-      font-size: 0.8rem;
+      gap: 12px;
+      font-size: 0.85rem;
       font-weight: 600;
       color: var(--ink-secondary);
     }
@@ -396,21 +470,23 @@
       gap: 24px;
     }
     .value-item {
-      padding: 24px;
-      border-radius: var(--radius);
+      padding: 32px;
+      border-radius: var(--radius-lg);
       border: 1px solid var(--border);
       background: var(--surface);
-      transition: border-color 0.2s, box-shadow 0.2s;
+      transition: all 0.3s cubic-bezier(0.2, 1, 0.3, 1);
     }
     .value-item:hover {
-      border-color: var(--border-strong);
-      box-shadow: 0 4px 16px oklch(0.2 0.02 250 / 0.05);
+      border-color: var(--accent);
+      box-shadow: var(--shadow-lg);
+      transform: translateY(-2px);
     }
     .value-item h3 {
       font-family: var(--font-display);
-      font-size: 1rem;
+      font-size: 1.1rem;
       font-weight: 700;
-      margin-bottom: 6px;
+      margin-bottom: 12px;
+      color: var(--ink);
     }
     .value-item p {
       font-size: 0.88rem;
@@ -442,14 +518,37 @@
       margin: 0 auto;
     }
     .price-card {
-      padding: 28px;
-      border-radius: var(--radius);
+      padding: 40px;
+      border-radius: var(--radius-lg);
       border: 1px solid var(--border);
       background: var(--surface);
+      display: flex;
+      flex-direction: column;
+      transition: all 0.3s cubic-bezier(0.2, 1, 0.3, 1);
+    }
+    .price-card:hover {
+      transform: scale(1.02);
+      box-shadow: var(--shadow-lg);
     }
     .price-card.featured {
       border-color: var(--accent);
-      box-shadow: 0 0 0 1px var(--accent), 0 8px 24px oklch(0.5 0.2 250 / 0.08);
+      border-width: 2px;
+      box-shadow: 0 10px 40px oklch(0.55 0.18 250 / 0.12);
+      position: relative;
+    }
+    .price-card.featured::after {
+      content: 'Recommended';
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      background: var(--accent);
+      color: white;
+      font-size: 0.65rem;
+      font-weight: 800;
+      padding: 5px 12px;
+      border-radius: 100px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
     }
     .price-card h3 {
       font-family: var(--font-display);
@@ -486,22 +585,37 @@
       text-align: center;
     }
     .cta-box {
-      background: var(--accent-soft);
+      background: oklch(0.15 0.02 250);
+      color: white;
       border-radius: var(--radius-lg);
-      padding: clamp(40px, 6vw, 72px) clamp(24px, 4vw, 56px);
+      padding: clamp(40px, 6vw, 80px) clamp(24px, 4vw, 60px);
+      box-shadow: var(--shadow-lg), 0 30px 60px oklch(0.1 0.01 250 / 0.1);
+      position: relative;
+      overflow: hidden;
+    }
+    .cta-box::before {
+      content: '';
+      position: absolute;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background: radial-gradient(circle, oklch(0.55 0.18 250 / 0.15) 0%, transparent 60%);
+      pointer-events: none;
     }
     .cta-box h2 {
       font-family: var(--font-display);
-      font-size: clamp(1.5rem, 3vw, 2rem);
-      font-weight: 700;
-      letter-spacing: -0.5px;
-      margin-bottom: 12px;
-      text-wrap: balance;
+      font-size: clamp(2rem, 4vw, 3rem);
+      font-weight: 800;
+      letter-spacing: -1.5px;
+      margin-bottom: 16px;
+      position: relative;
     }
     .cta-box p {
-      color: var(--ink-secondary);
-      margin-bottom: 28px;
-      font-size: 1rem;
+      color: oklch(0.8 0.01 250);
+      margin-bottom: 36px;
+      font-size: 1.1rem;
+      position: relative;
     }
 
     /* ─── Footer ─── */
@@ -570,12 +684,12 @@
   <!-- Hero -->
   <section class="hero">
     <div class="container">
-      <div class="hero-tagline">Free forever, no credit card needed</div>
-      <h1>Talk to your spreadsheet.<br/><em>No formulas required.</em></h1>
-      <p class="hero-sub">
+      <div class="hero-tagline animate-fade-in">Free forever, no credit card needed</div>
+      <h1 class="animate-fade-up delay-100">Talk to your spreadsheet.<br/><em class="animate-fade-in delay-200">No formulas required.</em></h1>
+      <p class="hero-sub animate-fade-up delay-200">
         A complete spreadsheet with AI that actually understands your data. Build budgets, catch formula errors, create charts, and manage expenses — all in plain English. Your private, instant Excel alternative.
       </p>
-      <div class="hero-actions">
+      <div class="hero-actions animate-fade-up delay-300">
         <a href="/app" class="btn btn-primary">
           Launch App (It's Free)
         </a>
@@ -583,7 +697,7 @@
       </div>
 
       <!-- Product screenshot -->
-      <div class="product-shot">
+      <div class="product-shot animate-fade-up delay-400">
         <div class="product-shot-frame">
           <img src="/screenshot.png" alt="smartsh!t spreadsheet with AI chat panel open, showing a monthly budget with formulas and conditional formatting" loading="eager" width="900" height="506" />
         </div>
@@ -653,45 +767,45 @@
       </div>
 
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;max-width:860px;margin:0 auto;">
-        <div style="padding:16px 20px;background:var(--surface);border:1px solid var(--border);border-radius:10px;">
-          <div style="font-size:1.2rem;margin-bottom:4px;">📊</div>
-          <div style="font-size:0.85rem;font-weight:600;color:var(--ink);">Charts & Graphs</div>
-          <div style="font-size:0.78rem;color:var(--ink-secondary);margin-top:2px;">Bar, line, pie, scatter, area. Trend lines and multi-series.</div>
+        <div class="feature-card animate-fade-up">
+          <div class="feature-icon">📊</div>
+          <div class="feature-title">Charts & Graphs</div>
+          <div class="feature-desc">Bar, line, pie, scatter, area. Trend lines and multi-series.</div>
         </div>
-        <div style="padding:16px 20px;background:var(--surface);border:1px solid var(--border);border-radius:10px;">
-          <div style="font-size:1.2rem;margin-bottom:4px;">🔢</div>
-          <div style="font-size:0.85rem;font-weight:600;color:var(--ink);">Real Formulas</div>
-          <div style="font-size:0.78rem;color:var(--ink-secondary);margin-top:2px;">SUM, VLOOKUP, IF, COUNTIF — with autocomplete and plain-English explanations.</div>
+        <div class="feature-card animate-fade-up delay-100">
+          <div class="feature-icon">🔢</div>
+          <div class="feature-title">Real Formulas</div>
+          <div class="feature-desc">SUM, VLOOKUP, IF, COUNTIF — with autocomplete and plain-English explanations.</div>
         </div>
-        <div style="padding:16px 20px;background:var(--surface);border:1px solid var(--border);border-radius:10px;">
-          <div style="font-size:1.2rem;margin-bottom:4px;">🎨</div>
-          <div style="font-size:0.85rem;font-weight:600;color:var(--ink);">Conditional Formatting</div>
-          <div style="font-size:0.78rem;color:var(--ink-secondary);margin-top:2px;">Color scales, data bars, icon sets. "Highlight anything over $500" just works.</div>
+        <div class="feature-card animate-fade-up delay-200">
+          <div class="feature-icon">🎨</div>
+          <div class="feature-title">Conditional Formatting</div>
+          <div class="feature-desc">Color scales, data bars, icon sets. "Highlight anything over $500" just works.</div>
         </div>
-        <div style="padding:16px 20px;background:var(--surface);border:1px solid var(--border);border-radius:10px;">
-          <div style="font-size:1.2rem;margin-bottom:4px;">🔍</div>
-          <div style="font-size:0.85rem;font-weight:600;color:var(--ink);">10-Rule Auditor</div>
-          <div style="font-size:0.78rem;color:var(--ink-secondary);margin-top:2px;">Finds range gaps, inconsistent formulas, outliers, and hidden errors automatically.</div>
+        <div class="feature-card animate-fade-up delay-300">
+          <div class="feature-icon">🔍</div>
+          <div class="feature-title">10-Rule Auditor</div>
+          <div class="feature-desc">Finds range gaps, inconsistent formulas, outliers, and hidden errors automatically.</div>
         </div>
-        <div style="padding:16px 20px;background:var(--surface);border:1px solid var(--border);border-radius:10px;">
-          <div style="font-size:1.2rem;margin-bottom:4px;">📱</div>
-          <div style="font-size:0.85rem;font-weight:600;color:var(--ink);">Mobile Ready</div>
-          <div style="font-size:0.78rem;color:var(--ink-secondary);margin-top:2px;">Full touch UI with mobile toolbar, responsive grid, and PWA install.</div>
+        <div class="feature-card animate-fade-up">
+          <div class="feature-icon">📱</div>
+          <div class="feature-title">Mobile Ready</div>
+          <div class="feature-desc">Full touch UI with mobile toolbar, responsive grid, and PWA install.</div>
         </div>
-        <div style="padding:16px 20px;background:var(--surface);border:1px solid var(--border);border-radius:10px;">
-          <div style="font-size:1.2rem;margin-bottom:4px;">📋</div>
-          <div style="font-size:0.85rem;font-weight:600;color:var(--ink);">Pivot Tables</div>
-          <div style="font-size:0.78rem;color:var(--ink-secondary);margin-top:2px;">Group, aggregate, and cross-tabulate. Ask "summarize by category" and it builds one.</div>
+        <div class="feature-card animate-fade-up delay-100">
+          <div class="feature-icon">📋</div>
+          <div class="feature-title">Pivot Tables</div>
+          <div class="feature-desc">Group, aggregate, and cross-tabulate. Ask "summarize by category" and it builds one.</div>
         </div>
-        <div style="padding:16px 20px;background:var(--surface);border:1px solid var(--border);border-radius:10px;">
-          <div style="font-size:1.2rem;margin-bottom:4px;">🔗</div>
-          <div style="font-size:0.85rem;font-weight:600;color:var(--ink);">Share Links</div>
-          <div style="font-size:0.78rem;color:var(--ink-secondary);margin-top:2px;">Generate a view link for anyone. No account needed to see shared sheets.</div>
+        <div class="feature-card animate-fade-up delay-200">
+          <div class="feature-icon">🔗</div>
+          <div class="feature-title">Share Links</div>
+          <div class="feature-desc">Generate a view link for anyone. No account needed to see shared sheets.</div>
         </div>
-        <div style="padding:16px 20px;background:var(--surface);border:1px solid var(--border);border-radius:10px;">
-          <div style="font-size:1.2rem;margin-bottom:4px;">⌨️</div>
-          <div style="font-size:0.85rem;font-weight:600;color:var(--ink);">Keyboard Power</div>
-          <div style="font-size:0.78rem;color:var(--ink-secondary);margin-top:2px;">Command palette, shortcuts, find/replace. Full keyboard navigation for power users.</div>
+        <div class="feature-card animate-fade-up delay-300">
+          <div class="feature-icon">⌨️</div>
+          <div class="feature-title">Keyboard Power</div>
+          <div class="feature-desc">Command palette, shortcuts, find/replace. Full keyboard navigation for power users.</div>
         </div>
       </div>
     </div>
@@ -785,31 +899,31 @@
   </section>
 
   <!-- Comparison -->
-  <section style="padding:80px 0;">
+  <section style="padding:100px 0; background: oklch(0.12 0.015 250); color: white;">
     <div class="container">
       <div class="demo-header">
-        <h2>How smartsh!t compares</h2>
-        <p>Same power, less friction, lower cost.</p>
+        <h2 style="color:white;">How smartsh!t compares</h2>
+        <p style="color: oklch(0.7 0.01 250);">Same power, less friction, lower cost.</p>
       </div>
 
-      <div style="overflow-x:auto;margin:0 auto;max-width:800px;">
-        <table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
+      <div style="overflow-x:auto;margin:0 auto;max-width:800px; background: oklch(1 0 0 / 0.03); padding: 32px; border-radius: var(--radius-lg); border: 1px solid oklch(1 0 0 / 0.1);">
+        <table style="width:100%;border-collapse:collapse;font-size:0.9rem;">
           <thead>
-            <tr style="border-bottom:2px solid var(--border-strong);">
-              <th style="text-align:left;padding:10px 12px;font-family:var(--font-display);font-weight:700;color:var(--ink);">Feature</th>
-              <th style="text-align:center;padding:10px 12px;font-weight:700;color:var(--accent);">smartsh!t</th>
-              <th style="text-align:center;padding:10px 12px;font-weight:600;color:var(--ink-secondary);">Excel + Copilot</th>
-              <th style="text-align:center;padding:10px 12px;font-weight:600;color:var(--ink-secondary);">Google Sheets + Gemini</th>
+            <tr style="border-bottom:2px solid oklch(1 0 0 / 0.2);">
+              <th style="text-align:left;padding:12px;font-family:var(--font-display);font-weight:700;color:white;">Feature</th>
+              <th style="text-align:center;padding:12px;font-weight:700;color:var(--accent);">smartsh!t</th>
+              <th style="text-align:center;padding:12px;font-weight:600;color:oklch(0.7 0.01 250);">Excel + Copilot</th>
+              <th style="text-align:center;padding:12px;font-weight:600;color:oklch(0.7 0.01 250);">Google Sheets + Gemini</th>
             </tr>
           </thead>
           <tbody>
-            <tr style="border-bottom:1px solid var(--border);"><td style="padding:8px 12px;color:var(--ink);">Starting price</td><td style="text-align:center;padding:8px 12px;font-weight:600;color:var(--accent);">$0</td><td style="text-align:center;padding:8px 12px;color:var(--ink-secondary);">$20–30/mo</td><td style="text-align:center;padding:8px 12px;color:var(--ink-secondary);">$20–30/mo</td></tr>
-            <tr style="border-bottom:1px solid var(--border);"><td style="padding:8px 12px;color:var(--ink);">Formula error detection</td><td style="text-align:center;padding:8px 12px;">✅ Automatic</td><td style="text-align:center;padding:8px 12px;color:var(--ink-muted);">Manual only</td><td style="text-align:center;padding:8px 12px;color:var(--ink-muted);">❌</td></tr>
-            <tr style="border-bottom:1px solid var(--border);"><td style="padding:8px 12px;color:var(--ink);">Preview before changes</td><td style="text-align:center;padding:8px 12px;">✅ Always</td><td style="text-align:center;padding:8px 12px;color:var(--ink-muted);">Sometimes</td><td style="text-align:center;padding:8px 12px;color:var(--ink-muted);">❌</td></tr>
-            <tr style="border-bottom:1px solid var(--border);"><td style="padding:8px 12px;color:var(--ink);">Data stays local</td><td style="text-align:center;padding:8px 12px;">✅ Default</td><td style="text-align:center;padding:8px 12px;color:var(--ink-muted);">❌ Cloud required</td><td style="text-align:center;padding:8px 12px;color:var(--ink-muted);">❌ Cloud required</td></tr>
-            <tr style="border-bottom:1px solid var(--border);"><td style="padding:8px 12px;color:var(--ink);">Instant AI (no loading)</td><td style="text-align:center;padding:8px 12px;">✅ 80% local</td><td style="text-align:center;padding:8px 12px;color:var(--ink-muted);">❌ Always remote</td><td style="text-align:center;padding:8px 12px;color:var(--ink-muted);">❌ Always remote</td></tr>
-            <tr style="border-bottom:1px solid var(--border);"><td style="padding:8px 12px;color:var(--ink);">Bring Your Own Key</td><td style="text-align:center;padding:8px 12px;">✅</td><td style="text-align:center;padding:8px 12px;color:var(--ink-muted);">❌</td><td style="text-align:center;padding:8px 12px;color:var(--ink-muted);">❌</td></tr>
-            <tr><td style="padding:8px 12px;color:var(--ink);">No install needed</td><td style="text-align:center;padding:8px 12px;">✅ Browser-based</td><td style="text-align:center;padding:8px 12px;color:var(--ink-muted);">Desktop app</td><td style="text-align:center;padding:8px 12px;">✅</td></tr>
+            <tr style="border-bottom:1px solid oklch(1 0 0 / 0.1);"><td style="padding:12px;color:oklch(0.9 0.01 250);">Starting price</td><td style="text-align:center;padding:12px;font-weight:600;color:var(--accent);">$0</td><td style="text-align:center;padding:12px;color:oklch(0.7 0.01 250);">$20–30/mo</td><td style="text-align:center;padding:12px;color:oklch(0.7 0.01 250);">$20–30/mo</td></tr>
+            <tr style="border-bottom:1px solid oklch(1 0 0 / 0.1);"><td style="padding:12px;color:oklch(0.9 0.01 250);">Formula error detection</td><td style="text-align:center;padding:12px;color:white;">✅ Automatic</td><td style="text-align:center;padding:12px;color:oklch(0.5 0.01 250);">Manual only</td><td style="text-align:center;padding:12px;color:oklch(0.5 0.01 250);">❌</td></tr>
+            <tr style="border-bottom:1px solid oklch(1 0 0 / 0.1);"><td style="padding:12px;color:oklch(0.9 0.01 250);">Preview before changes</td><td style="text-align:center;padding:12px;color:white;">✅ Always</td><td style="text-align:center;padding:12px;color:oklch(0.5 0.01 250);">Sometimes</td><td style="text-align:center;padding:12px;color:oklch(0.5 0.01 250);">❌</td></tr>
+            <tr style="border-bottom:1px solid oklch(1 0 0 / 0.1);"><td style="padding:12px;color:oklch(0.9 0.01 250);">Data stays local</td><td style="text-align:center;padding:12px;color:white;">✅ Default</td><td style="text-align:center;padding:12px;color:oklch(0.5 0.01 250);">❌ Cloud required</td><td style="text-align:center;padding:12px;color:oklch(0.5 0.01 250);">❌ Cloud required</td></tr>
+            <tr style="border-bottom:1px solid oklch(1 0 0 / 0.1);"><td style="padding:12px;color:oklch(0.9 0.01 250);">Instant AI (no loading)</td><td style="text-align:center;padding:12px;color:white;">✅ 80% local</td><td style="text-align:center;padding:12px;color:oklch(0.5 0.01 250);">❌ Always remote</td><td style="text-align:center;padding:12px;color:oklch(0.5 0.01 250);">❌ Always remote</td></tr>
+            <tr style="border-bottom:1px solid oklch(1 0 0 / 0.1);"><td style="padding:12px;color:oklch(0.9 0.01 250);">Bring Your Own Key</td><td style="text-align:center;padding:12px;color:white;">✅</td><td style="text-align:center;padding:12px;color:oklch(0.5 0.01 250);">❌</td><td style="text-align:center;padding:12px;color:oklch(0.5 0.01 250);">❌</td></tr>
+            <tr><td style="padding:12px;color:oklch(0.9 0.01 250);">No install needed</td><td style="text-align:center;padding:12px;color:white;">✅ Browser-based</td><td style="text-align:center;padding:12px;color:oklch(0.5 0.01 250);">Desktop app</td><td style="text-align:center;padding:12px;color:white;">✅</td></tr>
           </tbody>
         </table>
       </div>
@@ -818,11 +932,14 @@
 
   <!-- CTA -->
   <section class="cta">
-    <div class="container">
+    <div class="container animate-fade-up">
       <div class="cta-box">
-        <h2>Stop fighting formulas</h2>
+        <h2>Stop fighting formulas.</h2>
         <p>Free to start, private by default, and ready when you are.</p>
-        <a href="/app" class="btn btn-primary">Get Started Free</a>
+        <div style="display:flex; gap:16px; justify-content:center; flex-wrap:wrap;">
+          <a href="/app" class="btn btn-primary" style="padding: 16px 32px; font-size: 1rem;">Get Started Free</a>
+          <a href="mailto:support@smartsht.com" class="btn btn-secondary" style="background:transparent; border-color:oklch(1 0 0 / 0.2); color:white;">Talk to Sales</a>
+        </div>
       </div>
     </div>
   </section>
