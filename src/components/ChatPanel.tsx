@@ -237,6 +237,7 @@ export function ChatPanel({ isMobileOpen, onCloseMobile, embedded }: { isMobileO
             <button
               type="button"
               onClick={onCloseMobile}
+              aria-label="Close assistant"
               className="md:hidden p-1.5 rounded-lg text-white hover:bg-white/20"
             >
               <X size={16} aria-hidden="true" />
