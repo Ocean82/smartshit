@@ -17,6 +17,14 @@ interface DockPanelProps {
   headerActions?: React.ReactNode
 }
 
+/**
+ * Renders an active dock panel with resizable content and header controls.
+ *
+ * @param panelId - Identifier of the panel to render and resize
+ * @param title - Optional title displayed in the panel header
+ * @param headerActions - Optional controls displayed before the close button
+ * @returns The dock panel when active, or `null` otherwise
+ */
 export function DockPanel({ panelId, children, title, headerActions }: DockPanelProps) {
   const activePanel = useStore((s) => s.activePanel)
   const setActivePanel = useStore((s) => s.setActivePanel)

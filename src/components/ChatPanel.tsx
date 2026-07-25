@@ -22,6 +22,14 @@ function healthFooterMessage(health: ServerHealth | null): string {
   return 'Instant analysis active · Skills work without AI'
 }
 
+/**
+ * Renders the assistant chat panel with messaging, spreadsheet actions, attachments, feedback, and usage controls.
+ *
+ * @param isMobileOpen - Whether the standalone panel is open on mobile.
+ * @param onCloseMobile - Callback invoked when the mobile panel is closed.
+ * @param embedded - Whether to render the panel without standalone header and visibility controls.
+ * @returns The assistant chat panel.
+ */
 export function ChatPanel({ isMobileOpen, onCloseMobile, embedded }: { isMobileOpen?: boolean; onCloseMobile?: () => void; embedded?: boolean }) {
   const {
     messages,
