@@ -13,4 +13,4 @@
 
 export { TOOL_REGISTRY, getToolDefinition, resolveToolName, formatToolsForPrompt } from './tools'
 export { parseMessage, type ParseResult, type ParsedToolCall, type SheetContext } from './parser'
-export { executeTool, type ExecutionContext, type ExecutionResult } from './executor'
+export { executeTool, executeToolAsync, type ExecutionContext, type ExecutionResult } from './executor'

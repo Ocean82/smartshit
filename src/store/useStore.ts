@@ -25,7 +25,7 @@ import {
   cellToRef,
   SpreadsheetEngine,
 } from '@/engine/spreadsheet';
-import { parseMessage, executeTool, type ExecutionContext } from '@/agent';
+import { parseMessage, executeTool, executeToolAsync, type ExecutionContext } from '@/agent';
 import { executeTemplateTool, resolveGalleryTemplate } from '@/templates';
 import { MUTATION_TOOL_NAMES } from '@shared/toolRegistry';
 import { loadPersistedState } from '@/lib/persistence';
@@ -1487,6 +1487,14 @@ function executeAction(
   set: any
 ) {
   const ctx = buildExecutionContext(get, set, { suppressHistory: true });
+  if (action.tool === 'execute_script') {
+    // Sandbox scripts require async execution — fire and forget with error handling
+    executeToolAsync({ tool: action.tool, params: action.params, description: action.description }, ctx)
+      .catch((err) => {
+        console.error('[executeAction] Script execution failed:', err)
+      })
+    return;
+  }
   if (MUTATION_TOOL_NAMES.includes(action.tool)) {
     // applyAction already pushed a single undo point for this action
     executeTool({ tool: action.tool, params: action.params, description: action.description }, ctx);

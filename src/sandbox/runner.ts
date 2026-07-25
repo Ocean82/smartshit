@@ -8,6 +8,7 @@
 import { getQuickJS, type QuickJSContext, type QuickJSHandle } from 'quickjs-emscripten'
 import { buildHostAPI } from './api'
 import type { ScriptContext, ScriptOptions, SandboxResult, MutationCollector } from './types'
+import { validateScript } from './validate'
 import {
   EXECUTION_TIMEOUT_MS,
   MEMORY_LIMIT_BYTES,
@@ -27,6 +28,16 @@ export async function executeScript(
 ): Promise<SandboxResult> {
   const timeout = options.timeout ?? EXECUTION_TIMEOUT_MS
   const startTime = performance.now()
+
+  // ─── Pre-execution validation ──────────────────────────────────────────────
+  const validation = validateScript(code)
+  if (!validation.valid) {
+    return {
+      success: false,
+      error: validation.error!,
+      logs: [],
+    }
+  }
 
   // Initialize mutation collector
   const mutations: MutationCollector = {

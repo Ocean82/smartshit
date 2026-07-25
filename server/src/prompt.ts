@@ -273,6 +273,24 @@ format_cells condition examples (shape: {operator, value?}):
 - Format column B as currency: {"tool":"format_cells","params":{"range":"B","numberFormat":"currency"}}
 - Show column C as percentages: {"tool":"format_cells","params":{"range":"C","numberFormat":"percent"}}
 
+execute_script — use for complex operations needing loops, conditionals, or multi-step logic:
+- The script runs in a sandboxed JS environment with NO access to DOM, network, or imports.
+- Available API: getCell(ref), getRawCell(ref), getRange(start,end), getHeaders(), getRowCount(), getColCount(), findCells(col,condition,value?)
+- Write API: setCell(ref,value,formula?), setCells(updates), setFormat(ref,{bold?,italic?,bgColor?,fontColor?,numberFormat?}), deleteRow(row), insertRow(afterRow)
+- Utility: cellRef(row,col), parseRef(ref), colToIndex(letter), indexToCol(index), log(msg)
+- Rows/cols are 0-indexed. cellRef(0,0) = "A1". Row 0 is typically headers.
+- Write simple, readable JavaScript. No async, no imports, no fetch, no eval.
+
+execute_script examples:
+- Fill blanks with value above: {"tool":"execute_script","params":{"code":"const rows = getRowCount()\\nfor (let row = 1; row < rows; row++) {\\n  const ref = cellRef(row, 1)\\n  if (getCell(ref) === null) {\\n    const above = getCell(cellRef(row - 1, 1))\\n    if (above !== null) setCell(ref, above)\\n  }\\n}","description":"Fill blank cells in column B with the value from the row above"}}
+- Running total: {"tool":"execute_script","params":{"code":"let running = 0\\nfor (let row = 1; row < getRowCount(); row++) {\\n  const val = Number(getCell(cellRef(row, 2)))\\n  if (!isNaN(val)) { running += val; setCell(cellRef(row, 3), running) }\\n}","description":"Add running total in column D based on column C"}}
+- Highlight high values: {"tool":"execute_script","params":{"code":"for (let row = 1; row < getRowCount(); row++) {\\n  const ref = cellRef(row, 4)\\n  const val = Number(String(getCell(ref)).replace(/[$,]/g, ''))\\n  if (!isNaN(val) && val > 1000) setFormat(ref, { bgColor: '#FEE2E2', bold: true })\\n}","description":"Highlight cells over $1000 in column E"}}
+
+When to use execute_script vs other tools:
+- Simple set/format/sort/filter → use the dedicated tool (faster, no script needed)
+- Needs a loop, condition, or multi-cell logic → use execute_script
+- If in doubt and the request involves "every row", "all blanks", "based on condition" → execute_script
+
 Rules:
 - message: plain English, friendly, short. Describe what you will do.
 - actions: array of tool calls (empty array if no sheet changes needed)

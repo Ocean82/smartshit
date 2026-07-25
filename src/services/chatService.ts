@@ -13,7 +13,7 @@
 
 import type { ChatMessage, SheetData, Selection, WorkbookData } from '@/types'
 import type { ExecutionContext } from '@/agent/executor'
-import { parseMessage, executeTool } from '@/agent'
+import { parseMessage, executeTool, executeToolAsync } from '@/agent'
 import { executeTemplateTool, resolveGalleryTemplate } from '@/templates'
 import { processMessage } from '@/ai/brain'
 import { buildSpreadsheetContext } from '@/ai/buildContext'
@@ -145,7 +145,11 @@ export async function processChatMessage(
     if (parsed.understood && parsed.calls.length > 0) {
       pushHistory(`AI: ${parsed.explanation || parsed.calls.map((c) => c.description).join(', ')}`)
       const execCtx = buildExecContext({ suppressHistory: true })
-      const results = parsed.calls.map((call) => executeTool(call, execCtx))
+
+      // Use async execution to support sandbox scripts alongside sync tools
+      const results = await Promise.all(
+        parsed.calls.map((call) => executeToolAsync(call, execCtx))
+      )
       const allSuccess = results.every((r) => r.success)
       const totalModified = results.reduce((sum, r) => sum + r.modified, 0)
 

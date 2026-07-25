@@ -238,7 +238,8 @@ describe('Sandbox Runner', () => {
 
       expect(result.success).toBe(false)
       if (!result.success) {
-        expect(result.error).toContain('not defined')
+        // Validation catches "fetch" before it reaches QuickJS
+        expect(result.error).toContain('Network')
       }
     })
   })

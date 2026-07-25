@@ -2,7 +2,7 @@
 
 > Agent-generated scripts executed in a sandboxed WASM VM for complex spreadsheet operations.
 
-**Status:** Planning
+**Status:** ✅ Implemented (Phases 1-5)
 **Dependency:** `quickjs-emscripten` (npm)
 **Priority:** After P0 security fixes, before new skill work
 

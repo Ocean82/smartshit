@@ -9,6 +9,7 @@
  */
 
 export { executeScript as runScript } from './runner'
+export { validateScript } from './validate'
 export type {
   ScriptContext,
   ScriptOptions,

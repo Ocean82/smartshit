@@ -14,6 +14,7 @@ import { formatAsTable } from '@/lib/formatAsTable'
 import { getCellNotesService } from '@/lib/cellNotes'
 import { resolveToolName, TEMPLATE_TOOL_NAMES } from '@shared/toolRegistry'
 import { runScript } from '@/sandbox'
+import { recordTelemetry } from '@/ai/telemetry'
 
 export interface ExecutionContext {
   getActiveSheet: () => SheetData
@@ -99,6 +100,7 @@ async function executeScript(call: ParsedToolCall, ctx: ExecutionContext): Promi
     })
 
     if (!result.success) {
+      recordTelemetry('sandboxErrors', result.error)
       return { success: false, message: result.error, modified: 0 }
     }
 
@@ -122,6 +124,8 @@ async function executeScript(call: ParsedToolCall, ctx: ExecutionContext): Promi
     const totalModified = cellCount + Object.keys(result.formatUpdates).length +
       result.rowDeletions.length + result.rowInsertions.length
 
+    recordTelemetry('sandboxExecutions', `${totalModified} mutations in ${Math.round(result.executionTime)}ms`)
+
     return {
       success: true,
       message: result.summary || `Script executed: ${cellCount} cells modified`,
@@ -129,6 +133,7 @@ async function executeScript(call: ParsedToolCall, ctx: ExecutionContext): Promi
     }
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err)
+    recordTelemetry('sandboxErrors', detail)
     return {
       success: false,
       message: `Script execution failed: ${detail}`,
