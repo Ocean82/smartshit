@@ -186,7 +186,7 @@ export function ChatPanel({ isMobileOpen, onCloseMobile, embedded }: { isMobileO
           <Sparkles size={18} className="text-amber-300 shrink-0" />
           <div className="min-w-0">
             <h2 className="text-sm font-bold text-white truncate">smartsh!t assistant</h2>
-            <p className="text-[10px] truncate" style={{ color: 'var(--accent-300)' }}>Describe what you need — I handle the rest</p>
+            <p className="text-[10px] truncate" style={{ color: 'var(--accent-300)' }}>Ask about this sheet or make a change</p>
           </div>
         </div>
         <div className="flex items-center gap-1 shrink-0">
@@ -231,7 +231,7 @@ export function ChatPanel({ isMobileOpen, onCloseMobile, embedded }: { isMobileO
               onClick={onCloseMobile}
               className="md:hidden p-1.5 rounded-lg text-white hover:bg-white/20"
             >
-              ✕
+              <X size={16} aria-hidden="true" />
             </button>
           )}
         </div>

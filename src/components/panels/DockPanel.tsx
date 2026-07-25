@@ -31,48 +31,75 @@ export function DockPanel({ panelId, children, title, headerActions }: DockPanel
 
   const handleClose = () => setActivePanel(null)
 
-  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+  const resizeBy = useCallback((delta: number) => {
+    setPanelWidth(panelId, Math.min(def.maxWidth, Math.max(def.minWidth, width + delta)))
+  }, [width, panelId, def.maxWidth, def.minWidth, setPanelWidth])
+
+  const handleResizeStart = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault()
+    e.currentTarget.setPointerCapture(e.pointerId)
     resizingRef.current = true
     const startX = e.clientX
     const startWidth = width
     document.body.style.cursor = 'col-resize'
     document.body.style.userSelect = 'none'
 
-    const onMove = (ev: MouseEvent) => {
+    const onMove = (ev: PointerEvent) => {
       if (!resizingRef.current) return
-      // Dragging left edge → moving left means bigger panel
+      // The handle is on the left edge: moving left makes the panel wider.
       const delta = startX - ev.clientX
-      const newWidth = Math.min(def.maxWidth, Math.max(def.minWidth, startWidth + delta))
-      setPanelWidth(panelId, newWidth)
+      setPanelWidth(panelId, Math.min(def.maxWidth, Math.max(def.minWidth, startWidth + delta)))
     }
 
     const onUp = () => {
       resizingRef.current = false
       document.body.style.cursor = ''
       document.body.style.userSelect = ''
-      document.removeEventListener('mousemove', onMove)
-      document.removeEventListener('mouseup', onUp)
+      document.removeEventListener('pointermove', onMove)
+      document.removeEventListener('pointerup', onUp)
+      document.removeEventListener('pointercancel', onUp)
     }
 
-    document.addEventListener('mousemove', onMove)
-    document.addEventListener('mouseup', onUp)
+    document.addEventListener('pointermove', onMove)
+    document.addEventListener('pointerup', onUp)
+    document.addEventListener('pointercancel', onUp)
   }, [width, panelId, def.maxWidth, def.minWidth, setPanelWidth])
+
+  const handleResizeKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'ArrowLeft') {
+      e.preventDefault()
+      resizeBy(20)
+    } else if (e.key === 'ArrowRight') {
+      e.preventDefault()
+      resizeBy(-20)
+    } else if (e.key === 'Home') {
+      e.preventDefault()
+      setPanelWidth(panelId, def.minWidth)
+    } else if (e.key === 'End') {
+      e.preventDefault()
+      setPanelWidth(panelId, def.maxWidth)
+    }
+  }
 
   if (!isOpen) return null
 
   return (
     <div
-      className="relative flex flex-col bg-white border-l border-gray-200 shrink-0 h-full"
-      style={{ width, minWidth: def.minWidth, maxWidth: def.maxWidth }}
+      className="dock-panel relative flex flex-col bg-white border-l border-gray-200 shrink-0 h-full max-md:fixed max-md:inset-0 max-md:z-40"
+      style={{ width, minWidth: def.minWidth, maxWidth: `min(${def.maxWidth}px, calc(100vw - 360px))` }}
     >
       {/* Resize handle (left edge) */}
       <div
         role="separator"
         aria-orientation="vertical"
         aria-label={`Resize ${def.label} panel`}
-        onMouseDown={handleResizeStart}
-        className="absolute top-0 left-0 w-1.5 h-full cursor-col-resize z-10 group hover:bg-blue-400/30 active:bg-blue-500/40"
+        aria-valuemin={def.minWidth}
+        aria-valuemax={def.maxWidth}
+        aria-valuenow={width}
+        tabIndex={0}
+        onPointerDown={handleResizeStart}
+        onKeyDown={handleResizeKeyDown}
+        className="absolute top-0 left-0 w-2 h-full cursor-col-resize z-10 group hover:bg-blue-400/30 active:bg-blue-500/40 touch-none max-md:hidden"
       >
         <div className="absolute top-1/2 left-0 -translate-y-1/2 w-1 h-8 rounded-full bg-gray-300 group-hover:bg-blue-500 transition-colors" />
       </div>
