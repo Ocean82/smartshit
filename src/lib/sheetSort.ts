@@ -7,6 +7,7 @@
 
 import { cellToRef, refToCell } from '@/engine/spreadsheet'
 import type { CellData, SheetData, SortRule } from '@/types'
+import { findSummaryRowIndexes } from '@/lib/sheetRows'
 
 export function findLastDataRow(sheet: SheetData): number {
   let max = 0
@@ -99,6 +100,8 @@ export function computeMultiSortedCellUpdates(
 
   const headerRow = findHeaderRow(sheet)
   const lastRow = findLastDataRow(sheet)
+  const summaryRows = findSummaryRowIndexes(sheet, getComputedValue)
+  const sortableRowIndexes: number[] = []
   const oldIds: string[] = []
 
   interface RowData {
@@ -110,6 +113,9 @@ export function computeMultiSortedCellUpdates(
   const rows: RowData[] = []
 
   for (let r = headerRow + 1; r <= lastRow; r++) {
+    // Keep totals/subtotals anchored instead of sorting them into detail rows.
+    if (summaryRows.has(r)) continue
+    sortableRowIndexes.push(r)
     // Compute sort keys for all rule columns
     const sortKeys = rules.map((rule) => {
       const computed = getComputedValue(r, rule.column)
@@ -142,7 +148,7 @@ export function computeMultiSortedCellUpdates(
   // Rebuild cell map with new row positions
   const writes: Record<string, CellData> = {}
   for (let i = 0; i < rows.length; i++) {
-    const targetRow = headerRow + 1 + i
+    const targetRow = sortableRowIndexes[i]
     for (const [cellId, cell] of Object.entries(rows[i].cells)) {
       const ref = cellToRef(cellId)
       const newCellId = refToCell(targetRow, ref.col)

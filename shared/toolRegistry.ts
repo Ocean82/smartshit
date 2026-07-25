@@ -313,6 +313,26 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
     examples: ['smallest expense', 'lowest value in column C'],
   },
   {
+    name: 'count_rows',
+    category: 'read',
+    description: 'Count data rows matching a text or numeric condition without changing the sheet',
+    params: [
+      { name: 'column', type: 'string', description: 'Optional column letter or header. Omit to search each row.' },
+      { name: 'operator', type: 'string', description: 'equals, contains, gt, gte, lt, lte, or not_empty', required: true },
+      { name: 'value', type: 'string', description: 'Value to compare (not required for not_empty)' },
+    ],
+    examples: ['count how many are overdue', 'how many rows have status Paid', 'count values over 500'],
+  },
+  {
+    name: 'export_data',
+    category: 'read',
+    description: 'Download the active sheet as CSV or the workbook as Excel/JSON',
+    params: [
+      { name: 'format', type: 'string', description: 'csv, xlsx, or json', required: true },
+    ],
+    examples: ['export this as CSV', 'download as Excel', 'save the workbook as JSON'],
+  },
+  {
     name: 'analyze_data',
     category: 'read',
     description: 'Analyze the current sheet and provide a plain-English summary',

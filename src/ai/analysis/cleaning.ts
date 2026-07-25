@@ -97,12 +97,23 @@ export function runCleaningSkill(sheet: SheetData): ToolResult {
       : '',
   ].filter(Boolean).join(' ')
 
+  const hasChanges = preview.changes.length > 0 || preview.duplicateRows.length > 0
+  if (!hasChanges) {
+    return {
+      success: true,
+      message: `${message} Your data is already clean, so there is nothing to apply.`,
+      data: preview,
+      toolUsed: 'cleaning',
+      suggestions: ['Check for missing values', 'Analyze my data for patterns'],
+    }
+  }
+
   return {
     success: true,
     message,
     data: preview,
     toolUsed: 'cleaning',
-    suggestions: ['Click Apply to trim whitespace, normalize headers, and remove duplicate rows.'],
+    suggestions: ['Review the preview, then click Apply to clean the sheet.'],
     actions: [{
       tool: 'clean_sheet_data',
       params: {

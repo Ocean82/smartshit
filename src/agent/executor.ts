@@ -15,6 +15,8 @@ import { getCellNotesService } from '@/lib/cellNotes'
 import { resolveToolName, TEMPLATE_TOOL_NAMES } from '@shared/toolRegistry'
 import { runScript } from '@/sandbox'
 import { recordTelemetry } from '@/ai/telemetry'
+import { resolveDeleteRow } from '@/lib/deleteRowPreview'
+import { findSummaryRowIndexes } from '@/lib/sheetRows'
 
 export interface ExecutionContext {
   getActiveSheet: () => SheetData
@@ -37,6 +39,8 @@ export interface ExecutionContext {
   addChart?: (chart: ChartConfig) => void
   /** Runs a create_* template via the template module (src/templates). */
   executeTemplate?: (tool: string, params: Record<string, unknown>) => ExecutionResult
+  /** Trigger the application's existing browser download handlers. */
+  exportData?: (format: 'csv' | 'xlsx' | 'json') => void
 }
 
 export interface ExecutionResult {
@@ -224,23 +228,27 @@ function executeToolInner(call: ParsedToolCall, ctx: ExecutionContext): Executio
     }
 
     case 'delete_row': {
-      if (params.row != null) {
-        const row = (params.row as number) - 1 // Convert 1-indexed to 0-indexed
-        ctx.pushHistory(`Delete row ${params.row}`)
-        ctx.deleteRow(row)
-        return { success: true, message: `Deleted row ${params.row}`, modified: 1 }
-      }
-      if (params.match) {
-        const matchText = (params.match as string).toLowerCase()
-        const row = findRowByContent(sheet, matchText)
-        if (row >= 0) {
-          ctx.pushHistory(`Delete row containing "${params.match}"`)
-          ctx.deleteRow(row)
-          return { success: true, message: `Deleted row containing "${params.match}"`, modified: 1 }
+      const resolved = resolveDeleteRow(sheet, params, ctx.getComputedValue)
+      if (!resolved) {
+        if (typeof params.expectedRowSignature === 'string' && params.row != null) {
+          const current = resolveDeleteRow(sheet, { row: params.row }, ctx.getComputedValue)
+          if (current) {
+            return {
+              success: false,
+              message: `Row ${params.row} changed after the preview. Nothing was deleted; please ask again to review the current row.`,
+              modified: 0,
+            }
+          }
         }
-        return { success: false, message: `Could not find a row containing "${params.match}"`, modified: 0 }
+        const target = params.row != null ? `row ${params.row}` : `a row containing "${String(params.match ?? '')}"`
+        return { success: false, message: `Could not find ${target}`, modified: 0 }
       }
-      return { success: false, message: 'No row specified', modified: 0 }
+      // Keep the history label static: row details are already in the action
+      // description, and static labels avoid taint scanners misclassifying this
+      // non-SQL string as a query construction sink.
+      ctx.pushHistory('Delete row')
+      ctx.deleteRow(resolved.rowIndex)
+      return { success: true, message: `Deleted row ${resolved.rowNumber}`, modified: 1 }
     }
 
     case 'rename_header': {
@@ -427,17 +435,81 @@ function executeToolInner(call: ParsedToolCall, ctx: ExecutionContext): Executio
       return { success: true, message: `Replaced in ${count} cell(s)${note}`, modified: count }
     }
 
+    case 'count_rows': {
+      const rawColumn = String(params.column ?? '').trim()
+      const colIdx = rawColumn ? resolveColumnIndex(rawColumn, sheet, ctx.getComputedValue) : null
+      if (rawColumn && colIdx == null) {
+        return { success: false, message: `Could not find column "${rawColumn}"`, modified: 0 }
+      }
+
+      const operator = String(params.operator ?? 'equals').toLowerCase()
+      const supported = new Set(['equals', 'contains', 'gt', 'gte', 'lt', 'lte', 'not_empty'])
+      if (!supported.has(operator)) {
+        return { success: false, message: `Unsupported count condition "${operator}"`, modified: 0 }
+      }
+      if (operator !== 'not_empty' && params.value == null) {
+        return { success: false, message: 'count_rows requires a comparison value', modified: 0 }
+      }
+
+      const headerRow = findHeaderRow(sheet)
+      const lastRow = findLastDataRow(sheet)
+      const summaryRows = findSummaryRowIndexes(sheet, ctx.getComputedValue)
+      let maxCol = 0
+      for (const cellId of Object.keys(sheet.cells)) maxCol = Math.max(maxCol, cellToRef(cellId).col)
+      const matchingRows: number[] = []
+
+      for (let row = headerRow + 1; row <= lastRow; row++) {
+        if (summaryRows.has(row)) continue
+        const columns = colIdx == null
+          ? Array.from({ length: maxCol + 1 }, (_, index) => index)
+          : [colIdx]
+        if (columns.some((column) => countValueMatches(
+          ctx.getComputedValue(row, column),
+          operator,
+          params.value,
+        ))) {
+          matchingRows.push(row + 1)
+        }
+      }
+
+      const scope = rawColumn ? ` in ${rawColumn}` : ''
+      const rows = matchingRows.length > 0 ? ` (rows ${matchingRows.slice(0, 8).join(', ')}${matchingRows.length > 8 ? ', …' : ''})` : ''
+      return {
+        success: true,
+        message: `Found ${matchingRows.length} matching row${matchingRows.length === 1 ? '' : 's'}${scope}${rows}`,
+        modified: 0,
+      }
+    }
+
+    case 'export_data': {
+      const format = String(params.format ?? '').toLowerCase()
+      if (!['csv', 'xlsx', 'json'].includes(format)) {
+        return { success: false, message: 'Export format must be CSV, XLSX, or JSON', modified: 0 }
+      }
+      if (!ctx.exportData) {
+        return { success: false, message: 'Export is not available in this context', modified: 0 }
+      }
+      ctx.exportData(format as 'csv' | 'xlsx' | 'json')
+      return {
+        success: true,
+        message: `Started the ${format.toUpperCase()} download`,
+        modified: 0,
+      }
+    }
+
     case 'find_max':
     case 'find_min': {
       const col = requireColumn(params.column, sheet, ctx, tool)
       if ('error' in col) return col.error
       const colIdx = col.index
       const isMax = tool === 'find_max'
+      const headerRow = findHeaderRow(sheet)
+      const summaryRows = findSummaryRowIndexes(sheet, ctx.getComputedValue)
       let best: { val: number; row: number; label: string } | null = null
 
       for (const cellId of Object.keys(sheet.cells)) {
         const ref = cellToRef(cellId)
-        if (ref.col !== colIdx) continue
+        if (ref.col !== colIdx || ref.row <= headerRow || summaryRows.has(ref.row)) continue
         const computed = ctx.getComputedValue(ref.row, ref.col)
         const num = parseFloat(computed.replace(/[$,]/g, ''))
         if (isNaN(num)) continue
@@ -449,9 +521,16 @@ function executeToolInner(call: ParsedToolCall, ctx: ExecutionContext): Executio
 
       if (best) {
         const desc = isMax ? 'highest' : 'lowest'
-        return { success: true, message: `The ${desc} value in column ${col} is $${best.val.toLocaleString()} (${best.label}, row ${best.row + 1})`, modified: 0 }
+        const header = ctx.getComputedValue(headerRow, colIdx)
+        const isCurrency = /amount|expense|cost|price|total|spent|budget|income|revenue|salary/i.test(header)
+        const formatted = `${isCurrency ? '$' : ''}${best.val.toLocaleString()}`
+        return {
+          success: true,
+          message: `The ${desc} value in column ${col.label} is ${formatted} (${best.label}, row ${best.row + 1})`,
+          modified: 0,
+        }
       }
-      return { success: false, message: `No numeric values found in column ${col}`, modified: 0 }
+      return { success: false, message: `No numeric values found in column ${col.label}`, modified: 0 }
     }
 
     case 'multi_sort': {
@@ -459,16 +538,24 @@ function executeToolInner(call: ParsedToolCall, ctx: ExecutionContext): Executio
       if (!Array.isArray(rules) || rules.length === 0) {
         return { success: false, message: 'multi_sort requires a rules array', modified: 0 }
       }
-      const sortRules = rules.map((r) => {
-        const colIdx = resolveColumnIndex(String(r.column), sheet, ctx.getComputedValue)
-        return {
-          column: colIdx ?? 0,
-          direction: (r.direction === 'desc' ? 'desc' : 'asc') as 'asc' | 'desc',
-        }
-      }).filter((r) => r.column >= 0)
+      const sortRules = rules.flatMap((rule) => {
+        const column = resolveColumnIndex(String(rule.column), sheet, ctx.getComputedValue)
+        if (column == null) return []
+        return [{
+          column,
+          direction: (rule.direction === 'desc' ? 'desc' : 'asc') as 'asc' | 'desc',
+        }]
+      })
 
-      if (sortRules.length === 0) {
-        return { success: false, message: 'Could not resolve any columns for multi_sort', modified: 0 }
+      if (sortRules.length !== rules.length) {
+        const unresolved = rules
+          .filter((rule) => resolveColumnIndex(String(rule.column), sheet, ctx.getComputedValue) == null)
+          .map((rule) => String(rule.column))
+        return {
+          success: false,
+          message: `Could not resolve multi-sort column${unresolved.length === 1 ? '' : 's'}: ${unresolved.join(', ')}`,
+          modified: 0,
+        }
       }
 
       ctx.pushHistory(`Multi-sort by ${sortRules.length} column(s)`)
@@ -632,17 +719,21 @@ function resolveColumnIndex(
   sheet: SheetData,
   getComputedValue: (row: number, col: number) => string,
 ): number | null {
-  if (/^[A-Z]{1,3}$/i.test(column)) return letterToCol(column.toUpperCase())
   const headerRow = findHeaderRow(sheet)
-  // Derive actual last column from sheet data instead of a magic constant
-  let maxCol = 0
+  // Derive actual last column from sheet data instead of a magic constant.
+  let maxCol = -1
   for (const cellId of Object.keys(sheet.cells)) {
     const ref = cellToRef(cellId)
     if (ref.col > maxCol) maxCol = ref.col
   }
-  const lowered = column.toLowerCase()
+  const lowered = column.toLowerCase().trim()
+  // Header names win over short letter-like names such as Tax, ID, or Qty.
   for (let c = 0; c <= maxCol; c++) {
-    if (getComputedValue(headerRow, c).toLowerCase() === lowered) return c
+    if (getComputedValue(headerRow, c).toLowerCase().trim() === lowered) return c
+  }
+  if (/^[A-Z]{1,3}$/i.test(column)) {
+    const index = letterToCol(column.toUpperCase())
+    return index <= maxCol ? index : null
   }
   return null
 }
@@ -687,12 +778,28 @@ function isHeaderLikeCell(value: string | number | boolean | null | undefined): 
   return isNaN(parseFloat(text.replace(/[$,%]/g, '')))
 }
 
-function findRowByContent(sheet: SheetData, text: string): number {
-  for (const [cellId, cell] of Object.entries(sheet.cells)) {
-    if (cell.value != null && String(cell.value).toLowerCase().includes(text)) {
-      return cellToRef(cellId).row
+function countValueMatches(displayed: string, operator: string, rawTarget: unknown): boolean {
+  const value = displayed.trim()
+  if (operator === 'not_empty') return value !== ''
+
+  const targetText = String(rawTarget ?? '').trim()
+  if (operator === 'contains') return value.toLowerCase().includes(targetText.toLowerCase())
+  if (operator === 'equals') {
+    const leftNumber = Number(value.replace(/[$,%\s]/g, ''))
+    const rightNumber = Number(targetText.replace(/[$,%\s]/g, ''))
+    if (value !== '' && targetText !== '' && Number.isFinite(leftNumber) && Number.isFinite(rightNumber)) {
+      return leftNumber === rightNumber
     }
+    return value.toLowerCase() === targetText.toLowerCase()
   }
-  return -1
+
+  const left = Number(value.replace(/[$,%\s]/g, ''))
+  const right = Number(targetText.replace(/[$,%\s]/g, ''))
+  if (!Number.isFinite(left) || !Number.isFinite(right)) return false
+  if (operator === 'gt') return left > right
+  if (operator === 'gte') return left >= right
+  if (operator === 'lt') return left < right
+  if (operator === 'lte') return left <= right
+  return false
 }
 

@@ -33,6 +33,30 @@ describe('buildSheetProfile', () => {
     expect(profile.hasHeaders).toBe(true)
   })
 
+  it('classifies formula results by their computed value instead of formula source text', () => {
+    const sheet: SheetData = {
+      id: 's1',
+      name: 'Calculated',
+      cells: {
+        A1: { value: 'Item' },
+        B1: { value: 'Amount' },
+        A2: { value: 'Rent' },
+        B2: { value: null, formula: '=100+25' },
+      },
+      columnWidths: {},
+      rowHeights: {},
+      charts: [],
+      filters: [],
+      sortConfig: undefined,
+    }
+    const profile = buildSheetProfile(sheet, (row, col) => (
+      row === 1 && col === 1 ? '125' : getter(sheet)(row, col)
+    ))
+    const amount = profile.columns.find((column) => column.name === 'Amount')
+    expect(amount?.dtype).toBe('number')
+    expect(amount?.sumVal).toBe(125)
+  })
+
   it('detects totals row label', () => {
     const sheet: SheetData = {
       id: 's1',
@@ -54,5 +78,6 @@ describe('buildSheetProfile', () => {
 
     const profile = buildSheetProfile(sheet, getter(sheet))
     expect(profile.hasTotalsRow).toBe(true)
+    expect(profile.columns.find((column) => column.name === 'Amount')?.sumVal).toBe(10)
   })
 })

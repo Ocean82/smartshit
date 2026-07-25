@@ -37,6 +37,28 @@ describe('computeSortedCellUpdates', () => {
     expect(deletes).toEqual([])
   })
 
+  it('keeps a totals row anchored while sorting detail rows', () => {
+    const sheet: SheetData = {
+      id: 's1',
+      name: 'T',
+      cells: {
+        A1: { value: 'Name' }, B1: { value: 'Amount' },
+        A2: { value: 'Food' }, B2: { value: 40 },
+        A3: { value: 'Rent' }, B3: { value: 100 },
+        A4: { value: 'Total Expenses' }, B4: { value: 140, formula: '=SUM(B2:B3)' },
+      },
+      columnWidths: {},
+      rowHeights: {},
+      charts: [],
+    }
+
+    const { writes } = computeSortedCellUpdates(sheet, 1, 'desc', getComputed(sheet))
+    expect(writes.A2?.value).toBe('Rent')
+    expect(writes.A3?.value).toBe('Food')
+    expect(writes.A4).toBeUndefined()
+    expect(sheet.cells.A4?.value).toBe('Total Expenses')
+  })
+
   it('clears ghost cells from uneven columns and preserves format', () => {
     const sheet: SheetData = {
       id: 's1',
