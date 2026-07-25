@@ -6,6 +6,7 @@ import { analyzeBudget, budgetAnalysisToToolResult, savingsRecommendation } from
 import { generateReport } from '@/ai/analysis/reporting'
 import { runCleaningSkill } from '@/ai/analysis/cleaning'
 import { runQueryFromIntent } from '@/ai/queryEngine'
+import { queryComparison } from '@/ai/comparison'
 import { formatInsights, explainOutliers, mergeToolResultContent, toolResultToMessage } from '@/ai/responseBuilder'
 import { chatWithAgentServerStream } from '@/ai/agentClient'
 import { recordTelemetry } from '@/ai/telemetry'
@@ -22,6 +23,7 @@ export interface ProcessMessageInput {
   sheet: SheetData
   selection: Selection | null
   getComputedValue: (row: number, col: number) => string
+  getSheetComputedValue?: (sheetId: string, row: number, col: number) => string
   attachedPreview?: AttachedFilePreview | null
   priorInsights?: SheetInsights | null
   history?: Array<{ role: 'user' | 'assistant'; content: string }>
@@ -144,6 +146,15 @@ function runDeterministicSkills(
     return withTool(generateReport(profile, insights, workbookName), 'reporting')
   }
 
+  if (intent.intentType === 'compare') {
+    return withTool(queryComparison(
+      target.workbook,
+      target.sheet,
+      message,
+      target.getSheetComputedValue,
+    ), 'comparison')
+  }
+
   if (isQueryIntent(intent)) {
     const queryResult = runQueryFromIntent(target.sheet, intent, target.getComputedValue, insights)
     return queryResult ? withTool(queryResult, 'query') : null
@@ -201,9 +212,10 @@ export async function processMessage(input: ProcessMessageInput): Promise<ToolRe
   )
   const deterministicText = deterministic ? toolResultToMessage(deterministic, { includeSuggestionsInBody: false }) : ''
 
-  // Outlier follow-ups are fully answered locally — skip LLM to avoid clarification loops
-  if (deterministic?.toolUsed === 'outlier-explain') {
-    recordTelemetry('deterministicResponses', 'outlier-explain')
+  // Deterministic queries that fully answer (or precisely clarify) the request
+  // should not be diluted by a second, potentially contradictory LLM answer.
+  if (deterministic?.toolUsed === 'outlier-explain' || deterministic?.toolUsed === 'comparison') {
+    recordTelemetry('deterministicResponses', deterministic.toolUsed)
     if (input.onToken) input.onToken(deterministicText)
     return deterministic
   }

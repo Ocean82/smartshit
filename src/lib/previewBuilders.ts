@@ -1,6 +1,7 @@
 import type { CellChange, SheetData } from '@/types'
 import { cellToRef, refToCell, letterToCol } from '@/engine/spreadsheet'
 import { findLastDataRow } from '@/lib/sheetSort'
+import { resolveDeleteRow } from '@/lib/deleteRowPreview'
 
 /**
  * Build CellChange[] previews for proposed mutations (Phase 1 grid overlay).
@@ -99,6 +100,10 @@ export function buildActionPreview(
       getComputedValue,
     )
     return changes.length ? { changes } : undefined
+  }
+  if (tool === 'delete_row') {
+    const resolved = resolveDeleteRow(sheet, params, getComputedValue)
+    return resolved?.changes.length ? { changes: resolved.changes } : undefined
   }
   // Cleaning and others may already carry previewChanges in params
   if (Array.isArray(params.previewChanges) && params.previewChanges.length > 0) {

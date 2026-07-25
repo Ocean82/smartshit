@@ -13,17 +13,18 @@
 
 import type { ChatMessage, SheetData, Selection, WorkbookData } from '@/types'
 import type { ExecutionContext } from '@/agent/executor'
-import { parseMessage, executeTool, executeToolAsync } from '@/agent'
+import { parseMessage, executeToolAsync } from '@/agent'
 import { executeTemplateTool, resolveGalleryTemplate } from '@/templates'
 import { processMessage } from '@/ai/brain'
 import { buildSpreadsheetContext } from '@/ai/buildContext'
-import { toolResultToChatMessage, toolResultToMessage } from '@/ai/responseBuilder'
+import { toolResultToChatMessage } from '@/ai/responseBuilder'
 import { classifyMode, isLlmOnlyMode } from '@/ai/mode'
 import { findHeaderRow, findLastDataRow } from '@/lib/sheetSort'
 import { cellToRef } from '@/engine/spreadsheet'
 import type { SheetInsights } from '@/ai/sheetInsights'
 import type { AttachedFilePreview } from '@/ai/types'
-import { v4 as uuid } from 'uuid'
+import { getToolDefinition } from '@shared/toolRegistry'
+import { findDeleteRowMatches, resolveDeleteRow } from '@/lib/deleteRowPreview'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -32,8 +33,10 @@ export interface ChatServiceDeps {
   getWorkbook: () => WorkbookData
   /** Get the active sheet */
   getActiveSheet: () => SheetData
-  /** Get computed cell value */
+  /** Get computed cell value on the active sheet */
   getComputedValue: (row: number, col: number) => string
+  /** Get a computed value from any sheet (used by cross-sheet comparisons). */
+  getSheetComputedValue: (sheetId: string, row: number, col: number) => string
   /** Get the current selection */
   getSelection: () => Selection | null
   /** Get the active sheet ID */
@@ -77,6 +80,7 @@ export async function processChatMessage(
     getWorkbook,
     getActiveSheet,
     getComputedValue,
+    getSheetComputedValue,
     getSelection,
     getActiveSheetId,
     getAttachedPreview,
@@ -140,21 +144,95 @@ export async function processChatMessage(
       lastDataRow: lastDataRowIdx,
       lastDataCol: lastDataColIdx,
       headers,
+      columns: context.profile?.columns,
     })
 
+    // Destructive row deletion is always staged as an Apply/Reject action. The
+    // match is resolved to an exact row now, so a later edit cannot make Apply
+    // delete a different row than the one shown in the preview.
+    if (parsed.understood && parsed.calls.length === 1 && parsed.calls[0].tool === 'delete_row') {
+      const deleteParams = parsed.calls[0].params
+      if (typeof deleteParams.match === 'string') {
+        const matches = findDeleteRowMatches(sheet, deleteParams.match, getComputedValue)
+        if (matches.length > 1) {
+          finalizeMessage(streamingMsgId, {
+            id: streamingMsgId,
+            role: 'assistant',
+            content: `I found ${matches.length} rows containing **${deleteParams.match}** (rows ${matches.map((row) => row + 1).join(', ')}). Which exact row should I remove? Nothing was deleted.`,
+            timestamp: Date.now(),
+          })
+          setProcessing(false)
+          return
+        }
+      }
+
+      const resolved = resolveDeleteRow(sheet, deleteParams, getComputedValue)
+      if (!resolved) {
+        finalizeMessage(streamingMsgId, {
+          id: streamingMsgId,
+          role: 'assistant',
+          content: `I couldn't find the row you asked to remove. Nothing was deleted.`,
+          timestamp: Date.now(),
+        })
+      } else {
+        const previewResult = {
+          success: true,
+          message: `I found row ${resolved.rowNumber}: **${resolved.summary}**. Nothing has been deleted yet—review it, then choose Apply or Reject.`,
+          toolUsed: 'delete-row-preview',
+          actions: [{
+            tool: 'delete_row',
+            params: { row: resolved.rowNumber, expectedRowSignature: resolved.signature },
+            description: `Delete row ${resolved.rowNumber}: ${resolved.summary}`,
+          }],
+        }
+        finalizeMessage(streamingMsgId, toolResultToChatMessage(previewResult, {
+          id: streamingMsgId,
+          previewContext: { sheet, getComputedValue },
+        }))
+      }
+      setProcessing(false)
+      return
+    }
+
+    // A recognized ambiguity (for example "sort my data") is answered locally
+    // with a focused clarification instead of being sent to the LLM.
+    if (parsed.understood && parsed.calls.length === 0 && parsed.explanation) {
+      finalizeMessage(streamingMsgId, {
+        id: streamingMsgId,
+        role: 'assistant',
+        content: parsed.explanation,
+        timestamp: Date.now(),
+      })
+      setProcessing(false)
+      return
+    }
+
     if (parsed.understood && parsed.calls.length > 0) {
-      pushHistory(`AI: ${parsed.explanation || parsed.calls.map((c) => c.description).join(', ')}`)
+      const hasMutation = parsed.calls.some((call) => {
+        const category = getToolDefinition(call.tool)?.category
+        return category === 'mutate' || category === 'template'
+      })
+      if (hasMutation) {
+        pushHistory(`AI: ${parsed.explanation || parsed.calls.map((c) => c.description).join(', ')}`)
+      }
       const execCtx = buildExecContext({ suppressHistory: true })
 
-      // Use async execution to support sandbox scripts alongside sync tools
-      const results = await Promise.all(
-        parsed.calls.map((call) => executeToolAsync(call, execCtx))
-      )
+      // Preserve request order for compound mutations (clear then build, etc.).
+      // Promise.all allowed later tools to race async tools and observe stale data.
+      const results = []
+      for (const call of parsed.calls) {
+        results.push(await executeToolAsync(call, execCtx))
+      }
       const allSuccess = results.every((r) => r.success)
       const totalModified = results.reduce((sum, r) => sum + r.modified, 0)
 
       const resultMessages = results.map((r) => r.message)
-      const explanation = parsed.explanation || resultMessages.join('. ')
+      const allReadOnly = parsed.calls.every((call) => getToolDefinition(call.tool)?.category === 'read')
+      // Read tools must show their computed answer; the parser explanation is
+      // only a future-tense status message ("Finding...").
+      const explanation = allReadOnly
+        ? resultMessages.join('. ')
+        : (parsed.explanation || resultMessages.join('. '))
       const responseText = allSuccess
         ? `✓ ${explanation}${totalModified > 0 ? ` (${totalModified} cell${totalModified === 1 ? '' : 's'} modified)` : ''}`
         : `⚠️ ${resultMessages.join('. ')}`
@@ -196,6 +274,7 @@ export async function processChatMessage(
       sheet,
       selection: getSelection(),
       getComputedValue,
+      getSheetComputedValue,
       attachedPreview: getAttachedPreview(),
       priorInsights: priorInsights ?? null,
       history,

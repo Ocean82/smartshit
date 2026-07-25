@@ -5,8 +5,10 @@ import type { Selection, SheetData, WorkbookData } from '@/types'
 
 export interface AnalysisTarget {
   sheet: SheetData
+  workbook: WorkbookData
   workbookName: string
   getComputedValue: (row: number, col: number) => string
+  getSheetComputedValue: (sheetId: string, row: number, col: number) => string
   context: SpreadsheetContextPayload
   isAttached: boolean
 }
@@ -38,6 +40,7 @@ export function resolveAnalysisTarget(input: {
   sheet: SheetData
   selection: Selection | null
   getComputedValue: (row: number, col: number) => string
+  getSheetComputedValue?: (sheetId: string, row: number, col: number) => string
   attachedPreview?: AttachedFilePreview | null
 }): AnalysisTarget {
   const baseContext = buildSpreadsheetContext(
@@ -55,8 +58,15 @@ export function resolveAnalysisTarget(input: {
 
     return {
       sheet: attachedSheet,
+      workbook: attachedWorkbook,
       workbookName: input.attachedPreview.fileName,
       getComputedValue: getAttachedValue,
+      getSheetComputedValue: (sheetId, row, col) => {
+        const requested = attachedWorkbook.sheets.find((sheet) => sheet.id === sheetId)
+        if (!requested) return ''
+        const value = requested.cells[refToCell(row, col)]?.value
+        return value == null ? '' : String(value)
+      },
       context: mergeContext(baseContext, input.attachedPreview),
       isAttached: true,
     }
@@ -64,8 +74,16 @@ export function resolveAnalysisTarget(input: {
 
   return {
     sheet: input.sheet,
+    workbook: input.workbook,
     workbookName: input.workbook.name,
     getComputedValue: input.getComputedValue,
+    getSheetComputedValue: input.getSheetComputedValue
+      ?? ((sheetId, row, col) => {
+        if (sheetId === input.sheet.id) return input.getComputedValue(row, col)
+        const requested = input.workbook.sheets.find((sheet) => sheet.id === sheetId)
+        const value = requested?.cells[refToCell(row, col)]?.value
+        return value == null ? '' : String(value)
+      }),
     context: baseContext,
     isAttached: false,
   }

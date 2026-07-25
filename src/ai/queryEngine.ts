@@ -3,6 +3,9 @@ import { AI_ANALYSIS_CONFIG } from '@/ai/config'
 import type { SheetData } from '@/types'
 import { cellToRef, refToCell } from '@/engine/spreadsheet'
 import type { ToolResult, UserIntent } from '@/ai/types'
+import { findHeaderRow } from '@/lib/sheetSort'
+import { findSummaryRowIndexes } from '@/lib/sheetRows'
+import { buildSheetProfile } from '@/ai/sheetProfile'
 
 function parseNumeric(value: string | number | boolean | null | undefined): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) return value
@@ -23,12 +26,13 @@ function columnLetterToIndex(letter: string): number {
   return result - 1
 }
 
-function resolveColumnIndex(sheet: SheetData, column: string, headerRow = 0): number {
+function resolveColumnIndex(sheet: SheetData, column: string): number {
   let maxCol = 0
   for (const cellId of Object.keys(sheet.cells)) {
     maxCol = Math.max(maxCol, cellToRef(cellId).col)
   }
 
+  const headerRow = findHeaderRow(sheet)
   const target = column.trim().toLowerCase()
   for (let c = 0; c <= maxCol; c++) {
     const header = sheet.cells[refToCell(headerRow, c)]?.value
@@ -37,12 +41,24 @@ function resolveColumnIndex(sheet: SheetData, column: string, headerRow = 0): nu
     if (normalized === target || normalized.includes(target) || target.includes(normalized)) return c
   }
 
-  if (/^[a-z]{1,3}$/i.test(column)) return columnLetterToIndex(column)
-
-  const alpha = column.replace(/[^a-z]/gi, '')
-  if (alpha.length > 0) return columnLetterToIndex(alpha.charAt(0))
+  if (/^[a-z]{1,3}$/i.test(column)) {
+    const index = columnLetterToIndex(column)
+    return index <= maxCol ? index : -1
+  }
 
   return -1
+}
+
+function queryCellValue(
+  sheet: SheetData,
+  row: number,
+  col: number,
+  getComputedValue: (row: number, col: number) => string,
+): string | number | boolean | null | undefined {
+  const cell = sheet.cells[refToCell(row, col)]
+  const computed = getComputedValue(row, col)
+  if (cell?.formula && computed !== '') return computed
+  return cell?.value ?? computed
 }
 
 function getRowValues(
@@ -53,9 +69,7 @@ function getRowValues(
 ): string[] {
   const values: string[] = []
   for (let c = 0; c <= maxCol; c++) {
-    const cell = sheet.cells[refToCell(row, c)]
-    const computed = getComputedValue(row, c)
-    const raw = cell?.formula ?? cell?.value ?? computed
+    const raw = queryCellValue(sheet, row, c, getComputedValue)
     values.push(raw === null || raw === undefined ? '' : String(raw))
   }
   return values
@@ -81,11 +95,12 @@ export function queryTopN(
     return { success: false, message: `Could not find a column matching "${column}".` }
   }
   const rows: Array<{ row: number; value: number; data: string[] }> = []
+  const headerRow = findHeaderRow(sheet)
+  const summaryRows = findSummaryRowIndexes(sheet, getComputedValue)
 
-  for (let r = 1; r <= maxRow; r++) {
-    const cell = sheet.cells[refToCell(r, colIndex)]
-    const computed = getComputedValue(r, colIndex)
-    const num = parseNumeric(cell?.formula ?? cell?.value ?? computed)
+  for (let r = headerRow + 1; r <= maxRow; r++) {
+    if (summaryRows.has(r)) continue
+    const num = parseNumeric(queryCellValue(sheet, r, colIndex, getComputedValue))
     if (num === null) continue
     rows.push({ row: r + 1, value: num, data: getRowValues(sheet, r, maxCol, getComputedValue) })
   }
@@ -116,11 +131,12 @@ export function queryAggregate(
     return { success: false, message: `Could not find a numeric column matching "${column}".` }
   }
   const values: number[] = []
+  const headerRow = findHeaderRow(sheet)
+  const summaryRows = findSummaryRowIndexes(sheet, getComputedValue)
 
-  for (let r = 1; r <= maxRow; r++) {
-    const cell = sheet.cells[refToCell(r, colIndex)]
-    const computed = getComputedValue(r, colIndex)
-    const num = parseNumeric(cell?.formula ?? cell?.value ?? computed)
+  for (let r = headerRow + 1; r <= maxRow; r++) {
+    if (summaryRows.has(r)) continue
+    const num = parseNumeric(queryCellValue(sheet, r, colIndex, getComputedValue))
     if (num !== null) values.push(num)
   }
 
@@ -189,16 +205,17 @@ export function queryFilter(
   const rightLiteral = !rightIsColumn ? parseNumeric(rightColOrValue) : null
 
   const matches: Array<{ row: number; value: number; cells: string[] }> = []
+  const headerRow = findHeaderRow(sheet)
+  const summaryRows = findSummaryRowIndexes(sheet, getComputedValue)
 
-  for (let r = 1; r <= maxRow; r++) {
-    const leftCell = sheet.cells[refToCell(r, leftIndex)]
-    const leftNum = parseNumeric(leftCell?.formula ?? leftCell?.value ?? getComputedValue(r, leftIndex))
+  for (let r = headerRow + 1; r <= maxRow; r++) {
+    if (summaryRows.has(r)) continue
+    const leftNum = parseNumeric(queryCellValue(sheet, r, leftIndex, getComputedValue))
     if (leftNum === null) continue
 
     let rightNum: number | null = rightLiteral
     if (rightIsColumn && rightIndex >= 0) {
-      const rightCell = sheet.cells[refToCell(r, rightIndex)]
-      rightNum = parseNumeric(rightCell?.formula ?? rightCell?.value ?? getComputedValue(r, rightIndex))
+      rightNum = parseNumeric(queryCellValue(sheet, r, rightIndex, getComputedValue))
     }
     if (rightNum === null) continue
 
@@ -218,13 +235,44 @@ export function queryFilter(
   }
 }
 
+function defaultQueryColumn(
+  intent: UserIntent,
+  sheet: SheetData,
+  getComputedValue: (row: number, col: number) => string,
+  insights?: SheetInsights,
+): string | undefined {
+  const stats = insights?.columnStats.length
+    ? insights.columnStats
+    : buildSheetProfile(sheet, getComputedValue).columns
+      .filter((column) => column.dtype === 'number' && column.nonNullCount > 0)
+      .map((column) => ({ label: column.name, column: column.column }))
+  if (stats.length === 0) return undefined
+  const lower = intent.rawQuery.toLowerCase()
+  const mentioned = stats.filter((stat) => {
+    const label = stat.label.trim().toLowerCase()
+    return label !== '' && new RegExp(`(^|[^a-z0-9])${label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?=$|[^a-z0-9])`, 'i').test(lower)
+  })
+  if (mentioned.length === 1) return mentioned[0].label || mentioned[0].column
+
+  const amountStats = stats.filter((stat) => /amount|actual|cost|price|spent|expense|revenue|income|salary/i.test(stat.label))
+  if (amountStats.length === 1) return amountStats[0].label || amountStats[0].column
+
+  if (/expense|spend|cost/i.test(lower)) {
+    const expenseStats = amountStats.filter((stat) => /amount|actual|cost|price|spent|expense/i.test(stat.label))
+    if (expenseStats.length === 1) return expenseStats[0].label || expenseStats[0].column
+  }
+
+  return stats.length === 1 ? (stats[0].label || stats[0].column) : undefined
+}
+
 export function runQueryFromIntent(
   sheet: SheetData,
   intent: UserIntent,
   getComputedValue: (row: number, col: number) => string,
   insights?: SheetInsights,
 ): ToolResult | null {
-  const col = intent.targetColumns[0] ?? 'B'
+  const col = intent.targetColumns[0]
+    ?? defaultQueryColumn(intent, sheet, getComputedValue, insights)
   const n = typeof intent.parameters.n === 'number' ? intent.parameters.n : 5
   const ascending = intent.parameters.position === 'bottom'
 
@@ -242,17 +290,30 @@ export function runQueryFromIntent(
     return queryFilter(sheet, actualCol, 'gt', budgetCol, getComputedValue)
   }
 
-  if (intent.intentType === 'sort') {
+  const needsColumn = intent.intentType === 'sort'
+    || intent.intentType === 'calculate'
+    || intent.intentType === 'filter'
+    || (intent.intentType === 'analyze' && typeof intent.parameters.n === 'number')
+    || (intent.intentType === 'budget' && typeof intent.parameters.n === 'number')
+  if (!col && needsColumn) {
+    const choices = (insights?.columnStats ?? []).slice(0, 5).map((stat) => stat.label).join(', ')
+    return {
+      success: true,
+      message: `Which numeric column should I use?${choices ? ` Available columns: ${choices}.` : ''}`,
+    }
+  }
+
+  if (intent.intentType === 'sort' && col) {
     const sortAscending = intent.parameters.ascending !== false
     return querySort(sheet, col, sortAscending, getComputedValue)
   }
 
-  if (intent.intentType === 'filter' || (intent.intentType === 'analyze' && intent.parameters.n)
-    || (intent.intentType === 'budget' && intent.parameters.n)) {
+  if (col && (intent.intentType === 'filter' || (intent.intentType === 'analyze' && intent.parameters.n)
+    || (intent.intentType === 'budget' && intent.parameters.n))) {
     return queryTopN(sheet, col, n, ascending, getComputedValue)
   }
 
-  if (intent.intentType === 'calculate') {
+  if (intent.intentType === 'calculate' && col) {
     const lower = intent.rawQuery.toLowerCase()
     const op = lower.includes('average') || lower.includes('avg') ? 'avg'
       : lower.includes('count') ? 'count'

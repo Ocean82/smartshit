@@ -135,6 +135,13 @@ export function parseUserIntent(userMessage: string): UserIntent {
 
   if (bestScore === 0) bestIntent = 'chat'
 
+  // An explicit comparison verb is stronger than domain nouns such as
+  // "expenses" that otherwise win ties and hide the compare intent.
+  if (/\b(?:compare|comparison|versus|vs\.?|against)\b/i.test(lower) && (scores.compare ?? 0) > 0) {
+    bestIntent = 'compare'
+    bestScore = scores.compare ?? bestScore
+  }
+
   if (bestIntent === 'read' && (scores.analyze ?? 0) > 0) {
     bestIntent = 'analyze'
     bestScore += 2
@@ -179,7 +186,7 @@ export function parseUserIntent(userMessage: string): UserIntent {
 }
 
 export function isQueryIntent(intent: UserIntent): boolean {
-  if (['filter', 'sort', 'calculate', 'find', 'analyze'].includes(intent.intentType)) return true
+  if (['filter', 'sort', 'calculate', 'find', 'analyze', 'compare'].includes(intent.intentType)) return true
   if (intent.intentType === 'budget' && typeof intent.parameters.n === 'number') {
     return /top|bottom|first|last/i.test(intent.rawQuery)
   }

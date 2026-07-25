@@ -13,4 +13,10 @@ describe('shared parseUserIntent', () => {
     const intent = parseUserIntent('Explain my expenses')
     expect(intent.intentType).toBe('budget')
   })
+
+  it('prioritizes an explicit comparison over tied domain keywords', () => {
+    const intent = parseUserIntent('Compare January and February expenses')
+    expect(intent.intentType).toBe('compare')
+    expect(isQueryIntent(intent)).toBe(true)
+  })
 })
