@@ -102,7 +102,7 @@ export function parseAdvancedFormula(message: string): ParsedFormulaRequest | nu
 
   // "Add a COUNTIF formula in D2 to count C2:C20 equal to Overdue"
   const countIf = message.match(new RegExp(
-    `\\b(?:add|create|insert|write|put)\\s+(?:a\\s+)?COUNTIF(?:\\s+formula)?\\s+(?:in|at|into)\\s+(${CELL_REF})\\s+(?:to\\s+)?count\\s+(?:cells?\\s+)?(?:in\\s+)?(${RANGE_REF})\\s+(?:that\\s+are\\s+)?(equals?(\\s+to)?|is|=|>=|<=|>|<|over|above|under|below|at\\s+least|at\\s+most)\\s+(.+?)\\s*$`,
+    `\\b(?:add|create|insert|write|put)\\s+(?:a\\s+)?COUNTIF(?:\\s+formula)?\\s+(?:in|at|into)\\s+(${CELL_REF})\\s+(?:to\\s+)?count\\s+(?:cells?\\s+)?(?:in\\s+)?(${RANGE_REF})\\s+(?:that\\s+are\\s+)?(equals?(?:\\s+to)?|is|=|>=|<=|>|<|over|above|under|below|at\\s+least|at\\s+most)\\s+(.+?)\\s*$`,
     'i',
   ))
   if (countIf) {
@@ -119,7 +119,7 @@ export function parseAdvancedFormula(message: string): ParsedFormulaRequest | nu
 
   // "Add a SUMIF formula in D2 to sum B2:B20 where C2:C20 equals Paid"
   const sumIf = message.match(new RegExp(
-    `\\b(?:add|create|insert|write|put)\\s+(?:a\\s+)?SUMIF(?:\\s+formula)?\\s+(?:in|at|into)\\s+(${CELL_REF})\\s+(?:to\\s+)?sum\\s+(${RANGE_REF})\\s+where\\s+(${RANGE_REF})\\s+(equals?(\\s+to)?|is|=|>=|<=|>|<|over|above|under|below|at\\s+least|at\\s+most)\\s+(.+?)\\s*$`,
+    `\\b(?:add|create|insert|write|put)\\s+(?:a\\s+)?SUMIF(?:\\s+formula)?\\s+(?:in|at|into)\\s+(${CELL_REF})\\s+(?:to\\s+)?sum\\s+(${RANGE_REF})\\s+where\\s+(${RANGE_REF})\\s+(equals?(?:\\s+to)?|is|=|>=|<=|>|<|over|above|under|below|at\\s+least|at\\s+most)\\s+(.+?)\\s*$`,
     'i',
   ))
   if (sumIf) {
@@ -137,7 +137,7 @@ export function parseAdvancedFormula(message: string): ParsedFormulaRequest | nu
 
   // "Add an IF formula in D2: if C2 is Overdue then Late otherwise OK"
   const ifFormula = message.match(new RegExp(
-    `\\b(?:add|create|insert|write|put)\\s+(?:an?|a)?\\s+IF(?:\\s+formula)?\\s+(?:in|at|into)\\s+(${CELL_REF})\\s*:?\\s*if\\s+(${CELL_REF})\\s+(equals?(\\s+to)?|is(?:\\s+not)?|not\\s+equal\\s+to|==|=|!=|<>|>=|<=|>|<|over|above|under|below|at\\s+least|at\\s+most|greater\\s+than|less\\s+than)\\s+(.+?)\\s+then\\s+(.+?)\\s+(?:else|otherwise)\\s+(.+?)\\s*$`,
+    `\\b(?:add|create|insert|write|put)\\s+(?:an?|a)?\\s+IF(?:\\s+formula)?\\s+(?:in|at|into)\\s+(${CELL_REF})\\s*:?\\s*if\\s+(${CELL_REF})\\s+(equals?(?:\\s+to)?|is(?:\\s+not)?|not\\s+equal\\s+to|==|=|!=|<>|>=|<=|>|<|over|above|under|below|at\\s+least|at\\s+most|greater\\s+than|less\\s+than)\\s+(.+?)\\s+then\\s+(.+?)\\s+(?:else|otherwise)\\s+(.+?)\\s*$`,
     'i',
   ))
   if (ifFormula) {
