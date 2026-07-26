@@ -650,7 +650,7 @@ export const useStore = create<AppState>()(
 
         // Delegate to the chat service
         void import('@/services/chatService').then(({ processChatMessage }) => {
-          processChatMessage(input, streamingMsgId, {
+          void processChatMessage(input, streamingMsgId, {
             getWorkbook: () => get().workbook,
             getActiveSheet: () => get().getActiveSheet(),
             getComputedValue: (row, col) => get().getComputedValue(row, col),

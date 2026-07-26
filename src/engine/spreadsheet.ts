@@ -106,9 +106,9 @@ const HF_OPTIONS = {
 } as const;
 
 export class SpreadsheetEngine {
-  private hf: HyperFormula;
+  private readonly hf: HyperFormula;
   private sheetMapping: Map<string, number> = new Map();
-  private _aiRegistry: AIFunctionRegistry;
+  private readonly _aiRegistry: AIFunctionRegistry;
   private _disposeAIFunctions: (() => void) | null = null;
 
   /**
@@ -132,7 +132,6 @@ export class SpreadsheetEngine {
 
   loadWorkbook(workbook: WorkbookData): void {
     // Rebuild from scratch
-    this.hf.destroy();
     this.hf = HyperFormula.buildEmpty(HF_OPTIONS);
     this.sheetMapping.clear();
 
@@ -320,7 +319,7 @@ export class SpreadsheetEngine {
     try {
       // Get all registered function names from HyperFormula
       const registeredFunctions = HyperFormula.getRegisteredFunctionNames('enGB');
-      let baseFunctions: Array<{ name: string; description: string; category: string; syntax: string }> = [];
+      let baseFunctions: Array<{ name: string; description: string; category: string; syntax: string }>;
       if (registeredFunctions && registeredFunctions.length > 0) {
         baseFunctions = registeredFunctions.map((name: string) => {
           // Try to get function metadata

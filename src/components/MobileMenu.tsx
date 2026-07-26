@@ -2,7 +2,7 @@
  * MobileMenu — Bottom sheet menu for mobile devices.
  * Replaces the desktop MenuBar dropdown pattern with touch-friendly actions.
  */
-import { useState, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import { useStore } from '@/store/useStore';
 import { exportWorkbookToXlsx, exportSheetToCsv, importWorkbookFromFileWithMeta } from '@/io/xlsx';
 import { v4 as uuid } from 'uuid';

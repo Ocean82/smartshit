@@ -28,7 +28,7 @@ export function VersionHistoryPanel() {
 
   useEffect(() => {
     if (showVersionHistory) {
-      fetchVersions()
+      void fetchVersions()
     }
   }, [showVersionHistory, fetchVersions])
 

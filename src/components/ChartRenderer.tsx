@@ -1,7 +1,7 @@
 import { useStore } from '@/store/useStore';
 import { cellToRef, refToCell } from '@/engine/spreadsheet';
 import { X, Move } from 'lucide-react';
-import { useState, useCallback, useRef, useMemo } from 'react';
+import React, { useState, useCallback, useRef, useMemo } from 'react';
 import type { ChartConfig, TrendLineConfig, AxisConfig } from '@/types';
 
 export function ChartOverlay() {

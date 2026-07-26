@@ -35,7 +35,19 @@ export function initErrorReporting(): void {
     replaysOnErrorSampleRate: import.meta.env.PROD ? 1.0 : 0,
 
     // Don't send PII — only anonymous context
-    sendDefaultPii: false,
+    dataCollection: {
+      userInfo: false,
+      cookies: false,
+      httpHeaders: {
+        request: false,
+        response: false,
+      },
+      urlQueryParams: false,
+      genAI: {
+        inputs: false,
+        outputs: false,
+      },
+    },
 
     // Filter noisy errors that aren't actionable
     beforeSend(event) {

@@ -212,7 +212,7 @@ export function parseMessage(message: string, sheetContext?: SheetContext): Pars
   }
 
   // ─── Add row: "add [items]" ─────────────────────────────────────────────────
-  const addRow = lower.match(/(?:add|insert|new)\s+(?:a\s+)?(?:row|entry|line|item)(?:\s*:?\s*)(.+)/i)
+  const addRow = lower.match(/(?:add|insert|new)\s+(?:a\s+)?(?:row|entry|line|item)\s*:?\s*(.+)/i)
   if (addRow && !lower.includes('column')) {
     const parts = addRow[1].split(/[,;]/).map(s => s.trim()).filter(Boolean)
     if (parts.length > 0) {
@@ -442,16 +442,16 @@ export function parseMessage(message: string, sheetContext?: SheetContext): Pars
   // Handles "highlight over 500" and "highlight anything above $1,000".
   // When a target is named ("expenses" / a header), constrain the range;
   // otherwise scan numeric cells in the selection or populated sheet.
-  const comparativeHighlight = lower.match(/\b(?:highlight|colou?r|mark|shade)\s+(?:all\s+)?(.+?)?\s*(over|above|greater\s+than|more\s+than|under|below|less\s+than|at\s+least|at\s+most|>=|<=|>|<)\s*\$?([\d,.]+)\b/i)
+  const comparativeHighlight = lower.match(/\b(highlight|colou?r|mark|shade)\s+(?:all\s+)?(.+?)?\s*(over|above|greater\s+than|more\s+than|under|below|less\s+than|at\s+least|at\s+most|>=|<=|>|<)\s*\$?([\d,.]+)\b/i)
   if (comparativeHighlight) {
-    const targetText = (comparativeHighlight[1] ?? '').trim()
+    const targetText = (comparativeHighlight[2] ?? '').trim()
     const operatorMap: Record<string, 'gt' | 'lt' | 'gte' | 'lte'> = {
       over: 'gt', above: 'gt', 'greater than': 'gt', 'more than': 'gt', '>': 'gt',
       under: 'lt', below: 'lt', 'less than': 'lt', '<': 'lt',
       'at least': 'gte', '>=': 'gte', 'at most': 'lte', '<=': 'lte',
     }
-    const operator = operatorMap[comparativeHighlight[2].toLowerCase()]
-    const value = parseFloat(comparativeHighlight[3].replace(/,/g, ''))
+    const operator = operatorMap[comparativeHighlight[3].toLowerCase()]
+    const value = parseFloat(comparativeHighlight[4].replace(/,/g, ''))
     const range = /\b(?:anything|cells?|values?|numbers?)\b/.test(targetText)
       ? resolveSmartColumn(targetText, sheetContext, { allowNumericFallback: false })
       : resolveSmartColumn(targetText, sheetContext, {
@@ -463,9 +463,9 @@ export function parseMessage(message: string, sheetContext?: SheetContext): Pars
     calls.push({
       tool: 'format_cells',
       params: { range, condition: { operator, value }, bgColor },
-      description: `Highlight values ${comparativeHighlight[2]} ${value}`,
+      description: `Highlight values ${comparativeHighlight[3]} ${value}`,
     })
-    return { calls, understood: true, explanation: `Highlighting values ${comparativeHighlight[2]} ${value}${range ? ` in column ${range}` : ''}.` }
+    return { calls, understood: true, explanation: `Highlighting values ${comparativeHighlight[3]} ${value}${range ? ` in column ${range}` : ''}.` }
   }
 
   // ─── Find max/min ───────────────────────────────────────────────────────────
@@ -522,7 +522,7 @@ export function parseMessage(message: string, sheetContext?: SheetContext): Pars
   const containsMatch = lower.match(
     /cells?\s+(?:that\s+)?(?:contain(?:ing|s)?|with|having)\s+(?:the\s+)?(?:number\s+|value\s+|text\s+)?["']?([\w.$-]+)["']?/,
   )
-  if (containsMatch && lower.match(/(?:highlight|colou?r|mark|shade)/)) {
+  if (containsMatch && lower.match(/highlight|colou?r|mark|shade/)) {
     const value = containsMatch[1]
     const colorWord = lower.match(COLOR_WORD_RE)?.[1]
     const bgColor = (colorWord && colorWord !== value && HIGHLIGHT_BG_HEX[colorWord]) || '#FFF9C4'
@@ -536,10 +536,10 @@ export function parseMessage(message: string, sheetContext?: SheetContext): Pars
 
   // "highlight cells equal to 4" → numeric eq condition
   const highlightEquals = lower.match(
-    /(?:highlight|colou?r|mark|shade)\s+(?:the\s+)?cells?\s+(?:that\s+are\s+)?(?:equal(?:s)?(?:\s+to)?|=)\s*\$?([\d,.]+)/,
+    /(highlight|colou?r|mark|shade)\s+(?:the\s+)?cells?\s+(?:that\s+are\s+)?(?:equals?(\s+to)?|=)\s*\$?([\d,.]+)/,
   )
   if (highlightEquals) {
-    const value = parseFloat(highlightEquals[1].replace(/,/g, ''))
+    const value = parseFloat(highlightEquals[3].replace(/,/g, ''))
     const colorWord = lower.slice(highlightEquals.index! + highlightEquals[0].length).match(COLOR_WORD_RE)?.[1]
     const bgColor = (colorWord && HIGHLIGHT_BG_HEX[colorWord]) || '#FFF9C4'
     calls.push({
@@ -551,7 +551,7 @@ export function parseMessage(message: string, sheetContext?: SheetContext): Pars
   }
 
   // ─── Highlight negatives (requires the word "negative") ────────────────────
-  if (lower.match(/(?:highlight|colou?r|mark|shade)/) && lower.includes('negative')) {
+  if (lower.match(/highlight|colou?r|mark|shade/) && lower.includes('negative')) {
     const col = lower.match(/\bcolumn\s+([a-z]{1,3})\b/i)?.[1]?.toUpperCase()
     calls.push({
       tool: 'format_cells',

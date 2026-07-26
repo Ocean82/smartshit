@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react';
+import React, { useEffect, useRef, useCallback } from 'react';
 import { useStore } from '@/store/useStore';
 import { AlertTriangle } from 'lucide-react';
 import './ConfirmDialog.css';

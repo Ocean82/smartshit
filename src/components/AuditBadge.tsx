@@ -1,3 +1,4 @@
+import React from 'react'
 import { AlertCircle, AlertTriangle, Info, ShieldAlert, CheckCircle2 } from 'lucide-react'
 import type { Severity } from '@/auditor/types'
 

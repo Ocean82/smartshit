@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { useStore } from '@/store/useStore';
 import { X, BarChart3, LineChart, PieChart, TrendingUp } from 'lucide-react';
 import { v4 as uuid } from 'uuid';

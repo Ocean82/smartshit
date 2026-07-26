@@ -4,7 +4,7 @@
  * Pattern inspired by Univer's scroll-manager service: parses a cell reference
  * and scrolls the viewport to bring it into view.
  */
-import { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { useStore } from '@/store/useStore';
 import { cellToRef } from '@/engine/spreadsheet';
 import { X } from 'lucide-react';

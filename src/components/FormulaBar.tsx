@@ -7,7 +7,7 @@
  * - Formula/value content on the right (editable)
  * - Cancel (X) and Confirm (✓) buttons when editing
  */
-import { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import { useStore } from '@/store/useStore';
 import { colToLetter, refToCell, cellToRef } from '@/engine/spreadsheet';
 import { X, Check, FunctionSquare } from 'lucide-react';

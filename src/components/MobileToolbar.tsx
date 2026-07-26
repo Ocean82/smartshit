@@ -3,7 +3,7 @@
  * Shows only essential actions in a fixed bottom bar with proper touch targets.
  * Reveals additional tools via expandable tray.
  */
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { useStore } from '@/store/useStore';
 import { refToCell } from '@/engine/spreadsheet';
 import {

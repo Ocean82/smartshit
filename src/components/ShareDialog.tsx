@@ -64,7 +64,7 @@ export function ShareDialog({ open, onClose }: ShareDialogProps) {
   }, [cloudId])
 
   useEffect(() => {
-    if (open) fetchShares()
+    if (open) void fetchShares()
   }, [open, fetchShares])
 
   if (!open) return null
@@ -118,7 +118,7 @@ export function ShareDialog({ open, onClose }: ShareDialogProps) {
 
   const handleCopy = (token: string) => {
     const url = `${window.location.origin}/shared/${token}`
-    navigator.clipboard.writeText(url)
+    void navigator.clipboard.writeText(url)
     setCopiedToken(token)
     setTimeout(() => setCopiedToken(null), 2000)
   }

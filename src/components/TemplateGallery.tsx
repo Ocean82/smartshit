@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect } from 'react'
+import React, { useState, useMemo, useRef, useEffect } from 'react'
 import { useStore } from '@/store/useStore'
 import { LayoutTemplate, X, Search, ChevronRight, Upload, Download, Star, Globe, Loader2, Send } from 'lucide-react'
 import { templates, templateCategories, getPopularTemplates, searchTemplates, type TemplateCategory } from '@/data/templates'
@@ -44,7 +44,7 @@ export function TemplateGallery({ open, onClose }: TemplateGalleryProps) {
 
   useEffect(() => {
     if (activeCategory === 'Marketplace' && open) {
-      fetchCloudTemplates()
+      void fetchCloudTemplates()
     }
   }, [activeCategory, cloudSort, open]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -162,7 +162,7 @@ export function TemplateGallery({ open, onClose }: TemplateGalleryProps) {
               placeholder={activeCategory === 'Marketplace' ? 'Search community templates...' : 'Search templates...'}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter' && activeCategory === 'Marketplace') fetchCloudTemplates() }}
+              onKeyDown={(e) => { if (e.key === 'Enter' && activeCategory === 'Marketplace') void fetchCloudTemplates() }}
               className="w-full pl-9 pr-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:border-blue-400 focus:ring-1 focus:ring-blue-200 outline-none"
             />
           </div>
@@ -243,7 +243,7 @@ export function TemplateGallery({ open, onClose }: TemplateGalleryProps) {
         <PublishDialog
           templates={communityTemplates}
           onClose={() => setShowPublish(false)}
-          onPublished={() => { setShowPublish(false); setActiveCategory('Marketplace'); fetchCloudTemplates() }}
+          onPublished={() => { setShowPublish(false); setActiveCategory('Marketplace'); void fetchCloudTemplates() }}
         />
       )}
     </div>

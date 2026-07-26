@@ -110,7 +110,6 @@ function runDeterministicSkills(
   mode: ReturnType<typeof classifyMode>,
   intent: ReturnType<typeof parseUserIntent>,
   priorInsights?: SheetInsights | null,
-  userPreferences?: Record<string, string>,
 ): ToolResult | null {
   const profile = buildSheetProfile(target.sheet, target.getComputedValue)
   const insights = target.context.insights

@@ -168,9 +168,9 @@ export function resolveActTemplates(message: string): ActTemplateResult {
     }
 
     // "highlight cells equal to 4"
-    const equalsMatch = lower.match(/equal(?:s)?(?:\s+to)?\s*\$?([\d,.]+)/)
+    const equalsMatch = lower.match(/equals?(\s+to)?\s*\$?([\d,.]+)/)
     if (equalsMatch) {
-      const value = parseFloat(equalsMatch[1].replace(/,/g, ''))
+      const value = parseFloat(equalsMatch[2].replace(/,/g, ''))
       return {
         message: `I will highlight cells equal to ${value}. Click Apply to confirm.`,
         actions: [{ tool: 'format_cells', params: { condition: { operator: 'eq', value }, bgColor }, description: `Highlight cells equal to ${value}` }],

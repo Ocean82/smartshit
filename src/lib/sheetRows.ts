@@ -19,8 +19,8 @@ export function getSheetBounds(sheet: SheetData): SheetBounds {
 
 /** Labels that unambiguously identify an aggregate/summary row. */
 const EXACT_SUMMARY_LABEL = /^(?:(?:grand|annual)\s+)?(?:sub)?totals?\s*:?$/i
-const PREFIXED_SUMMARY_LABEL = /^(?:(?:grand|annual)\s+)?(?:sub)?total(?:s)?\s+\S+/i
-const KNOWN_SUMMARY_LABEL = /^(?:(?:grand|annual)\s+)?(?:sub)?total(?:s)?\s+(?:amount|income|expenses?|revenue|cogs|costs?|cash\s+receipts|opex|paid|interest|investment|payments?|outstanding|inventory\s+value|budget|contributions?|assets?|liabilities|payroll|employees?|tasks?|credits?|potential|applied|sets?|lost|\d+-year\s+cost)\s*:?$/i
+const PREFIXED_SUMMARY_LABEL = /^(?:(?:grand|annual)\s+)?(?:sub)?totals?\s+\S+/i
+const KNOWN_SUMMARY_LABEL = /^(?:(?:grand|annual)\s+)?(?:sub)?totals?\s+(?:amount|income|expenses?|revenue|cogs|costs?|cash\s+receipts|opex|paid|interest|investment|payments?|outstanding|inventory\s+value|budget|contributions?|assets?|liabilities|payroll|employees?|tasks?|credits?|potential|applied|sets?|lost|\d+-year\s+cost)\s*:?$/i
 
 function displayValue(
   sheet: SheetData,

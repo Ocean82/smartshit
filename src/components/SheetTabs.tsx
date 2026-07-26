@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import { useStore } from '@/store/useStore';
 import { Plus, X, Edit3, Check } from 'lucide-react';
 

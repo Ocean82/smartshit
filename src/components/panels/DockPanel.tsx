@@ -3,7 +3,7 @@
  * Provides: header with title + close button, resize handle, content slot.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useStore } from '@/store/useStore'
 import { getPanelDef, type PanelId } from './panelTypes'
 import { X } from 'lucide-react'
@@ -29,6 +29,7 @@ interface DockPanelProps {
  * Renders an active dock panel with resizable content and header controls.
  *
  * @param panelId - Identifier of the panel to render and resize
+ * @param children - The content to be rendered within the panel
  * @param title - Optional title displayed in the panel header
  * @param headerActions - Optional controls displayed before the close button
  * @returns The dock panel when active, or `null` otherwise
