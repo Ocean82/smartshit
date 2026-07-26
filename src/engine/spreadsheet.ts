@@ -106,7 +106,7 @@ const HF_OPTIONS = {
 } as const;
 
 export class SpreadsheetEngine {
-  private readonly hf: HyperFormula;
+  private hf: HyperFormula;
   private sheetMapping: Map<string, number> = new Map();
   private readonly _aiRegistry: AIFunctionRegistry;
   private _disposeAIFunctions: (() => void) | null = null;

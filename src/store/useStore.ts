@@ -1474,7 +1474,19 @@ function buildExecutionContext(
 ): ExecutionContext {
   const ctx: ExecutionContext = {
     getActiveSheet: () => get().getActiveSheet(),
-    getComputedValue: (row, col) => get().getComputedValue(row, col),
+    getSheets: () => get().workbook.sheets,
+    getComputedValue: (row, col, sheetId) => {
+      if (sheetId) {
+        const state = get();
+        const targetSheet = state.workbook.sheets.find((candidate) => candidate.id === sheetId);
+        const cell = targetSheet?.cells[refToCell(row, col)];
+        if (cell?.formula && state.engine.isAIFormula(cell.formula)) {
+          return cell.displayValue == null ? String(cell.value ?? '') : String(cell.displayValue);
+        }
+        return state.engine.getComputedValue(sheetId, row, col);
+      }
+      return get().getComputedValue(row, col);
+    },
     setCellValue: (cellId, value, formula) => get().setCellValue(cellId, value, formula),
     setCellFormat: (cellId, format) => get().setCellFormat(cellId, format),
     setCellValidation: (cellId, validation) => {

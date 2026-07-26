@@ -17,6 +17,14 @@ export function findLastDataRow(sheet: SheetData): number {
   return max
 }
 
+export function findLastDataCol(sheet: SheetData): number {
+  let max = 0
+  for (const cellId of Object.keys(sheet.cells)) {
+    max = Math.max(max, cellToRef(cellId).col)
+  }
+  return max
+}
+
 export function findHeaderRow(sheet: SheetData): number {
   for (let r = 0; r < 5; r++) {
     let count = 0

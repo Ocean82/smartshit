@@ -8,7 +8,7 @@
 import type { ParsedToolCall } from './parser'
 import { refToCell, cellToRef, letterToCol } from '@/engine/spreadsheet'
 import type { SheetData, FilterConfig, CellFormat, ChartConfig } from '@/types'
-import { computeSortedCellUpdates, computeMultiSortedCellUpdates, findHeaderRow, findLastDataRow, type SortPatch } from '@/lib/sheetSort'
+import { computeSortedCellUpdates, computeMultiSortedCellUpdates, findHeaderRow, findLastDataRow, findLastDataCol, type SortPatch } from '@/lib/sheetSort'
 import { applyFormatCells } from '@/lib/formatCellsTool'
 import { formatAsTable } from '@/lib/formatAsTable'
 import { getCellNotesService } from '@/lib/cellNotes'
@@ -20,7 +20,8 @@ import { findSummaryRowIndexes } from '@/lib/sheetRows'
 
 export interface ExecutionContext {
   getActiveSheet: () => SheetData
-  getComputedValue: (row: number, col: number) => string
+  getSheets: () => SheetData[]
+  getComputedValue: (row: number, col: number, sheetId?: string) => string
   setCellValue: (cellId: string, value: string | number | boolean | null, formula?: string) => void
   setCellFormat: (cellId: string, format: Partial<CellFormat>) => void
   setCellValidation?: (cellId: string, validation: import('@/types').DataValidation | null) => void
@@ -280,17 +281,17 @@ function executeToolInner(call: ParsedToolCall, ctx: ExecutionContext): Executio
 
     case 'multi_sheet_join': {
       const sourceName = String(params.sourceSheet ?? '')
-      const sourceSheet = ctx.workbook.sheets.find((s) => s.name === sourceName)
+      const sourceSheet = ctx.getSheets().find((s: SheetData) => s.name === sourceName)
       if (!sourceSheet) {
-        return { success: false, message: `Source sheet "${sourceName}" not found. Available: ${ctx.workbook.sheets.map((s) => s.name).join(', ')}`, modified: 0 }
+        return { success: false, message: `Source sheet "${sourceName}" not found. Available: ${ctx.getSheets().map((s: SheetData) => s.name).join(', ')}`, modified: 0 }
       }
 
-      const sourceKeyIdx = resolveColumnIndex(params.sourceKey, sourceSheet, ctx.getComputedValue)
-      const targetKeyIdx = resolveColumnIndex(params.targetKey, sheet, ctx.getComputedValue)
+      const sourceKeyIdx = resolveColumnIndex(String(params.sourceKey ?? ''), sourceSheet, ctx.getComputedValue)
+      const targetKeyIdx = resolveColumnIndex(String(params.targetKey ?? ''), sheet, ctx.getComputedValue)
       const colsToCopy = (params.columnsToCopy as string[]) || []
 
-      if (sourceKeyIdx === -1) return { success: false, message: `Source key column "${params.sourceKey}" not found in ${sourceName}`, modified: 0 }
-      if (targetKeyIdx === -1) return { success: false, message: `Target key column "${params.targetKey}" not found in current sheet`, modified: 0 }
+      if (sourceKeyIdx === null || sourceKeyIdx === -1) return { success: false, message: `Source key column "${params.sourceKey}" not found in ${sourceName}`, modified: 0 }
+      if (targetKeyIdx === null || targetKeyIdx === -1) return { success: false, message: `Target key column "${params.targetKey}" not found in current sheet`, modified: 0 }
 
       const sourceRows = findLastDataRow(sourceSheet) + 1
       const targetRows = findLastDataRow(sheet) + 1
@@ -303,7 +304,7 @@ function executeToolInner(call: ParsedToolCall, ctx: ExecutionContext): Executio
         const data: Record<string, string | number | boolean | null> = {}
         colsToCopy.forEach((colLetter) => {
           const cIdx = resolveColumnIndex(colLetter, sourceSheet, ctx.getComputedValue)
-          if (cIdx !== -1) {
+          if (cIdx !== null && cIdx !== -1) {
             data[colLetter] = ctx.getComputedValue(r, cIdx, sourceSheet.id)
           }
         })

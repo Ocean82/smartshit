@@ -53,6 +53,7 @@ function harness(cells: SheetData['cells'] = {}): Harness {
     renameSheet: () => {},
     pushHistory: () => {},
     exportData: (format) => exports.push(format),
+    getSheets: () => [],
   } as ExecutionContext
 
   return { ctx, writes, deletions, exports, bulkCalls: () => bulkCalls }

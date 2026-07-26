@@ -434,6 +434,7 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
     params: [
       { name: 'preference', type: 'string', description: 'The preference text to remember', required: true },
     ],
+    examples: [],
     hidden: true,
   },
   // ─── Sandbox script execution ──────────────────────────────────────────────

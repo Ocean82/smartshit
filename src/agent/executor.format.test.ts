@@ -25,6 +25,7 @@ function makeContext(sheet: SheetData) {
 
   const ctx: ExecutionContext = {
     getActiveSheet: () => sheet,
+    getSheets: () => [sheet],
     getComputedValue: (row, col) => {
       for (const [id, cell] of Object.entries(sheet.cells)) {
         const ref = cellToRef(id)
