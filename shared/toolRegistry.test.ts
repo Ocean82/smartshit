@@ -89,7 +89,7 @@ describe('shared toolRegistry', () => {
   })
 
   it('hidden niche templates are registered but excluded from the LLM prompt', () => {
-    const hidden = TOOL_REGISTRY.filter((t) => t.hidden)
+    const hidden = TOOL_REGISTRY.filter((t) => t.hidden && t.category === 'template')
     expect(hidden.length).toBe(49)
     for (const tool of hidden) {
       expect(tool.category, tool.name).toBe('template')
@@ -99,6 +99,7 @@ describe('shared toolRegistry', () => {
     const prompt = formatToolsForPrompt()
     expect(prompt).not.toContain('create_wedding_budget')
     expect(prompt).not.toContain('create_workout_log')
+    expect(prompt).not.toContain('save_preference')
   })
 
   it('server allowlist accepts hidden template tools', () => {
