@@ -21,7 +21,7 @@
     "typescript",
     "budget",
     "expenses",
-    "hyperformula",
+    "formualizer",
     "self-hosted"
   ],
   "type": "module",
@@ -43,10 +43,10 @@
   },
   "dependencies": {
     "@clerk/react": "^6.11.4",
+    "@ocean8219/formualizer": "^0.7.2",
     "@sentry/react": "^10.67.0",
     "@types/uuid": "^10.0.0",
     "clsx": "2.1.1",
-    "hyperformula": "^3.3.0",
     "immer": "^11.1.8",
     "lucide-react": "^1.21.0",
     "quickjs-emscripten": "^0.32.0",

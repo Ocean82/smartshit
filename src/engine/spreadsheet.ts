@@ -1,4 +1,4 @@
-import HyperFormula from 'hyperformula';
+import { Workbook, type WorkbookApi } from '@ocean8219/formualizer';
 import type { SheetData, WorkbookData, PivotConfig, PivotResult } from '@/types';
 import { v4 as uuid } from 'uuid';
 import { AIFunctionRegistry } from './aiFunctions';
@@ -55,24 +55,14 @@ export function refToCell(row: number, col: number): string {
 }
 
 /**
- * Convert a raw HyperFormula cell value into the display string used everywhere
+ * Convert a raw formualizer cell value into the display string used everywhere
  * in the app (grid, auditor, AI context).
  *
- * HyperFormula returns a `DetailedCellError` object for failed formulas, whose
- * `.value` carries the real Excel error code (`#DIV/0!`, `#NAME?`, `#REF!`, …).
- * Previously every error object was flattened to the literal `'#ERROR!'`, which
- * no consumer recognised — in particular `auditor/utils.ts#isErrorValue` tests
- * for the specific Excel codes, so the auditor silently reported broken
- * spreadsheets as clean. Preserve `.value` so error detection works.
+ * Formualizer returns Excel error strings directly (e.g. "#DIV/0!", "#REF!"),
+ * so we just need to handle null/undefined and coerce everything else to string.
  */
 export function computedValueToString(val: unknown): string {
   if (val === null || val === undefined) return '';
-  if (typeof val === 'object') {
-    const detailed = val as { value?: unknown };
-    // DetailedCellError#value is the Excel error code, e.g. "#DIV/0!"
-    if (typeof detailed.value === 'string' && detailed.value) return detailed.value;
-    return '#ERROR!';
-  }
   return String(val);
 }
 
@@ -99,15 +89,10 @@ export function createEmptyWorkbook(name: string): WorkbookData {
   };
 }
 
-/** Shared HyperFormula construction options — keep both build sites in sync. */
-const HF_OPTIONS = {
-  licenseKey: 'gpl-v3',
-  precisionRounding: 10,
-} as const;
-
 export class SpreadsheetEngine {
-  private hf: HyperFormula;
-  private sheetMapping: Map<string, number> = new Map();
+  private wb: WorkbookApi;
+  // Maps our internal sheet uuid -> the sheet name used in formualizer
+  private sheetMapping: Map<string, string> = new Map();
   private readonly _aiRegistry: AIFunctionRegistry;
   private _disposeAIFunctions: (() => void) | null = null;
 
@@ -120,8 +105,7 @@ export class SpreadsheetEngine {
    */
   constructor(aiRegistry?: AIFunctionRegistry) {
     this._aiRegistry = aiRegistry ?? new AIFunctionRegistry();
-    this.hf = HyperFormula.buildEmpty(HF_OPTIONS);
-    // Register built-in AI functions into this engine's registry
+    this.wb = new Workbook();
     this._disposeAIFunctions = registerBuiltinAIFunctions(this._aiRegistry);
   }
 
@@ -131,96 +115,72 @@ export class SpreadsheetEngine {
   }
 
   loadWorkbook(workbook: WorkbookData): void {
-    // Rebuild from scratch
-    this.hf = HyperFormula.buildEmpty(HF_OPTIONS);
+    this.wb = new Workbook();
     this.sheetMapping.clear();
-
     for (const sheet of workbook.sheets) {
       this.loadSheet(sheet);
     }
   }
 
   loadSheet(sheet: SheetData): void {
-    let maxRow = 0;
-    let maxCol = 0;
-    const cellEntries = Object.entries(sheet.cells);
-    for (const [cellId] of cellEntries) {
-      const ref = cellToRef(cellId);
-      maxRow = Math.max(maxRow, ref.row + 1);
-      maxCol = Math.max(maxCol, ref.col + 1);
-    }
-
-    const rows = Math.max(maxRow, 1);
-    const cols = Math.max(maxCol, 1);
-    const data: (string | number | boolean | null)[][] = Array.from(
-      { length: rows },
-      () => Array(cols).fill(null)
-    );
-
-    for (const [cellId, cellData] of cellEntries) {
-      const ref = cellToRef(cellId);
-      // AI formulas are handled by the AI registry, not HyperFormula
-      if (cellData.formula && this.isAIFormula(cellData.formula)) {
-        data[ref.row][ref.col] = cellData.value;
-      } else {
-        data[ref.row][ref.col] = cellData.formula
-          ? cellData.formula
-          : cellData.value;
-      }
-    }
-
-    // HyperFormula rejects duplicate sheet names. Previously the resulting
-    // throw was swallowed, leaving the sheet unmapped so every read returned
-    // "" with no error anywhere. Resolve collisions up front instead, and use
-    // the name HyperFormula actually assigned.
     try {
-      const requestedName = this.uniqueSheetName(sheet.name);
-      const assignedName = this.hf.addSheet(requestedName);
-      const hfId = this.hf.getSheetId(assignedName);
-      if (hfId === undefined) {
-        console.error(`[engine] Could not resolve a HyperFormula id for sheet "${sheet.name}"`);
-        return;
+      const sheetName = this.uniqueSheetName(sheet.name);
+      this.wb.addSheet(sheetName);
+      this.sheetMapping.set(sheet.id, sheetName);
+
+      for (const [cellId, cellData] of Object.entries(sheet.cells)) {
+        const ref = cellToRef(cellId);
+        // row/col are 0-based internally; formualizer uses 1-based
+        const r = ref.row + 1;
+        const c = ref.col + 1;
+        if (cellData.formula && this.isAIFormula(cellData.formula)) {
+          // AI formulas bypass the engine — store the cached value
+          const v = cellData.value;
+          if (v !== null && v !== undefined) this.wb.setValue(sheetName, r, c, v as string | number | boolean);
+        } else if (cellData.formula) {
+          this.wb.setFormula(sheetName, r, c, cellData.formula);
+        } else if (cellData.value !== null && cellData.value !== undefined) {
+          this.wb.setValue(sheetName, r, c, cellData.value as string | number | boolean);
+        }
       }
-      this.hf.setSheetContent(hfId, data);
-      this.sheetMapping.set(sheet.id, hfId);
     } catch (err) {
       console.error(`[engine] Failed to load sheet "${sheet.name}":`, err);
     }
   }
 
-  /** Suffix a sheet name until it no longer collides inside HyperFormula. */
+  /** Suffix a sheet name until it no longer collides inside formualizer. */
   private uniqueSheetName(name: string): string {
     const base = name.trim() || 'Sheet';
-    if (this.hf.getSheetId(base) === undefined) return base;
+    const existing = new Set(this.sheetMapping.values());
+    if (!existing.has(base)) return base;
     for (let i = 2; i < 1000; i++) {
       const candidate = `${base} (${i})`;
-      if (this.hf.getSheetId(candidate) === undefined) return candidate;
+      if (!existing.has(candidate)) return candidate;
     }
     return `${base} (${Date.now()})`;
   }
 
   getCellValue(sheetId: string, row: number, col: number): unknown {
-    const hfSheetId = this.sheetMapping.get(sheetId);
-    if (hfSheetId === undefined) return null;
+    const sheetName = this.sheetMapping.get(sheetId);
+    if (!sheetName) return null;
     try {
-      return this.hf.getCellValue({ sheet: hfSheetId, row, col });
+      return this.wb.evaluateCell(sheetName, row + 1, col + 1);
     } catch {
       return null;
     }
   }
 
   setCellValue(sheetId: string, row: number, col: number, value: string | number | boolean | null): void {
-    const hfSheetId = this.sheetMapping.get(sheetId);
-    if (hfSheetId === undefined) return;
+    const sheetName = this.sheetMapping.get(sheetId);
+    if (!sheetName) return;
     try {
-      const dims = this.hf.getSheetDimensions(hfSheetId);
-      if (row >= dims.height) {
-        this.hf.addRows(hfSheetId, [dims.height, row - dims.height + 1]);
+      if (value === null) {
+        this.wb.setValue(sheetName, row + 1, col + 1, '');
+      } else if (typeof value === 'string' && value.startsWith('=')) {
+        this.wb.setFormula(sheetName, row + 1, col + 1, value);
+      } else {
+        this.wb.setValue(sheetName, row + 1, col + 1, value);
       }
-      if (col >= dims.width) {
-        this.hf.addColumns(hfSheetId, [dims.width, col - dims.width + 1]);
-      }
-      this.hf.setCellContents({ sheet: hfSheetId, row, col }, [[value]]);
     } catch (e) {
       console.error('Error setting cell value:', e);
     }
@@ -315,46 +275,14 @@ export class SpreadsheetEngine {
   }
 
   getFunctionList(): Array<{ name: string; description: string; category: string; syntax: string }> {
-    if (!this.hf) return [];
-    try {
-      // Get all registered function names from HyperFormula
-      const registeredFunctions = HyperFormula.getRegisteredFunctionNames('enGB');
-      let baseFunctions: Array<{ name: string; description: string; category: string; syntax: string }>;
-      if (registeredFunctions && registeredFunctions.length > 0) {
-        baseFunctions = registeredFunctions.map((name: string) => {
-          // Try to get function metadata
-          const info = this.getFallbackInfo(name);
-          return {
-            name: name.toUpperCase(),
-            description: info?.description || '',
-            category: info?.category || 'General',
-            syntax: info?.syntax || name.toUpperCase() + '()',
-          };
-        });
-      } else {
-        baseFunctions = this.getFallbackFunctions();
-      }
-      // Append AI functions
-      return [...baseFunctions, ...getAIFunctionList(this._aiRegistry)];
-    } catch {
-      return [...this.getFallbackFunctions(), ...getAIFunctionList(this._aiRegistry)];
-    }
-  }
-
-  private getFallbackInfo(name: string): { description: string; category: string; syntax: string } | null {
-    const map = this.buildFunctionMap();
-    return map.get(name.toUpperCase()) || null;
+    return [...this.getFallbackFunctions(), ...this.getExtendedFunctions(), ...getAIFunctionList(this._aiRegistry)];
   }
 
   private _functionMap: Map<string, { description: string; category: string; syntax: string }> | null = null;
   private buildFunctionMap() {
     if (this._functionMap) return this._functionMap;
     const m = new Map<string, { description: string; category: string; syntax: string }>();
-    for (const fn of this.getFallbackFunctions()) {
-      m.set(fn.name, { description: fn.description, category: fn.category, syntax: fn.syntax });
-    }
-    // Add extended functions from HyperFormula that aren't in fallback
-    for (const fn of this.getExtendedFunctions()) {
+    for (const fn of [...this.getFallbackFunctions(), ...this.getExtendedFunctions()]) {
       m.set(fn.name, { description: fn.description, category: fn.category, syntax: fn.syntax });
     }
     this._functionMap = m;
@@ -594,6 +522,6 @@ export class SpreadsheetEngine {
       this._disposeAIFunctions = null;
     }
     this._aiRegistry.dispose();
-    this.hf.destroy();
+    // formualizer WASM objects are GC'd; no explicit destroy needed
   }
 }
