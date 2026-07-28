@@ -231,7 +231,7 @@ export class SpreadsheetEngine {
       ? argsStr.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map((a) => a.trim())
       : [];
 
-    const resolvedArgs = rawArgs.map((arg) => {
+    const resolvedArgs = rawArgs.map((arg): string | number | boolean | null | (string | number | boolean | null)[][] => {
       // String literal
       if (arg.startsWith('"') && arg.endsWith('"')) {
         return arg.slice(1, -1);
@@ -248,10 +248,12 @@ export class SpreadsheetEngine {
       if (/^[A-Z]+\d+:[A-Z]+\d+$/i.test(arg)) {
         const rangeResult = this._resolveRange(arg, resolveArg);
         // Check for ref error marker
-        if (rangeResult[0]?.[0] && typeof rangeResult[0][0] === 'object' && rangeResult[0][0].__refError) {
+        const firstCell = rangeResult[0]?.[0];
+        if (firstCell && typeof firstCell === 'object' && '__refError' in firstCell) {
           return '#REF!';
         }
-        return rangeResult;
+        // TypeScript narrowing: after the check, rangeResult is the normal type
+        return rangeResult as (string | number | boolean | null)[][];
       }
       // Pass as string
       return arg;
@@ -294,10 +296,10 @@ export class SpreadsheetEngine {
     }
   }
 
-  private _resolveRange(
+private _resolveRange(
     rangeRef: string,
     resolveArg: (ref: string) => string | number | boolean | null,
-  ): (string | number | boolean | null)[][] {
+  ): (string | number | boolean | null | { __refError: true })[][] {
     const parts = rangeRef.split(':');
     if (parts.length !== 2) return [];
 
@@ -306,7 +308,7 @@ export class SpreadsheetEngine {
 
     if (!start || !end) {
       // Return a special marker that executeAIFormula can detect and convert to #REF!
-      return [[{ __refError: true }]];
+      return [[{ __refError: true }]] as (string | number | boolean | null | { __refError: true })[][];
     }
 
     const minRow = Math.min(start.row, end.row);
