@@ -63,7 +63,8 @@ export function executeTool(call: ParsedToolCall, ctx: ExecutionContext): Execut
     return executeToolInner(call, ctx)
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err)
-    console.error(`[executor] Tool "${call.tool}" failed:`, err)
+    const safeTool = String(call.tool).replace(/[\r\n]/g, '_')
+    console.error(`[executor] Tool "${safeTool}" failed:`, err)
     return {
       success: false,
       message: `Could not complete "${call.tool}": ${detail}`,
@@ -503,7 +504,7 @@ function executeToolInner(call: ParsedToolCall, ctx: ExecutionContext): Executio
         if (cell.value == null) continue
         const original = String(cell.value)
         pattern.lastIndex = 0
-        const next = original.replace(pattern, replace)
+        const next = original.replace(pattern, () => replace)
         if (next !== original) updates[cellId] = { value: next }
       }
       const count = applyBulk(ctx, updates)

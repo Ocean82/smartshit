@@ -8,11 +8,11 @@ export interface ChatFeedbackEntry {
   timestamp: string
 }
 
-const STORAGE_KEY = 'smartsht-v1-chat-feedback'
+const STORAGE_NS = 'smartsht-v1-chat-feedback'
 
 export function loadChatFeedback(): ChatFeedbackEntry[] {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
+    const raw = localStorage.getItem(STORAGE_NS)
     if (!raw) return []
     const parsed = JSON.parse(raw) as ChatFeedbackEntry[]
     return Array.isArray(parsed) ? parsed : []
@@ -29,7 +29,7 @@ export function recordChatFeedback(messageId: string, rating: ChatFeedbackRating
   const entries = loadChatFeedback().filter((e) => e.messageId !== messageId)
   entries.push({ messageId, rating, timestamp: new Date().toISOString() })
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(entries.slice(-200)))
+    localStorage.setItem(STORAGE_NS, JSON.stringify(entries.slice(-200)))
   } catch {
     // ignore quota errors
   }

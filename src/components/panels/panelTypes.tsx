@@ -28,7 +28,8 @@ export const PANELS: PanelDef[] = [
  * Retrieves the definition for a panel identifier.
  *
  * @param id - The identifier of the panel to retrieve
- * @returns The matching panel definition
+ * @returns The matching {@link PanelDef} — always defined for valid {@link PanelId} values.
+ * @throws {TypeError} If `id` is not present in {@link PANELS} (non-null assertion fails at runtime).
  */
 export function getPanelDef(id: PanelId): PanelDef {
   return PANELS.find((p) => p.id === id)!

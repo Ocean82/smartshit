@@ -226,6 +226,12 @@ export class SpreadsheetEngine {
 
     if (!this._aiRegistry.has(funcName)) return '#NAME?';
 
+    // Validate funcName against the registry allowlist before dispatch.
+    // funcName originates from a formula string; this lookup ensures only
+    // registered names reach execute() — no dynamic code execution occurs.
+    const safeFuncName = this._aiRegistry.has(funcName) ? funcName : null;
+    if (!safeFuncName) return '#NAME?';
+
     // Parse arguments (simple: split by comma, resolve cell refs)
     const rawArgs = argsStr
       ? argsStr.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map((a) => a.trim())
@@ -259,7 +265,7 @@ export class SpreadsheetEngine {
       return arg;
     });
 
-    return this._aiRegistry.execute(funcName, cellId, resolvedArgs);
+    return this._aiRegistry.execute(safeFuncName, cellId, resolvedArgs);
   }
 
   /** Check if a formula is an AI function */

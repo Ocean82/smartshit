@@ -104,7 +104,7 @@ const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype'])
 function stripUnsafeKeys<T extends object>(value: T): T {
   for (const key of UNSAFE_KEYS) {
     if (Object.prototype.hasOwnProperty.call(value, key)) {
-      delete (value as Record<string, unknown>)[key]
+      (value as Record<string, unknown>)[key] = undefined
     }
   }
   return value

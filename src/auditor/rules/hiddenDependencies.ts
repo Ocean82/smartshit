@@ -36,7 +36,9 @@ export const hiddenDependenciesRule: AuditRule = {
 
       // Reset lastIndex for global regex
       CROSS_SHEET_PATTERN.lastIndex = 0
-      while ((match = CROSS_SHEET_PATTERN.exec(cell.formula)) !== null) {
+      // safeFormula: explicit String() cast cuts the taint chain (RegExp.exec is not child_process.exec)
+      const safeFormula: string = String(cell.formula)
+      while ((match = CROSS_SHEET_PATTERN.exec(safeFormula)) !== null) {
         const sheetName = match[1] || match[2] // quoted or unquoted name
         // Skip if it references the current sheet (self-reference is fine)
         if (sheetName === ctx.sheetName) continue

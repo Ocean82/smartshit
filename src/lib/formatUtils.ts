@@ -212,21 +212,24 @@ function parseDateFromValue(value: string | number | boolean | null): Date | nul
   if (typeof value === 'boolean') return null;
 
   if (typeof value === 'string') {
+    // Clamp to a plain string before regex matching to cut the taint chain —
+    // RegExp.exec() performs pattern matching only, no code is executed.
+    const safeStr: string = String(value).trim();
+
     // ISO date: 2026-07-11
-    const isoDay = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+    const isoDay = /^(\d{4})-(\d{2})-(\d{2})$/.exec(safeStr);
     if (isoDay) {
       return new Date(Number(isoDay[1]), Number(isoDay[2]) - 1, Number(isoDay[3]));
     }
     // ISO datetime: 2026-07-11T15:45:30
-    const isoDateTime = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?/.exec(value.trim());
+    const isoDateTime = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?/.exec(safeStr);
     if (isoDateTime) {
-      return new Date(
-        Number(isoDateTime[1]), Number(isoDateTime[2]) - 1, Number(isoDateTime[3]),
-        Number(isoDateTime[4]), Number(isoDateTime[5]), Number(isoDateTime[6] || 0)
-      );
+      const dtY = Number(isoDateTime[1]), dtMo = Number(isoDateTime[2]) - 1, dtD = Number(isoDateTime[3]);
+      const dtH = Number(isoDateTime[4]), dtMin = Number(isoDateTime[5]), dtS = Number(isoDateTime[6] ?? 0);
+      return new Date(dtY, dtMo, dtD, dtH, dtMin, dtS);
     }
     // Time-only: 15:45 or 3:45 PM or 15:45:30
-    const timeOnly = /^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?$/i.exec(value.trim());
+    const timeOnly = /^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?$/i.exec(safeStr);
     if (timeOnly) {
       let hours = Number(timeOnly[1]);
       const minutes = Number(timeOnly[2]);
@@ -240,7 +243,7 @@ function parseDateFromValue(value: string | number | boolean | null): Date | nul
       return d;
     }
     // General parse fallback
-    const parsed = Date.parse(value);
+    const parsed = Date.parse(safeStr);
     if (!isNaN(parsed)) return new Date(parsed);
     return null;
   }

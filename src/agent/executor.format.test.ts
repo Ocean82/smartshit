@@ -194,7 +194,7 @@ describe('executor: filter and template delegation', () => {
   it('fails gracefully when templates are unavailable in the context', () => {
     const sheet = makeSheet({})
     const { ctx } = makeContext(sheet)
-    delete ctx.executeTemplate
+    ctx.executeTemplate = undefined
 
     const result = executeTool({ tool: 'create_invoice', params: {}, description: 'Invoice' }, ctx)
     expect(result.success).toBe(false)

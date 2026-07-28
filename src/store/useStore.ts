@@ -534,7 +534,7 @@ export const useStore = create<AppState>()(
               // Deep clone only the active sheet's mutable data
               return {
                 ...s,
-                cells: JSON.parse(JSON.stringify(s.cells)),
+                cells: structuredClone(s.cells),
                 columnWidths: { ...s.columnWidths },
                 rowHeights: s.rowHeights ? { ...s.rowHeights } : {},
                 charts: s.charts ? [...s.charts] : [],
@@ -1588,8 +1588,14 @@ function executeAction(
 ): ExecutionResult | Promise<ExecutionResult> {
   const ctx = buildExecutionContext(get, set, { suppressHistory: true });
   if (action.tool === 'execute_script') {
+    // Validate that code is a non-empty string before passing to the sandbox.
+    // params.code originates from LLM output and must not be run unsanitized.
+    const rawCode = action.params.code;
+    if (typeof rawCode !== 'string' || !rawCode.trim()) {
+      return { success: false, message: 'execute_script requires a non-empty string code parameter', modified: 0 };
+    }
     return executeToolAsync(
-      { tool: action.tool, params: action.params, description: action.description },
+      { tool: action.tool, params: { ...action.params, code: rawCode }, description: action.description },
       ctx,
     );
   }

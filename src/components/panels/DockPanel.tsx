@@ -32,7 +32,7 @@ interface DockPanelProps {
  * @param children - The content to be rendered within the panel
  * @param title - Optional title displayed in the panel header
  * @param headerActions - Optional controls displayed before the close button
- * @returns The dock panel when active, or `null` otherwise
+ * @returns The rendered dock panel when `panelId` matches the active panel, or `null` when the panel is closed.
  */
 export function DockPanel({ panelId, children, title, headerActions }: DockPanelProps) {
   const activePanel = useStore((s) => s.activePanel)
@@ -56,13 +56,23 @@ export function DockPanel({ panelId, children, title, headerActions }: DockPanel
   // Keep the existing minimum width as the lower bound. On mobile the panel
   // becomes full-screen, so this constraint only applies to the desktop dock.
   const effectiveMaxWidth = Math.max(def.minWidth, Math.min(def.maxWidth, viewportMaxWidth))
-  const storedWidth = panelWidths[panelId] ?? def.defaultWidth
+  const raw = panelWidths[panelId]
+  const storedWidth = Number.isFinite(raw) ? (raw as number) : def.defaultWidth
   const width = Math.min(effectiveMaxWidth, Math.max(def.minWidth, storedWidth))
   const isOpen = activePanel === panelId
 
   useEffect(() => {
     if (storedWidth !== width) setPanelWidth(panelId, width)
   }, [panelId, setPanelWidth, storedWidth, width])
+
+  // Unmount cleanup: if the panel is closed mid-drag, release body styles and drag state.
+  useEffect(() => {
+    return () => {
+      resizeStartRef.current = null
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+  }, [])
 
   const handleClose = () => setActivePanel(null)
 
@@ -121,7 +131,7 @@ export function DockPanel({ panelId, children, title, headerActions }: DockPanel
       {/* Resize handle (left edge) */}
       <div
         role="slider"
-        aria-orientation="vertical"
+        aria-orientation="horizontal"
         aria-label={`Resize ${def.label} panel`}
         aria-valuemin={def.minWidth}
         aria-valuemax={effectiveMaxWidth}
