@@ -60,7 +60,7 @@ class WorkbookStub {
     // SUM(range or list)
     const sumMatch = expr.match(/^SUM\((.+)\)$/i);
     if (sumMatch) {
-      return this._rangeValues(sheet, sumMatch[1]).reduce((a, v) => a + (Number(v) || 0), 0);
+      return this._rangeValues(sheet, sumMatch[1]).reduce((a: number, v) => a + (Number(v) || 0), 0);
     }
 
     // Simple binary arithmetic between two cell refs or numbers: A1/A2, A1+B1, etc.
