@@ -414,7 +414,7 @@ export const useStore = create<AppState>()(
         // Trigger AI formula execution after state update
         if (isAI) {
           const newState = get();
-          const activeSheet = newState.getActiveSheet();
+          const _activeSheet = newState.getActiveSheet();
           newState.engine.executeAIFormula(
             cellId,
             formula!,

@@ -36,6 +36,8 @@ export function PivotDialog({ isOpen, onClose }: Props) {
     !rowFields.includes(c.letter) && !colFields.includes(c.letter) && !valueFields.find(v => v.col === c.letter)
   );
 
+  const [hasHeader, setHasHeader] = useState(true);
+
   if (!isOpen || !selection) return null;
 
   const startRowBase = Math.min(selection.startRow, selection.endRow);
@@ -43,8 +45,6 @@ export function PivotDialog({ isOpen, onClose }: Props) {
   const endRow = Math.max(selection.startRow, selection.endRow);
   const startCol = Math.min(selection.startCol, selection.endCol);
   const endCol = Math.max(selection.startCol, selection.endCol);
-
-  const [hasHeader, setHasHeader] = useState(true);
 
   const handleGenerate = () => {
     if (valueFields.length === 0) return;
