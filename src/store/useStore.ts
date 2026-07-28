@@ -334,6 +334,17 @@ export const useStore = create<AppState>()(
           s.selection = null;
           s.editingCell = null;
         });
+        // Execute AI formulas for the newly active sheet
+        const state = get();
+        const activeSheet = state.getActiveSheet();
+        state.engine.executeAIFormulasForSheet(
+          activeSheet.id,
+          activeSheet.cells,
+          (ref) => {
+            const refPos = cellToRef(ref);
+            return state.engine.getComputedValue(state.activeSheetId, refPos.row, refPos.col) || null;
+          }
+        );
       },
 
       addSheet: (name?: string) => {
@@ -351,9 +362,10 @@ export const useStore = create<AppState>()(
       },
 
       deleteSheet: (sheetId) => {
+        const state = get();
+        if (state.workbook.sheets.length <= 1) return;
         get().pushHistory('Delete sheet');
         set((s) => {
-          if (s.workbook.sheets.length <= 1) return;
           s.workbook.sheets = s.workbook.sheets.filter((sh) => sh.id !== sheetId);
           if (s.activeSheetId === sheetId) {
             s.activeSheetId = s.workbook.sheets[0].id;
@@ -361,6 +373,7 @@ export const useStore = create<AppState>()(
           }
           s.workbook.updatedAt = Date.now();
         });
+        get().engine.loadWorkbook(get().workbook);
       },
 
       renameSheet: (sheetId, name) => {
@@ -369,6 +382,7 @@ export const useStore = create<AppState>()(
           if (sheet) sheet.name = name;
           s.workbook.updatedAt = Date.now();
         });
+        get().engine.loadWorkbook(get().workbook);
       },
 
       setCellValue: (cellId, value, formula) => {
@@ -397,6 +411,19 @@ export const useStore = create<AppState>()(
           }
           s.workbook.updatedAt = Date.now();
         });
+        // Trigger AI formula execution after state update
+        if (isAI) {
+          const newState = get();
+          const activeSheet = newState.getActiveSheet();
+          newState.engine.executeAIFormula(
+            cellId,
+            formula!,
+            (ref) => {
+              const refPos = cellToRef(ref);
+              return newState.engine.getComputedValue(newState.activeSheetId, refPos.row, refPos.col) || null;
+            }
+          );
+        }
       },
 
       setCellFormat: (cellId, format) => {
@@ -1212,6 +1239,18 @@ export const useStore = create<AppState>()(
           });
         });
 
+        // Execute AI formulas for the active sheet after state is updated
+        const state = get();
+        const activeSheet = state.getActiveSheet();
+        eng.executeAIFormulasForSheet(
+          activeSheet.id,
+          activeSheet.cells,
+          (ref) => {
+            const refPos = cellToRef(ref);
+            return state.engine.getComputedValue(state.activeSheetId, refPos.row, refPos.col) || null;
+          }
+        );
+
         // Auto-open Insights panel on import (replaces old auto-chat-explain)
         if (activeRows > 5) {
           set((s) => { s.activePanel = 'insights' });
@@ -1241,6 +1280,18 @@ export const useStore = create<AppState>()(
           s.undoStack = [];
           s.redoStack = [];
         });
+
+        // Execute AI formulas for the active sheet after state is updated
+        const state = get();
+        const activeSheet = state.getActiveSheet();
+        eng.executeAIFormulasForSheet(
+          activeSheet.id,
+          activeSheet.cells,
+          (ref) => {
+            const refPos = cellToRef(ref);
+            return state.engine.getComputedValue(state.activeSheetId, refPos.row, refPos.col) || null;
+          }
+        );
       },
 
       getActiveSheet: () => {
@@ -1259,21 +1310,14 @@ export const useStore = create<AppState>()(
         const cellId = refToCell(row, col);
         const cell = sheet.cells[cellId];
 
-        // Route AI formulas through the AI function registry
+        // Route AI formulas - only return cached displayValue or placeholder
         if (cell?.formula && state.engine.isAIFormula(cell.formula)) {
           // If we already have a resolved displayValue, use it
           if (cell.displayValue !== undefined) {
             return cell.displayValue;
           }
-          const result = state.engine.executeAIFormula(
-            cellId,
-            cell.formula,
-            (ref) => {
-              const refPos = cellToRef(ref);
-              return state.engine.getComputedValue(state.activeSheetId, refPos.row, refPos.col) || null;
-            },
-          );
-          return result === null ? '' : String(result);
+          // Return loading placeholder - actual execution happens via explicit triggers
+          return '⏳ Loading...';
         }
 
         return state.engine.getComputedValue(state.activeSheetId, row, col);

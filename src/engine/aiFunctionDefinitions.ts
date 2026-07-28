@@ -17,7 +17,6 @@
  */
 
 import type { AIFunctionInfo, AsyncAIFunctionExecutor, AIFunctionRegistry } from './aiFunctions'
-import { aiFunctionRegistry } from './aiFunctions'
 
 const API_BASE = import.meta.env.VITE_AI_API_URL ?? ''
 
@@ -58,6 +57,8 @@ async function callAIFunction(
  * Local fallback for when the AI server is offline.
  * Provides basic heuristic results without LLM.
  */
+const OFFLINE_MARKER = '⚠ AI offline';
+
 function localFallback(
   functionName: string,
   args: Record<string, unknown>,
@@ -71,8 +72,22 @@ function localFallback(
       return heuristicSentiment(input)
     case 'AI.EXTRACT':
       return heuristicExtract(input, String(args.field ?? ''))
+    case 'AI.SUMMARIZE':
+      return `${OFFLINE_MARKER} Summary unavailable`
+    case 'AI.TRANSLATE':
+      return `${OFFLINE_MARKER} Translation unavailable`
+    case 'AI.CLASSIFY':
+      return `${OFFLINE_MARKER} Classification unavailable`
+    case 'AI.TAG':
+      return `${OFFLINE_MARKER} Tags unavailable`
+    case 'AI.EXPLAIN':
+      return `${OFFLINE_MARKER} Explanation unavailable`
+    case 'AI.PREDICT':
+      return `${OFFLINE_MARKER} Prediction unavailable`
+    case 'AI.SCORE':
+      return `${OFFLINE_MARKER} Score unavailable`
     default:
-      return `[AI offline] ${input.slice(0, 50)}`
+      return `${OFFLINE_MARKER} Unknown function`
   }
 }
 
@@ -124,7 +139,11 @@ function heuristicExtract(text: string, field: string): string {
     return emailMatch?.[0] ?? ''
   }
   if (lower === 'phone') {
-    const phoneMatch = text.match(/[\d()+-][\d() +-]{6,}/)
+    // Match common phone formats: (123) 456-7890, 123-456-7890, 123.456.7890, +1 123 456 7890
+    // Requires at least 10 digits with optional country code
+    const phoneMatch = text.match(
+      /\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b/
+    )
     return phoneMatch?.[0] ?? ''
   }
   return ''
@@ -371,7 +390,7 @@ const scoreExecutor: AsyncAIFunctionExecutor = async (...args) => {
  * Returns a dispose function that unregisters everything.
  */
 export function registerBuiltinAIFunctions(
-  registry: AIFunctionRegistry = aiFunctionRegistry,
+  registry: AIFunctionRegistry,
 ): () => void {
   const disposers = [
     registry.registerAsyncFunction(AI_CATEGORIZE, categorizeExecutor),
@@ -393,7 +412,7 @@ export function registerBuiltinAIFunctions(
 
 /** Get all AI function infos formatted for the autocomplete component */
 export function getAIFunctionList(
-  registry: AIFunctionRegistry = aiFunctionRegistry,
+  registry: AIFunctionRegistry,
 ): Array<{
   name: string
   description: string

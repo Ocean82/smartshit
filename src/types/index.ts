@@ -133,6 +133,7 @@ export interface PivotConfig {
   rows: PivotField[];
   columns: PivotField[];
   values: PivotField[];
+  hasHeader?: boolean;
 }
 
 export interface PivotResult {

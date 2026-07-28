@@ -67,6 +67,8 @@ const DEFAULT_CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
 const DEFAULT_MAX_CACHE_ENTRIES = 500
 /** Argument payloads longer than this are hashed rather than stored verbatim. */
 const MAX_INLINE_KEY_LENGTH = 256
+/** Max concurrent async AI function calls */
+const DEFAULT_CONCURRENCY_LIMIT = 10
 
 export class AIFunctionRegistry {
   private _functions: Map<string, RegisteredAIFunction> = new Map()
@@ -79,6 +81,9 @@ export class AIFunctionRegistry {
   private _pendingCalls: Map<string, PendingCall> = new Map()
   private _cacheTtl: number = DEFAULT_CACHE_TTL_MS
   private _maxCacheEntries: number = DEFAULT_MAX_CACHE_ENTRIES
+  private _concurrencyLimit: number = DEFAULT_CONCURRENCY_LIMIT
+  private _runningCalls = 0
+  private _callQueue: Array<() => void> = []
   private _onCellUpdate: ((cellId: string, value: string | number | boolean | null) => void) | null = null
 
   /** Set the callback that pushes resolved async values back into the sheet */
@@ -89,6 +94,11 @@ export class AIFunctionRegistry {
   /** Set cache TTL in milliseconds */
   setCacheTtl(ms: number) {
     this._cacheTtl = ms
+  }
+
+  /** Set max concurrent async calls (default: 10) */
+  setConcurrencyLimit(limit: number) {
+    this._concurrencyLimit = Math.max(1, limit)
   }
 
   /**
@@ -188,9 +198,9 @@ export class AIFunctionRegistry {
       return '⏳ Loading...'
     }
 
-    // Fire async call
+    // Fire async call with concurrency limiting
     const cellIds = new Set<string>([cellId])
-    const promise = (entry.executor as AsyncAIFunctionExecutor)(...args)
+    const promise = this._runWithLimit(() => (entry.executor as AsyncAIFunctionExecutor)(...args))
     this._pendingCalls.set(cacheKey, { promise, cellIds })
 
     promise
@@ -213,6 +223,37 @@ export class AIFunctionRegistry {
       })
 
     return '⏳ Loading...'
+  }
+
+  /** Run an async function with concurrency limiting */
+  private _runWithLimit<T>(fn: () => Promise<T>): Promise<T> {
+    return new Promise((resolve, reject) => {
+      const run = async () => {
+        this._runningCalls++
+        try {
+          const result = await fn()
+          resolve(result)
+        } catch (e) {
+          reject(e)
+        } finally {
+          this._runningCalls--
+          this._processQueue()
+        }
+      }
+
+      if (this._runningCalls < this._concurrencyLimit) {
+        run()
+      } else {
+        this._callQueue.push(run)
+      }
+    })
+  }
+
+  private _processQueue() {
+    if (this._callQueue.length > 0 && this._runningCalls < this._concurrencyLimit) {
+      const next = this._callQueue.shift()!
+      next()
+    }
   }
 
   /** Invalidate all cached results (e.g., when user changes API key) */
@@ -297,12 +338,3 @@ function hashString(input: string): string {
   }
   return (hash >>> 0).toString(36) + ':' + input.length
 }
-
-/**
- * Shared registry instance.
- *
- * Prefer `new AIFunctionRegistry()` when you need an isolated lifecycle —
- * `SpreadsheetEngine` owns its own instance so that disposing one engine cannot
- * unregister functions still in use by another.
- */
-export const aiFunctionRegistry = new AIFunctionRegistry()

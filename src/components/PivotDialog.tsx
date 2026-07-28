@@ -38,10 +38,13 @@ export function PivotDialog({ isOpen, onClose }: Props) {
 
   if (!isOpen || !selection) return null;
 
-  const startRow = Math.min(selection.startRow, selection.endRow) + 1;
+  const startRowBase = Math.min(selection.startRow, selection.endRow);
+  const startRow = hasHeader ? startRowBase + 1 : startRowBase;
   const endRow = Math.max(selection.startRow, selection.endRow);
   const startCol = Math.min(selection.startCol, selection.endCol);
   const endCol = Math.max(selection.startCol, selection.endCol);
+
+  const [hasHeader, setHasHeader] = useState(true);
 
   const handleGenerate = () => {
     if (valueFields.length === 0) return;
@@ -52,6 +55,7 @@ export function PivotDialog({ isOpen, onClose }: Props) {
       rows: rowFields.map(col => ({ sourceColumn: col, aggregation: 'sum' as const })),
       columns: colFields.map(col => ({ sourceColumn: col, aggregation: 'sum' as const })),
       values: valueFields.map(v => ({ sourceColumn: v.col, aggregation: v.agg })),
+      hasHeader,
     };
 
     if (!engine) return;
@@ -178,9 +182,19 @@ export function PivotDialog({ isOpen, onClose }: Props) {
                   </select>
                 </div>
               ))}
-            </div>
-          </div>
-        )}
+</div>
+        </div>
+      )}
+
+        <label className="flex items-center gap-2 text-sm text-gray-700 mb-4">
+          <input
+            type="checkbox"
+            checked={hasHeader}
+            onChange={e => setHasHeader(e.target.checked)}
+            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+          />
+          First row is header
+        </label>
 
         <div className="flex gap-2 justify-end">
           <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">

@@ -3,6 +3,7 @@ import type { SheetData, WorkbookData, PivotConfig, PivotResult } from '@/types'
 import { v4 as uuid } from 'uuid';
 import { AIFunctionRegistry } from './aiFunctions';
 import { registerBuiltinAIFunctions, getAIFunctionList } from './aiFunctionDefinitions';
+import { computePivotTable } from './pivot';
 
 export function colToLetter(col: number): string {
   let result = '';
@@ -63,9 +64,12 @@ export function refToCell(row: number, col: number): string {
  */
 export function computedValueToString(val: unknown): string {
   if (val === null || val === undefined) return '';
-  if (typeof val === 'object') {
-    const detailed = val as { value?: unknown };
-    if (typeof detailed.value === 'string' && detailed.value) return detailed.value;
+  if (typeof val === 'object' && val !== null) {
+    const detailed = val as { value?: unknown; type?: string };
+    // formualizer errors have { value: '#DIV/0!', type: 'DIV_BY_ZERO' }
+    if (typeof detailed.value === 'string' && detailed.value.startsWith('#')) {
+      return detailed.value;
+    }
     return '#ERROR!';
   }
   return String(val);
@@ -112,6 +116,7 @@ export class SpreadsheetEngine {
     this._aiRegistry = aiRegistry ?? new AIFunctionRegistry();
     this.wb = new Workbook();
     this._disposeAIFunctions = registerBuiltinAIFunctions(this._aiRegistry);
+    this.invalidateFunctionMap(); // Ensure AI functions appear in function map
   }
 
   /** Access the AI function registry for custom function registration */
@@ -120,14 +125,13 @@ export class SpreadsheetEngine {
   }
 
   loadWorkbook(workbook: WorkbookData): void {
-    this.wb = new Workbook();
-    this.sheetMapping.clear();
+    this.reset();
     for (const sheet of workbook.sheets) {
       this.loadSheet(sheet);
     }
   }
 
-  loadSheet(sheet: SheetData): void {
+  loadSheet(sheet: SheetData): { success: boolean; error?: Error } {
     try {
       const sheetName = this.uniqueSheetName(sheet.name);
       this.wb.addSheet(sheetName);
@@ -148,8 +152,11 @@ export class SpreadsheetEngine {
           this.wb.setValue(sheetName, r, c, cellData.value as string | number | boolean);
         }
       }
+      return { success: true };
     } catch (err) {
-      console.error(`[engine] Failed to load sheet "${sheet.name}":`, err);
+      const error = err instanceof Error ? err : new Error(String(err));
+      console.error(`[engine] Failed to load sheet "${sheet.name}":`, error);
+      return { success: false, error };
     }
   }
 
@@ -211,7 +218,7 @@ export class SpreadsheetEngine {
     resolveArg: (ref: string) => string | number | boolean | null,
   ): string | number | boolean | null {
     // Parse: =AI.FUNCTION_NAME(arg1, arg2, ...)
-    const match = formulaText.match(/^=(AI\.[A-Z_]+)\((.*)?\)$/i);
+    const match = formulaText.match(/^=(AI\.[A-Z0-9_-]+)\((.*)?\)$/i);
     if (!match) return '#NAME?';
 
     const funcName = match[1].toUpperCase();
@@ -239,7 +246,12 @@ export class SpreadsheetEngine {
       }
       // Range reference (A1:B10) — resolve to 2D array
       if (/^[A-Z]+\d+:[A-Z]+\d+$/i.test(arg)) {
-        return this._resolveRange(arg, resolveArg);
+        const rangeResult = this._resolveRange(arg, resolveArg);
+        // Check for ref error marker
+        if (rangeResult[0]?.[0] && typeof rangeResult[0][0] === 'object' && rangeResult[0][0].__refError) {
+          return '#REF!';
+        }
+        return rangeResult;
       }
       // Pass as string
       return arg;
@@ -250,7 +262,36 @@ export class SpreadsheetEngine {
 
   /** Check if a formula is an AI function */
   isAIFormula(formula: string): boolean {
-    return /^=AI\.[A-Z_]+\(/i.test(formula);
+    return /^=AI\.[A-Z0-9_-]+\(/i.test(formula);
+  }
+
+  /**
+   * Execute all AI formulas in the workbook.
+   * Placeholder for future use - currently store handles per-sheet execution.
+   */
+  executeAllAIFormulas(): void {
+    // Implementation would require access to store's cell data
+    // For now, store calls executeAIFormulasForSheet per sheet
+  }
+
+  /**
+   * Execute AI formulas for a specific sheet by scanning the store's cell data.
+   * This should be called from the store after loading workbook data.
+   */
+  executeAIFormulasForSheet(
+    sheetId: string,
+    cells: Record<string, { value: string | number | boolean | null; formula?: string }>,
+    resolveArg: (ref: string) => string | number | boolean | null
+  ): void {
+    const sheetName = this.sheetMapping.get(sheetId);
+    if (!sheetName) return;
+
+    for (const [cellId, cellData] of Object.entries(cells)) {
+      if (cellData.formula && this.isAIFormula(cellData.formula)) {
+        // Fire and forget - registry handles caching/dedup
+        this.executeAIFormula(cellId, cellData.formula, resolveArg);
+      }
+    }
   }
 
   private _resolveRange(
@@ -260,8 +301,13 @@ export class SpreadsheetEngine {
     const parts = rangeRef.split(':');
     if (parts.length !== 2) return [];
 
-    const start = cellToRef(parts[0].toUpperCase());
-    const end = cellToRef(parts[1].toUpperCase());
+    const start = tryCellToRef(parts[0].toUpperCase());
+    const end = tryCellToRef(parts[1].toUpperCase());
+
+    if (!start || !end) {
+      // Return a special marker that executeAIFormula can detect and convert to #REF!
+      return [[{ __refError: true }]];
+    }
 
     const minRow = Math.min(start.row, end.row);
     const maxRow = Math.max(start.row, end.row);
@@ -292,6 +338,14 @@ export class SpreadsheetEngine {
     }
     this._functionMap = m;
     return m;
+  }
+
+  /**
+   * Invalidate the function map cache so it rebuilds on next getFunctionInfo call.
+   * Call this after dynamically registering new functions.
+   */
+  invalidateFunctionMap(): void {
+    this._functionMap = null;
   }
 
   getFunctionInfo(name: string): { name: string; description: string; category: string; syntax: string } | null {
@@ -453,72 +507,26 @@ export class SpreadsheetEngine {
     startCol: number,
     endCol: number
   ): PivotResult {
-    const sourceRows: Record<string, (string | number | boolean | null)[]>[] = [];
-    for (let r = startRow; r <= endRow; r++) {
-      const row: Record<string, (string | number | boolean | null)[]> = {};
-      for (let c = startCol; c <= endCol; c++) {
-        const colLetter = colToLetter(c);
-        const cellId = refToCell(r, c);
-        row[colLetter] = [cells[cellId]?.value ?? null];
-      }
-      sourceRows.push(row);
-    }
+    return computePivotTable(cells, config, startRow, endRow, startCol, endCol);
+  }
 
-    const rowKeyMap = new Map<string, (string | number)[]>();
-    const colKeyMap = new Map<string, (string | number)[]>();
-    const valueAggMap = new Map<string, number[]>();
-
-    for (const sourceRow of sourceRows) {
-      const rowKeyParts = config.rows.map(f => String(sourceRow[f.sourceColumn]?.[0] ?? ''));
-      const rowKey = rowKeyParts.join('||');
-      if (!rowKeyMap.has(rowKey)) rowKeyMap.set(rowKey, rowKeyParts);
-
-      const colKeyParts = config.columns.map(f => String(sourceRow[f.sourceColumn]?.[0] ?? ''));
-      const colKey = colKeyParts.join('||');
-      if (!colKeyMap.has(colKey)) colKeyMap.set(colKey, colKeyParts);
-
-      for (let vfIdx = 0; vfIdx < config.values.length; vfIdx++) {
-        const vf = config.values[vfIdx];
-        const vfKey = `${rowKey}||${colKey}||${vfIdx}`;
-        const existing = valueAggMap.get(vfKey) || [];
-        const rawVal = sourceRow[vf.sourceColumn]?.[0];
-        const numVal = typeof rawVal === 'number' ? rawVal : parseFloat(String(rawVal));
-        if (!isNaN(numVal)) existing.push(numVal);
-        valueAggMap.set(vfKey, existing);
-      }
-    }
-
-    const rowFieldLabels = config.rows.map(f => f.label || f.sourceColumn);
-    const valueLabels = config.values.map(f => f.label || `${f.aggregation}(${f.sourceColumn})`);
-
-    const colKeys = Array.from(colKeyMap.keys());
-    const headers = [...rowFieldLabels, ...colKeys.flatMap(ck => {
-      const parts = colKeyMap.get(ck)!;
-      return valueLabels.map(vl => [...parts, vl].join(' '));
-    })];
-
-    const resultRows: (string | number)[][] = [];
-    for (const [rowKey, rowParts] of rowKeyMap) {
-      const row: (string | number)[] = [...rowParts];
-      for (const colKey of colKeys) {
-        for (let vfIdx = 0; vfIdx < config.values.length; vfIdx++) {
-          const vf = config.values[vfIdx];
-          const vfKey = `${rowKey}||${colKey}||${vfIdx}`;
-          const values = valueAggMap.get(vfKey) || [];
-          switch (vf.aggregation) {
-            case 'sum': row.push(values.reduce((a, b) => a + b, 0)); break;
-            case 'average': row.push(values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0); break;
-            case 'count': row.push(values.length); break;
-            case 'min': row.push(values.length ? Math.min(...values) : 0); break;
-            case 'max': row.push(values.length ? Math.max(...values) : 0); break;
-            case 'distinctCount': row.push(new Set(values).size); break;
-          }
-        }
-      }
-      resultRows.push(row);
-    }
-
-    return { headers, rows: resultRows, grandTotals: [] };
+  /**
+   * Reset the engine for a new workbook.
+   * Clears AI cache, pending calls, and rebuilds the formualizer workbook.
+   * Called by loadWorkbook to ensure clean state when switching workbooks.
+   */
+  reset(): void {
+    // Clear AI registry cache and pending calls
+    this._aiRegistry.clearCache();
+    // Note: pending calls will complete but update callback may target old cells
+    // This is acceptable as they'll be ignored (sheetMapping cleared below)
+    
+    // Recreate formualizer workbook and clear sheet mapping
+    this.wb = new Workbook();
+    this.sheetMapping.clear();
+    
+    // Invalidate function map cache so it rebuilds with current AI functions
+    this._functionMap = null;
   }
 
   destroy(): void {
