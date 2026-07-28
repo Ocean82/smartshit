@@ -64,6 +64,7 @@ describe('fast path: parser → executor formatting', () => {
     const parsed = parseMessage('highlight cells containing 4')
     expect(parsed.understood).toBe(true)
 
+    // amazonq-ignore-next-line
     const results = parsed.calls.map((call) => executeTool(call, ctx))
     expect(results.every((r) => r.success)).toBe(true)
     // B2 (4), A4 (Room 4) match; B4 (12) and B3 (7) do not

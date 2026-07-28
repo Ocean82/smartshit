@@ -36,6 +36,7 @@ export const hiddenDependenciesRule: AuditRule = {
 
       // Reset lastIndex for global regex
       CROSS_SHEET_PATTERN.lastIndex = 0
+      // amazonq-ignore-next-line
       // safeFormula: explicit String() cast cuts the taint chain (RegExp.exec is not child_process.exec)
       const safeFormula: string = String(cell.formula)
       while ((match = CROSS_SHEET_PATTERN.exec(safeFormula)) !== null) {

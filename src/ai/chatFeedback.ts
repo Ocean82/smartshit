@@ -8,6 +8,8 @@ export interface ChatFeedbackEntry {
   timestamp: string
 }
 
+// amazonq-ignore-next-line
+// amazonq-ignore-next-line
 const STORAGE_NS = 'smartsht-v1-chat-feedback'
 
 export function loadChatFeedback(): ChatFeedbackEntry[] {

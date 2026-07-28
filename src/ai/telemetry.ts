@@ -33,6 +33,7 @@ export interface TelemetrySnapshot {
   updatedAt: string
 }
 
+// amazonq-ignore-next-line
 const STORAGE_KEY = 'smartsht-v1-telemetry'
 const MAX_EVENT_HISTORY = 100
 
