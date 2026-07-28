@@ -63,6 +63,11 @@ export function refToCell(row: number, col: number): string {
  */
 export function computedValueToString(val: unknown): string {
   if (val === null || val === undefined) return '';
+  if (typeof val === 'object') {
+    const detailed = val as { value?: unknown };
+    if (typeof detailed.value === 'string' && detailed.value) return detailed.value;
+    return '#ERROR!';
+  }
   return String(val);
 }
 

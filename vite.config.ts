@@ -20,6 +20,9 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['src/**/*.test.ts', 'shared/**/*.test.ts'],
+    alias: {
+      '@ocean8219/formualizer': new URL('src/__mocks__/@ocean8219/formualizer.ts', import.meta.url).pathname,
+    },
   },
   server: {
     proxy: {
