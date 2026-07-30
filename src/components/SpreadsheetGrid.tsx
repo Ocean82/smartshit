@@ -154,13 +154,24 @@ export function SpreadsheetGrid() {
   }, [activeFilters, getComputedValue, sheet]);
 
   // ─── Viewport (virtualization) ─────────────────────────────────────────────
+  // Column width & resize state (must be declared before useGridViewport)
+  const [columnWidths, setColumnWidths] = useState<Record<number, number>>({});
+  const [resizingCol, setResizingCol] = useState<number | null>(null);
+  const [resizeStartX, setResizeStartX] = useState(0);
+  const [resizeStartWidth, setResizeStartWidth] = useState(0);
+  const [showFindReplace, setShowFindReplace] = useState(false);
+
+  const getColWidth = useCallback((col: number) => {
+    return columnWidths[col] || sheet.columnWidths[col] || DEFAULT_CELL_WIDTH;
+  }, [columnWidths, sheet.columnWidths]);
+
   const viewport = useGridViewport({
     sheet,
     getComputedValue,
     columnWidths: sheet.columnWidths,
     activeFilters,
     activeSortConfig,
-    getColWidth: (col: number) => columnWidths[col] || sheet.columnWidths[col] || DEFAULT_CELL_WIDTH,
+    getColWidth,
   });
 
   // ─── Selection & Editing ───────────────────────────────────────────────────
@@ -181,16 +192,7 @@ export function SpreadsheetGrid() {
     setSelection: selectionManager.setSelection,
   });
 
-  // ─── Column width & resize ─────────────────────────────────────────────────
-  const [columnWidths, setColumnWidths] = useState<Record<number, number>>({});
-  const [resizingCol, setResizingCol] = useState<number | null>(null);
-  const [resizeStartX, setResizeStartX] = useState(0);
-  const [resizeStartWidth, setResizeStartWidth] = useState(0);
-  const [showFindReplace, setShowFindReplace] = useState(false);
-
-  const getColWidth = useCallback((col: number) => {
-    return columnWidths[col] || sheet.columnWidths[col] || DEFAULT_CELL_WIDTH;
-  }, [columnWidths, sheet.columnWidths]);
+  // ─── Column resize handlers ─────────────────────────────────────────────────
 
   // Column resize
   const handleResizeStart = useCallback((col: number, e: React.MouseEvent) => {
