@@ -61,16 +61,6 @@ export function SpreadsheetGrid() {
 
   const sheet = getActiveSheet();
   const notesService = getCellNotesService();
-  const storeState = useStore.getState();
-  console.log('[SpreadsheetGrid] render', {
-    cellCount: Object.keys(sheet?.cells ?? {}).length,
-    sampleCells: Object.keys(sheet?.cells ?? {}).slice(0, 5),
-    sheetName: sheet?.name,
-    activeSheetId: storeState.activeSheetId,
-    columns: sheet?.columnWidths ? Object.keys(sheet.columnWidths).length : 0,
-    gridVisible: storeState.activePanel,
-    workbookSheets: storeState.workbook?.sheets?.length,
-  });
 
   const pendingPreview = useMemo(
     () => findActivePendingPreview(messages),
@@ -183,24 +173,13 @@ export function SpreadsheetGrid() {
     activeSortConfig,
     getColWidth,
   });
-  console.log('[SpreadsheetGrid] viewport', {
-    totalRows: viewport.TOTAL_ROWS,
-    totalCols: viewport.TOTAL_COLS,
-    visibleRange: viewport.visibleRange,
-    totalWidth: viewport.totalWidth,
-    totalHeight: viewport.totalHeight,
-  });
-  if (sheet?.cells && Object.keys(sheet.cells).length > 0) {
-    const firstId = Object.keys(sheet.cells)[0];
-    const firstRef = cellToRef(firstId);
-    const computed = getComputedValue(firstRef.row, firstRef.col);
-    console.log('[SpreadsheetGrid] first cell', {
-      id: firstId,
-      ref: firstRef,
-      data: sheet.cells[firstId],
-      computed,
-    });
-  }
+
+  // Reset local column width overrides when a new workbook is imported.
+  // Without this, resize handles from the previous file persist onto the new sheet.
+  const workbookId = useStore((s) => s.workbook.id);
+  useEffect(() => {
+    setColumnWidths({});
+  }, [workbookId]);
 
   // ─── Selection & Editing ───────────────────────────────────────────────────
   const selectionManager = useSelectionManager({
@@ -334,9 +313,7 @@ export function SpreadsheetGrid() {
       onTouchEnd={onGridTouchEnd}
       style={{ outline: 'none', userSelect: 'none', WebkitOverflowScrolling: 'touch' }}
     >
-      <div style={{ minWidth: ROW_HEADER_WIDTH + viewport.totalWidth + 20, height: viewport.totalHeight + COL_HEADER_HEIGHT, backgroundColor: 'red', position: 'relative' }}>
-        {/* Debug marker to confirm grid area renders */}
-        <div style={{ position: 'absolute', top: 0, left: 0, width: 100, height: 28, backgroundColor: 'lime', color: 'black', zIndex: 999999, fontSize: 10, lineHeight: '28px', paddingLeft: 4, fontWeight: 'bold' }}>DEBUG</div>
+      <div style={{ minWidth: ROW_HEADER_WIDTH + viewport.totalWidth + 20, height: viewport.totalHeight + COL_HEADER_HEIGHT, position: 'relative' }}>
         {/* Selection range overlay */}
         <SelectionOverlay
           getColWidth={getColWidth}
@@ -426,13 +403,12 @@ export function SpreadsheetGrid() {
                   {row + 1}
                 </div>
                 {/*
-                 * Cell container — mirrors GridHeaders' positioning strategy:
-                 * positioned at baseOffset so each GridCell's colOffset lands
-                 * on the correct pixel when scrolled horizontally.
+                 * Cell container — ROW_HEADER_WIDTH skips the sticky row-number
+                 * gutter; baseOffset skips columns scrolled off-screen to the left.
                  */}
                 <div
                   className="absolute"
-                  style={{ left: viewport.visibleColOffsets.baseOffset, height: CELL_HEIGHT }}
+                  style={{ left: ROW_HEADER_WIDTH + viewport.visibleColOffsets.baseOffset, height: CELL_HEIGHT }}
                 >
                   {Array.from({ length: viewport.visibleRange.endCol - viewport.visibleRange.startCol + 1 }, (_, j) => {
                     const col = viewport.visibleRange.startCol + j;

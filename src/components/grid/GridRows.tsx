@@ -155,14 +155,16 @@ export function GridRows({
           </div>
 
           {/*
-           * Cell container — mirrors GridHeaders' positioning strategy exactly:
-           * positioned at baseOffset so that each GridCell's colOffset (which is
-           * relative to baseOffset) lands on the correct pixel.
+           * Cell container — positioned at ROW_HEADER_WIDTH + baseOffset.
+           * ROW_HEADER_WIDTH skips the sticky row-number gutter.
+           * baseOffset skips the columns scrolled off-screen to the left.
+           * Each GridCell then uses colOffset (relative to baseOffset) for its
+           * final left position, matching how column headers are placed.
            */}
           <div
             className="absolute"
             style={{
-              left: visibleColOffsets.baseOffset,
+              left: ROW_HEADER_WIDTH + visibleColOffsets.baseOffset,
               height: CELL_HEIGHT,
             }}
           >
