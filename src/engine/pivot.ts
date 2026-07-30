@@ -1,5 +1,5 @@
 import type { PivotConfig, PivotResult } from '@/types';
-import { colToLetter, refToCell } from './spreadsheet';
+import { colToLetter, refToCell } from '@/lib/cellRef';
 
 export interface PivotField {
   sourceColumn: string;

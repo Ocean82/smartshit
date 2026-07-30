@@ -9,7 +9,7 @@
  * - aiFunctionDefinitions (AI function argument splitting)
  */
 
-import { cellToRef, tryCellToRef, refToCell, colToLetter, letterToCol } from '@/engine/spreadsheet';
+import { cellToRef, tryCellToRef, refToCell, colToLetter, letterToCol } from './cellRef';
 
 export interface CellRef {
   row: number;
@@ -242,4 +242,4 @@ export function escapeRegex(str: string): string {
  * Get the column letter for a 0-based column index.
  * Re-export from spreadsheet engine for convenience.
  */
-export { colToLetter, letterToCol, refToCell, cellToRef, tryCellToRef } from '@/engine/spreadsheet';
+export { colToLetter, letterToCol, refToCell, cellToRef, tryCellToRef } from './cellRef';
