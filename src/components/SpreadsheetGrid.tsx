@@ -404,7 +404,14 @@ export function SpreadsheetGrid() {
               row >= Math.min(selectionManager.selection.startRow, selectionManager.selection.endRow) &&
               row <= Math.max(selectionManager.selection.startRow, selectionManager.selection.endRow);
             return (
-              <div key={`${displayIndex}-${row}`} className="flex absolute" role="row" aria-rowindex={row + 2} style={{ height: CELL_HEIGHT, top: displayIndex * CELL_HEIGHT }}>
+              <div
+                key={`${displayIndex}-${row}`}
+                className="absolute"
+                role="row"
+                aria-rowindex={row + 2}
+                style={{ height: CELL_HEIGHT, top: displayIndex * CELL_HEIGHT, left: 0, right: 0 }}
+              >
+                {/* Sticky row-number gutter — always anchored to the left edge */}
                 <div
                   role="rowheader"
                   aria-colindex={1}
@@ -413,23 +420,28 @@ export function SpreadsheetGrid() {
                       ? 'bg-blue-100 text-blue-700 border-blue-300'
                       : 'bg-gradient-to-r from-gray-50 to-gray-100 text-gray-500 hover:bg-gray-200'
                   }`}
-                  style={{ width: ROW_HEADER_WIDTH, height: CELL_HEIGHT, top: displayIndex * CELL_HEIGHT }}
+                  style={{ width: ROW_HEADER_WIDTH, height: CELL_HEIGHT }}
                   onClick={() => selectionManager.handleRowSelect(row)}
                 >
                   {row + 1}
                 </div>
-                <div className="relative" style={{ width: viewport.totalWidth, height: CELL_HEIGHT }}>
+                {/*
+                 * Cell container — mirrors GridHeaders' positioning strategy:
+                 * positioned at baseOffset so each GridCell's colOffset lands
+                 * on the correct pixel when scrolled horizontally.
+                 */}
+                <div
+                  className="absolute"
+                  style={{ left: viewport.visibleColOffsets.baseOffset, height: CELL_HEIGHT }}
+                >
                   {Array.from({ length: viewport.visibleRange.endCol - viewport.visibleRange.startCol + 1 }, (_, j) => {
                     const col = viewport.visibleRange.startCol + j;
                     const cellId = refToCell(row, col);
-                    const cellData = sheet.cells[cellId];
                     const selected = selectionManager.isSelected(row, col);
                     const active = selectionManager.isActiveCell(row, col);
                     const crosshair = !active && !selected && selectionManager.selection != null &&
                       (row === selectionManager.selection.startRow || col === selectionManager.selection.startCol);
                     const isEditingCell = editingController.editingCell === cellId;
-                    const computed = getComputedValue(row, col);
-                    const pendingChange = pendingPreview?.changeByCell.get(cellId) ?? null;
 
                     return (
                       <GridCell
@@ -441,9 +453,9 @@ export function SpreadsheetGrid() {
                         computed={getComputedValue(row, col)}
                         colWidth={getColWidth(col)}
                         cellHeight={CELL_HEIGHT}
-                        isEditing={editingController.editingCell === cellId}
-                        isActive={selectionManager.isActiveCell(row, col)}
-                        isSelected={selectionManager.isSelected(row, col)}
+                        isEditing={isEditingCell}
+                        isActive={active}
+                        isSelected={selected}
                         isCrosshair={crosshair}
                         editValue={editingController.editValue}
                         hasNote={notesService.hasNote(sheet.id, cellId)}

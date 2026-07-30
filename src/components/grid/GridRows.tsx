@@ -125,7 +125,21 @@ export function GridRows({
         row >= Math.min(selection.startRow, selection.endRow) &&
         row <= Math.max(selection.startRow, selection.endRow);
       rows.push(
-        <div key={`${displayIndex}-${row}`} className="flex absolute" role="row" aria-rowindex={row + 2} style={{ height: CELL_HEIGHT, top: displayIndex * CELL_HEIGHT }}>
+        <div
+          key={`${displayIndex}-${row}`}
+          className="absolute flex"
+          role="row"
+          aria-rowindex={row + 2}
+          style={{
+            height: CELL_HEIGHT,
+            top: displayIndex * CELL_HEIGHT,
+            // Row header is sticky-left so it must live at left:0.
+            // Cells are positioned relative to baseOffset (same as GridHeaders).
+            left: 0,
+            right: 0,
+          }}
+        >
+          {/* Sticky row-number gutter — always anchored to the left edge */}
           <div
             role="rowheader"
             aria-colindex={1}
@@ -134,20 +148,30 @@ export function GridRows({
                 ? 'bg-blue-100 text-blue-700 border-blue-300'
                 : 'bg-gradient-to-r from-gray-50 to-gray-100 text-gray-500 hover:bg-gray-200'
             }`}
-            style={{ width: ROW_HEADER_WIDTH, height: CELL_HEIGHT, top: displayIndex * CELL_HEIGHT }}
+            style={{ width: ROW_HEADER_WIDTH, height: CELL_HEIGHT }}
             onClick={() => handleRowSelect(row)}
           >
             {row + 1}
           </div>
-          <div className="relative" style={{ width: totalWidth, height: CELL_HEIGHT }}>
+
+          {/*
+           * Cell container — mirrors GridHeaders' positioning strategy exactly:
+           * positioned at baseOffset so that each GridCell's colOffset (which is
+           * relative to baseOffset) lands on the correct pixel.
+           */}
+          <div
+            className="absolute"
+            style={{
+              left: visibleColOffsets.baseOffset,
+              height: CELL_HEIGHT,
+            }}
+          >
             {Array.from({ length: visibleRange.endCol - visibleRange.startCol + 1 }, (_, j) => {
               const col = visibleRange.startCol + j;
               const cellId = refToCell(row, col);
               const cellData = sheet.cells[cellId];
               const selected = isSelected(row, col);
               const active = isActiveCell(row, col);
-              const crosshair = !active && !selected && selection != null &&
-                (row === selection.startRow || col === selection.startCol);
               const isEditingCell = editingCell === cellId;
               const computed = getComputedValue(row, col);
               const pendingChange = pendingPreview?.changeByCell.get(cellId) ?? null;
@@ -165,7 +189,7 @@ export function GridRows({
                   isEditing={isEditingCell}
                   isActive={active}
                   isSelected={selected}
-                  isCrosshair={crosshair}
+                  isCrosshair={isCrosshair(row, col)}
                   editValue={editValue}
                   hasNote={notesService.hasNote(sheet.id, cellId)}
                   noteText={notesService.getNote(sheet.id, cellId)?.text ?? ''}
@@ -216,14 +240,12 @@ export function GridRows({
     pendingChangeByCell,
     editContainerRef,
     inputRef,
-    totalWidth,
     visibleColOffsets,
     getColWidth,
     sheet,
     CELL_HEIGHT,
     ROW_HEADER_WIDTH,
-    editContainerRef,
-    inputRef,
+    handleRowSelect,
     onMouseDown,
     onMouseMove,
     onDoubleClick,
