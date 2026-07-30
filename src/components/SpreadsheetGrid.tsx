@@ -14,7 +14,6 @@ import { findActivePendingPreview } from '@/lib/pendingActionPreview';
 import { useTouch } from '@/hooks/useTouch';
 import { getCellNotesService } from '@/lib/cellNotes';
 import { GridCell } from './grid';
-import { GridHeaders } from './grid/GridHeaders';
 import { useGridViewport } from './grid/GridViewport';
 import { useEditingController } from './grid/EditingController';
 import { useSelectionManager } from './grid/SelectionManager';
@@ -313,8 +312,173 @@ export function SpreadsheetGrid() {
       onTouchEnd={onGridTouchEnd}
       style={{ outline: 'none', userSelect: 'none', WebkitOverflowScrolling: 'touch' }}
     >
-      <div style={{ minWidth: ROW_HEADER_WIDTH + viewport.totalWidth + 20, height: viewport.totalHeight + COL_HEADER_HEIGHT, position: 'relative' }}>
-        {/* Selection range overlay */}
+      {/*
+       * Scroll content — sized to the full virtual grid so the scrollbar reflects
+       * total content dimensions, even though only visible rows/cols are rendered.
+       */}
+      <div style={{ width: ROW_HEADER_WIDTH + viewport.totalWidth, height: COL_HEADER_HEIGHT + viewport.totalHeight, position: 'relative' }}>
+
+        {/* ── Sticky column header row ─────────────────────────────────────── */}
+        <div
+          className="flex"
+          style={{
+            position: 'sticky',
+            top: 0,
+            height: COL_HEADER_HEIGHT,
+            zIndex: 20,
+            width: ROW_HEADER_WIDTH + viewport.totalWidth,
+          }}
+        >
+          {/* Corner cell */}
+          <div
+            role="columnheader"
+            aria-label="Select all"
+            className="shrink-0 border-b border-r border-gray-300 bg-gray-100 flex items-center justify-center text-[10px] text-gray-400 font-medium cursor-pointer hover:bg-gray-200 sticky left-0 z-30"
+            style={{ width: ROW_HEADER_WIDTH, height: COL_HEADER_HEIGHT }}
+            onClick={() => useStore.getState().setSelection({ startRow: 0, startCol: 0, endRow: 9999, endCol: 9999 })}
+          >
+            ▾
+          </div>
+
+          {/* Spacer for columns scrolled off to the left */}
+          {viewport.visibleColOffsets.baseOffset > 0 && (
+            <div style={{ width: viewport.visibleColOffsets.baseOffset, height: COL_HEADER_HEIGHT, flexShrink: 0 }} />
+          )}
+
+          {/* Visible column headers */}
+          {Array.from({ length: viewport.visibleRange.endCol - viewport.visibleRange.startCol + 1 }, (_, j) => {
+            const col = viewport.visibleRange.startCol + j;
+            const isColSelected = selectionManager.selection &&
+              col >= Math.min(selectionManager.selection.startCol, selectionManager.selection.endCol) &&
+              col <= Math.max(selectionManager.selection.startCol, selectionManager.selection.endCol);
+            return (
+              <div
+                key={col}
+                role="columnheader"
+                aria-colindex={col + 2}
+                className={`relative group shrink-0 border-b border-r border-gray-300 flex items-center justify-center text-[11px] font-medium cursor-pointer transition-colors ${
+                  isColSelected
+                    ? 'bg-blue-100 text-blue-700 border-blue-300'
+                    : 'bg-gradient-to-b from-gray-50 to-gray-100 text-gray-500 hover:bg-gray-200'
+                }`}
+                style={{ width: getColWidth(col), height: COL_HEADER_HEIGHT }}
+                onClick={() => selectionManager.handleColSelect(col)}
+              >
+                {colToLetter(col)}
+                {activeSortConfig?.column === col && (
+                  <span className="ml-0.5 text-blue-500 text-[9px]">{activeSortConfig.direction === 'asc' ? '▲' : '▼'}</span>
+                )}
+                {activeFilters.some((f: any) => f.column === col) && (
+                  <span className="ml-0.5 text-amber-500 text-[9px]">⏷</span>
+                )}
+                <div
+                  className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-400 opacity-0 group-hover:opacity-100 z-10"
+                  onMouseDown={(e) => handleResizeStart(col, e)}
+                  onDoubleClick={(e) => { e.stopPropagation(); handleAutoFitColumn(col); }}
+                />
+              </div>
+            );
+          })}
+        </div>
+
+        {/* ── Virtualized data rows ────────────────────────────────────────── */}
+        {/*
+         * Top spacer pushes visible rows to their correct vertical position
+         * without rendering the invisible rows above them.
+         */}
+        <div style={{ height: viewport.rowOffset }} aria-hidden="true" />
+
+        {Array.from({ length: viewport.visibleRange.endRow - viewport.visibleRange.startRow + 1 }, (_, i) => {
+          const displayIndex = viewport.visibleRange.startRow + i;
+          const row = viewport.filteredRows ? viewport.filteredRows[displayIndex] : displayIndex;
+          if (row == null) return null;
+          const isRowSelected = selectionManager.selection &&
+            row >= Math.min(selectionManager.selection.startRow, selectionManager.selection.endRow) &&
+            row <= Math.max(selectionManager.selection.startRow, selectionManager.selection.endRow);
+
+          return (
+            <div
+              key={`${displayIndex}-${row}`}
+              className="flex"
+              role="row"
+              aria-rowindex={row + 2}
+              style={{ height: CELL_HEIGHT }}
+            >
+              {/* Sticky row-number gutter */}
+              <div
+                role="rowheader"
+                aria-colindex={1}
+                className={`shrink-0 border-b border-r border-gray-300 flex items-center justify-center text-[11px] font-medium cursor-pointer transition-colors sticky left-0 z-10 ${
+                  isRowSelected
+                    ? 'bg-blue-100 text-blue-700 border-blue-300'
+                    : 'bg-gradient-to-r from-gray-50 to-gray-100 text-gray-500 hover:bg-gray-200'
+                }`}
+                style={{ width: ROW_HEADER_WIDTH, height: CELL_HEIGHT }}
+                onClick={() => selectionManager.handleRowSelect(row)}
+              >
+                {row + 1}
+              </div>
+
+              {/* Spacer for columns scrolled off to the left */}
+              {viewport.visibleColOffsets.baseOffset > 0 && (
+                <div style={{ width: viewport.visibleColOffsets.baseOffset, height: CELL_HEIGHT, flexShrink: 0 }} />
+              )}
+
+              {/* Visible cells */}
+              {Array.from({ length: viewport.visibleRange.endCol - viewport.visibleRange.startCol + 1 }, (_, j) => {
+                const col = viewport.visibleRange.startCol + j;
+                const cellId = refToCell(row, col);
+                const selected = selectionManager.isSelected(row, col);
+                const active = selectionManager.isActiveCell(row, col);
+                const crosshair = !active && !selected && selectionManager.selection != null &&
+                  (row === selectionManager.selection.startRow || col === selectionManager.selection.startCol);
+                const isEditingCell = editingController.editingCell === cellId;
+
+                return (
+                  <GridCell
+                    key={col}
+                    row={row}
+                    col={col}
+                    cellId={cellId}
+                    cellData={sheet.cells[cellId]}
+                    computed={getComputedValue(row, col)}
+                    colWidth={getColWidth(col)}
+                    cellHeight={CELL_HEIGHT}
+                    isEditing={isEditingCell}
+                    isActive={active}
+                    isSelected={selected}
+                    isCrosshair={crosshair}
+                    editValue={editingController.editValue}
+                    hasNote={notesService.hasNote(sheet.id, cellId)}
+                    noteText={notesService.getNote(sheet.id, cellId)?.text ?? ''}
+                    pendingChange={pendingPreview?.changeByCell.get(cellId) ?? null}
+                    dataBarPeers={dataBarPeersByCol.get(col) ?? []}
+                    colorScalePeers={colorScalePeersByCol.get(col) ?? []}
+                    iconSetPeers={iconSetPeersByCol.get(col) ?? []}
+                    colOffset={0}
+                    editContainerRef={editingController.editContainerRef}
+                    inputRef={editingController.inputRef}
+                    onMouseDown={selectionManager.handleMouseDown}
+                    onMouseMove={selectionManager.handleMouseMove}
+                    onDoubleClick={selectionManager.handleCellDoubleClick}
+                    onContextMenu={selectionManager.handleContextMenu}
+                    onEditChange={editingController.setEditValue}
+                    onEditBlur={editingController.commitEdit}
+                    onCheckboxToggle={(cid, cd) => {
+                      const checked = cd.validation?.checkedValue ?? 'TRUE';
+                      const unchecked = cd.validation?.uncheckedValue ?? 'FALSE';
+                      const isChecked = cd.value === checked || (typeof cd.value === 'string' && cd.value.toUpperCase() === checked.toUpperCase()) || cd.value === 1 || cd.value === true;
+                      pushHistory('Toggle checkbox');
+                      setCellValue(cid, isChecked ? unchecked : checked);
+                    }}
+                  />
+                );
+              })}
+            </div>
+          );
+        })}
+
+        {/* Selection overlay — rendered on top of all cells */}
         <SelectionOverlay
           getColWidth={getColWidth}
           totalCols={viewport.TOTAL_COLS}
@@ -322,149 +486,16 @@ export function SpreadsheetGrid() {
           rowHeaderWidth={ROW_HEADER_WIDTH}
           colHeaderHeight={COL_HEADER_HEIGHT}
         />
+
         {/* Freeze pane indicators */}
-        {sheet.frozenRows && sheet.frozenRows > 0 && (
-          <div
-            className="absolute pointer-events-none z-[8]"
-            style={{
-              top: sheet.frozenRows * CELL_HEIGHT + COL_HEADER_HEIGHT,
-              left: 0,
-              right: 0,
-              height: 2,
-              backgroundColor: '#3b82f6',
-              opacity: 0.6,
-            }}
-          />
+        {sheet.frozenRows != null && sheet.frozenRows > 0 && (
+          <div className="absolute pointer-events-none z-[8]" style={{ top: sheet.frozenRows * CELL_HEIGHT + COL_HEADER_HEIGHT, left: 0, right: 0, height: 2, backgroundColor: '#3b82f6', opacity: 0.6 }} />
         )}
-        {sheet.frozenCols && sheet.frozenCols > 0 && (
-          <div
-            className="absolute pointer-events-none z-[8]"
-            style={{
-              top: 0,
-              left: (() => { let w = ROW_HEADER_WIDTH; for (let c = 0; c < (sheet.frozenCols ?? 0); c++) w += getColWidth(c); return w; })(),
-              bottom: 0,
-              width: 2,
-              backgroundColor: '#3b82f6',
-              opacity: 0.6,
-            }}
-          />
+        {sheet.frozenCols != null && sheet.frozenCols > 0 && (
+          <div className="absolute pointer-events-none z-[8]" style={{ top: 0, left: (() => { let w = ROW_HEADER_WIDTH; for (let c = 0; c < (sheet.frozenCols ?? 0); c++) w += getColWidth(c); return w; })(), bottom: 0, width: 2, backgroundColor: '#3b82f6', opacity: 0.6 }} />
         )}
-        {/* Column headers - sticky */}
-        <GridHeaders
-          visibleRange={viewport.visibleRange}
-          filteredRows={viewport.filteredRows}
-          totalWidth={viewport.totalWidth}
-          visibleColOffsets={viewport.visibleColOffsets}
-          getColWidth={getColWidth}
-          COL_HEADER_HEIGHT={COL_HEADER_HEIGHT}
-          ROW_HEADER_WIDTH={ROW_HEADER_WIDTH}
-          CELL_HEIGHT={CELL_HEIGHT}
-          selection={selectionManager.selection}
-          activeSortConfig={activeSortConfig}
-          activeFilters={activeFilters}
-          handleColSelect={selectionManager.handleColSelect}
-          handleRowSelect={selectionManager.handleRowSelect}
-          handleResizeStart={handleResizeStart}
-          handleAutoFitColumn={handleAutoFitColumn}
-          sheet={sheet}
-          getComputedValue={getComputedValue}
-          rowOffset={viewport.rowOffset}
-        />
-
-        {/* Rows - virtualized */}
-        <div className="relative" style={{ top: viewport.rowOffset }}>
-          {Array.from({ length: Math.max(0, viewport.visibleRange.endRow - viewport.visibleRange.startRow + 1) }, (_, i) => {
-            const displayIndex = viewport.visibleRange.startRow + i;
-            const row = viewport.filteredRows ? viewport.filteredRows[displayIndex] : displayIndex;
-            if (row == null) return null;
-            const isRowSelected = selectionManager.selection &&
-              row >= Math.min(selectionManager.selection.startRow, selectionManager.selection.endRow) &&
-              row <= Math.max(selectionManager.selection.startRow, selectionManager.selection.endRow);
-            return (
-              <div
-                key={`${displayIndex}-${row}`}
-                className="absolute"
-                role="row"
-                aria-rowindex={row + 2}
-                style={{ height: CELL_HEIGHT, top: displayIndex * CELL_HEIGHT, left: 0, right: 0 }}
-              >
-                {/* Sticky row-number gutter — always anchored to the left edge */}
-                <div
-                  role="rowheader"
-                  aria-colindex={1}
-                  className={`border-b border-r border-gray-300 flex items-center justify-center text-[11px] font-medium shrink-0 sticky left-0 z-10 cursor-pointer transition-colors ${
-                    isRowSelected
-                      ? 'bg-blue-100 text-blue-700 border-blue-300'
-                      : 'bg-gradient-to-r from-gray-50 to-gray-100 text-gray-500 hover:bg-gray-200'
-                  }`}
-                  style={{ width: ROW_HEADER_WIDTH, height: CELL_HEIGHT }}
-                  onClick={() => selectionManager.handleRowSelect(row)}
-                >
-                  {row + 1}
-                </div>
-                {/*
-                 * Cell container — ROW_HEADER_WIDTH skips the sticky row-number
-                 * gutter; baseOffset skips columns scrolled off-screen to the left.
-                 */}
-                <div
-                  className="absolute"
-                  style={{ left: ROW_HEADER_WIDTH + viewport.visibleColOffsets.baseOffset, height: CELL_HEIGHT }}
-                >
-                  {Array.from({ length: viewport.visibleRange.endCol - viewport.visibleRange.startCol + 1 }, (_, j) => {
-                    const col = viewport.visibleRange.startCol + j;
-                    const cellId = refToCell(row, col);
-                    const selected = selectionManager.isSelected(row, col);
-                    const active = selectionManager.isActiveCell(row, col);
-                    const crosshair = !active && !selected && selectionManager.selection != null &&
-                      (row === selectionManager.selection.startRow || col === selectionManager.selection.startCol);
-                    const isEditingCell = editingController.editingCell === cellId;
-
-                    return (
-                      <GridCell
-                        key={col}
-                        row={row}
-                        col={col}
-                        cellId={cellId}
-                        cellData={sheet.cells[cellId]}
-                        computed={getComputedValue(row, col)}
-                        colWidth={getColWidth(col)}
-                        cellHeight={CELL_HEIGHT}
-                        isEditing={isEditingCell}
-                        isActive={active}
-                        isSelected={selected}
-                        isCrosshair={crosshair}
-                        editValue={editingController.editValue}
-                        hasNote={notesService.hasNote(sheet.id, cellId)}
-                        noteText={notesService.getNote(sheet.id, cellId)?.text ?? ''}
-                        pendingChange={pendingPreview?.changeByCell.get(cellId) ?? null}
-                        dataBarPeers={dataBarPeersByCol.get(col) ?? []}
-                        colorScalePeers={colorScalePeersByCol.get(col) ?? []}
-                        iconSetPeers={iconSetPeersByCol.get(col) ?? []}
-                        colOffset={viewport.visibleColOffsets.offsets[j]}
-                        editContainerRef={editingController.editContainerRef}
-                        inputRef={editingController.inputRef}
-                        onMouseDown={selectionManager.handleMouseDown}
-                        onMouseMove={selectionManager.handleMouseMove}
-                        onDoubleClick={selectionManager.handleCellDoubleClick}
-                        onContextMenu={selectionManager.handleContextMenu}
-                        onEditChange={editingController.setEditValue}
-                        onEditBlur={editingController.commitEdit}
-                        onCheckboxToggle={(cid, cd) => {
-                          const checked = cd.validation?.checkedValue ?? 'TRUE';
-                          const unchecked = cd.validation?.uncheckedValue ?? 'FALSE';
-                          const isChecked = cd.value === checked || (typeof cd.value === 'string' && cd.value.toUpperCase() === checked.toUpperCase()) || cd.value === 1 || cd.value === true;
-                          pushHistory('Toggle checkbox');
-                          setCellValue(cid, isChecked ? unchecked : checked);
-                        }}
-                      />
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })}
-        </div>
       </div>
+
       <FormulaAutocomplete
         visible={!!editingController.editingCell && editingController.editValue.startsWith('=')}
         editValue={editingController.editValue}
@@ -477,41 +508,21 @@ export function SpreadsheetGrid() {
         <div className="sticky bottom-0 left-0 right-0 z-40 flex items-center justify-between gap-3 px-3 py-2 bg-emerald-700 text-white shadow-lg border-t border-emerald-500">
           <div className="min-w-0 text-xs">
             <span className="font-bold tracking-wide">AI action staged: </span>
-            <span className="font-medium text-emerald-100 truncate">
-              {pendingPreview.action.description}
-            </span>
-            <span className="ml-2 text-emerald-200">
-              ({pendingPreview.changes.length} cell{pendingPreview.changes.length === 1 ? '' : 's'})
-            </span>
+            <span className="font-medium text-emerald-100 truncate">{pendingPreview.action.description}</span>
+            <span className="ml-2 text-emerald-200">({pendingPreview.changes.length} cell{pendingPreview.changes.length === 1 ? '' : 's'})</span>
           </div>
           <div className="flex gap-2 shrink-0">
-            <button
-              type="button"
-              className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold bg-white text-emerald-800 rounded-lg hover:bg-emerald-50 transition-colors"
-              onClick={() => applyAction(pendingPreview.action.id)}
-            >
-              <Check size={12} />
-              Apply
+            <button type="button" className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold bg-white text-emerald-800 rounded-lg hover:bg-emerald-50 transition-colors" onClick={() => applyAction(pendingPreview.action.id)}>
+              <Check size={12} /> Apply
             </button>
-            <button
-              type="button"
-              className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold bg-emerald-900/40 text-white rounded-lg border border-emerald-400/50 hover:bg-emerald-900/60 transition-colors"
-              onClick={() => rejectAction(pendingPreview.action.id)}
-            >
-              <XCircle size={12} />
-              Reject
+            <button type="button" className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold bg-emerald-900/40 text-white rounded-lg border border-emerald-400/50 hover:bg-emerald-900/60 transition-colors" onClick={() => rejectAction(pendingPreview.action.id)}>
+              <XCircle size={12} /> Reject
             </button>
           </div>
         </div>
       )}
 
-      {/* Screen reader live region — announces selection changes */}
-      <div
-        role="status"
-        aria-live="polite"
-        aria-atomic="true"
-        className="sr-only"
-      >
+      <div role="status" aria-live="polite" aria-atomic="true" className="sr-only">
         {selectionManager.selection && `Cell ${colToLetter(selectionManager.selection.startCol)}${selectionManager.selection.startRow + 1} selected`}
       </div>
     </div>

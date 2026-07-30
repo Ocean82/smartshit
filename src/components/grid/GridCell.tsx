@@ -159,8 +159,8 @@ export const GridCell = memo(function GridCell({
       style={{
         width: colWidth,
         height: cellHeight,
-        position: 'absolute',
-        left: colOffset,
+        flexShrink: 0,
+        position: 'relative',
         ...getCellStyle(resolveCellFormat(cellData?.format, computed), rawValue),
         ...(colorScaleBg && !pendingChange ? { backgroundColor: colorScaleBg } : {}),
         ...(pendingChange ? { backgroundColor: undefined } : {}),
