@@ -1,6 +1,5 @@
 import React, { useMemo } from 'react';
 import { useStore } from '@/store/useStore';
-import { refToCell } from '@/engine/spreadsheet';
 import type { CellData } from '@/types';
 
 interface GridCanvasProps {
@@ -9,26 +8,34 @@ interface GridCanvasProps {
   className?: string;
 }
 
-export function GridCanvas({ maxRows = 50, maxCols = 26, className }: GridCanvasProps) {
-  const sheet = useStore((s) => s.workbook?.sheets[s.activeSheetId ?? 0]);
+/** Extract numeric row index from a cell ref like "A1" -> 0 */
+function rowFromRef(ref: string): number {
+  const m = ref.match(/(\d+)$/);
+  return m ? parseInt(m[1], 10) - 1 : -1;
+}
 
-  const visibleCells = useMemo(() => {
+export function GridCanvas({ maxRows = 50, maxCols = 26, className }: GridCanvasProps) {
+  const sheet = useStore((s) => {
+    const wb = s.workbook;
+    if (!wb) return undefined;
+    return wb.sheets.find((sh) => sh.id === wb.activeSheetId) ?? wb.sheets[0];
+  });
+
+  const rowsByIndex = useMemo(() => {
     if (!sheet) return [];
-    const rows: Array<{ row: number; cells: Array<{ col: number; id: string; data?: CellData }> }> = [];
-    for (let r = 0; r < Math.min(sheet.cells.length ?? 0, maxRows); r++) {
-      const rowCells: Array<{ col: number; id: string; data?: CellData }> = [];
-      for (let c = 0; c < maxCols; c++) {
-        const id = refToCell(r, c);
-        const data = sheet.cells[id];
-        if (data && data.value != null && data.value !== '') {
-          rowCells.push({ col: c, id, data });
-        }
-      }
-      if (rowCells.length > 0) {
-        rows.push({ row: r, cells: rowCells });
-      }
+    const map = new Map<number, Array<{ col: number; data: CellData }>>();
+    for (const [ref, data] of Object.entries(sheet.cells)) {
+      const col = ref.charCodeAt(0) - 65;
+      if (col < 0 || col >= maxCols) continue;
+      const row = rowFromRef(ref);
+      if (row < 0 || row >= maxRows) continue;
+      if (data.value == null || data.value === '') continue;
+      const r = map.get(row);
+      if (r) r.push({ col, data });
+      else map.set(row, [{ col, data }]);
     }
-    return rows;
+    const sorted = [...map.entries()].sort(([a], [b]) => a - b);
+    return sorted.map(([row, cells]) => ({ row, cells: cells.sort((a, b) => a.col - b.col) }));
   }, [sheet, maxRows, maxCols]);
 
   if (!sheet) {
@@ -49,7 +56,7 @@ export function GridCanvas({ maxRows = 50, maxCols = 26, className }: GridCanvas
           </tr>
         </thead>
         <tbody>
-          {visibleCells.map(({ row, cells }) => (
+          {rowsByIndex.map(({ row, cells }) => (
             <tr key={row}>
               <td className="border px-1 py-0.5 bg-muted text-muted-foreground text-center">{row + 1}</td>
               {Array.from({ length: maxCols }, (_, c) => {
