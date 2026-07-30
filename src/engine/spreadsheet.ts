@@ -188,11 +188,11 @@ export class SpreadsheetEngine {
   ): Promise<string | number | boolean | null> {
     const useFormualizer = typeof FormulaDialect !== 'undefined' && typeof parse === 'function';
 
-    let funcName = '';
-    let resolvedArgs: (string | number | boolean | null | (string | number | boolean | null)[][])[] = [];
+    let funcName!: string;
+    const resolvedArgs: (string | number | boolean | null | (string | number | boolean | null)[][])[] = [];
 
     if (useFormualizer) {
-      let ast: ASTNodeData | null = null;
+      let ast: ASTNodeData | null;
       try {
         ast = await parse(formulaText, FormulaDialect.Excel);
       } catch (e) {
@@ -501,8 +501,7 @@ case 'function': {
         category: 'Formulas',
         syntax: `${fn.name}(${Array.from({ length: fn.minArgs }, (_, i) => `arg${i + 1}`).join(', ')}${fn.maxArgs === null || fn.maxArgs > fn.minArgs ? ', ...' : ''})`,
       }));
-    } catch {
-    }
+    } catch { /* formualizer unavailable */ }
 
     const fallback = [...this.getFallbackFunctions(), ...this.getExtendedFunctions()];
     const aiFunctions = getAIFunctionList(this._aiRegistry);
@@ -539,8 +538,7 @@ case 'function': {
           });
         }
       }
-    } catch {
-    }
+    } catch { /* formualizer unavailable */ }
     this._functionMap = m;
     return m;
   }
