@@ -3,6 +3,15 @@ import { cellToRef, refToCell } from '@/engine/spreadsheet';
 import { X, Move } from 'lucide-react';
 import React, { useState, useCallback, useRef, useMemo } from 'react';
 import type { ChartConfig, TrendLineConfig, AxisConfig } from '@/types';
+import {
+  linearRegression,
+  computeTrendValues,
+  formatTrendEquation,
+  parseRangeRef,
+  columnLetterToIndex,
+  columnIndexToLetter,
+  cellRefToString,
+} from '@/lib/chartMath';
 
 export function ChartOverlay() {
   const { getActiveSheet, removeChart } = useStore();
@@ -31,106 +40,7 @@ interface MultiSeriesChartData {
 }
 
 // --- Trend Line Computations ---
-
-function linearRegression(values: number[]): { slope: number; intercept: number } {
-  const n = values.length;
-  if (n < 2) return { slope: 0, intercept: values[0] || 0 };
-  let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
-  for (let i = 0; i < n; i++) {
-    sumX += i;
-    sumY += values[i];
-    sumXY += i * values[i];
-    sumX2 += i * i;
-  }
-  const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
-  const intercept = (sumY - slope * sumX) / n;
-  return { slope, intercept };
-}
-
-function computeTrendValues(values: number[], config: TrendLineConfig): number[] {
-  const n = values.length;
-  if (n < 2) return values;
-
-  switch (config.type) {
-    case 'linear': {
-      const { slope, intercept } = linearRegression(values);
-      return values.map((_, i) => slope * i + intercept);
-    }
-    case 'movingAverage': {
-      const period = config.period || 3;
-      return values.map((_, i) => {
-        const start = Math.max(0, i - period + 1);
-        const window = values.slice(start, i + 1);
-        return window.reduce((a, b) => a + b, 0) / window.length;
-      });
-    }
-    case 'exponential': {
-      // ln(y) = a + bx → y = e^(a+bx)
-      const logValues = values.map((v) => (v > 0 ? Math.log(v) : 0));
-      const { slope, intercept } = linearRegression(logValues);
-      return values.map((_, i) => Math.exp(intercept + slope * i));
-    }
-    case 'polynomial': {
-      const degree = Math.min(config.degree || 2, 4);
-      const coeffs = polyFit(values, degree);
-      return values.map((_, i) => {
-        let y = 0;
-        for (let d = 0; d <= degree; d++) y += coeffs[d] * Math.pow(i, d);
-        return y;
-      });
-    }
-    default:
-      return values;
-  }
-}
-
-/** Simple least-squares polynomial fit (degree 2–4). Returns coefficients [a0, a1, ..., an]. */
-function polyFit(values: number[], degree: number): number[] {
-  const n = values.length;
-  const size = degree + 1;
-  // Build normal equations: X^T * X * a = X^T * y
-  const matrix: number[][] = Array.from({ length: size }, () => Array(size + 1).fill(0));
-  for (let row = 0; row < size; row++) {
-    for (let col = 0; col < size; col++) {
-      for (let i = 0; i < n; i++) {
-        matrix[row][col] += Math.pow(i, row + col);
-      }
-    }
-    for (let i = 0; i < n; i++) {
-      matrix[row][size] += values[i] * Math.pow(i, row);
-    }
-  }
-  // Gaussian elimination
-  for (let col = 0; col < size; col++) {
-    let maxRow = col;
-    for (let row = col + 1; row < size; row++) {
-      if (Math.abs(matrix[row][col]) > Math.abs(matrix[maxRow][col])) maxRow = row;
-    }
-    [matrix[col], matrix[maxRow]] = [matrix[maxRow], matrix[col]];
-    const pivot = matrix[col][col];
-    if (Math.abs(pivot) < 1e-10) continue;
-    for (let j = col; j <= size; j++) matrix[col][j] /= pivot;
-    for (let row = 0; row < size; row++) {
-      if (row === col) continue;
-      const factor = matrix[row][col];
-      for (let j = col; j <= size; j++) matrix[row][j] -= factor * matrix[col][j];
-    }
-  }
-  return matrix.map((row) => row[size]);
-}
-
-function formatEquation(values: number[], config: TrendLineConfig): string {
-  if (config.type === 'linear') {
-    const { slope, intercept } = linearRegression(values);
-    const sign = intercept >= 0 ? '+' : '-';
-    return `y = ${slope.toFixed(2)}x ${sign} ${Math.abs(intercept).toFixed(2)}`;
-  }
-  if (config.type === 'movingAverage') return `MA(${config.period || 3})`;
-  if (config.type === 'exponential') return 'y = ae^(bx)';
-  return `poly(${config.degree || 2})`;
-}
-
-// --- Data Parsing ---
+// Using shared utilities from @/lib/chartMath
 
 function parseMultiSeriesData(
   chart: ChartConfig,
@@ -471,7 +381,7 @@ function LineChart({ data, maxVal, fill, trendLine, scatter, axisConfig }: {
             <path d={trendPath} fill="none" stroke={trendColor} strokeWidth={1.5} strokeDasharray="4 3" opacity={0.7} />
             {trendLine.showEquation && sIdx === 0 && (
               <text x={padding + 4} y={padding - 4} fontSize={7} fill={trendColor} opacity={0.8}>
-                {formatEquation(series.values, trendLine)}
+                {formatTrendEquation(series.values, trendLine)}
               </text>
             )}
           </g>

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useStore } from '@/store/useStore';
-import { CheckCircle2, AlertCircle, Info, X, Undo2 } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Info, AlertTriangle, X, Undo2 } from 'lucide-react';
 import type { Toast as ToastType } from '@/types';
 import './Toast.css';
 
@@ -46,6 +46,7 @@ function ToastItem({ toast }: { toast: ToastType }) {
     success: <CheckCircle2 size={16} />,
     error: <AlertCircle size={16} />,
     info: <Info size={16} />,
+    warning: <AlertTriangle size={16} />,
   };
 
   return (

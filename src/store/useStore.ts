@@ -83,6 +83,10 @@ interface AppState {
   setShowPivotDialog: (show: boolean) => void;
   contextMenu: { x: number; y: number; cell: string } | null;
 
+  // Grid zoom
+  gridZoom: number;
+  setGridZoom: (zoom: number) => void;
+
   // Panel system (right-side dock)
   activePanel: 'chat' | 'insights' | 'auditor' | 'inspector' | null;
   panelWidths: Record<string, number>;

@@ -1,41 +1,40 @@
 import { useStore } from '@/store/useStore';
 import { refToCell } from '@/engine/spreadsheet';
-import { useMemo, useState, useCallback } from 'react';
+import { useMemo, useEffect, useCallback } from 'react';
 import { Minus, Plus } from 'lucide-react';
 
 const ZOOM_LEVELS = [50, 75, 85, 100, 125, 150, 175, 200];
 
 export function StatusBar() {
-  const { selection, getActiveSheet, getComputedValue, messages } = useStore();
+  const { selection, getActiveSheet, getComputedValue, messages, gridZoom, setGridZoom } = useStore();
   const sheet = getActiveSheet();
-  const [zoom, setZoom] = useState(100);
 
-  const handleZoomChange = useCallback((newZoom: number) => {
-    const clamped = Math.max(50, Math.min(200, newZoom));
-    setZoom(clamped);
-    // Apply zoom to the spreadsheet grid container via CSS custom property
+  // Apply zoom as a CSS custom property on the grid container.
+  // The grid reads --grid-zoom and scales its font/cell sizes accordingly.
+  // This avoids transform: scale() which breaks virtual scroll geometry.
+  useEffect(() => {
     const gridEl = document.querySelector('[data-spreadsheet-grid]') as HTMLElement | null;
     if (gridEl) {
-      gridEl.style.setProperty('--grid-zoom', String(clamped / 100));
-      gridEl.style.transform = `scale(${clamped / 100})`;
-      gridEl.style.transformOrigin = 'top left';
-      // Adjust the parent container to account for scaled size
-      const parent = gridEl.parentElement;
-      if (parent) {
-        parent.style.overflow = 'auto';
-      }
+      gridEl.style.setProperty('--grid-zoom', String(gridZoom / 100));
+      // Reset any legacy transform that may have been applied previously
+      gridEl.style.transform = '';
+      gridEl.style.transformOrigin = '';
     }
-  }, []);
+  }, [gridZoom]);
 
   const zoomIn = useCallback(() => {
-    const next = ZOOM_LEVELS.find((z) => z > zoom) ?? 200;
-    handleZoomChange(next);
-  }, [zoom, handleZoomChange]);
+    const next = ZOOM_LEVELS.find((z) => z > gridZoom) ?? 200;
+    setGridZoom(next);
+  }, [gridZoom, setGridZoom]);
 
   const zoomOut = useCallback(() => {
-    const prev = [...ZOOM_LEVELS].reverse().find((z) => z < zoom) ?? 50;
-    handleZoomChange(prev);
-  }, [zoom, handleZoomChange]);
+    const prev = [...ZOOM_LEVELS].reverse().find((z) => z < gridZoom) ?? 50;
+    setGridZoom(prev);
+  }, [gridZoom, setGridZoom]);
+
+  const handleZoomSelect = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
+    setGridZoom(Number(e.target.value));
+  }, [setGridZoom]);
 
   const stats = useMemo(() => {
     if (!selection) return null;
@@ -73,20 +72,15 @@ export function StatusBar() {
     };
   }, [selection, sheet.cells, getComputedValue]);
 
-  // Calculate response time from last user→assistant pair
   const responseTime = useMemo(() => {
     if (messages.length < 2) return null;
-    // Find the last assistant message
     for (let i = messages.length - 1; i >= 1; i--) {
       if (messages[i].role === 'assistant' && messages[i].content) {
-        // Find the preceding user message
         for (let j = i - 1; j >= 0; j--) {
           if (messages[j].role === 'user') {
             const diff = messages[i].timestamp - messages[j].timestamp;
             if (diff > 0 && diff < 120_000) {
-              return diff < 1000
-                ? `${diff}ms`
-                : `${(diff / 1000).toFixed(1)}s`;
+              return diff < 1000 ? `${diff}ms` : `${(diff / 1000).toFixed(1)}s`;
             }
             return null;
           }
@@ -96,21 +90,26 @@ export function StatusBar() {
     return null;
   }, [messages]);
 
-  const cellCount = Object.keys(sheet.cells).filter(k => sheet.cells[k]?.value != null).length;
+  const cellCount = Object.keys(sheet.cells).filter((k) => sheet.cells[k]?.value != null).length;
 
   return (
-    <div className="h-6 border-t flex items-center px-3 text-[10px] gap-3 shrink-0 hidden md:flex" style={{ background: 'var(--surface-secondary)', borderColor: 'var(--neutral-200)', color: 'var(--neutral-500)' }}>
+    <div
+      className="h-6 border-t flex items-center px-3 text-[10px] gap-3 shrink-0 hidden md:flex"
+      style={{ background: 'var(--surface-secondary)', borderColor: 'var(--neutral-200)', color: 'var(--neutral-500)' }}
+    >
       <span className="font-medium" style={{ color: 'var(--neutral-700)' }}>{sheet.name}</span>
       <span style={{ color: 'var(--neutral-300)' }}>·</span>
       <span>{cellCount} cells</span>
 
       {stats && stats.count > 0 && (
         <>
-          <span className="text-slate-300" style={{ color: 'var(--neutral-300)' }}>·</span>
+          <span style={{ color: 'var(--neutral-300)' }}>·</span>
           <span>Count: {stats.count}</span>
           {stats.sum !== null && (
             <>
-              <span className="font-medium" style={{ color: 'var(--neutral-700)' }}>Sum: {stats.sum.toLocaleString()}</span>
+              <span className="font-medium" style={{ color: 'var(--neutral-700)' }}>
+                Sum: {stats.sum.toLocaleString()}
+              </span>
               <span>Avg: {stats.avg?.toLocaleString()}</span>
               <span>Min: {stats.min?.toLocaleString()}</span>
               <span>Max: {stats.max?.toLocaleString()}</span>
@@ -127,20 +126,20 @@ export function StatusBar() {
         </span>
       )}
 
-      {/* Zoom controls */}
+      {/* Zoom controls — state lives in the store, applied via CSS custom property */}
       <div className="flex items-center gap-1.5 border-l border-gray-200 pl-3 ml-1">
         <button
           type="button"
           onClick={zoomOut}
-          disabled={zoom <= 50}
+          disabled={gridZoom <= 50}
           className="p-0.5 rounded hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed"
           title="Zoom out"
         >
           <Minus size={11} />
         </button>
         <select
-          value={zoom}
-          onChange={(e) => handleZoomChange(Number(e.target.value))}
+          value={gridZoom}
+          onChange={handleZoomSelect}
           className="text-[10px] bg-transparent border-none cursor-pointer text-slate-600 font-medium w-[42px] text-center appearance-none"
           title="Zoom level"
         >
@@ -151,7 +150,7 @@ export function StatusBar() {
         <button
           type="button"
           onClick={zoomIn}
-          disabled={zoom >= 200}
+          disabled={gridZoom >= 200}
           className="p-0.5 rounded hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed"
           title="Zoom in"
         >

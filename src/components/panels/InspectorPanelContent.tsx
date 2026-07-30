@@ -10,7 +10,7 @@
 
 import { useMemo } from 'react'
 import { useStore } from '@/store/useStore'
-import { cellToRef, refToCell, colToLetter } from '@/engine/spreadsheet'
+import { cellToRef, refToCell, colToLetter, letterToCol } from '@/engine/spreadsheet'
 import { explainFormula, describeCellValue } from '@/lib/formulaExplainer'
 import { ArrowDownRight, ArrowUpLeft, Hash, Type, Search } from 'lucide-react'
 
@@ -46,21 +46,23 @@ export function InspectorPanelContent() {
   const dependencies = useMemo(() => {
     if (!cellInfo?.formula) return { precedents: [], dependents: [] }
 
-    const formula = cellInfo.formula.startsWith('=') ? cellInfo.formula.slice(1) : cellInfo.formula
+    const formula = cellInfo.formula.startsWith('=')
+      ? cellInfo.formula.slice(1)
+      : cellInfo.formula
 
-    // Extract cell references from the formula (precedents)
-    const refs: string[] = []
-    const rangeRe = /([A-Z]+)(\d+):([A-Z]+)(\d+)/g
-    const cellRe = /([A-Z]+)(\d+)/g
+    // Regex supports multi-letter columns (A–ZZZ) and up to 7-digit row numbers
+    const rangeRe = /([A-Z]{1,3})(\d{1,7}):([A-Z]{1,3})(\d{1,7})/gi
+    const cellRe = /([A-Z]{1,3})(\d{1,7})/gi
 
-    // First get ranges
-    let match
     const rangeRefs = new Set<string>()
+    let match: RegExpExecArray | null
+
+    // Expand range references first
     while ((match = rangeRe.exec(formula)) !== null) {
-      const startCol = match[1].charCodeAt(0) - 65
-      const startRow = parseInt(match[2]) - 1
-      const endCol = match[3].charCodeAt(0) - 65
-      const endRow = parseInt(match[4]) - 1
+      const startCol = letterToCol(match[1])
+      const startRow = parseInt(match[2], 10) - 1
+      const endCol = letterToCol(match[3])
+      const endRow = parseInt(match[4], 10) - 1
       for (let r = startRow; r <= endRow; r++) {
         for (let c = startCol; c <= endCol; c++) {
           rangeRefs.add(refToCell(r, c))
@@ -68,22 +70,25 @@ export function InspectorPanelContent() {
       }
     }
 
-    // Then get individual cell refs (skip those already in ranges)
-    const cleanFormula = formula.replace(/([A-Z]+\d+):([A-Z]+\d+)/g, '')
+    // Collect individual cell refs, skipping those already covered by ranges
+    const individualRefs: string[] = []
+    // Strip range tokens so the cell regex doesn't double-match them
+    const cleanFormula = formula.replace(/[A-Z]{1,3}\d{1,7}:[A-Z]{1,3}\d{1,7}/gi, '')
     while ((match = cellRe.exec(cleanFormula)) !== null) {
-      const col = match[1].charCodeAt(0) - 65
-      const row = parseInt(match[2]) - 1
-      refs.push(refToCell(row, col))
+      const col = letterToCol(match[1])
+      const row = parseInt(match[2], 10) - 1
+      individualRefs.push(refToCell(row, col))
     }
 
-    const precedents = [...new Set([...rangeRefs, ...refs])].slice(0, 20)
+    const precedents = [...new Set([...rangeRefs, ...individualRefs])].slice(0, 20)
 
     // Find dependents — cells whose formulas reference our cell
     const ourCellId = cellInfo.cellId
+    const ourRef = `${colToLetter(cellInfo.col)}${cellInfo.row + 1}`
     const dependents: string[] = []
     for (const [id, cell] of Object.entries(sheet.cells)) {
       if (id === ourCellId || !cell.formula) continue
-      if (cell.formula.includes(ourCellId) || cell.formula.includes(colToLetter(cellInfo.col) + String(cellInfo.row + 1))) {
+      if (cell.formula.includes(ourCellId) || cell.formula.includes(ourRef)) {
         dependents.push(id)
       }
     }

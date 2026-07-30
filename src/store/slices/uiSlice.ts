@@ -10,6 +10,9 @@ import type { Toast, ConfirmDialogState } from '@/types'
 import { v4 as uuid } from 'uuid'
 
 export interface UIState {
+  // Grid zoom level (50–200, percent)
+  gridZoom: number
+
   // Panel/dialog visibility
   showChat: boolean
   chatWidth: number
@@ -41,6 +44,7 @@ export interface UIState {
 }
 
 export interface UIActions {
+  setGridZoom: (zoom: number) => void
   setShowPivotDialog: (show: boolean) => void
   setShowFilterDialog: (v: boolean) => void
   setShowConditionalFormatDialog: (v: boolean) => void
@@ -77,7 +81,11 @@ export function createUIState(): UIState {
   const storedShowChat = storage?.getItem('smartsht-show-chat') ?? null
   const initialShowChat = storedShowChat === null ? true : storedShowChat !== '0'
 
+  const storedZoom = Number(storage?.getItem('smartsht-grid-zoom') || 100)
+  const initialZoom = Number.isFinite(storedZoom) ? Math.min(200, Math.max(50, storedZoom)) : 100
+
   return {
+    gridZoom: initialZoom,
     showChat: initialShowChat,
     chatWidth: initialChatWidth,
     showFileExplorer: false,
@@ -110,6 +118,11 @@ export function createUIActions(
   const storage = typeof localStorage !== 'undefined' ? localStorage : null
 
   return {
+    setGridZoom: (zoom) => {
+      const clamped = Math.min(200, Math.max(50, Math.round(zoom)))
+      set((s) => { s.gridZoom = clamped })
+      try { storage?.setItem('smartsht-grid-zoom', String(clamped)) } catch { /* ignore */ }
+    },
     setShowPivotDialog: (show) => set((s) => { s.showPivotDialog = show }),
     setShowFilterDialog: (v) => set((s) => { s.showFilterDialog = v }),
     setShowConditionalFormatDialog: (v) => set((s) => { s.showConditionalFormatDialog = v }),
