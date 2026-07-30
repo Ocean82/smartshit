@@ -4,7 +4,7 @@ import { useStore } from '@/store/useStore';
 import { colToLetter, refToCell, cellToRef } from '@/engine/spreadsheet';
 import { FormulaAutocomplete } from './FormulaAutocomplete';
 import { FindReplaceDialog } from './FindReplaceDialog';
-import { SelectionOverlay } from './SelectionOverlay';
+import { SelectionOverlay } from '@/components/SelectionOverlay';
 import type { CellFormat } from '@/types';
 import { getBorderCSS, isNegativeRedFormat } from '@/lib/formatUtils';
 import { buildFilteredRowIndex } from '@/lib/rowFilter';
@@ -14,6 +14,10 @@ import { findActivePendingPreview } from '@/lib/pendingActionPreview';
 import { useTouch } from '@/hooks/useTouch';
 import { getCellNotesService } from '@/lib/cellNotes';
 import { GridCell } from './grid';
+import { GridHeaders } from './grid/GridHeaders';
+import { useGridViewport } from './grid/GridViewport';
+import { useEditingController } from './grid/EditingController';
+import { useSelectionManager } from './grid/SelectionManager';
 
 /** Check if a cell value represents the "checked" state for a checkbox validation. */
 function isCellChecked(value: string | number | boolean | null | undefined, checkedValue?: string): boolean {
@@ -64,11 +68,6 @@ export function SpreadsheetGrid() {
   );
 
   // ─── Conditional format peer caches ─────────────────────────────────────────
-  // These caches compute column-level peer values for data bars, color scales,
-  // and icon sets. To avoid recomputing on every keystroke, we derive a stable
-  // fingerprint of only the cells in columns that have conditional rules.
-
-  /** Identify which columns have each rule type (stable unless rules are added/removed). */
   const conditionalCols = useMemo(() => {
     const dataBar = new Set<number>()
     const colorScale = new Set<number>()
@@ -154,25 +153,35 @@ export function SpreadsheetGrid() {
     );
   }, [activeFilters, getComputedValue, sheet]);
 
-  // Dynamic grid bounds: show only enough rows/cols to contain data + buffer
-  const { TOTAL_ROWS, TOTAL_COLS } = useMemo(() => {
-    const lastDataRow = findLastDataRow(sheet);
-    const lastDataCol = Object.keys(sheet.cells).reduce((max, cellId) => {
-      const ref = cellToRef(cellId);
-      return ref ? Math.max(max, ref.col) : max;
-    }, 0);
-    return {
-      TOTAL_ROWS: Math.min(MAX_ROWS, Math.max(100, lastDataRow + EMPTY_ROWS_BUFFER + 1)),
-      TOTAL_COLS: Math.min(MAX_COLS, Math.max(26, lastDataCol + EMPTY_COLS_BUFFER + 1)),
-    };
-  }, [sheet]);
+  // ─── Viewport (virtualization) ─────────────────────────────────────────────
+  const viewport = useGridViewport({
+    sheet,
+    getComputedValue,
+    columnWidths: sheet.columnWidths,
+    activeFilters,
+    activeSortConfig,
+    getColWidth: (col: number) => columnWidths[col] || sheet.columnWidths[col] || DEFAULT_CELL_WIDTH,
+  });
 
-  const displayRowCount = filteredRows ? filteredRows.length : TOTAL_ROWS;
-  const gridRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const editContainerRef = useRef<HTMLDivElement>(null);
-  const [isDragging, setIsDragging] = useState(false);
-  const [autocompletePos, setAutocompletePos] = useState({ top: 0, left: 0 });
+  // ─── Selection & Editing ───────────────────────────────────────────────────
+  const selectionManager = useSelectionManager({
+    TOTAL_ROWS: viewport.TOTAL_ROWS,
+    TOTAL_COLS: viewport.TOTAL_COLS,
+    pushHistory,
+    setShowFindReplace: (show: boolean) => setShowFindReplace(show),
+    findLastDataRow,
+  });
+
+  const editingController = useEditingController({
+    setEditingCell: selectionManager.setEditingCell,
+    setEditValue: selectionManager.setEditValue,
+    setCellValue,
+    pushHistory,
+    validateCellValue: useStore.getState().validateCellValue,
+    setSelection: selectionManager.setSelection,
+  });
+
+  // ─── Column width & resize ─────────────────────────────────────────────────
   const [columnWidths, setColumnWidths] = useState<Record<number, number>>({});
   const [resizingCol, setResizingCol] = useState<number | null>(null);
   const [resizeStartX, setResizeStartX] = useState(0);
@@ -182,240 +191,6 @@ export function SpreadsheetGrid() {
   const getColWidth = useCallback((col: number) => {
     return columnWidths[col] || sheet.columnWidths[col] || DEFAULT_CELL_WIDTH;
   }, [columnWidths, sheet.columnWidths]);
-
-  useEffect(() => {
-    if (editingCell && inputRef.current) {
-      inputRef.current.focus();
-      // Move cursor to end
-      const len = inputRef.current.value.length;
-      inputRef.current.setSelectionRange(len, len);
-    }
-  }, [editingCell]);
-
-  const commitEdit = useCallback(() => {
-    if (!editingCell) return;
-    pushHistory('Edit cell ' + editingCell);
-    const val = editValue;
-    if (val.startsWith('=')) {
-      setCellValue(editingCell, null, val);
-    } else {
-      const num = Number(val);
-      if (val !== '' && !isNaN(num)) {
-        setCellValue(editingCell, num);
-      } else {
-        setCellValue(editingCell, val || null);
-      }
-    }
-    // Validate cell value
-    const { validateCellValue } = useStore.getState();
-    const cellVal = val.startsWith('=') ? null : (val !== '' && !isNaN(Number(val)) ? Number(val) : (val || null));
-    const result = validateCellValue(editingCell, cellVal);
-    useStore.setState((state) => {
-      const cell = state.getActiveSheet().cells[editingCell];
-      if (cell) {
-        if (!result.valid) {
-          cell.validationError = result.message;
-        } else {
-          delete cell.validationError;
-        }
-      }
-    });
-
-    setEditingCell(null);
-    setEditValue('');
-  }, [editingCell, editValue, pushHistory, setCellValue, setEditingCell, setEditValue]);
-
-  const handleCellClick = useCallback((row: number, col: number, e: React.MouseEvent) => {
-    if (e.shiftKey && selection) {
-      setSelection({
-        startRow: selection.startRow,
-        startCol: selection.startCol,
-        endRow: row,
-        endCol: col,
-      });
-    } else if ((e.ctrlKey || e.metaKey) && selection) {
-      // Ctrl+click: add a new disjoint range
-      addSelection({ startRow: row, startCol: col, endRow: row, endCol: col });
-    } else {
-      setSelection({ startRow: row, startCol: col, endRow: row, endCol: col });
-    }
-    if (editingCell) commitEdit();
-    setEditingCell(null);
-  }, [selection, editingCell, setSelection, addSelection, setEditingCell, commitEdit]);
-
-  const handleCellDoubleClick = useCallback((row: number, col: number) => {
-    const cellId = refToCell(row, col);
-    const cellData = sheet.cells[cellId];
-    setEditingCell(cellId);
-    setEditValue(cellData?.formula || String(cellData?.value ?? ''));
-    setSelection({ startRow: row, startCol: col, endRow: row, endCol: col });
-    requestAnimationFrame(() => {
-      if (editContainerRef.current) {
-        const rect = editContainerRef.current.getBoundingClientRect();
-        setAutocompletePos({ top: rect.bottom + 2, left: rect.left });
-      }
-    });
-  }, [sheet.cells, setEditingCell, setEditValue, setSelection]);
-
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (editingCell) {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        commitEdit();
-        const ref = cellToRef(editingCell);
-        setSelection({ startRow: ref.row + 1, startCol: ref.col, endRow: ref.row + 1, endCol: ref.col });
-      } else if (e.key === 'Escape') {
-        setEditingCell(null);
-        setEditValue('');
-      } else if (e.key === 'Tab') {
-        e.preventDefault();
-        commitEdit();
-        const ref = cellToRef(editingCell);
-        const newCol = e.shiftKey ? Math.max(0, ref.col - 1) : ref.col + 1;
-        setSelection({ startRow: ref.row, startCol: newCol, endRow: ref.row, endCol: newCol });
-      }
-      return;
-    }
-
-    if (!selection) return;
-    const { startRow: r, startCol: c } = selection;
-
-    if (e.key === 'Delete' || e.key === 'Backspace') {
-      e.preventDefault();
-      pushHistory('Delete cells');
-      const minR = Math.min(selection.startRow, selection.endRow);
-      const maxR = Math.max(selection.startRow, selection.endRow);
-      const minC = Math.min(selection.startCol, selection.endCol);
-      const maxC = Math.max(selection.startCol, selection.endCol);
-      for (let row = minR; row <= maxR; row++) {
-        for (let col = minC; col <= maxC; col++) {
-          setCellValue(refToCell(row, col), null);
-        }
-      }
-      return;
-    }
-
-    const navigate = (nr: number, nc: number, shift: boolean) => {
-      if (shift) {
-        setSelection({ ...selection, endRow: nr, endCol: nc });
-      } else {
-        setSelection({ startRow: nr, startCol: nc, endRow: nr, endCol: nc });
-      }
-    };
-
-    switch (e.key) {
-      case 'ArrowUp': e.preventDefault(); navigate(e.shiftKey ? selection.endRow - 1 : Math.max(0, r - 1), e.shiftKey ? selection.endCol : c, e.shiftKey); break;
-      case 'ArrowDown': e.preventDefault(); navigate(e.shiftKey ? selection.endRow + 1 : r + 1, e.shiftKey ? selection.endCol : c, e.shiftKey); break;
-      case 'ArrowLeft': e.preventDefault(); navigate(e.shiftKey ? selection.endRow : r, e.shiftKey ? Math.max(0, selection.endCol - 1) : Math.max(0, c - 1), e.shiftKey); break;
-      case 'ArrowRight': e.preventDefault(); navigate(e.shiftKey ? selection.endRow : r, e.shiftKey ? selection.endCol + 1 : c + 1, e.shiftKey); break;
-      case 'Enter':
-      case 'F2': {
-        e.preventDefault();
-        const cellId = refToCell(r, c);
-        setEditingCell(cellId);
-        const cellData = sheet.cells[cellId];
-        setEditValue(cellData?.formula || String(cellData?.value ?? ''));
-        requestAnimationFrame(() => {
-          if (editContainerRef.current) {
-            const rect = editContainerRef.current.getBoundingClientRect();
-            setAutocompletePos({ top: rect.bottom + 2, left: rect.left });
-          }
-        });
-        break;
-      }
-      default:
-        if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
-          const cellId = refToCell(r, c);
-          setEditingCell(cellId);
-          setEditValue(e.key);
-          requestAnimationFrame(() => {
-            if (editContainerRef.current) {
-              const rect = editContainerRef.current.getBoundingClientRect();
-              setAutocompletePos({ top: rect.bottom + 2, left: rect.left });
-            }
-          });
-        }
-        // Ctrl/Cmd shortcuts
-        if (e.ctrlKey || e.metaKey) {
-          switch (e.key) {
-            case 'z': e.preventDefault(); useStore.getState().undo(); break;
-            case 'y': e.preventDefault(); useStore.getState().redo(); break;
-            case 'c': e.preventDefault(); useStore.getState().copy(); break;
-            case 'x': e.preventDefault(); useStore.getState().cut(); break;
-            case 'v': e.preventDefault(); useStore.getState().paste(); break;
-            case 'a': e.preventDefault(); setSelection({ startRow: 0, startCol: 0, endRow: TOTAL_ROWS - 1, endCol: TOTAL_COLS - 1 }); break;
-            case 'f': case 'h': e.preventDefault(); setShowFindReplace(true); break;
-            case 'End': {
-              // Ctrl+End: jump to last cell with data (like Excel)
-              e.preventDefault();
-              const lastRow = findLastDataRow(sheet);
-              const lastCol = Object.keys(sheet.cells).reduce((max, cid) => {
-                const ref = cellToRef(cid);
-                return ref ? Math.max(max, ref.col) : max;
-              }, 0);
-              setSelection({ startRow: lastRow, startCol: lastCol, endRow: lastRow, endCol: lastCol });
-              // Scroll to the last data cell
-              if (gridRef.current) {
-                gridRef.current.scrollTop = Math.max(0, lastRow * CELL_HEIGHT - gridRef.current.clientHeight / 2);
-              }
-              break;
-            }
-            case 'Home': {
-              // Ctrl+Home: jump to A1
-              e.preventDefault();
-              setSelection({ startRow: 0, startCol: 0, endRow: 0, endCol: 0 });
-              if (gridRef.current) {
-                gridRef.current.scrollTop = 0;
-                gridRef.current.scrollLeft = 0;
-              }
-              break;
-            }
-            case 'b': {
-              e.preventDefault();
-              const cellId = refToCell(r, c);
-              const currentBold = sheet.cells[cellId]?.format?.bold ?? false;
-              useStore.getState().setRangeFormat({ bold: !currentBold });
-              break;
-            }
-            case 'i': {
-              e.preventDefault();
-              const cellId2 = refToCell(r, c);
-              const currentItalic = sheet.cells[cellId2]?.format?.italic ?? false;
-              useStore.getState().setRangeFormat({ italic: !currentItalic });
-              break;
-            }
-          }
-        }
-    }
-  }, [editingCell, selection, sheet, commitEdit, pushHistory, setCellValue, setSelection, setEditingCell, setEditValue, TOTAL_ROWS, TOTAL_COLS]);
-
-  const handleAutocompleteSelect = useCallback((functionName: string) => {
-    if (!functionName) return;
-    setEditValue('=' + functionName + '(');
-  }, [setEditValue]);
-
-  const handleMouseDown = useCallback((row: number, col: number, e: React.MouseEvent) => {
-    if (e.button !== 0) return;
-    setIsDragging(true);
-    handleCellClick(row, col, e);
-  }, [handleCellClick]);
-
-  const handleMouseMove = useCallback((row: number, col: number) => {
-    if (!isDragging || !selection) return;
-    setSelection({
-      startRow: selection.startRow,
-      startCol: selection.startCol,
-      endRow: row,
-      endCol: col,
-    });
-  }, [isDragging, selection, setSelection]);
-
-  const handleMouseUp = useCallback(() => setIsDragging(false), []);
-
-  const handleContextMenu = useCallback((e: React.MouseEvent, row: number, col: number) => {
-    e.preventDefault();
-    setContextMenu({ x: e.clientX, y: e.clientY, cell: refToCell(row, col) });
-  }, [setContextMenu]);
 
   // Column resize
   const handleResizeStart = useCallback((col: number, e: React.MouseEvent) => {
@@ -439,6 +214,7 @@ export function SpreadsheetGrid() {
     maxWidth = Math.max(maxWidth, ctx.measureText(headerText).width + 24);
 
     // Check all cells in the column that have data
+    const sheet = getActiveSheet();
     for (const [cellId, cellData] of Object.entries(sheet.cells)) {
       const ref = cellToRef(cellId);
       if (ref.col !== col) continue;
@@ -470,249 +246,69 @@ export function SpreadsheetGrid() {
     };
   }, [resizingCol, resizeStartX, resizeStartWidth]);
 
-  // Touch support for mobile
+  // ─── Touch support ──────────────────────────────────────────────────────────
   const getScrollOffset = useCallback(() => {
-    if (!gridRef.current) return { scrollTop: 0, scrollLeft: 0 };
-    return { scrollTop: gridRef.current.scrollTop, scrollLeft: gridRef.current.scrollLeft };
-  }, []);
+    if (!viewport.gridRef.current) return { scrollTop: 0, scrollLeft: 0 };
+    return { scrollTop: viewport.gridRef.current.scrollTop, scrollLeft: viewport.gridRef.current.scrollLeft };
+  }, [viewport.gridRef]);
 
-  const handleTouchTap = useCallback((row: number, col: number) => {
-    setSelection({ startRow: row, startCol: col, endRow: row, endCol: col });
-    if (editingCell) commitEdit();
-    setEditingCell(null);
-  }, [setSelection, editingCell, commitEdit, setEditingCell]);
-
-  const handleTouchDoubleTap = useCallback((row: number, col: number) => {
-    handleCellDoubleClick(row, col);
-  }, [handleCellDoubleClick]);
-
-  const handleTouchLongPress = useCallback((row: number, col: number, x: number, y: number) => {
-    // Select cell and show context menu
-    setSelection({ startRow: row, startCol: col, endRow: row, endCol: col });
-    setContextMenu({ x, y, cell: refToCell(row, col) });
-  }, [setSelection, setContextMenu]);
-
-  const handleTouchDragSelect = useCallback((row: number, col: number) => {
-    if (!selection) return;
-    setSelection({
-      startRow: selection.startRow,
-      startCol: selection.startCol,
-      endRow: row,
-      endCol: col,
-    });
-  }, [selection, setSelection]);
-
-  const handleTouchDragEnd = useCallback(() => {
-    // Nothing needed for now; selection is already set
-  }, []);
-
-  const isSelected = useCallback((row: number, col: number) => {
-    if (!selection) return false;
-    // Check primary selection
-    const minR = Math.min(selection.startRow, selection.endRow);
-    const maxR = Math.max(selection.startRow, selection.endRow);
-    const minC = Math.min(selection.startCol, selection.endCol);
-    const maxC = Math.max(selection.startCol, selection.endCol);
-    if (row >= minR && row <= maxR && col >= minC && col <= maxC) return true;
-    // Check additional selections (Ctrl+click ranges)
-    for (const sel of additionalSelections) {
-      const r0 = Math.min(sel.startRow, sel.endRow);
-      const r1 = Math.max(sel.startRow, sel.endRow);
-      const c0 = Math.min(sel.startCol, sel.endCol);
-      const c1 = Math.max(sel.startCol, sel.endCol);
-      if (row >= r0 && row <= r1 && col >= c0 && col <= c1) return true;
-    }
-    return false;
-  }, [selection, additionalSelections]);
-
-  const isActiveCell = useCallback((row: number, col: number) => {
-    return selection?.startRow === row && selection?.startCol === col;
-  }, [selection]);
-
-  const getCellStyle = useCallback((format: CellFormat | undefined, cellValue?: string | number | boolean | null): React.CSSProperties => {
-    if (!format) return {};
-    const style: React.CSSProperties = {
-      fontWeight: format.bold ? 700 : undefined,
-      fontStyle: format.italic ? 'italic' : undefined,
-      textDecoration: format.underline ? 'underline' : undefined,
-      fontSize: format.fontSize ? `${format.fontSize}px` : undefined,
-      color: format.fontColor || undefined,
-      backgroundColor: format.bgColor || undefined,
-      textAlign: format.textAlign || undefined,
-      ...getBorderCSS(format.borders),
-    };
-    // Apply red text for negative values with number-neg-red format
-    if (isNegativeRedFormat(format.numberFormat, cellValue ?? null) && !format.fontColor) {
-      style.color = '#DC2626';
-    }
-    return style;
-  }, []);
-
-  // Select all cells in a row
-  const handleRowSelect = useCallback((row: number) => {
-    setSelection({ startRow: row, startCol: 0, endRow: row, endCol: TOTAL_COLS - 1 });
-  }, [setSelection, TOTAL_COLS]);
-
-  // Select all cells in a column
-  const handleColSelect = useCallback((col: number) => {
-    setSelection({ startRow: 0, startCol: col, endRow: TOTAL_ROWS - 1, endCol: col });
-  }, [setSelection, TOTAL_ROWS]);
-
-  // Virtual scrolling state
-  const [scrollState, setScrollState] = useState({ scrollTop: 0, scrollLeft: 0, viewportHeight: 600, viewportWidth: 800 });
-
-  const handleScroll = useCallback(() => {
-    if (!gridRef.current) return;
-    const { scrollTop, scrollLeft, clientHeight, clientWidth } = gridRef.current;
-    setScrollState({ scrollTop, scrollLeft, viewportHeight: clientHeight, viewportWidth: clientWidth });
-  }, []);
-
-  // Calculate visible range (display indices when filtered)
-  const visibleRange = useMemo(() => {
-    const { scrollTop, scrollLeft, viewportHeight, viewportWidth } = scrollState;
-    const startRow = Math.max(0, Math.floor(scrollTop / CELL_HEIGHT) - BUFFER_ROWS);
-    const endRow = Math.min(displayRowCount - 1, Math.ceil((scrollTop + viewportHeight) / CELL_HEIGHT) + BUFFER_ROWS);
-    
-    let colStart = 0;
-    let accWidth = 0;
-    for (let i = 0; i < TOTAL_COLS; i++) {
-      if (accWidth + getColWidth(i) >= scrollLeft) {
-        colStart = Math.max(0, i - BUFFER_COLS);
-        break;
-      }
-      accWidth += getColWidth(i);
-    }
-    
-    let colEnd = colStart;
-    accWidth = 0;
-    for (let i = colStart; i < TOTAL_COLS; i++) {
-      accWidth += getColWidth(i);
-      if (accWidth > viewportWidth) {
-        colEnd = Math.min(TOTAL_COLS - 1, i + BUFFER_COLS);
-        break;
-      }
-      colEnd = i;
-    }
-    
-    return { startRow, endRow, startCol: colStart, endCol: colEnd };
-  }, [scrollState, getColWidth, displayRowCount, TOTAL_COLS]);
-
-  // Calculate total dimensions
-  const totalWidth = useMemo(() => {
-    let width = 0;
-    for (let i = 0; i < TOTAL_COLS; i++) {
-      width += getColWidth(i);
-    }
-    return width;
-  }, [getColWidth, TOTAL_COLS]);
-
-  const totalHeight = displayRowCount * CELL_HEIGHT;
-
-  // Offset for visible rows
-  const rowOffset = visibleRange.startRow * CELL_HEIGHT;
-
-  // Column offsets for visible columns
-  const visibleColOffsets = useMemo(() => {
-    const offsets: number[] = [0];
-    let accWidth = 0;
-    for (let i = 0; i < visibleRange.startCol; i++) {
-      accWidth += getColWidth(i);
-    }
-    for (let i = visibleRange.startCol; i <= visibleRange.endCol; i++) {
-      offsets.push(offsets[offsets.length - 1] + getColWidth(i));
-    }
-    return { offsets, baseOffset: accWidth };
-  }, [visibleRange.startCol, visibleRange.endCol, getColWidth]);
-
-  useEffect(() => {
-    if (editingCell && inputRef.current) {
-      inputRef.current.focus();
-      const len = inputRef.current.value.length;
-      inputRef.current.setSelectionRange(len, len);
-    }
-  }, [editingCell]);
-
-  useEffect(() => {
-    const el = gridRef.current;
-    if (!el) return;
-    el.addEventListener('scroll', handleScroll, { passive: true });
-    handleScroll();
-    return () => el.removeEventListener('scroll', handleScroll);
-  }, [handleScroll]);
-
-  // Scroll first pending preview cell into view when a new preview appears
-  useEffect(() => {
-    if (!pendingPreview?.changes.length || !gridRef.current) return;
-    const first = pendingPreview.changes[0]?.cell;
-    if (!first) return;
-    const ref = cellToRef(first);
-    if (!ref) return;
-    const top = ref.row * CELL_HEIGHT;
-    let left = 0;
-    for (let c = 0; c < ref.col; c++) left += getColWidth(c);
-    gridRef.current.scrollTo({
-      top: Math.max(0, top - CELL_HEIGHT * 2),
-      left: Math.max(0, left - DEFAULT_CELL_WIDTH),
-      behavior: 'smooth',
-    });
-  }, [pendingPreview?.action.id]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Touch hook for mobile interactions
+  // Touch hook - wrap handlers to match useTouch signatures
   const { handleTouchStart, handleTouchMove, handleTouchEnd } = useTouch({
-    onTap: handleTouchTap,
-    onDoubleTap: handleTouchDoubleTap,
-    onLongPress: handleTouchLongPress,
-    onDragSelect: handleTouchDragSelect,
-    onDragEnd: handleTouchDragEnd,
+    onTap: (row, col) => selectionManager.handleCellClick(row, col, { preventDefault: () => {}, nativeEvent: new MouseEvent('click') } as React.MouseEvent),
+    onDoubleTap: selectionManager.handleCellDoubleClick,
+    onLongPress: (row, col, x, y) => selectionManager.handleContextMenu({ preventDefault: () => {}, clientX: x, clientY: y } as React.MouseEvent, row, col),
+    onDragSelect: (row, col) => selectionManager.handleMouseMove(row, col),
+    onDragEnd: selectionManager.handleMouseUp,
     cellHeight: CELL_HEIGHT,
     rowHeaderWidth: ROW_HEADER_WIDTH,
     colHeaderHeight: COL_HEADER_HEIGHT,
     getColWidth,
     getScrollOffset,
-    visibleRange,
-    colOffsets: visibleColOffsets,
+    visibleRange: viewport.visibleRange,
+    colOffsets: viewport.visibleColOffsets,
   });
 
   const onGridTouchStart = useCallback((e: React.TouchEvent) => {
-    const rect = gridRef.current?.getBoundingClientRect();
+    const rect = viewport.gridRef.current?.getBoundingClientRect();
     if (!rect) return;
     handleTouchStart(e, rect);
-  }, [handleTouchStart]);
+  }, [handleTouchStart, viewport.gridRef]);
 
   const onGridTouchMove = useCallback((e: React.TouchEvent) => {
-    const rect = gridRef.current?.getBoundingClientRect();
+    const rect = viewport.gridRef.current?.getBoundingClientRect();
     if (!rect) return;
     handleTouchMove(e, rect);
-  }, [handleTouchMove]);
+  }, [handleTouchMove, viewport.gridRef]);
 
   const onGridTouchEnd = useCallback((e: React.TouchEvent) => {
-    const rect = gridRef.current?.getBoundingClientRect();
+    const rect = viewport.gridRef.current?.getBoundingClientRect();
     if (!rect) return;
     handleTouchEnd(e, rect);
-  }, [handleTouchEnd]);
+  }, [handleTouchEnd, viewport.gridRef]);
 
+  // ─── Render ─────────────────────────────────────────────────────────────────
   return (
     <div
-      ref={gridRef}
+      ref={viewport.gridRef}
       data-spreadsheet-grid
       role="grid"
       aria-label="Spreadsheet grid"
-      aria-rowcount={TOTAL_ROWS}
-      aria-colcount={TOTAL_COLS}
+      aria-rowcount={viewport.TOTAL_ROWS}
+      aria-colcount={viewport.TOTAL_COLS}
       className="flex-1 overflow-auto relative touch-pan-x touch-pan-y"
       tabIndex={0}
-      onKeyDown={handleKeyDown}
-      onMouseUp={handleMouseUp}
+      onKeyDown={selectionManager.handleKeyDown}
+      onMouseUp={selectionManager.handleMouseUp}
       onTouchStart={onGridTouchStart}
       onTouchMove={onGridTouchMove}
       onTouchEnd={onGridTouchEnd}
       style={{ outline: 'none', userSelect: 'none', WebkitOverflowScrolling: 'touch' }}
     >
-      <div style={{ minWidth: ROW_HEADER_WIDTH + totalWidth + 20, height: totalHeight + COL_HEADER_HEIGHT }}>
+      <div style={{ minWidth: ROW_HEADER_WIDTH + viewport.totalWidth + 20, height: viewport.totalHeight + COL_HEADER_HEIGHT }}>
         {/* Selection range overlay */}
         <SelectionOverlay
           getColWidth={getColWidth}
-          totalCols={TOTAL_COLS}
+          totalCols={viewport.TOTAL_COLS}
           cellHeight={CELL_HEIGHT}
           rowHeaderWidth={ROW_HEADER_WIDTH}
           colHeaderHeight={COL_HEADER_HEIGHT}
@@ -745,64 +341,36 @@ export function SpreadsheetGrid() {
           />
         )}
         {/* Column headers - sticky */}
-        <div className="flex sticky top-0 z-20" role="row" aria-rowindex={1} style={{ height: COL_HEADER_HEIGHT }}>
-          <div
-            role="columnheader"
-            className="bg-gradient-to-b from-gray-100 to-gray-150 border-b border-r border-gray-300 flex items-center justify-center text-[10px] text-gray-400 font-medium shrink-0 sticky left-0 z-30"
-            style={{ width: ROW_HEADER_WIDTH, height: COL_HEADER_HEIGHT }}
-            onClick={() => setSelection({ startRow: 0, startCol: 0, endRow: TOTAL_ROWS - 1, endCol: TOTAL_COLS - 1 })}
-            aria-label="Select all cells"
-          >
-            ▾
-          </div>
-          <div className="relative" style={{ width: totalWidth, height: COL_HEADER_HEIGHT }}>
-            <div className="absolute" style={{ left: visibleColOffsets.baseOffset, top: 0 }}>
-              {Array.from({ length: visibleRange.endCol - visibleRange.startCol + 1 }, (_, i) => {
-                const col = visibleRange.startCol + i;
-                const isColSelected = selection &&
-                  col >= Math.min(selection.startCol, selection.endCol) &&
-                  col <= Math.max(selection.startCol, selection.endCol);
-                return (
-                  <div
-                    key={col}
-                    role="columnheader"
-                    aria-colindex={col + 2}
-                    className={`border-b border-r border-gray-300 flex items-center justify-center text-[11px] font-medium shrink-0 relative group cursor-pointer transition-colors ${
-                      isColSelected
-                        ? 'bg-blue-100 text-blue-700 border-blue-300'
-                        : 'bg-gradient-to-b from-gray-50 to-gray-100 text-gray-500 hover:bg-gray-200'
-                    }`}
-                    style={{ width: getColWidth(col), height: COL_HEADER_HEIGHT, position: 'absolute', left: visibleColOffsets.offsets[i] }}
-                    onClick={() => handleColSelect(col)}
-                  >
-                    {colToLetter(col)}
-                    {activeSortConfig?.column === col && (
-                      <span className="ml-0.5 text-blue-500 text-[9px]">{activeSortConfig.direction === 'asc' ? '▲' : '▼'}</span>
-                    )}
-                    {activeFilters.some((f) => f.column === col) && (
-                      <span className="ml-0.5 text-amber-500 text-[9px]">⏷</span>
-                    )}
-                    <div
-                      className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-400 opacity-0 group-hover:opacity-100 z-10"
-                      onMouseDown={(e) => handleResizeStart(col, e)}
-                      onDoubleClick={(e) => { e.stopPropagation(); handleAutoFitColumn(col); }}
-                    />
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
+        <GridHeaders
+          visibleRange={viewport.visibleRange}
+          filteredRows={viewport.filteredRows}
+          totalWidth={viewport.totalWidth}
+          visibleColOffsets={viewport.visibleColOffsets}
+          getColWidth={getColWidth}
+          COL_HEADER_HEIGHT={COL_HEADER_HEIGHT}
+          ROW_HEADER_WIDTH={ROW_HEADER_WIDTH}
+          CELL_HEIGHT={CELL_HEIGHT}
+          selection={selectionManager.selection}
+          activeSortConfig={activeSortConfig}
+          activeFilters={activeFilters}
+          handleColSelect={selectionManager.handleColSelect}
+          handleRowSelect={selectionManager.handleRowSelect}
+          handleResizeStart={handleResizeStart}
+          handleAutoFitColumn={handleAutoFitColumn}
+          sheet={sheet}
+          getComputedValue={getComputedValue}
+          rowOffset={viewport.rowOffset}
+        />
 
         {/* Rows - virtualized */}
-        <div className="relative" style={{ top: rowOffset }}>
-          {Array.from({ length: Math.max(0, visibleRange.endRow - visibleRange.startRow + 1) }, (_, i) => {
-            const displayIndex = visibleRange.startRow + i;
-            const row = filteredRows ? filteredRows[displayIndex] : displayIndex;
+        <div className="relative" style={{ top: viewport.rowOffset }}>
+          {Array.from({ length: Math.max(0, viewport.visibleRange.endRow - viewport.visibleRange.startRow + 1) }, (_, i) => {
+            const displayIndex = viewport.visibleRange.startRow + i;
+            const row = viewport.filteredRows ? viewport.filteredRows[displayIndex] : displayIndex;
             if (row == null) return null;
-            const isRowSelected = selection &&
-              row >= Math.min(selection.startRow, selection.endRow) &&
-              row <= Math.max(selection.startRow, selection.endRow);
+            const isRowSelected = selectionManager.selection &&
+              row >= Math.min(selectionManager.selection.startRow, selectionManager.selection.endRow) &&
+              row <= Math.max(selectionManager.selection.startRow, selectionManager.selection.endRow);
             return (
               <div key={`${displayIndex}-${row}`} className="flex absolute" role="row" aria-rowindex={row + 2} style={{ height: CELL_HEIGHT, top: displayIndex * CELL_HEIGHT }}>
                 <div
@@ -813,21 +381,21 @@ export function SpreadsheetGrid() {
                       ? 'bg-blue-100 text-blue-700 border-blue-300'
                       : 'bg-gradient-to-r from-gray-50 to-gray-100 text-gray-500 hover:bg-gray-200'
                   }`}
-                  style={{ width: ROW_HEADER_WIDTH, height: CELL_HEIGHT }}
-                  onClick={() => handleRowSelect(row)}
+                  style={{ width: ROW_HEADER_WIDTH, height: CELL_HEIGHT, top: displayIndex * CELL_HEIGHT }}
+                  onClick={() => selectionManager.handleRowSelect(row)}
                 >
                   {row + 1}
                 </div>
-                <div className="relative" style={{ width: totalWidth, height: CELL_HEIGHT }}>
-                  {Array.from({ length: visibleRange.endCol - visibleRange.startCol + 1 }, (_, j) => {
-                    const col = visibleRange.startCol + j;
+                <div className="relative" style={{ width: viewport.totalWidth, height: CELL_HEIGHT }}>
+                  {Array.from({ length: viewport.visibleRange.endCol - viewport.visibleRange.startCol + 1 }, (_, j) => {
+                    const col = viewport.visibleRange.startCol + j;
                     const cellId = refToCell(row, col);
                     const cellData = sheet.cells[cellId];
-                    const selected = isSelected(row, col);
-                    const active = isActiveCell(row, col);
-                    const crosshair = !active && !selected && selection != null &&
-                      (row === selection.startRow || col === selection.startCol);
-                    const isEditingCell = editingCell === cellId;
+                    const selected = selectionManager.isSelected(row, col);
+                    const active = selectionManager.isActiveCell(row, col);
+                    const crosshair = !active && !selected && selectionManager.selection != null &&
+                      (row === selectionManager.selection.startRow || col === selectionManager.selection.startCol);
+                    const isEditingCell = editingController.editingCell === cellId;
                     const computed = getComputedValue(row, col);
                     const pendingChange = pendingPreview?.changeByCell.get(cellId) ?? null;
 
@@ -837,35 +405,34 @@ export function SpreadsheetGrid() {
                         row={row}
                         col={col}
                         cellId={cellId}
-                        cellData={cellData}
-                        computed={computed}
+                        cellData={sheet.cells[cellId]}
+                        computed={getComputedValue(row, col)}
                         colWidth={getColWidth(col)}
                         cellHeight={CELL_HEIGHT}
-                        isEditing={isEditingCell}
-                        isActive={active}
-                        isSelected={selected}
+                        isEditing={editingController.editingCell === cellId}
+                        isActive={selectionManager.isActiveCell(row, col)}
+                        isSelected={selectionManager.isSelected(row, col)}
                         isCrosshair={crosshair}
-                        editValue={editValue}
+                        editValue={editingController.editValue}
                         hasNote={notesService.hasNote(sheet.id, cellId)}
                         noteText={notesService.getNote(sheet.id, cellId)?.text ?? ''}
-                        pendingChange={pendingChange}
+                        pendingChange={pendingPreview?.changeByCell.get(cellId) ?? null}
                         dataBarPeers={dataBarPeersByCol.get(col) ?? []}
                         colorScalePeers={colorScalePeersByCol.get(col) ?? []}
                         iconSetPeers={iconSetPeersByCol.get(col) ?? []}
-                        getCellStyle={getCellStyle}
-                        colOffset={visibleColOffsets.offsets[j]}
-                        editContainerRef={isEditingCell ? editContainerRef : undefined}
-                        inputRef={isEditingCell ? inputRef : undefined}
-                        onMouseDown={handleMouseDown}
-                        onMouseMove={handleMouseMove}
-                        onDoubleClick={handleCellDoubleClick}
-                        onContextMenu={handleContextMenu}
-                        onEditChange={setEditValue}
-                        onEditBlur={commitEdit}
+                        colOffset={viewport.visibleColOffsets.offsets[j]}
+                        editContainerRef={editingController.editContainerRef}
+                        inputRef={editingController.inputRef}
+                        onMouseDown={selectionManager.handleMouseDown}
+                        onMouseMove={selectionManager.handleMouseMove}
+                        onDoubleClick={selectionManager.handleCellDoubleClick}
+                        onContextMenu={selectionManager.handleContextMenu}
+                        onEditChange={editingController.setEditValue}
+                        onEditBlur={editingController.commitEdit}
                         onCheckboxToggle={(cid, cd) => {
                           const checked = cd.validation?.checkedValue ?? 'TRUE';
                           const unchecked = cd.validation?.uncheckedValue ?? 'FALSE';
-                          const isChecked = isCellChecked(cd.value, checked);
+                          const isChecked = cd.value === checked || (typeof cd.value === 'string' && cd.value.toUpperCase() === checked.toUpperCase()) || cd.value === 1 || cd.value === true;
                           pushHistory('Toggle checkbox');
                           setCellValue(cid, isChecked ? unchecked : checked);
                         }}
@@ -879,10 +446,10 @@ export function SpreadsheetGrid() {
         </div>
       </div>
       <FormulaAutocomplete
-        visible={!!editingCell && editValue.startsWith('=')}
-        editValue={editValue}
-        onSelect={handleAutocompleteSelect}
-        position={autocompletePos}
+        visible={!!editingController.editingCell && editingController.editValue.startsWith('=')}
+        editValue={editingController.editValue}
+        onSelect={editingController.handleAutocompleteSelect}
+        position={editingController.autocompletePos}
       />
       <FindReplaceDialog isOpen={showFindReplace} onClose={() => setShowFindReplace(false)} />
 
@@ -925,7 +492,7 @@ export function SpreadsheetGrid() {
         aria-atomic="true"
         className="sr-only"
       >
-        {selection && `Cell ${colToLetter(selection.startCol)}${selection.startRow + 1} selected`}
+        {selectionManager.selection && `Cell ${colToLetter(selectionManager.selection.startCol)}${selectionManager.selection.startRow + 1} selected`}
       </div>
     </div>
   );

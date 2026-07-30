@@ -12,10 +12,11 @@
  * only unrelated cells change).
  */
 
-import React, { memo } from 'react'
+import React, { memo, useMemo } from 'react'
 import type { CellData, CellFormat } from '@/types'
 import { formatCellValue } from '@/lib/formatUtils'
 import { resolveCellFormat, getDataBarRule, getDataBarInfo, getColorScaleRule, computeColorScaleBg, getIconSetRule, computeIconForCell } from '@/lib/conditionalFormat'
+import { getBorderCSS, isNegativeRedFormat } from '@/lib/formatUtils'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -45,7 +46,6 @@ export interface GridCellProps {
   dataBarPeers: number[]
   colorScalePeers: number[]
   iconSetPeers: number[]
-  getCellStyle: (format: CellFormat | undefined, cellValue?: string | number | boolean | null) => React.CSSProperties
   colOffset: number
   // Refs
   editContainerRef?: React.Ref<HTMLDivElement>
@@ -66,6 +66,29 @@ function isCellChecked(value: string | number | boolean | null | undefined, chec
   const checked = checkedValue ?? 'TRUE'
   const current = String(value ?? '').toUpperCase()
   return current === checked.toUpperCase() || current === '1' || current === 'YES' || current === 'TRUE'
+}
+
+/** Resolve and compute cell style inline to avoid callback prop breaking memo */
+function getCellStyle(
+  format: CellFormat | undefined,
+  cellValue?: string | number | boolean | null
+): React.CSSProperties {
+  if (!format) return {}
+  const style: React.CSSProperties = {
+    fontWeight: format.bold ? 700 : undefined,
+    fontStyle: format.italic ? 'italic' : undefined,
+    textDecoration: format.underline ? 'underline' : undefined,
+    fontSize: format.fontSize ? `${format.fontSize}px` : undefined,
+    color: format.fontColor || undefined,
+    backgroundColor: format.bgColor || undefined,
+    textAlign: format.textAlign || undefined,
+    ...getBorderCSS(format.borders),
+  }
+  // Apply red text for negative values with number-neg-red format
+  if (isNegativeRedFormat(format.numberFormat, cellValue ?? null) && !format.fontColor) {
+    style.color = '#DC2626'
+  }
+  return style
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -89,7 +112,6 @@ export const GridCell = memo(function GridCell({
   dataBarPeers,
   colorScalePeers,
   iconSetPeers,
-  getCellStyle,
   colOffset,
   editContainerRef,
   inputRef,
