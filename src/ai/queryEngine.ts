@@ -6,25 +6,8 @@ import type { ToolResult, UserIntent } from '@/ai/types'
 import { findHeaderRow } from '@/lib/sheetSort'
 import { findSummaryRowIndexes } from '@/lib/sheetRows'
 import { buildSheetProfile } from '@/ai/sheetProfile'
-
-function parseNumeric(value: string | number | boolean | null | undefined): number | null {
-  if (typeof value === 'number' && Number.isFinite(value)) return value
-  if (typeof value === 'string') {
-    const cleaned = value.replace(/[$,\s]/g, '')
-    const num = Number(cleaned)
-    if (cleaned !== '' && Number.isFinite(num)) return num
-  }
-  return null
-}
-
-function columnLetterToIndex(letter: string): number {
-  const upper = letter.toUpperCase()
-  let result = 0
-  for (let i = 0; i < upper.length; i++) {
-    result = result * 26 + (upper.charCodeAt(i) - 64)
-  }
-  return result - 1
-}
+import { parseNumeric } from '@/ai/utils'
+import { letterToCol } from '@/lib'
 
 function resolveColumnIndex(sheet: SheetData, column: string): number {
   let maxCol = 0
@@ -42,7 +25,7 @@ function resolveColumnIndex(sheet: SheetData, column: string): number {
   }
 
   if (/^[a-z]{1,3}$/i.test(column)) {
-    const index = columnLetterToIndex(column)
+    const index = letterToCol(column.toUpperCase())
     return index <= maxCol ? index : -1
   }
 

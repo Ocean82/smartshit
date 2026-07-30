@@ -8,6 +8,7 @@
 import type { ParsedToolCall } from './parser'
 import { refToCell, cellToRef, letterToCol } from '@/engine/spreadsheet'
 import type { SheetData, FilterConfig, CellFormat, ChartConfig } from '@/types'
+import { escapeRegex } from '@/lib'
 import { computeSortedCellUpdates, computeMultiSortedCellUpdates, findHeaderRow, findLastDataRow, findLastDataCol, type SortPatch } from '@/lib/sheetSort'
 import { applyFormatCells } from '@/lib/formatCellsTool'
 import { formatAsTable } from '@/lib/formatAsTable'
@@ -487,7 +488,7 @@ function executeToolInner(call: ParsedToolCall, ctx: ExecutionContext): Executio
         return { success: false, message: 'find_and_replace requires a "find" value', modified: 0 }
       }
       // Escape the needle: user text like "(" or "+" is not a regex.
-      const pattern = new RegExp(escapeRegExp(find), 'gi')
+      const pattern = new RegExp(escapeRegex(find), 'gi')
       ctx.pushHistory(`Replace "${find}" → "${replace}"`)
 
       const updates: BulkUpdates = {}
@@ -737,10 +738,7 @@ function applyBulk(ctx: ExecutionContext, updates: BulkUpdates): number {
   return count
 }
 
-/** Escape a user-supplied string so it can be embedded literally in a RegExp. */
-function escapeRegExp(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-}
+
 
 /** Validate a cell-reference param, returning either the normalised ref or a failure result. */
 function requireCellRef(

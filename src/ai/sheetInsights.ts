@@ -4,6 +4,7 @@ import { cellScalar } from '@/lib/formatUtils'
 import { AI_ANALYSIS_CONFIG } from '@/ai/config'
 import { detectOutliers, type OutlierItem } from '@/ai/outliers'
 import { findSummaryRowIndexes } from '@/lib/sheetRows'
+import { parseNumeric, normalizeHeader } from '@/ai/utils'
 
 export interface ColumnStat {
   column: string
@@ -49,21 +50,6 @@ export interface SheetInsights {
 const MAX_CATEGORY_TOTALS = 15
 const MAX_TOP_EXPENSES = 10
 const MAX_VARIANCES = 10
-
-function parseNumeric(value: string | number | boolean | null | undefined): number | null {
-  if (typeof value === 'number' && Number.isFinite(value)) return value
-  if (typeof value === 'string') {
-    const cleaned = value.replace(/[$,\s]/g, '')
-    const num = Number(cleaned)
-    if (cleaned !== '' && Number.isFinite(num)) return num
-  }
-  return null
-}
-
-function normalizeHeader(value: string | number | boolean | null | undefined): string {
-  if (value === null || value === undefined) return ''
-  return String(value).trim().toLowerCase()
-}
 
 function buildMatrix(
   sheet: SheetData,

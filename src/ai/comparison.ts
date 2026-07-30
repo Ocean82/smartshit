@@ -4,6 +4,8 @@ import type { SheetData, WorkbookData } from '@/types'
 import { refToCell } from '@/engine/spreadsheet'
 import { findHeaderRow, findLastDataRow } from '@/lib/sheetSort'
 import { findSummaryRowIndexes } from '@/lib/sheetRows'
+import { escapeRegex } from '@/lib'
+import { parseNumeric } from '@/ai/utils'
 
 export type SheetValueGetter = (sheetId: string, row: number, col: number) => string
 
@@ -14,26 +16,10 @@ interface ComparedValue {
   role: ColumnProfile['role']
 }
 
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-}
-
 function phraseAppears(message: string, phrase: string): boolean {
   const trimmed = phrase.trim()
   if (!trimmed) return false
-  return new RegExp(`(^|[^a-z0-9])${escapeRegExp(trimmed)}(?=$|[^a-z0-9])`, 'i').test(message)
-}
-
-function parseNumeric(value: string | number | boolean | null | undefined): number | null {
-  if (typeof value === 'number' && Number.isFinite(value)) return value
-  if (value == null || typeof value === 'boolean') return null
-  const text = String(value).trim()
-  if (!text) return null
-  const negative = /^\(.*\)$/.test(text)
-  const cleaned = text.replace(/[()$,%\s]/g, '').replace(/,/g, '')
-  const numeric = Number(cleaned)
-  if (!Number.isFinite(numeric)) return null
-  return negative ? -numeric : numeric
+  return new RegExp(`(^|[^a-z0-9])${escapeRegex(trimmed)}(?=$|[^a-z0-9])`, 'i').test(message)
 }
 
 function sheetGetter(getValue: SheetValueGetter, sheet: SheetData) {

@@ -3,16 +3,7 @@ import { cellToRef, colToLetter, refToCell } from '@/engine/spreadsheet'
 import { cellScalar } from '@/lib/formatUtils'
 import type { ColumnProfile, ColumnRole, SheetProfile, SheetPurpose } from '@/ai/types'
 import { findSummaryRowIndexes } from '@/lib/sheetRows'
-
-function parseNumeric(value: string | number | boolean | null | undefined): number | null {
-  if (typeof value === 'number' && Number.isFinite(value)) return value
-  if (typeof value === 'string') {
-    const cleaned = value.replace(/[$,\s]/g, '')
-    const num = Number(cleaned)
-    if (cleaned !== '' && Number.isFinite(num)) return num
-  }
-  return null
-}
+import { parseNumeric } from '@/ai/utils'
 
 function inferRole(header: string, values: (string | number | null)[]): ColumnRole {
   const h = header.toLowerCase()

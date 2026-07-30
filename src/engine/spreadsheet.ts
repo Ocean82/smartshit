@@ -186,29 +186,63 @@ export class SpreadsheetEngine {
     formulaText: string,
     resolveArg: (ref: string) => string | number | boolean | null,
   ): Promise<string | number | boolean | null> {
-    let ast: ASTNodeData | null = null;
-    try {
-      const result = await parse(formulaText, FormulaDialect.Excel);
-      ast = result;
-    } catch (e) {
-      console.error('[AI Formula] Parse error:', e);
-      return '#NAME?';
-    }
+    const useFormualizer = typeof FormulaDialect !== 'undefined' && typeof parse === 'function';
 
-    if (!ast || ast.type !== 'function' || !ast.name) {
-      return '#NAME?';
-    }
+    let funcName = '';
+    let resolvedArgs: (string | number | boolean | null | (string | number | boolean | null)[][])[] = [];
 
-    const funcName = ast.name.toUpperCase();
-    if (!this._aiRegistry.has(funcName)) return '#NAME?';
+    if (useFormualizer) {
+      let ast: ASTNodeData | null = null;
+      try {
+        ast = await parse(formulaText, FormulaDialect.Excel);
+      } catch (e) {
+        console.error('[AI Formula] Parse error:', e);
+        return '#NAME?';
+      }
 
-    const resolvedArgs: (string | number | boolean | null | (string | number | boolean | null)[][])[] = [];
+      if (!ast || ast.type !== 'function' || !ast.name) return '#NAME?';
+      funcName = ast.name.toUpperCase();
+      if (!this._aiRegistry.has(funcName)) return '#NAME?';
 
-    if (ast.args && ast.args.length > 0) {
-      for (const argNode of ast.args) {
-        if (!argNode) continue;
-        const resolved = await this._resolveAIArgument(argNode as ASTNodeData, resolveArg);
-        resolvedArgs.push(resolved);
+      if (ast.args && ast.args.length > 0) {
+        for (const argNode of ast.args) {
+          if (!argNode) continue;
+          const resolved = await this._resolveAIArgument(argNode as ASTNodeData, resolveArg);
+          resolvedArgs.push(resolved);
+        }
+      }
+    } else {
+      const match = formulaText.match(/^=(AI\.[A-Z0-9_-]+)\((.*)\)$/i);
+      if (!match) return '#NAME?';
+      funcName = match[1].toUpperCase();
+      if (!this._aiRegistry.has(funcName)) return '#NAME?';
+
+      const rawArgs = match[2];
+      if (rawArgs.trim()) {
+        const args = this._splitArgs(rawArgs);
+        for (const arg of args) {
+          const trimmed = arg.trim();
+          if (
+            (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+            (trimmed.startsWith("'") && trimmed.endsWith("'"))
+          ) {
+            resolvedArgs.push(trimmed.slice(1, -1));
+          } else if (/^-?\d+(\.\d+)?$/.test(trimmed)) {
+            resolvedArgs.push(Number(trimmed));
+          } else if (/^[A-Z]+\d+:[A-Z]+\d+$/i.test(trimmed)) {
+            const rangeResult = this._resolveRange(trimmed, resolveArg);
+            const firstCell = rangeResult[0]?.[0];
+            if (firstCell && typeof firstCell === 'object' && '__refError' in firstCell) {
+              resolvedArgs.push('#REF!');
+            } else {
+              resolvedArgs.push(rangeResult);
+            }
+          } else if (/^[A-Z]+\d+$/i.test(trimmed)) {
+            resolvedArgs.push(resolveArg(trimmed));
+          } else {
+            resolvedArgs.push(trimmed);
+          }
+        }
       }
     }
 
@@ -399,7 +433,35 @@ case 'function': {
   private _evaluateFunction(funcName: string, args: any[]): string | number | boolean | null {
     return `#FUNC:${funcName}`;
   }
-private _resolveRange(
+  private _splitArgs(argsStr: string): string[] {
+    const args: string[] = [];
+    let current = '';
+    let inString = false;
+    let stringChar = '';
+
+    for (let i = 0; i < argsStr.length; i++) {
+      const ch = argsStr[i];
+      if (inString) {
+        current += ch;
+        if (ch === stringChar && argsStr[i - 1] !== '\\') {
+          inString = false;
+        }
+      } else if (ch === '"' || ch === "'") {
+        inString = true;
+        stringChar = ch;
+        current += ch;
+      } else if (ch === ',') {
+        args.push(current);
+        current = '';
+      } else {
+        current += ch;
+      }
+    }
+    if (current.trim()) args.push(current);
+    return args;
+  }
+
+  private _resolveRange(
     rangeRef: string,
     resolveArg: (ref: string) => string | number | boolean | null,
   ): any[][] {

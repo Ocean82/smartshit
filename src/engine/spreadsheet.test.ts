@@ -238,9 +238,8 @@ describe('executeAIFormula — regex and parser edge cases', () => {
    *     named AI.MY-FUNC or AI.GPT4 would return #NAME? instead of dispatching
    *     to the registry. The fix widens the pattern to [A-Z0-9_-]+.
    */
-  it('B4 — accepts function names with hyphens and digits', () => {
+  it('B4 — accepts function names with hyphens and digits', async () => {
     const engine = new SpreadsheetEngine()
-    // Register a hyphenated AI function directly into the engine's own registry
     engine.aiRegistry.registerFunction(
       {
         name: 'AI.MY-FUNC',
@@ -266,10 +265,8 @@ describe('executeAIFormula — regex and parser edge cases', () => {
       () => 'digit-ok',
     )
 
-const resolve = () => null
-  // Must NOT return '#NAME?' — the regex must parse these names
-  it('B4 — accepts function names with hyphens and digits', async () => {
-    const engine = new SpreadsheetEngine()
+    const resolve = () => null
+    // Must NOT return '#NAME?' — the regex must parse these names
     expect(await engine.executeAIFormula('A1', '=AI.MY-FUNC("hello")', resolve)).toBe('hyphen-ok')
     expect(await engine.executeAIFormula('A1', '=AI.GPT4("hello")',    resolve)).toBe('digit-ok')
     engine.destroy()

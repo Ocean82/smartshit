@@ -6,6 +6,7 @@
 import { FONT_COLOR_HEX, HIGHLIGHT_BG_HEX } from '../../shared/colorMaps'
 import type { ColumnProfile } from '@/ai/types'
 import { parseAdvancedFormula } from './formulaPatterns'
+import { escapeRegex, letterToCol } from '@/lib'
 
 export interface ParsedToolCall {
   tool: string
@@ -36,27 +37,21 @@ const NON_ROW_DELETE_TARGETS = [
   'note', 'notes', 'comment', 'comments', 'validation', 'everything', 'all',
 ]
 
+const NON_ROW_DELETE_RE = NON_ROW_DELETE_TARGETS.map(
+  (word) => new RegExp(`\\b${word}\\b`),
+)
+
 function isNonRowDeleteTarget(text: string): boolean {
   const t = text.toLowerCase()
-  return NON_ROW_DELETE_TARGETS.some((word) => new RegExp(`\\b${word}\\b`).test(t))
+  return NON_ROW_DELETE_RE.some((re) => re.test(t))
 }
 
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-}
-
-function columnLetterToIndex(letter: string): number {
-  return letter.toUpperCase().split('').reduce(
-    (result, char) => result * 26 + char.charCodeAt(0) - 64,
-    0,
-  ) - 1
-}
 
 function columnMentioned(message: string, column: ColumnProfile): boolean {
   const lower = message.toLowerCase()
   const header = column.name.trim().toLowerCase()
-  if (header && new RegExp(`\\b${escapeRegExp(header)}\\b`, 'i').test(lower)) return true
-  return new RegExp(`\\bcolumn\\s+${escapeRegExp(column.column)}\\b`, 'i').test(message)
+  if (header && new RegExp(`\\b${escapeRegex(header)}\\b`, 'i').test(lower)) return true
+  return new RegExp(`\\bcolumn\\s+${escapeRegex(column.column)}\\b`, 'i').test(message)
 }
 
 /**
@@ -80,7 +75,7 @@ function resolveSmartColumn(
 
   const bareColumn = message.match(/\b(?:in|from|of)\s+([a-z]{1,3})\s*[?.!]*$/i)?.[1]
   if (bareColumn && !DIRECTION_WORDS.has(bareColumn.toLowerCase())) {
-    const index = columnLetterToIndex(bareColumn)
+    const index = letterToCol(bareColumn)
     if (!sheetContext || index <= sheetContext.lastDataCol) return bareColumn.toUpperCase()
   }
 
@@ -301,7 +296,7 @@ export function parseMessage(message: string, sheetContext?: SheetContext): Pars
     } else if (explicitColumn && !DIRECTION_WORDS.has(explicitColumn.toLowerCase())) {
       column = explicitColumn.toUpperCase()
     } else if (shortTarget && !DIRECTION_WORDS.has(shortTarget.toLowerCase())) {
-      const index = columnLetterToIndex(shortTarget)
+      const index = letterToCol(shortTarget)
       column = !sheetContext || index <= sheetContext.lastDataCol
         ? shortTarget.toUpperCase()
         : byName
@@ -397,9 +392,9 @@ export function parseMessage(message: string, sheetContext?: SheetContext): Pars
       const profile = sheetContext?.columns?.find((item) => item.column === column)
       if (profile) {
         criterion = criterion
-          .replace(new RegExp(`^(?:an?\\s+|the\\s+)?${escapeRegExp(profile.name)}\\s+(?:of|is|=|are)?\\s*`, 'i'), '')
-          .replace(new RegExp(`\\s+in\\s+(?:the\\s+)?(?:${escapeRegExp(profile.name)}|column\\s+${escapeRegExp(profile.column)})$`, 'i'), '')
-          .replace(new RegExp(`\\s+${escapeRegExp(profile.name)}$`, 'i'), '')
+          .replace(new RegExp(`^(?:an?\\s+|the\\s+)?${escapeRegex(profile.name)}\\s+(?:of|is|=|are)?\\s*`, 'i'), '')
+          .replace(new RegExp(`\\s+in\\s+(?:the\\s+)?(?:${escapeRegex(profile.name)}|column\\s+${escapeRegex(profile.column)})$`, 'i'), '')
+          .replace(new RegExp(`\\s+${escapeRegex(profile.name)}$`, 'i'), '')
           .replace(/^(?:an?|the)\s+/i, '')
           .trim()
       }
