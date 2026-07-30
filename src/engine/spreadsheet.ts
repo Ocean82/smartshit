@@ -1,4 +1,4 @@
-import { Workbook, type WorkbookApi } from '@ocean8219/formualizer';
+import { Workbook, type WorkbookApi, parse, FormulaDialect, ASTNodeData } from '@ocean8219/formualizer';
 import type { SheetData, WorkbookData, PivotConfig, PivotResult } from '@/types';
 import { v4 as uuid } from 'uuid';
 import { AIFunctionRegistry } from './aiFunctions';
@@ -26,14 +26,6 @@ export function letterToCol(letter: string): number {
 
 const CELL_ID_RE = /^([A-Za-z]{1,3})(\d{1,7})$/;
 
-/**
- * Parse a cell id ("A1", "bc23") into 0-based coordinates, or `null` when the
- * input is not a valid reference.
- *
- * Prefer this over `cellToRef` wherever a malformed id should be handled
- * explicitly — `cellToRef` collapses bad input to A1, which silently writes to
- * the wrong cell.
- */
 export function tryCellToRef(cellId: string): { row: number; col: number } | null {
   const match = typeof cellId === 'string' ? cellId.match(CELL_ID_RE) : null;
   if (!match) return null;
@@ -42,11 +34,6 @@ export function tryCellToRef(cellId: string): { row: number; col: number } | nul
   return { row, col: letterToCol(match[1]) };
 }
 
-/**
- * Parse a cell id into 0-based coordinates, falling back to A1 for malformed
- * input. Retained for the many call sites that cannot meaningfully handle a
- * failure; new code should use {@link tryCellToRef}.
- */
 export function cellToRef(cellId: string): { row: number; col: number } {
   return tryCellToRef(cellId) ?? { row: 0, col: 0 };
 }
@@ -55,18 +42,10 @@ export function refToCell(row: number, col: number): string {
   return `${colToLetter(col)}${row + 1}`;
 }
 
-/**
- * Convert a raw formualizer cell value into the display string used everywhere
- * in the app (grid, auditor, AI context).
- *
- * Formualizer returns Excel error strings directly (e.g. "#DIV/0!", "#REF!"),
- * so we just need to handle null/undefined and coerce everything else to string.
- */
 export function computedValueToString(val: unknown): string {
   if (val === null || val === undefined) return '';
   if (typeof val === 'object' && val !== null) {
     const detailed = val as { value?: unknown; type?: string };
-    // formualizer errors have { value: '#DIV/0!', type: 'DIV_BY_ZERO' }
     if (typeof detailed.value === 'string' && detailed.value.startsWith('#')) {
       return detailed.value;
     }
@@ -100,26 +79,17 @@ export function createEmptyWorkbook(name: string): WorkbookData {
 
 export class SpreadsheetEngine {
   private wb: WorkbookApi;
-  // Maps our internal sheet uuid -> the sheet name used in formualizer
   private sheetMapping: Map<string, string> = new Map();
-  private readonly _aiRegistry: AIFunctionRegistry;
+  private _aiRegistry: AIFunctionRegistry;
   private _disposeAIFunctions: (() => void) | null = null;
 
-  /**
-   * @param aiRegistry Optional registry override. Defaults to a registry owned
-   * by this engine so that disposing one engine cannot unregister the AI
-   * functions still in use by another instance (tests, preview panes, a second
-   * workbook tab). Pass the shared `aiFunctionRegistry` explicitly to opt into
-   * the previous global behaviour.
-   */
   constructor(aiRegistry?: AIFunctionRegistry) {
     this._aiRegistry = aiRegistry ?? new AIFunctionRegistry();
     this.wb = new Workbook();
     this._disposeAIFunctions = registerBuiltinAIFunctions(this._aiRegistry);
-    this.invalidateFunctionMap(); // Ensure AI functions appear in function map
+    this.invalidateFunctionMap();
   }
 
-  /** Access the AI function registry for custom function registration */
   get aiRegistry(): AIFunctionRegistry {
     return this._aiRegistry;
   }
@@ -131,6 +101,17 @@ export class SpreadsheetEngine {
     }
   }
 
+  reset(): void {
+    this._aiRegistry.clearCache();
+    this._aiRegistry.dispose();
+    this._disposeAIFunctions?.();
+    this._aiRegistry = new AIFunctionRegistry();
+    this.wb = new Workbook();
+    this.sheetMapping.clear();
+    this._disposeAIFunctions = registerBuiltinAIFunctions(this._aiRegistry);
+    this.invalidateFunctionMap();
+  }
+
   loadSheet(sheet: SheetData): { success: boolean; error?: Error } {
     try {
       const sheetName = this.uniqueSheetName(sheet.name);
@@ -139,11 +120,9 @@ export class SpreadsheetEngine {
 
       for (const [cellId, cellData] of Object.entries(sheet.cells)) {
         const ref = cellToRef(cellId);
-        // row/col are 0-based internally; formualizer uses 1-based
         const r = ref.row + 1;
         const c = ref.col + 1;
         if (cellData.formula && this.isAIFormula(cellData.formula)) {
-          // AI formulas bypass the engine — store the cached value
           const v = cellData.value;
           if (v !== null && v !== undefined) this.wb.setValue(sheetName, r, c, v as string | number | boolean);
         } else if (cellData.formula) {
@@ -160,7 +139,6 @@ export class SpreadsheetEngine {
     }
   }
 
-  /** Suffix a sheet name until it no longer collides inside formualizer. */
   private uniqueSheetName(name: string): string {
     const base = name.trim() || 'Sheet';
     const existing = new Set(this.sheetMapping.values());
@@ -203,109 +181,228 @@ export class SpreadsheetEngine {
     return computedValueToString(val);
   }
 
-  /**
-   * Execute an AI formula function for a specific cell.
-   * Called when a cell contains a formula starting with =AI.
-   *
-   * @param cellId The cell reference (e.g., "A1")
-   * @param formulaText The full formula text (e.g., "=AI.CATEGORIZE(A1)")
-   * @param resolveArg Callback to resolve cell references to values
-   * @returns The AI function result (immediate or placeholder)
-   */
-  executeAIFormula(
+  async executeAIFormula(
     cellId: string,
     formulaText: string,
     resolveArg: (ref: string) => string | number | boolean | null,
-  ): string | number | boolean | null {
-    // Parse: =AI.FUNCTION_NAME(arg1, arg2, ...)
-    const match = formulaText.match(/^=(AI\.[A-Z0-9_-]+)\((.*)?\)$/i);
-    if (!match) return '#NAME?';
+  ): Promise<string | number | boolean | null> {
+    let ast: ASTNodeData | null = null;
+    try {
+      const result = await parse(formulaText, FormulaDialect.Excel);
+      ast = result;
+    } catch (e) {
+      console.error('[AI Formula] Parse error:', e);
+      return '#NAME?';
+    }
 
-    const funcName = match[1].toUpperCase();
-    const argsStr = match[2] || '';
+    if (!ast || ast.type !== 'function' || !ast.name) {
+      return '#NAME?';
+    }
 
+    const funcName = ast.name.toUpperCase();
     if (!this._aiRegistry.has(funcName)) return '#NAME?';
 
-    // Validate funcName against the registry allowlist before dispatch.
-    // funcName originates from a formula string; this lookup ensures only
-    // registered names reach execute() — no dynamic code execution occurs.
-    const safeFuncName = this._aiRegistry.has(funcName) ? funcName : null;
-    if (!safeFuncName) return '#NAME?';
+    const resolvedArgs: (string | number | boolean | null | (string | number | boolean | null)[][])[] = [];
 
-    // Parse arguments (simple: split by comma, resolve cell refs)
-    const rawArgs = argsStr
-      ? argsStr.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map((a) => a.trim())
-      : [];
+    if (ast.args && ast.args.length > 0) {
+      for (const argNode of ast.args) {
+        if (!argNode) continue;
+        const resolved = await this._resolveAIArgument(argNode as ASTNodeData, resolveArg);
+        resolvedArgs.push(resolved);
+      }
+    }
 
-    const resolvedArgs = rawArgs.map((arg): string | number | boolean | null | (string | number | boolean | null)[][] => {
-      // String literal
-      if (arg.startsWith('"') && arg.endsWith('"')) {
-        return arg.slice(1, -1);
-      }
-      // Number
-      if (/^-?\d+(\.\d+)?$/.test(arg)) {
-        return Number(arg);
-      }
-      // Cell reference — resolve it
-      if (/^[A-Z]+\d+$/i.test(arg)) {
-        return resolveArg(arg);
-      }
-      // Range reference (A1:B10) — resolve to 2D array
-      if (/^[A-Z]+\d+:[A-Z]+\d+$/i.test(arg)) {
-        const rangeResult = this._resolveRange(arg, resolveArg);
-        // Check for ref error marker
-        const firstCell = rangeResult[0]?.[0];
-        if (firstCell && typeof firstCell === 'object' && '__refError' in firstCell) {
-          return '#REF!';
-        }
-        // TypeScript narrowing: after the check, rangeResult is the normal type
-        return rangeResult as (string | number | boolean | null)[][];
-      }
-      // Pass as string
-      return arg;
-    });
-
-    return this._aiRegistry.execute(safeFuncName, cellId, resolvedArgs);
+    return this._aiRegistry.execute(funcName, cellId, resolvedArgs);
   }
 
-  /** Check if a formula is an AI function */
   isAIFormula(formula: string): boolean {
     return /^=AI\.[A-Z0-9_-]+\(/i.test(formula);
   }
 
-  /**
-   * Execute all AI formulas in the workbook.
-   * Placeholder for future use - currently store handles per-sheet execution.
-   */
   executeAllAIFormulas(): void {
-    // Implementation would require access to store's cell data
-    // For now, store calls executeAIFormulasForSheet per sheet
   }
 
-  /**
-   * Execute AI formulas for a specific sheet by scanning the store's cell data.
-   * This should be called from the store after loading workbook data.
-   */
   executeAIFormulasForSheet(
     sheetId: string,
     cells: Record<string, { value: string | number | boolean | null; formula?: string }>,
-    resolveArg: (ref: string) => string | number | boolean | null
+    resolveArg: (ref: string) => string | number | boolean | null,
   ): void {
     const sheetName = this.sheetMapping.get(sheetId);
     if (!sheetName) return;
 
     for (const [cellId, cellData] of Object.entries(cells)) {
       if (cellData.formula && this.isAIFormula(cellData.formula)) {
-        // Fire and forget - registry handles caching/dedup
         this.executeAIFormula(cellId, cellData.formula, resolveArg);
       }
     }
   }
 
+  /**
+   * Convert an AST node to its string representation for simple cases.
+   * Used to handle simple literals and references in AI function arguments.
+   */
+  private astNodeToString(node: ASTNodeData): string {
+    if (!node) return '';
+    switch (node.type) {
+      case 'text':
+        return `"${node.value ?? ''}"`;
+      case 'number':
+        return String(node.value ?? 0);
+      case 'boolean':
+        return String(node.value ?? false);
+      case 'reference': {
+        const ref = node.reference;
+        if (!ref) return '';
+        const start = `${colToLetter(ref.colStart)}${ref.rowStart + 1}`;
+        if (ref.rowStart === ref.rowEnd && ref.colStart === ref.colEnd) {
+          return start;
+        }
+        const end = `${colToLetter(ref.colEnd)}${ref.rowEnd + 1}`;
+        return `${start}:${end}`;
+      }
+      case 'function': {
+        const args = (node.args ?? []).map((arg) => this.astNodeToString(arg)).join(', ');
+        return `${node.name}(${args})`;
+      }
+      case 'binaryOp':
+        return `(${this.astNodeToString(node.left!)}${node.op}${this.astNodeToString(node.right!)})`;
+      case 'unaryOp':
+        return `${node.op}${this.astNodeToString(node.operand!)}`;
+      default:
+        return '';
+    }
+  }
+
+  private async _resolveAIArgument(
+    argNode: ASTNodeData,
+    resolveArg: (ref: string) => string | number | boolean | null,
+  ): Promise<any> {
+    // Convert AST node to string for simple cases
+    const argStr = this.astNodeToString(argNode);
+    const trimmed = argStr.trim();
+
+    if (
+      (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+      (trimmed.startsWith("'") && trimmed.endsWith("'"))
+    ) {
+      return trimmed.slice(1, -1);
+    }
+
+    if (/^-?\d+(\.\d+)?$/.test(trimmed)) {
+      return Number(trimmed);
+    }
+
+    if (/^[A-Z]+\d+:[A-Z]+\d+$/i.test(trimmed)) {
+      const rangeResult = this._resolveRange(trimmed, resolveArg);
+      const firstCell = rangeResult[0]?.[0];
+      if (firstCell && typeof firstCell === 'object' && '__refError' in firstCell) {
+        return '#REF!';
+      }
+      return rangeResult;
+    }
+
+    if (/^[A-Z]+\d+$/i.test(trimmed)) {
+      return resolveArg(trimmed);
+    }
+
+    try {
+      const ast = await parse(trimmed, FormulaDialect.Excel);
+      return this._evaluateAST(ast, resolveArg);
+    } catch {
+      return trimmed;
+    }
+  }
+
+  private async _evaluateAST(
+    ast: any,
+    resolveArg: (ref: string) => string | number | boolean | null,
+  ): Promise<any> {
+    if (!ast) return null;
+
+    switch (ast.type) {
+      case 'reference': {
+        const ref = ast.reference;
+        if (!ref) return null;
+        if (
+          ref.rowStart === ref.rowEnd &&
+          ref.colStart === ref.colEnd &&
+          ref.rowStart !== undefined
+        ) {
+          const cellRef = `${colToLetter(ref.colStart)}${ref.rowStart + 1}`;
+          return resolveArg(cellRef);
+        }
+        return this._resolveRange(
+          `${colToLetter(ref.colStart)}${ref.rowStart + 1}:${colToLetter(ref.colEnd)}${ref.rowEnd + 1}`,
+          resolveArg,
+        );
+      }
+      case 'number':
+        return ast.value ?? 0;
+      case 'text':
+        return ast.value ?? '';
+      case 'boolean':
+        return ast.value ?? false;
+      case 'binaryOp': {
+        const leftNode = ast.left;
+        const rightNode = ast.right;
+        if (!leftNode || !rightNode) return null;
+        const left = await this._evaluateAST(leftNode, resolveArg);
+        const right = await this._evaluateAST(rightNode, resolveArg);
+        if (left === null || right === null) return null;
+        const op = ast.op;
+        if (typeof left === 'number' && typeof right === 'number') {
+          switch (op) {
+            case '+': return left + right;
+            case '-': return left - right;
+            case '*': return left * right;
+            case '/': return right !== 0 ? left / right : '#DIV/0!';
+            case '^': return Math.pow(left, right);
+            case '&': return String(left) + String(right);
+            case '=': return left === right;
+            case '<>': return left !== right;
+            case '<': return left < right;
+            case '<=': return left <= right;
+            case '>': return left > right;
+            case '>=': return left >= right;
+          }
+        }
+        if (op === '&') return String(left) + String(right);
+        if (op === '=') return left === right;
+        if (op === '<>') return left !== right;
+        if (op === '<') return left < right;
+        if (op === '<=') return left <= right;
+        if (op === '>') return left > right;
+        if (op === '>=') return left >= right;
+        return null;
+      }
+      case 'unaryOp': {
+        const operandNode = ast.operand;
+        if (!operandNode) return null;
+        const operand = await this._evaluateAST(operandNode, resolveArg);
+        if (operand === null) return null;
+        if (ast.op === '-' && typeof operand === 'number') return -operand;
+        if (ast.op === '+' && typeof operand === 'number') return +operand;
+        return operand;
+      }
+case 'function': {
+        const funcName = ast.name?.toUpperCase();
+        const args = await Promise.all(
+          (ast.args ?? []).map((arg: ASTNodeData) => this._evaluateAST(arg, resolveArg)),
+        );
+        return this._evaluateFunction(funcName, args);
+      }
+      default:
+        return null;
+    }
+  }
+
+  private _evaluateFunction(funcName: string, args: any[]): string | number | boolean | null {
+    return `#FUNC:${funcName}`;
+  }
 private _resolveRange(
     rangeRef: string,
     resolveArg: (ref: string) => string | number | boolean | null,
-  ): (string | number | boolean | null | { __refError: true })[][] {
+  ): any[][] {
     const parts = rangeRef.split(':');
     if (parts.length !== 2) return [];
 
@@ -313,8 +410,7 @@ private _resolveRange(
     const end = tryCellToRef(parts[1].toUpperCase());
 
     if (!start || !end) {
-      // Return a special marker that executeAIFormula can detect and convert to #REF!
-      return [[{ __refError: true }]] as (string | number | boolean | null | { __refError: true })[][];
+      return [[{ __refError: true }]];
     }
 
     const minRow = Math.min(start.row, end.row);
@@ -322,9 +418,9 @@ private _resolveRange(
     const minCol = Math.min(start.col, end.col);
     const maxCol = Math.max(start.col, end.col);
 
-    const result: (string | number | boolean | null)[][] = [];
+    const result: any[][] = [];
     for (let r = minRow; r <= maxRow; r++) {
-      const row: (string | number | boolean | null)[] = [];
+      const row: any[] = [];
       for (let c = minCol; c <= maxCol; c++) {
         row.push(resolveArg(refToCell(r, c)));
       }
@@ -334,7 +430,32 @@ private _resolveRange(
   }
 
   getFunctionList(): Array<{ name: string; description: string; category: string; syntax: string }> {
-    return [...this.getFallbackFunctions(), ...this.getExtendedFunctions(), ...getAIFunctionList(this._aiRegistry)];
+    let formualizerFunctions: Array<{ name: string; description: string; category: string; syntax: string }> = [];
+    try {
+      const registered = this.wb.listFunctions();
+      formualizerFunctions = registered.map(fn => ({
+        name: fn.name,
+        description: `Built-in function (${fn.minArgs}–${fn.maxArgs ?? '∞'} args)${fn.volatile ? ' [volatile]' : ''}`,
+        category: 'Formulas',
+        syntax: `${fn.name}(${Array.from({ length: fn.minArgs }, (_, i) => `arg${i + 1}`).join(', ')}${fn.maxArgs === null || fn.maxArgs > fn.minArgs ? ', ...' : ''})`,
+      }));
+    } catch {
+    }
+
+    const fallback = [...this.getFallbackFunctions(), ...this.getExtendedFunctions()];
+    const aiFunctions = getAIFunctionList(this._aiRegistry);
+
+    const seen = new Set<string>();
+    const merged: Array<{ name: string; description: string; category: string; syntax: string }> = [];
+
+    for (const fn of [...formualizerFunctions, ...fallback, ...aiFunctions]) {
+      const key = fn.name.toUpperCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        merged.push(fn);
+      }
+    }
+    return merged;
   }
 
   private _functionMap: Map<string, { description: string; category: string; syntax: string }> | null = null;
@@ -344,23 +465,30 @@ private _resolveRange(
     for (const fn of [...this.getFallbackFunctions(), ...this.getExtendedFunctions()]) {
       m.set(fn.name, { description: fn.description, category: fn.category, syntax: fn.syntax });
     }
+    try {
+      const formualizerFuncs = this.wb.listFunctions();
+      for (const fn of formualizerFuncs) {
+        const name = fn.name.toUpperCase();
+        if (!m.has(name)) {
+          m.set(name, {
+            description: `Formualizer built-in: ${fn.name}`,
+            category: 'Formualizer',
+            syntax: `${fn.name}(${fn.minArgs === fn.maxArgs ? fn.minArgs : `${fn.minArgs}–${fn.maxArgs ?? '?'}`} args)`,
+          });
+        }
+      }
+    } catch {
+    }
     this._functionMap = m;
     return m;
   }
 
-  /**
-   * Invalidate the function map cache so it rebuilds on next getFunctionInfo call.
-   * Call this after dynamically registering new functions.
-   */
   invalidateFunctionMap(): void {
     this._functionMap = null;
   }
 
   getFunctionInfo(name: string): { name: string; description: string; category: string; syntax: string } | null {
     const key = name.toUpperCase();
-    // Check the memoized built-in map first — getFunctionList() rebuilds the
-    // full catalogue on every call, which is far too slow for a per-keystroke
-    // autocomplete lookup.
     const info = this.buildFunctionMap().get(key);
     if (info) return { name: key, ...info };
 
@@ -426,7 +554,6 @@ private _resolveRange(
 
   private getExtendedFunctions(): Array<{ name: string; description: string; category: string; syntax: string }> {
     return [
-      // Lookup & Reference (from PhpSpreadsheet reference)
       { name: 'XLOOKUP', description: 'Searches a range or array for a match', category: 'Lookup', syntax: 'XLOOKUP(lookup_value, lookup_array, return_array, [not_found], [match_mode])' },
       { name: 'FILTER', description: 'Filters a range based on criteria', category: 'Lookup', syntax: 'FILTER(array, include, [if_empty])' },
       { name: 'SORT', description: 'Sorts the contents of a range', category: 'Lookup', syntax: 'SORT(array, [sort_index], [sort_order], [by_col])' },
@@ -436,7 +563,6 @@ private _resolveRange(
       { name: 'ADDRESS', description: 'Returns a cell address as text', category: 'Lookup', syntax: 'ADDRESS(row_num, column_num, [abs_num], [a1], [sheet_text])' },
       { name: 'TRANSPOSE', description: 'Returns the transpose of an array', category: 'Lookup', syntax: 'TRANSPOSE(array)' },
       { name: 'CHOOSE', description: 'Chooses a value from a list', category: 'Lookup', syntax: 'CHOOSE(index_num, value1, [value2], ...)' },
-      // Statistical
       { name: 'COUNTBLANK', description: 'Counts empty cells in a range', category: 'Statistical', syntax: 'COUNTBLANK(range)' },
       { name: 'COUNTIFS', description: 'Counts cells meeting multiple criteria', category: 'Statistical', syntax: 'COUNTIFS(range1, criteria1, [range2], [criteria2], ...)' },
       { name: 'SUMIFS', description: 'Sums cells meeting multiple criteria', category: 'Math', syntax: 'SUMIFS(sum_range, range1, criteria1, [range2], [criteria2], ...)' },
@@ -449,7 +575,6 @@ private _resolveRange(
       { name: 'SMALL', description: 'Returns the k-th smallest value', category: 'Statistical', syntax: 'SMALL(array, k)' },
       { name: 'RANK', description: 'Returns the rank of a number in a list', category: 'Statistical', syntax: 'RANK(number, ref, [order])' },
       { name: 'PERCENTILE', description: 'Returns the k-th percentile', category: 'Statistical', syntax: 'PERCENTILE(array, k)' },
-      // Math & Trig
       { name: 'PRODUCT', description: 'Multiplies its arguments', category: 'Math', syntax: 'PRODUCT(number1, [number2], ...)' },
       { name: 'RAND', description: 'Returns a random number between 0 and 1', category: 'Math', syntax: 'RAND()' },
       { name: 'RANDBETWEEN', description: 'Returns a random integer between two values', category: 'Math', syntax: 'RANDBETWEEN(bottom, top)' },
@@ -462,13 +587,11 @@ private _resolveRange(
       { name: 'ODD', description: 'Rounds up to nearest odd integer', category: 'Math', syntax: 'ODD(number)' },
       { name: 'GCD', description: 'Returns the greatest common divisor', category: 'Math', syntax: 'GCD(number1, [number2], ...)' },
       { name: 'LCM', description: 'Returns the least common multiple', category: 'Math', syntax: 'LCM(number1, [number2], ...)' },
-      // Logical
       { name: 'IFS', description: 'Checks multiple conditions', category: 'Logical', syntax: 'IFS(condition1, value1, [condition2], [value2], ...)' },
       { name: 'SWITCH', description: 'Evaluates expression against values', category: 'Logical', syntax: 'SWITCH(expression, value1, result1, [value2, result2], ..., [default])' },
       { name: 'IFERROR', description: 'Returns value if no error, otherwise alternative', category: 'Logical', syntax: 'IFERROR(value, value_if_error)' },
       { name: 'IFNA', description: 'Returns value if not #N/A, otherwise alternative', category: 'Logical', syntax: 'IFNA(value, value_if_na)' },
       { name: 'XOR', description: 'Returns TRUE if odd number of args are TRUE', category: 'Logical', syntax: 'XOR(logical1, [logical2], ...)' },
-      // Text
       { name: 'TEXT', description: 'Formats a number as text', category: 'Text', syntax: 'TEXT(value, format_text)' },
       { name: 'VALUE', description: 'Converts text to number', category: 'Text', syntax: 'VALUE(text)' },
       { name: 'SUBSTITUTE', description: 'Replaces text in a string', category: 'Text', syntax: 'SUBSTITUTE(text, old_text, new_text, [instance_num])' },
@@ -479,7 +602,6 @@ private _resolveRange(
       { name: 'PROPER', description: 'Capitalizes first letter of each word', category: 'Text', syntax: 'PROPER(text)' },
       { name: 'EXACT', description: 'Checks if two text strings are identical', category: 'Text', syntax: 'EXACT(text1, text2)' },
       { name: 'TEXTJOIN', description: 'Joins text with a delimiter', category: 'Text', syntax: 'TEXTJOIN(delimiter, ignore_empty, text1, [text2], ...)' },
-      // Date/Time
       { name: 'DATEDIF', description: 'Calculates difference between two dates', category: 'Date/Time', syntax: 'DATEDIF(start_date, end_date, unit)' },
       { name: 'EDATE', description: 'Returns date N months away', category: 'Date/Time', syntax: 'EDATE(start_date, months)' },
       { name: 'EOMONTH', description: 'Returns last day of month N months away', category: 'Date/Time', syntax: 'EOMONTH(start_date, months)' },
@@ -489,15 +611,13 @@ private _resolveRange(
       { name: 'HOUR', description: 'Returns the hour from a time', category: 'Date/Time', syntax: 'HOUR(serial_number)' },
       { name: 'MINUTE', description: 'Returns the minute from a time', category: 'Date/Time', syntax: 'MINUTE(serial_number)' },
       { name: 'SECOND', description: 'Returns the second from a time', category: 'Date/Time', syntax: 'SECOND(serial_number)' },
-      // Financial (from PhpSpreadsheet reference)
       { name: 'PMT', description: 'Returns the payment for a loan', category: 'Financial', syntax: 'PMT(rate, nper, pv, [fv], [type])' },
       { name: 'FV', description: 'Returns the future value of an investment', category: 'Financial', syntax: 'FV(rate, nper, pmt, [pv], [type])' },
-      { name: 'PV', description: 'Returns the present value of an investment', category: 'Financial', syntax: 'PV(rate, nper, pmt, [fv], [type])' },
+      { name: 'PV', description: 'Returns the present value of an investment', category: 'Financial', syntax: 'PV(rate, nper, pmt, [pv], [type])' },
       { name: 'NPV', description: 'Returns the net present value', category: 'Financial', syntax: 'NPV(rate, value1, [value2], ...)' },
       { name: 'IRR', description: 'Returns the internal rate of return', category: 'Financial', syntax: 'IRR(values, [guess])' },
       { name: 'RATE', description: 'Returns the interest rate per period', category: 'Financial', syntax: 'RATE(nper, pmt, pv, [fv], [type], [guess])' },
       { name: 'NPER', description: 'Returns the number of periods', category: 'Financial', syntax: 'NPER(rate, pmt, pv, [fv], [type])' },
-      // Information
       { name: 'ISBLANK', description: 'Returns TRUE if value is empty', category: 'Information', syntax: 'ISBLANK(value)' },
       { name: 'ISNUMBER', description: 'Returns TRUE if value is a number', category: 'Information', syntax: 'ISNUMBER(value)' },
       { name: 'ISTEXT', description: 'Returns TRUE if value is text', category: 'Information', syntax: 'ISTEXT(value)' },
@@ -515,26 +635,73 @@ private _resolveRange(
     startCol: number,
     endCol: number
   ): PivotResult {
-    return computePivotTable(cells, config, startRow, endRow, startCol, endCol);
-  }
+    const dataStartRow = config.hasHeader ? startRow + 1 : startRow;
+    const sourceRows: Record<string, (string | number | boolean | null)[]>[] = [];
+    for (let r = dataStartRow; r <= endRow; r++) {
+      const row: Record<string, (string | number | boolean | null)[]> = {};
+      for (let c = startCol; c <= endCol; c++) {
+        const colLetter = colToLetter(c);
+        const cellId = refToCell(r, c);
+        row[colLetter] = [cells[cellId]?.value ?? null];
+      }
+      sourceRows.push(row);
+    }
 
-  /**
-   * Reset the engine for a new workbook.
-   * Clears AI cache, pending calls, and rebuilds the formualizer workbook.
-   * Called by loadWorkbook to ensure clean state when switching workbooks.
-   */
-  reset(): void {
-    // Clear AI registry cache and pending calls
-    this._aiRegistry.clearCache();
-    // Note: pending calls will complete but update callback may target old cells
-    // This is acceptable as they'll be ignored (sheetMapping cleared below)
-    
-    // Recreate formualizer workbook and clear sheet mapping
-    this.wb = new Workbook();
-    this.sheetMapping.clear();
-    
-    // Invalidate function map cache so it rebuilds with current AI functions
-    this._functionMap = null;
+    const rowKeyMap = new Map<string, (string | number)[]>();
+    const colKeyMap = new Map<string, (string | number)[]>();
+    const valueAggMap = new Map<string, number[]>();
+
+    for (const sourceRow of sourceRows) {
+      const rowKeyParts = config.rows.map(f => String(sourceRow[f.sourceColumn]?.[0] ?? ''));
+      const rowKey = rowKeyParts.join('||');
+      if (!rowKeyMap.has(rowKey)) rowKeyMap.set(rowKey, rowKeyParts);
+
+      const colKeyParts = config.columns.map(f => String(sourceRow[f.sourceColumn]?.[0] ?? ''));
+      const colKey = colKeyParts.join('||');
+      if (!colKeyMap.has(colKey)) colKeyMap.set(colKey, colKeyParts);
+
+      for (let vfIdx = 0; vfIdx < config.values.length; vfIdx++) {
+        const vf = config.values[vfIdx];
+        const vfKey = `${rowKey}||${colKey}||${vfIdx}`;
+        const existing = valueAggMap.get(vfKey) || [];
+        const rawVal = sourceRow[vf.sourceColumn]?.[0];
+        const numVal = typeof rawVal === 'number' ? rawVal : parseFloat(String(rawVal));
+        if (!isNaN(numVal)) existing.push(numVal);
+        valueAggMap.set(vfKey, existing);
+      }
+    }
+
+    const rowFieldLabels = config.rows.map(f => f.label || f.sourceColumn);
+    const valueLabels = config.values.map(f => f.label || `${f.aggregation}(${f.sourceColumn})`);
+
+    const colKeys = Array.from(colKeyMap.keys());
+    const headers = [...rowFieldLabels, ...colKeys.flatMap(ck => {
+      const parts = colKeyMap.get(ck)!;
+      return valueLabels.map(vl => [...parts, vl].join(' '));
+    })];
+
+    const resultRows: (string | number)[][] = [];
+    for (const [rowKey, rowParts] of rowKeyMap) {
+      const row: (string | number)[] = [...rowParts];
+      for (const colKey of colKeys) {
+        for (let vfIdx = 0; vfIdx < config.values.length; vfIdx++) {
+          const vf = config.values[vfIdx];
+          const vfKey = `${rowKey}||${colKey}||${vfIdx}`;
+          const values = valueAggMap.get(vfKey) || [];
+          switch (vf.aggregation) {
+            case 'sum': row.push(values.reduce((a, b) => a + b, 0)); break;
+            case 'average': row.push(values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0); break;
+            case 'count': row.push(values.length); break;
+            case 'min': row.push(values.length ? Math.min(...values) : 0); break;
+            case 'max': row.push(values.length ? Math.max(...values) : 0); break;
+            case 'distinctCount': row.push(new Set(values).size); break;
+          }
+        }
+      }
+      resultRows.push(row);
+    }
+
+    return { headers, rows: resultRows, grandTotals: [] };
   }
 
   destroy(): void {
@@ -543,6 +710,5 @@ private _resolveRange(
       this._disposeAIFunctions = null;
     }
     this._aiRegistry.dispose();
-    // formualizer WASM objects are GC'd; no explicit destroy needed
   }
 }

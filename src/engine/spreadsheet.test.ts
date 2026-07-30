@@ -266,19 +266,21 @@ describe('executeAIFormula — regex and parser edge cases', () => {
       () => 'digit-ok',
     )
 
-    const resolve = () => null
-    // Must NOT return '#NAME?' — the regex must parse these names
-    expect(engine.executeAIFormula('A1', '=AI.MY-FUNC("hello")', resolve)).toBe('hyphen-ok')
-    expect(engine.executeAIFormula('A1', '=AI.GPT4("hello")',    resolve)).toBe('digit-ok')
+const resolve = () => null
+  // Must NOT return '#NAME?' — the regex must parse these names
+  it('B4 — accepts function names with hyphens and digits', async () => {
+    const engine = new SpreadsheetEngine()
+    expect(await engine.executeAIFormula('A1', '=AI.MY-FUNC("hello")', resolve)).toBe('hyphen-ok')
+    expect(await engine.executeAIFormula('A1', '=AI.GPT4("hello")',    resolve)).toBe('digit-ok')
     engine.destroy()
   })
 
   /**
    * B4: Unknown function names must still return #NAME?.
    */
-  it('B4 — returns #NAME? for unregistered AI function names', () => {
+  it('B4 — returns #NAME? for unregistered AI function names', async () => {
     const engine = new SpreadsheetEngine()
-    expect(engine.executeAIFormula('A1', '=AI.NOPE("x")', () => null)).toBe('#NAME?')
+    expect(await engine.executeAIFormula('A1', '=AI.NOPE("x")', () => null)).toBe('#NAME?')
     engine.destroy()
   })
 
@@ -292,7 +294,7 @@ describe('executeAIFormula — regex and parser edge cases', () => {
    * _resolveRange — the outer regex guard drops it as a plain string, which is
    * separate behaviour.
    */
-  it('B5 — passes #REF! to the executor for a range with an invalid cell bound (row 0)', () => {
+  it('B5 — passes #REF! to the executor for a range with an invalid cell bound (row 0)', async () => {
     const engine = new SpreadsheetEngine()
     let receivedArg: unknown = undefined
     engine.aiRegistry.registerFunction(
@@ -313,7 +315,7 @@ describe('executeAIFormula — regex and parser edge cases', () => {
     // A0:B1 — both parts match [A-Z]+\d+ so the range guard fires, but
     // tryCellToRef('A0') returns null (row 0 is invalid) → _resolveRange
     // returns { __refError: true } → executeAIFormula passes '#REF!' to executor
-    engine.executeAIFormula('A1', '=AI.TEST(A0:B1)', () => null)
+    await engine.executeAIFormula('A1', '=AI.TEST(A0:B1)', () => null)
     expect(receivedArg).toBe('#REF!')
     engine.destroy()
   })
@@ -324,7 +326,7 @@ describe('executeAIFormula — regex and parser edge cases', () => {
    * and that the limitation is not silently turned into a wrong result that would
    * mislead the user. This test intentionally documents the known boundary.
    */
-  it('O4 — does not crash on arguments with nested parentheses (graceful degradation)', () => {
+  it('O4 — does not crash on arguments with nested parentheses (graceful degradation)', async () => {
     const engine = new SpreadsheetEngine()
     engine.aiRegistry.registerFunction(
       {
@@ -340,9 +342,7 @@ describe('executeAIFormula — regex and parser edge cases', () => {
     )
     // The mini-parser will pass `IF(A1>0,"pos","neg")` as a raw string argument;
     // that is acceptable behaviour for the current implementation.
-    expect(() => {
-      engine.executeAIFormula('A1', '=AI.EXPLAIN(IF(A1>0,"pos","neg"))', () => null)
-    }).not.toThrow()
+    await expect(engine.executeAIFormula('A1', '=AI.EXPLAIN(IF(A1>0,"pos","neg"))', () => null)).resolves.not.toThrow()
     engine.destroy()
   })
 })
