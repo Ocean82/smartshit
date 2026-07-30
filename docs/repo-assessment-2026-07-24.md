@@ -9,7 +9,7 @@
 
 ## 1. Executive Summary
 
-smartsh!t is an **AI-augmented web spreadsheet** (React 19 + Vite 7 + HyperFormula) with an Express 5 API that fronts several LLM providers. Its genuinely differentiated ideas are the **client-side formula auditor** and the **hybrid intent router** that answers most requests deterministically without an LLM round-trip.
+smartsh!t is an **AI-augmented web spreadsheet** (React 19 + Vite 7 + Formualizer) with an Express 5 API that fronts several LLM providers. Its genuinely differentiated ideas are the **client-side formula auditor** and the **hybrid intent router** that answers most requests deterministically without an LLM round-trip.
 
 **Overall grade: B / B+ — a strong, unusually disciplined solo project that is close to, but not quite at, production-hardened.**
 
@@ -33,7 +33,7 @@ That is a better-than-average health baseline. The issues below are mostly about
 
 | Layer | Tech | LOC |
 |---|---|---|
-| Frontend | React 19, Vite 7, Tailwind 4, Zustand+Immer, HyperFormula 3.3 | ~39.4k (`src/` + `shared/`) |
+| Frontend | React 19, Vite 7, Tailwind 4, Zustand+Immer, Formualizer | ~39.4k (`src/` + `shared/`) |
 | Backend | Express 5, TypeScript, SSE streaming, Zod, Postgres (`pg`), S3 | ~4.7k (`server/src/`) |
 | Tests | Vitest, 32 test files | ~3.3k |
 | AI | Ollama (local) / OpenRouter / Groq / HuggingFace / BYOK | — |
@@ -137,8 +137,8 @@ Related, smaller: share tokens are `randomUUID()` (v4, 122 bits of entropy) — 
 - `vite@7.3.2` — high (`server.fs.deny` bypass on Windows) + moderate; dev-server-only, bump to >7.3.4.
 - `postcss ≤8.5.17` — high, path traversal via sourceMappingURL; build-time only.
 
-### 🟡 P2-2 — HyperFormula is used under `licenseKey: 'gpl-v3'` while the project ships MIT
-`src/engine/spreadsheet.ts` instantiates HyperFormula twice with `licenseKey: 'gpl-v3'`. HyperFormula 3.3.0 is dual-licensed (proprietary or GPL-3.0-only); choosing the GPLv3 key means **the distributed application is subject to GPLv3 copyleft**, which is incompatible with the MIT license declared in `LICENSE`, `package.json`, and the README badge. For an open-source hobby project this is a paperwork problem; for `smartsht.com` with a $7/mo Pro tier it is a **real commercial licensing exposure**. Either buy a HyperFormula commercial key, relicense the project GPLv3, or replace the formula engine. Worth a lawyer's five minutes before scaling revenue.
+### ~~🟡 P2-2 — HyperFormula GPLv3 licensing conflict~~ ✅ RESOLVED
+The formula engine has been replaced with `@ocean8219/formualizer`, a permissively-licensed fork. The GPLv3 copyleft conflict no longer applies. The project is correctly MIT-licensed throughout.
 
 ### 🟡 P2-3 — No linter or formatter
 No ESLint, no Prettier, no `.editorconfig`. Style is currently consistent because there's one author, but `src/store/useStore.ts` uses semicolons while `server/src/*` doesn't — the drift has already started. CI runs tests and builds only. Adding `eslint` + `typescript-eslint` + `eslint-plugin-react-hooks` to CI would catch a class of React bugs (`useIsSignedIn()` in `AuthProvider.tsx` calls `useAuth()` inside a `try`/after an early return — a conditional-hook violation that lint would flag immediately).
@@ -155,7 +155,7 @@ No ESLint, no Prettier, no `.editorconfig`. Style is currently consistent becaus
 | `src/engine` | **0** | 3 |
 | `server/src/routes` | **0** | 5 |
 
-Zero component tests (no React Testing Library), zero tests on the HyperFormula wrapper, zero tests on any HTTP route — including the ownership checks and the Stripe webhook. The auth/ownership logic and `verifyWebhookSignature` are the highest-value untested code in the repo: they're pure, easy to test, and a regression there is a security incident. `supertest` + a `pg` mock would cover the routes in an afternoon.
+Zero component tests (no React Testing Library), zero tests on the Formualizer wrapper, zero tests on any HTTP route — including the ownership checks and the Stripe webhook. The auth/ownership logic and `verifyWebhookSignature` are the highest-value untested code in the repo: they're pure, easy to test, and a regression there is a security incident. `supertest` + a `pg` mock would cover the routes in an afternoon.
 
 ### 🟡 P2-5 — God objects persist
 `src/store/useStore.ts` is 1,496 lines and still owns workbook mutations, chat orchestration, clipboard, sort/filter, files, history, and toasts. Extraction has *started* — `src/store/slices/` (uiSlice, fileSlice) and `src/services/chatService.ts` exist and are well-designed — but the bulk hasn't moved. `src/components/SpreadsheetGrid.tsx` is 932 lines. `src/templates/personal-finance.ts` is 1,901 lines (data-heavy, less concerning). 21 files exceed 400 lines. This is the main day-2 maintainability tax.
@@ -206,7 +206,7 @@ Two caveats: (a) the planning docs outnumber the tests, and some are stale relat
 10. Add ESLint + `eslint-plugin-react-hooks` to CI — P2-4 (and it will catch the `useIsSignedIn` hook violation).
 
 **This quarter:**
-11. Get clarity on the **HyperFormula GPLv3-vs-MIT conflict** — P2-2. This is the highest-consequence item in the whole review even though it isn't a bug.
+11. ~~Get clarity on the **HyperFormula GPLv3-vs-MIT conflict** — P2-2.~~ ✅ Resolved — migrated to `@ocean8219/formualizer`.
 12. Route tests with `supertest` (ownership checks + Stripe webhook first) — P2-4.
 13. Continue the `useStore` slice extraction already begun — P2-5.
 14. Consolidate duplicated constants into `shared/` — P2-6.
@@ -220,6 +220,6 @@ This does not read like a weekend prototype. Strict types with three `any`s, zer
 
 The gap is **operational**. The three P0s share a root cause: infrastructure-boundary assumptions that were never validated against a running system — the proxy layer that rewrites `req.ip`, the one router that missed the auth middleware, the IPv6 warning that scrolls past on boot. Each is a small diff. Together they mean that the moment a real `GROQ_API_KEY` lands on a public box, the LLM budget is unprotected.
 
-Fix the P0s this week and this is a solidly production-ready v1. Resolve the HyperFormula licensing question before the Pro tier grows, because that one gets more expensive the longer it waits.
+Fix the P0s this week and this is a solidly production-ready v1.
 
 **Grade: B+ on engineering craft, C+ on operational hardening, A– on documentation and product thinking.**

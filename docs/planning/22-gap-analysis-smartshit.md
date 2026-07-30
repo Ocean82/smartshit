@@ -39,7 +39,7 @@ smartsh!t has implemented a **thin brain layer** — mode routing, structured co
 
 | Capability | Location |
 |------------|----------|
-| Spreadsheet engine | [`src/engine/spreadsheet.ts`](../../src/engine/spreadsheet.ts) (HyperFormula) |
+| Spreadsheet engine | [`src/engine/spreadsheet.ts`](../../src/engine/spreadsheet.ts) (Formualizer) |
 | xlsx/csv I/O | [`src/io/xlsx.ts`](../../src/io/xlsx.ts) |
 | Template creation actions | [`src/store/useStore.ts`](../../src/store/useStore.ts) `executeAction()` |
 | LLM providers (Groq, OpenRouter, HF, Ollama) | [`server/src/index.ts`](../../server/src/index.ts) |
@@ -99,7 +99,7 @@ smartsh!t has implemented a **thin brain layer** — mode routing, structured co
 | [09 Analyzer](09-tools-analyzer.md) | [`sheetInsights.ts`](../../src/ai/sheetInsights.ts) | Partial — basic stats only; no outliers, trends, correlations, purpose detection |
 | [10 Writer](10-tools-writer.md) | `bulkSetCells`, `setCellValue`, `executeAction` | Partial — template writes work; no generic cell/range writer API |
 | [11 Formatter](11-tools-formatter.md) | `setCellFormat`, `format_cells` action | Partial — limited formatting vs spec |
-| [12 Formula engine](12-tools-formula-engine.md) | HyperFormula + `apply_formula` action | Partial — SUM/AVG/MAX/MIN/COUNT columns only |
+| [12 Formula engine](12-tools-formula-engine.md) | Formualizer + `apply_formula` action | Partial — SUM/AVG/MAX/MIN/COUNT columns only |
 | [13 Chart engine](13-tools-chart-engine.md) | `create_chart` action + `ChartConfig` | Partial — UI dialog exists; limited chart intelligence |
 | [14 Query engine](14-tools-query-engine.md) | None | **Missing** — no NL → filter/sort/aggregate queries |
 
@@ -202,7 +202,7 @@ Do **not** blindly port the Python/pandas stack. smartsh!t should keep:
 
 | smartsh!t strength | Spec approach | Keep |
 |--------------------|---------------|------|
-| HyperFormula live formulas | pandas static DataFrames | Client-side computed values |
+| Formualizer live formulas | pandas static DataFrames | Client-side computed values |
 | React + Zustand UI | CLI/agent integration | In-browser spreadsheet state |
 | SSE streaming LLM | Sync `brain.process()` | Streaming chat UX |
 | TypeScript monorepo | Python package | TS tools in `src/ai/` |

@@ -20,7 +20,7 @@ export type { CellLocation, AuditRule, AuditContext } from './types'
  * Run a full audit on a sheet.
  *
  * @param sheet - The sheet data from the Zustand store.
- * @param getComputedValue - Function to get HyperFormula-computed value for a cell.
+ * @param getComputedValue - Function to get Formualizer-computed value for a cell.
  * @returns Structured audit result with findings and score.
  */
 export function runAudit(

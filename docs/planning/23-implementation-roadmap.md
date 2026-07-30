@@ -6,9 +6,9 @@
 
 **Goal:** Make smartsh!t genuinely useful for real users—import a budget, ask questions, get specific financial advice, query/filter data, and apply safe sheet changes—by closing gaps identified in [`docs/planning/22-gap-analysis-smartshit.md`](docs/planning/22-gap-analysis-smartshit.md).
 
-**Architecture:** Keep HyperFormula + Zustand client-side; add a TypeScript "brain" layer (`src/ai/`) with shared types, tools, and skills. Server continues LLM routing via [`server/src/index.ts`](server/src/index.ts); deterministic analysis runs on the client where computed values live. Port **interfaces and behavior** from planning docs, not pandas/openpyxl.
+**Architecture:** Keep Formualizer + Zustand client-side; add a TypeScript "brain" layer (`src/ai/`) with shared types, tools, and skills. Server continues LLM routing via [`server/src/index.ts`](server/src/index.ts); deterministic analysis runs on the client where computed values live. Port **interfaces and behavior** from planning docs, not pandas/openpyxl.
 
-**Tech Stack:** TypeScript, React 19, Zustand, HyperFormula, Express 5, Vitest, existing LLM providers (Groq/OpenRouter/HF/Ollama).
+**Tech Stack:** TypeScript, React 19, Zustand, Formualizer (@ocean8219/formualizer), Express 5, Vitest, existing LLM providers (Groq/OpenRouter/HF/Ollama).
 
 ---
 
@@ -379,7 +379,7 @@ npm run build && npm run build --prefix server
 - RAG / vector memory across sessions
 - Autonomous agent loop (plan → tool → observe → replan)
 - Inventory skill (defer until user demand; sales tracker template exists)
-- Rewriting HyperFormula or spreadsheet UI
+- Rewriting Formualizer or spreadsheet UI
 
 ---
 

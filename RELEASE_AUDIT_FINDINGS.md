@@ -9,7 +9,7 @@
 
 ## 1. Executive Summary
 
-A comprehensive audit was performed across the `smartsh!t` full-stack application (React 19 / Vite frontend + Express 5 Node backend + HyperFormula calculation engine + QuickJS sandbox + Ollama / Cloud LLM routing).
+A comprehensive audit was performed across the `smartsh!t` full-stack application (React 19 / Vite frontend + Express 5 Node backend + Formualizer calculation engine + QuickJS sandbox + Ollama / Cloud LLM routing).
 
 All code defects, calculation/logic bugs, state synchronization issues, and ESLint warnings fixable within the repository were identified, resolved, and verified through automated test suites and build gates.
 
@@ -25,8 +25,8 @@ Items requiring external environment or infrastructure configuration (API keys, 
    - **Issue:** When multiple value fields were configured in a pivot table (e.g., `SUM(Sales)` and `SUM(Profit)`), the engine pushed all raw values into a single array key (`aggKey`), causing aggregated sums/averages to mix and corrupt data across all value fields.
    - **Fix:** Refactored `computePivotTable` to key aggregations by individual value field index (`rowKey||colKey||vfIdx`), ensuring isolated, mathematically precise aggregations per field.
 
-2. **HyperFormula & Zustand Store Desynchronization (`src/store/useStore.ts`)**
-   - **Issue:** Structural operations (`deleteRow`, `insertRow`, `deleteColumn`, `insertColumn`, and `deleteSelectedCells`) modified `sheet.cells` in the Zustand store but omitted re-synchronizing the underlying HyperFormula engine. Subsequent cell reads via `getComputedValue()` returned stale cached values from the wrong cell positions.
+2. **Formualizer & Zustand Store Desynchronization (`src/store/useStore.ts`)**
+   - **Issue:** Structural operations (`deleteRow`, `insertRow`, `deleteColumn`, `insertColumn`, and `deleteSelectedCells`) modified `sheet.cells` in the Zustand store but omitted re-synchronizing the underlying Formualizer engine. Subsequent cell reads via `getComputedValue()` returned stale cached values from the wrong cell positions.
    - **Fix:** Added `get().engine.loadWorkbook(get().workbook)` after structural row/col and cell deletion operations to guarantee 100% state synchronization.
 
 3. **Target Column Resolution Failure on Empty Columns (`src/agent/executor.ts`)**
@@ -100,9 +100,9 @@ The following items cannot be configured inside this local development environme
 - **Action Required:**
   - Set `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, and `STRIPE_PRO_PRICE_ID` in `server/.env`.
 
-### 6. Licensing Resolution (HyperFormula GPLv3)
-- **Description:** `README.md` and `docs/LICENSING.md` note that HyperFormula is used under its GPLv3 license option, which requires attribution/alignment with MIT license declarations.
-- **Action Required:** Review `docs/LICENSING.md` before commercial SaaS distribution.
+### 6. Licensing Resolution (Formualizer)
+- **Description:** The formula engine has been migrated from HyperFormula (GPLv3) to `@ocean8219/formualizer`, a permissively-licensed fork. The GPLv3 conflict is resolved.
+- **Action Required:** None — licensing is now consistent (MIT throughout).
 
 ---
 

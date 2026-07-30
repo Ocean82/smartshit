@@ -16,12 +16,12 @@ spreadsheet.ts
 ├── colToLetter / letterToCol / cellToRef / refToCell   ← coordinate math (used app-wide)
 ├── createEmptySheet / createEmptyWorkbook              ← factories
 └── class SpreadsheetEngine
-    ├── hf: HyperFormula                    ← the real calc engine
-    ├── sheetMapping: Map<appSheetId, hfSheetId>
-    ├── loadWorkbook / loadSheet            ← push cells into HF as a 2D array
+    ├── wb: Workbook (Formualizer)          ← the real calc engine
+    ├── sheetMapping: Map<appSheetId, sheetName>
+    ├── loadWorkbook / loadSheet            ← push cells into Formualizer
     ├── get/setCellValue, getComputedValue  ← read/write bridge
-    ├── executeAIFormula                    ← intercepts `=AI.*(…)` before HF sees it
-    ├── getFunctionList                     ← autocomplete metadata (HF built-ins + AI)
+    ├── executeAIFormula                    ← intercepts `=AI.*(…)` before Formualizer sees it
+    ├── getFunctionList                     ← autocomplete metadata (Formualizer built-ins + AI)
     ├── computePivotTable
     └── destroy()
 
@@ -29,7 +29,7 @@ aiFunctions.ts        → class AIFunctionRegistry + `aiFunctionRegistry` SINGLE
 aiFunctionDefinitions.ts → 10 `AI.*` definitions, executors, HTTP client, offline heuristics
 ```
 
-**The AI-formula flow.** `=AI.*` formulas never reach HyperFormula. `store.setCellValue` checks `engine.isAIFormula(formula)` and skips the HF write; `store.getComputedValue` detects the AI formula and calls `engine.executeAIFormula(...)`, which parses arguments, resolves cell refs, and delegates to the registry. The registry returns `"⏳ Loading..."` synchronously, fires the HTTP call in the background, then pushes the resolved value back through `setUpdateCallback` (wired in `useStore.ts:248`). This is a sensible design — a sync façade over an async resource.
+**The AI-formula flow.** `=AI.*` formulas never reach Formualizer. `store.setCellValue` checks `engine.isAIFormula(formula)` and skips the engine write; `store.getComputedValue` detects the AI formula and calls `engine.executeAIFormula(...)`, which parses arguments, resolves cell refs, and delegates to the registry. The registry returns `"⏳ Loading..."` synchronously, fires the HTTP call in the background, then pushes the resolved value back through `setUpdateCallback` (wired in `useStore.ts:248`). This is a sensible design — a sync façade over an async resource.
 
 ### `src/agent` — the deterministic fast path
 
@@ -58,7 +58,7 @@ The architecture is sound. The defects are in the implementations.
 if (typeof val === 'object') return '#ERROR!';
 ```
 
-HyperFormula returns a `DetailedCellError` object carrying the **real** error code. I inspected it directly:
+The formula engine returns a `DetailedCellError` object carrying the **real** error code. I inspected it directly:
 
 ```
 =A1/B1      → ctor: DetailedCellError, .type = DIV_BY_ZERO, .value = "#DIV/0!"
@@ -93,7 +93,7 @@ getComputedValue(sheetId: string, row: number, col: number): string {
   const val = this.getCellValue(sheetId, row, col);
   if (val === null || val === undefined) return '';
   if (typeof val === 'object') {
-    // HyperFormula DetailedCellError — preserve the real Excel error code
+    // Formualizer DetailedCellError — preserve the real Excel error code
     return (val as { value?: string }).value ?? '#ERROR!';
   }
   return String(val);
@@ -321,7 +321,7 @@ after e1.destroy()    : 0  AI fns
 
 Any second engine instance — a test, a preview pane, a future multi-workbook tab — silently disables AI formulas for the surviving instance. `dispose()` also nulls `_onCellUpdate`, which `useStore` set once at line 248 and never re-establishes, so async results stop landing even if functions are re-registered.
 
-Related: **`loadWorkbook` leaks HyperFormula instances.** It calls `this.hf.destroy()` then rebuilds — fine — but if `addSheet` throws mid-loop the mapping is left partially populated (see M3). The `try/catch` in `loadSheet` swallows the error with a bare comment.
+Related: **`loadWorkbook` leaks Formualizer instances.** It calls `this.wb` reset then rebuilds — fine — but if `addSheet` throws mid-loop the mapping is left partially populated (see M3). The `try/catch` in `loadSheet` swallows the error with a bare comment.
 
 **Fix:** make the registry an instance member (`new AIFunctionRegistry()` per engine) rather than a shared singleton, or reference-count registrations. The class is already written to support this; only the export is global.
 
@@ -338,7 +338,7 @@ s2 A1 = ""    ← silently empty; sheet never mapped
 
 xlsx imports and "duplicate sheet" flows can both produce colliding names. The user sees a blank sheet with no explanation.
 
-**Fix:** de-duplicate names before calling `addSheet` (`Sheet 1`, `Sheet 1 (2)`, …), capture the name HyperFormula actually assigned, and log/surface a warning instead of swallowing.
+**Fix:** de-duplicate names before calling `addSheet` (`Sheet 1`, `Sheet 1 (2)`, …), capture the name Formualizer actually assigned, and log/surface a warning instead of swallowing.
 
 ---
 
@@ -369,7 +369,7 @@ modify_column (500 rows)   →   500
 find_and_replace           → 1,133
 ```
 
-Each call runs a HyperFormula recalc **plus** an immer `produce` **plus** a Zustand notification **plus** a React render pass. Clearing a moderately sized sheet is thousands of synchronous recalcs on the main thread.
+Each call runs a Formualizer recalc **plus** an immer `produce` **plus** a Zustand notification **plus** a React render pass. Clearing a moderately sized sheet is thousands of synchronous recalcs on the main thread.
 
 **Fix:** accumulate into a record and issue one `ctx.bulkSetCells(updates)` in `clear_sheet`, `modify_column`, `find_and_replace`, `set_range`, and `add_row`. Delete the three genuinely unused context members (`insertRow`, `addSheet`, `addChart`) or wire them up — dead interface members mislead every future implementer.
 

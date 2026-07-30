@@ -36,7 +36,7 @@ inspectors, and proactive insights that surface automatically.
 | 09 | Tools: Analyzer | Statistical analysis pipeline |
 | 10 | Tools: Writer | Cell mutation tools |
 | 11 | Tools: Formatter | Formatting/conditional formatting |
-| 12 | Tools: Formula Engine | HyperFormula integration |
+| 12 | Tools: Formula Engine | Formualizer integration |
 | 13 | Tools: Chart Engine | Chart creation |
 | 14 | Tools: Query Engine | Data querying (top N, filter, compare) |
 | 15 | Skills: Budget | Budget-specific analysis |

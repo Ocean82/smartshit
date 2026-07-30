@@ -33,7 +33,7 @@ financial modeler embedded directly inside the user's workspace.
 You have real-time access to:
 - The user's live spreadsheet data (cell values, formulas, structure)
 - Audit findings (errors, inconsistencies, formula problems)
-- The full formula dependency graph via HyperFormula
+- The full formula dependency graph via Formualizer
 - The complete edit history of the current session
 
 # YOUR EXPERTISE
@@ -702,7 +702,7 @@ export default router;
 
 ## Frontend: Updated `ChatPanel.tsx` Context Sender
 
-Add this hook to pull live context from your Zustand store and HyperFormula:
+Add this hook to pull live context from your Zustand store and Formualizer:
 
 ```typescript
 // hooks/useAIContext.ts

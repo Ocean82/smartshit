@@ -23,7 +23,7 @@ The AI isn't a chatbot bolted onto a grid. It's an **understanding layer** that 
 ## Current State (July 2026)
 
 What's working:
-- [x] Full spreadsheet grid with formulas (HyperFormula)
+- [x] Full spreadsheet grid with formulas (Formualizer)
 - [x] Excel import/export (.xlsx, .csv)
 - [x] AI chat assistant (local + cloud providers)
 - [x] Spreadsheet auditor (formula errors, outliers, inconsistencies)
@@ -138,7 +138,7 @@ When a user imports a file, immediately show a summary card (not in chat — ove
 | Postgres EAV cell storage | Current local-first arch works for target users |
 | Full autonomous agent loop | Overkill — users need understanding, not automation |
 | pgvector / RAG | Only matters for multi-sheet workspaces (v2) |
-| Custom formula compiler | HyperFormula is sufficient |
+| Custom formula compiler | Formualizer is sufficient |
 | Workflow automation | Solving "understand" before "automate" |
 | Template marketplace | Premature — build audience first |
 

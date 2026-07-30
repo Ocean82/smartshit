@@ -283,7 +283,7 @@ This is a pattern-based translator (no LLM needed for common formulas):
 - Fallback for complex formulas: show the formula + a "Ask AI to explain" button
 
 **Dependency detection:**
-HyperFormula already tracks the dependency graph. Use `engine.hf.getCellDependents()` and `engine.hf.getCellPrecedents()` to get the links.
+Formualizer already tracks the dependency graph. Use `engine.wb` methods to get cell dependents and precedents.
 
 **Audit integration:**
 Check if `lastAuditResult?.findings` has any entry where `finding.cells` includes this cell's coordinates.
@@ -331,7 +331,7 @@ src/lib/formulaExplainer.ts         — Pattern-based formula → English
 ### Week 3: Cell Inspector + Polish
 14. **formulaExplainer.ts** — Pattern-based formula → English translator
 15. **InspectorPanel.tsx** — Cell explanation + dependencies
-16. **Wire HyperFormula dependency graph** — getCellPrecedents/getDependents
+16. **Wire Formualizer dependency graph** — getCellPrecedents/getDependents
 17. **Connect audit findings per-cell** — Show relevant findings in inspector
 18. **Polish** — Animations, localStorage persistence, edge cases, mobile
 19. **Remove dead code** — Old `showChat`, `showSkills`, `showAuditPanel` state
@@ -370,7 +370,7 @@ All of these already exist and just need to be wired up:
 - `computeSheetInsights()` — computes key numbers
 - `buildSheetProfile()` — detects sheet purpose
 - `runAudit()` — finds formula issues
-- HyperFormula dependency graph — tracks cell relationships
+- Formualizer dependency graph — tracks cell relationships
 - `cellToRef()` / `refToCell()` — cell coordinate utilities
 
 The implementation is primarily UI/component work + glue code. No new algorithms needed.

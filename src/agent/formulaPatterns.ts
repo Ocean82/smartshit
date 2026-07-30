@@ -29,7 +29,7 @@ function unquote(value: string): string {
   return trimmed
 }
 
-/** Excel/HyperFormula string literal with embedded quotes escaped. */
+/** Excel/Formualizer string literal with embedded quotes escaped. */
 function quoteFormulaText(value: string): string {
   return `"${unquote(value).replace(/"/g, '""')}"`
 }

@@ -1,6 +1,6 @@
 /**
- * SaaS financial model demo — gallery template with HyperFormula formulas
- * for HyperFormula (no ROI(); use standard growth/margin formulas).
+ * SaaS financial model demo — gallery template with Formualizer formulas
+ * (no ROI(); use standard growth/margin formulas).
  */
 import type { TemplateSpec } from './types';
 

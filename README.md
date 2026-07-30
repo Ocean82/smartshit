@@ -101,7 +101,7 @@ Open **http://localhost:5173**
 ```
 ┌─────────────────────┐        ┌──────────────────┐
 │  React + Vite       │  SSE   │  Express server  │
-│  HyperFormula       │◄──────►│  Intent parser   │
+│  Formualizer        │◄──────►│  Intent parser   │
 │  Zustand store      │        │  LLM routing     │
 │  Auditor engine     │        │  (port 8787)     │
 └─────────────────────┘        └────────┬─────────┘
@@ -114,10 +114,10 @@ Open **http://localhost:5173**
 
 | Layer | Tech |
 |-------|------|
-| Frontend | React 19, Vite 7, Tailwind CSS 4, Zustand, HyperFormula |
+| Frontend | React 19, Vite 7, Tailwind CSS 4, Zustand, Formualizer |
 | Backend | Express 5, TypeScript, SSE streaming |
 | AI | Ollama (local) / OpenRouter / Groq / Hugging Face / BYOK |
-| Auditor | TypeScript-native, runs in-browser against HyperFormula |
+| Auditor | TypeScript-native, runs in-browser against Formualizer |
 | I/O | SheetJS (`xlsx`) for Excel import/export |
 
 ---
@@ -184,9 +184,9 @@ See [docs/project_outline/roadmap-v1.md](docs/project_outline/roadmap-v1.md) for
 
 MIT License — Copyright (c) 2026 **[Ocean82](https://github.com/Ocean82)**.
 
-> **Note:** the formula engine (HyperFormula) is currently used under its GPLv3
-> option, which conflicts with the MIT declaration above. See
-> **[docs/LICENSING.md](docs/LICENSING.md)** — this is being resolved.
+> **Note:** the formula engine uses **[@ocean8219/formualizer](https://github.com/Ocean82/formualizer)**,
+> a permissively-licensed fork. The earlier GPLv3 licensing conflict with HyperFormula
+> no longer applies.
 
 See [LICENSE](LICENSE). Free to use, modify, and distribute with attribution.
 
@@ -200,4 +200,4 @@ If smartsh!t saves you from spreadsheet confusion, consider sponsoring:
 
 ---
 
-**Topics:** `spreadsheet` · `ai` · `formula-auditor` · `budget` · `react` · `typescript` · `hyperformula` · `open-source` · `self-hosted`
+**Topics:** `spreadsheet` · `ai` · `formula-auditor` · `budget` · `react` · `typescript` · `formualizer` · `open-source` · `self-hosted`

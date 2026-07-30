@@ -70,7 +70,7 @@ function createAuditFixture(): {
   cells['A8'] = { value: 'One-time' }
   cells['B8'] = { value: 99999 } // Extreme outlier vs other values in column B
 
-  // Computed values (simulate what HyperFormula would return)
+  // Computed values (simulate what Formualizer would return)
   const computedOverrides: Record<string, string> = {
     'E1': '4500',
     'E2': '1230',

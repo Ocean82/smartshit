@@ -720,7 +720,7 @@ type BulkUpdates = Record<string, { value: string | number | boolean | null; for
 /**
  * Apply a batch of cell writes in a single store transaction.
  *
- * Each individual `setCellValue` triggers a HyperFormula recalculation, an
+ * Each individual `setCellValue` triggers a Formualizer recalculation, an
  * immer produce, a Zustand notification and a React render, so looping over
  * thousands of cells is pathologically slow. `bulkSetCells` collapses that into
  * one update. Returns the number of cells written.

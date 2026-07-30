@@ -392,7 +392,7 @@ export const useStore = create<AppState>()(
       setCellValue: (cellId, value, formula) => {
         const state = get();
         const ref = cellToRef(cellId);
-        // AI formulas are handled by our registry, not HyperFormula
+        // AI formulas are handled by our registry, not Formualizer
         const isAI = formula && state.engine.isAIFormula(formula);
         if (!isAI) {
           state.engine.setCellValue(state.activeSheetId, ref.row, ref.col, formula || value);
@@ -1185,7 +1185,7 @@ export const useStore = create<AppState>()(
       bulkSetCells: (cells) => {
         const state = get();
         for (const [cellId, data] of Object.entries(cells)) {
-          // Skip AI formulas — they're handled by the AI registry, not HyperFormula
+          // Skip AI formulas — they're handled by the AI registry, not Formualizer
           if (data.formula && state.engine.isAIFormula(data.formula)) continue;
           const ref = cellToRef(cellId);
           state.engine.setCellValue(state.activeSheetId, ref.row, ref.col, data.formula || data.value);

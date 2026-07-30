@@ -69,7 +69,7 @@ describe('coordinate helpers', () => {
 
 describe('computedValueToString', () => {
   // The object-unwrapping cases are a backward-compat shim: formualizer returns
-  // error strings directly, but any code that passes a HyperFormula-style
+  // error strings directly, but any code that passes a Formualizer-style
   // { value: '#DIV/0!' } object (e.g. persisted workbook data) must still work.
   it('unwraps a { value } error object (backward-compat shim)', () => {
     expect(computedValueToString({ value: '#DIV/0!', type: 'DIV_BY_ZERO' })).toBe('#DIV/0!')

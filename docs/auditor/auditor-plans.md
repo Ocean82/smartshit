@@ -6,25 +6,25 @@
 ## What I See in `smartsh!t`
 
 **Frontend (React/TypeScript):**
-- `SpreadsheetTable.tsx` — renders the grid via HyperFormula
+- `SpreadsheetTable.tsx` — renders the grid via Formualizer
 - `FormulaBar.tsx` — formula editing
 - `ChatPanel.tsx` — AI chat interface
 - `useSpreadsheetStore.ts` — Zustand store holding all cell data
 - `xlsx` npm package for import/export
-- HyperFormula for formula evaluation
+- Formualizer for formula evaluation
 
 **Backend (Node/Express):**
 - `server/index.ts` — Express server
 - `server/routes/chat.ts` — OpenAI integration
 - No file persistence — everything lives client-side in Zustand
 
-**Key insight:**  data is already parsed and living in the Zustand store as structured cell objects. We don't need Python. we don't need `openpyxl`. we already have the formula graph — **HyperFormula gives us everything**.
+**Key insight:**  data is already parsed and living in the Zustand store as structured cell objects. We don't need Python. we don't need `openpyxl`. we already have the formula graph — **Formualizer gives us everything**.
 
 ---
 
 # 🔧 Native Spreadsheet Auditor for smartsh!t
 
-This is a **TypeScript-native auditor** that runs entirely in-browser against the existing HyperFormula instance and Zustand store. No Python. No subprocess. No server changes.
+This is a **TypeScript-native auditor** that runs entirely in-browser against the existing Formualizer instance and Zustand store. No Python. No subprocess. No server changes.
 
 ---
 
@@ -111,7 +111,7 @@ export interface AuditContext {
   cells: CellInfo[][];
   sheetName: string;
   sheetIndex: number;
-  hf: any; // HyperFormula instance
+  hf: any; // Formualizer Workbook instance
   allCells: CellInfo[];
   formulaCells: CellInfo[];
   getCellAt: (row: number, col: number) => CellInfo | null;
@@ -938,7 +938,7 @@ export function runAudit(
 ): AuditResult {
   const startTime = performance.now();
 
-  // Build cell grid from HyperFormula
+  // Build cell grid from Formualizer
   const sheetDimensions = hfInstance.getSheetDimensions(sheetIndex);
   const rows = sheetDimensions.height;
   const cols = sheetDimensions.width;
@@ -956,7 +956,7 @@ export function runAudit(
       try {
         formula = hfInstance.getCellFormula(address);
         if (formula && typeof formula === "string") {
-          // HyperFormula returns formula with = prefix sometimes
+          // Formualizer returns formula with = prefix sometimes
           formula = formula.startsWith("=") ? formula.substring(1) : formula;
         }
       } catch {
@@ -1553,7 +1553,7 @@ import { AuditPanel } from "./components/AuditPanel";
 
 // Inside your layout:
 <AuditPanel
-  hfInstance={hfInstance}  // your HyperFormula instance
+  hfInstance={hfInstance}  // your Formualizer instance
   onCellNavigate={(row, col) => {
     // scroll to and select that cell in SpreadsheetTable
     store.setSelectedCell(row, col);
@@ -1597,9 +1597,9 @@ Health Score: ${auditResult.score}/100
 | | Python `spreadsheet-auditor` | This native TS auditor |
 |---|---|---|
 | Runtime | Needs Python subprocess | Runs in browser |
-| Data source | Needs raw `.xlsx` file | Uses existing HyperFormula instance |
+| Data source | Needs raw `.xlsx` file | Uses existing Formualizer instance |
 | Latency | File upload → server → subprocess → parse | Instant (~50ms for 10K cells) |
-| Integration | Separate service/process | Direct Zustand/HyperFormula access |
+| Integration | Separate service/process | Direct Zustand/Formualizer access |
 | Auto-fix | Returns suggestions only | Can modify cells directly |
 | LLM context | Requires server roundtrip | Available immediately for chat |
 | New dependencies | Python, openpyxl, subprocess | Zero — pure TypeScript |

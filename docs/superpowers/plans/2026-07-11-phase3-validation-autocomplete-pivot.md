@@ -6,16 +6,16 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add three professional-grade spreadsheet features — data validation with dropdowns/error indicators, formula autocomplete with function metadata from HyperFormula, and pivot tables with drag-and-drop field configuration.
+**Goal:** Add three professional-grade spreadsheet features — data validation with dropdowns/error indicators, formula autocomplete with function metadata from Formualizer, and pivot tables with drag-and-drop field configuration.
 
-**Architecture:** Each feature is independent and can be implemented in any order. Data validation extends the existing `DataValidation` type stub. Formula autocomplete extracts function metadata from the HyperFormula instance and renders a suggestion popup overlaying the cell editor. Pivot tables create a new sheet type with aggregated data computed from a source range.
+**Architecture:** Each feature is independent and can be implemented in any order. Data validation extends the existing `DataValidation` type stub. Formula autocomplete extracts function metadata from the Formualizer instance and renders a suggestion popup overlaying the cell editor. Pivot tables create a new sheet type with aggregated data computed from a source range.
 
-**Tech Stack:** React, Zustand, HyperFormula v3.3.0, TypeScript, Tailwind CSS
+**Tech Stack:** React, Zustand, Formualizer (via @ocean8219/formualizer), TypeScript, Tailwind CSS
 
 ## Global Constraints
 
 - Virtual scrolling grid: 1000 rows × 100 cols, buffer zones (5 rows, 3 cols)
-- HyperFormula v3.3.0 (GPL-v3) — 380+ built-in functions, already loaded
+- Formualizer (via @ocean8219/formualizer) — 380+ built-in functions, already loaded
 - Zustand store pattern — all state mutations go through `useStore`
 - Existing `DataValidation` type at `src/types/index.ts:34-41` — must use this interface
 - No new npm dependencies — build with React + Tailwind only
@@ -432,13 +432,13 @@ Expected: All 14 tests pass
 
 ## Feature B: Formula Autocomplete
 
-### Task 4: Extract Function Metadata from HyperFormula
+### Task 4: Extract Function Metadata from Formualizer
 
 **Files:**
 - Modify: `src/engine/spreadsheet.ts`
 
 **Interfaces:**
-- Consumes: HyperFormula instance (already loaded)
+- Consumes: Formualizer Workbook instance (already loaded)
 - Produces: `getFunctionList(): Array<{ name: string; description: string; category: string; syntax: string }>` and `getFunctionInfo(name: string)`
 
 - [x] **Step 1: Add function metadata methods to SpreadsheetEngine**
@@ -449,13 +449,13 @@ In `src/engine/spreadsheet.ts`, add these methods to the `SpreadsheetEngine` cla
 getFunctionList(): Array<{ name: string; description: string; category: string; syntax: string }> {
   if (!this.hf) return [];
   try {
-    // HyperFormula v3.x API — get built-in function names
+    // Formualizer API — get built-in function names
     const builtIn = (this.hf as any).constructor?.defaultConfig?.functionRegistry;
     if (!builtIn) {
       // Fallback: curated list of most common functions
       return this.getFallbackFunctions();
     }
-    // If HyperFormula exposes function metadata, use it
+    // If Formualizer exposes function metadata, use it
     return Object.entries(builtIn).map(([name, info]: [string, any]) => ({
       name: name.toUpperCase(),
       description: info.description || '',
