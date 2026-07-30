@@ -1,3 +1,10 @@
+### ~~Task 4: Extract Function Metadata from HyperFormula~~ ✅ SUPERSEDED
+
+> **Note:** This task was originally implemented against HyperFormula. The formula engine has since been
+> replaced with **@ocean8219/formualizer** (see commit `ad2c7c9`). Function metadata is now extracted
+> via `this.wb.listFunctions()` from formualizer instead of `this.hf.constructor.defaultConfig.functionRegistry`.
+> The rest of this brief is preserved for historical reference only.
+
 ### Task 4: Extract Function Metadata from HyperFormula
 
 **Files:**
