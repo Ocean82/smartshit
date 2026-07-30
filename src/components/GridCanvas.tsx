@@ -1,49 +1,69 @@
-// Grid Canvas Component with Fixed Data Rendering Logic
-'use client'; \
-import React, { useState, useEffect, useCallback } from 'react';
-export interface GridCellProps {
-  value?: string;
-  row: number;
-  colIndex: number;
+import React, { useMemo } from 'react';
+import { useStore } from '@/store/useStore';
+import { refToCell } from '@/engine/spreadsheet';
+import type { CellData } from '@/types';
+
+interface GridCanvasProps {
+  maxRows?: number;
+  maxCols?: number;
+  className?: string;
 }
-\
-// Memoized cell to prevent unnecessary re-renders affecting performance
-const memoize = (() => new Map() as typeof (new Map()))(); \
-\
-type MemoryMapKey<T> = T extends Function ? string : never; \n\\nexport const GridCanvas: React.FC = () => {
-  const [gridData, setGridData] = useState<Record<string, any[]>>([]); // Changed to accept data directly
-  const [isLoading, setIsLoading] = useState(true);
-  const [errorState, setError] = useState<string | null>(null);
-  \n  useEffect(() => { 
-    async function loadGridData() {
-      try {
-        const response = await fetch('/api/grid-data'); // Adjusted endpoint to use correct path
-        if (!response.ok) throw new Error(`Server responded with ${response.status}`);\n        \
-        const data: any[] = await response.json();
-        \n        setGridData(data);
-        setIsLoading(false);  
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Unknown error loading grid');
-        console.error('[Grid Load Error]', err);
-        // Even if fetch fails, show fallback empty state - don't crash
+
+export function GridCanvas({ maxRows = 50, maxCols = 26, className }: GridCanvasProps) {
+  const sheet = useStore((s) => s.workbook?.sheets[s.activeSheetId ?? 0]);
+
+  const visibleCells = useMemo(() => {
+    if (!sheet) return [];
+    const rows: Array<{ row: number; cells: Array<{ col: number; id: string; data?: CellData }> }> = [];
+    for (let r = 0; r < Math.min(sheet.cells.length ?? 0, maxRows); r++) {
+      const rowCells: Array<{ col: number; id: string; data?: CellData }> = [];
+      for (let c = 0; c < maxCols; c++) {
+        const id = refToCell(r, c);
+        const data = sheet.cells[id];
+        if (data && data.value != null && data.value !== '') {
+          rowCells.push({ col: c, id, data });
+        }
+      }
+      if (rowCells.length > 0) {
+        rows.push({ row: r, cells: rowCells });
       }
     }
-\n    loadGridData();
-  }, []); 
-\
-type GridState = { rows: number; columns: string[] }; \n\\ncalculateColumnWidths(): GridState | null {
-  if (!gridData || gridData.length === 0) return null;
-  const colLengths = new Array<string>().fill(''); // Placeholder cols
-    return { \
-      rows: Math.max(1, this.rows),
-    }; }
-  \n\	return (
-      <div style={{ padding: '2rem', backgroundColor: '#fafafa' }}>
-        {!gridData.length && isLoading ? (// Use loading state
-          <p>Loading grid data...</p>) : null}
-        {!isLoading && !errorState && gridData.length > 0 ?
-          (
-            // Fixed rendering - map through all cells individually with proper types
-              {gridData.map((row, rowIndex) => 
-                row?.map((cellVal, colIndex: number)
-                  cellVal !== undefined || null != cellVal))},}
+    return rows;
+  }, [sheet, maxRows, maxCols]);
+
+  if (!sheet) {
+    return <div className={className}>No sheet data</div>;
+  }
+
+  return (
+    <div className={className}>
+      <table className="w-full border-collapse text-xs">
+        <thead>
+          <tr>
+            <th className="border px-1 py-0.5 bg-muted text-muted-foreground w-8" />
+            {Array.from({ length: maxCols }, (_, i) => (
+              <th key={i} className="border px-1 py-0.5 bg-muted text-muted-foreground font-normal">
+                {String.fromCharCode(65 + i)}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {visibleCells.map(({ row, cells }) => (
+            <tr key={row}>
+              <td className="border px-1 py-0.5 bg-muted text-muted-foreground text-center">{row + 1}</td>
+              {Array.from({ length: maxCols }, (_, c) => {
+                const cell = cells.find((cl) => cl.col === c);
+                return (
+                  <td key={c} className="border px-1 py-0.5 truncate max-w-[120px]">
+                    {cell?.data?.displayValue ?? cell?.data?.value ?? ''}
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
