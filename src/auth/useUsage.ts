@@ -33,6 +33,39 @@ function setStoredUsage(data: UsageData): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
 }
 
+/**
+ * Core usage tracking logic, extracted to break the circular dependency between
+ * useTrackedUsage and the final exported useUsage hook. This is not a hook.
+ */
+function getUsageState(
+  isPro: boolean,
+  hasByok: boolean,
+  isCheckingPro: boolean,
+  usage: UsageData,
+) {
+  const canAsk = isPro || isCheckingPro || usage.count < FREE_DAILY_LIMIT
+  const remaining = isPro || isCheckingPro ? Infinity : Math.max(0, FREE_DAILY_LIMIT - usage.count)
+  return { canAsk, remaining }
+}
+
+/**
+ * The callback to record usage, extracted to break the circular dependency.
+ * This is not a hook.
+ */
+function createRecordUsage(
+  isPro: boolean,
+  hasByok: boolean,
+  setUsage: (usage: UsageData) => void,
+) {
+  return () => {
+    if (isPro || hasByok) return
+    const current = getStoredUsage()
+    const updated: UsageData = { count: current.count + 1, date: getToday() }
+    setStoredUsage(updated)
+    setUsage(updated)
+  }
+}
+
 /** Dev mode hook — unlimited usage, no Clerk dependency */
 function useUnlimitedUsage() {
   return {
@@ -97,20 +130,8 @@ function useTrackedUsage() {
   // While server check is in-flight (serverIsPro === null), don't gate the user.
   // This prevents the flash of "3 questions remaining" before the server responds.
   const isCheckingPro = !claimsPro && !hasByok && serverIsPro === null
-  const canAsk = isPro || isCheckingPro || usage.count < FREE_DAILY_LIMIT
-  const remaining = isPro || isCheckingPro ? Infinity : Math.max(0, FREE_DAILY_LIMIT - usage.count)
-
-  const recordUsage = useCallback(() => {
-    if (isPro || hasByok) return
-
-    const current = getStoredUsage()
-    const updated: UsageData = {
-      count: current.count + 1,
-      date: getToday(),
-    }
-    setStoredUsage(updated)
-    setUsage(updated)
-  }, [isPro, hasByok])
+  const { canAsk, remaining } = getUsageState(isPro, hasByok, isCheckingPro, usage)
+  const recordUsage = useCallback(createRecordUsage(isPro, hasByok, setUsage), [isPro, hasByok, setUsage])
 
   return {
     isPro,
