@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
+import type { KeyboardEvent } from 'react'
 import { useStore } from '@/store/useStore'
 import { cellToRef } from '@/engine/spreadsheet'
 import { Search, Replace, X, ArrowDown, ArrowUp } from 'lucide-react'
@@ -178,7 +179,7 @@ export function FindReplaceDialog({ isOpen, onClose }: Props) {
     setTimeout(doSearch, 50)
   }, [matches, findText, replaceText, caseSensitive, useRegex, pushHistory, setCellValue, doSearch])
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: KeyboardEvent) => {
     if (e.key === 'Enter') {
       e.preventDefault()
       if (matches.length === 0) {

@@ -1,7 +1,7 @@
 import { Workbook, type WorkbookApi, parse, FormulaDialect, ASTNodeData } from '@ocean8219/formualizer';
 import type { SheetData, WorkbookData, PivotConfig, PivotResult } from '@/types';
 import { v4 as uuid } from 'uuid';
-import { AIFunctionRegistry } from './aiFunctions';
+import { AIFunctionRegistry, type EvalValue } from './aiFunctions';
 import { registerBuiltinAIFunctions, getAIFunctionList } from './aiFunctionDefinitions';
 import { computePivotTable } from './pivot';
 
@@ -155,7 +155,7 @@ export class SpreadsheetEngine {
     const useFormualizer = typeof FormulaDialect !== 'undefined' && typeof parse === 'function';
 
     let funcName!: string;
-    const resolvedArgs: (string | number | boolean | null | (string | number | boolean | null)[][])[] = [];
+    const resolvedArgs: EvalValue[] = [];
 
     if (useFormualizer) {
       let ast: ASTNodeData | null;
@@ -232,7 +232,7 @@ export class SpreadsheetEngine {
 
     for (const [cellId, cellData] of Object.entries(cells)) {
       if (cellData.formula && this.isAIFormula(cellData.formula)) {
-        this.executeAIFormula(cellId, cellData.formula, resolveArg);
+        void this.executeAIFormula(cellId, cellData.formula, resolveArg);
       }
     }
   }
@@ -276,7 +276,7 @@ export class SpreadsheetEngine {
   private async _resolveAIArgument(
     argNode: ASTNodeData,
     resolveArg: (ref: string) => string | number | boolean | null,
-  ): Promise<any> {
+  ): Promise<EvalValue> {
     // Convert AST node to string for simple cases
     const argStr = this.astNodeToString(argNode);
     const trimmed = argStr.trim();
@@ -314,9 +314,9 @@ export class SpreadsheetEngine {
   }
 
   private async _evaluateAST(
-    ast: any,
+    ast: ASTNodeData,
     resolveArg: (ref: string) => string | number | boolean | null,
-  ): Promise<any> {
+  ): Promise<EvalValue> {
     if (!ast) return null;
 
     switch (ast.type) {
@@ -389,14 +389,14 @@ case 'function': {
         const args = await Promise.all(
           (ast.args ?? []).map((arg: ASTNodeData) => this._evaluateAST(arg, resolveArg)),
         );
-        return this._evaluateFunction(funcName, args);
+        return funcName ? this._evaluateFunction(funcName, args) : null;
       }
       default:
         return null;
     }
   }
 
-  private _evaluateFunction(funcName: string, args: any[]): string | number | boolean | null {
+  private _evaluateFunction(funcName: string, _args: EvalValue[]): string | number | boolean | null {
     return `#FUNC:${funcName}`;
   }
   private _splitArgs(argsStr: string): string[] {
@@ -430,7 +430,7 @@ case 'function': {
   private _resolveRange(
     rangeRef: string,
     resolveArg: (ref: string) => string | number | boolean | null,
-  ): any[][] {
+  ): EvalValue[][] {
     const parts = rangeRef.split(':');
     if (parts.length !== 2) return [];
 
@@ -446,9 +446,9 @@ case 'function': {
     const minCol = Math.min(start.col, end.col);
     const maxCol = Math.max(start.col, end.col);
 
-    const result: any[][] = [];
+    const result: EvalValue[][] = [];
     for (let r = minRow; r <= maxRow; r++) {
-      const row: any[] = [];
+      const row: EvalValue[] = [];
       for (let c = minCol; c <= maxCol; c++) {
         row.push(resolveArg(refToCell(r, c)));
       }
@@ -661,73 +661,7 @@ case 'function': {
     startCol: number,
     endCol: number
   ): PivotResult {
-    const dataStartRow = config.hasHeader ? startRow + 1 : startRow;
-    const sourceRows: Record<string, (string | number | boolean | null)[]>[] = [];
-    for (let r = dataStartRow; r <= endRow; r++) {
-      const row: Record<string, (string | number | boolean | null)[]> = {};
-      for (let c = startCol; c <= endCol; c++) {
-        const colLetter = colToLetter(c);
-        const cellId = refToCell(r, c);
-        row[colLetter] = [cells[cellId]?.value ?? null];
-      }
-      sourceRows.push(row);
-    }
-
-    const rowKeyMap = new Map<string, (string | number)[]>();
-    const colKeyMap = new Map<string, (string | number)[]>();
-    const valueAggMap = new Map<string, number[]>();
-
-    for (const sourceRow of sourceRows) {
-      const rowKeyParts = config.rows.map(f => String(sourceRow[f.sourceColumn]?.[0] ?? ''));
-      const rowKey = rowKeyParts.join('||');
-      if (!rowKeyMap.has(rowKey)) rowKeyMap.set(rowKey, rowKeyParts);
-
-      const colKeyParts = config.columns.map(f => String(sourceRow[f.sourceColumn]?.[0] ?? ''));
-      const colKey = colKeyParts.join('||');
-      if (!colKeyMap.has(colKey)) colKeyMap.set(colKey, colKeyParts);
-
-      for (let vfIdx = 0; vfIdx < config.values.length; vfIdx++) {
-        const vf = config.values[vfIdx];
-        const vfKey = `${rowKey}||${colKey}||${vfIdx}`;
-        const existing = valueAggMap.get(vfKey) || [];
-        const rawVal = sourceRow[vf.sourceColumn]?.[0];
-        const numVal = typeof rawVal === 'number' ? rawVal : parseFloat(String(rawVal));
-        if (!isNaN(numVal)) existing.push(numVal);
-        valueAggMap.set(vfKey, existing);
-      }
-    }
-
-    const rowFieldLabels = config.rows.map(f => f.label || f.sourceColumn);
-    const valueLabels = config.values.map(f => f.label || `${f.aggregation}(${f.sourceColumn})`);
-
-    const colKeys = Array.from(colKeyMap.keys());
-    const headers = [...rowFieldLabels, ...colKeys.flatMap(ck => {
-      const parts = colKeyMap.get(ck)!;
-      return valueLabels.map(vl => [...parts, vl].join(' '));
-    })];
-
-    const resultRows: (string | number)[][] = [];
-    for (const [rowKey, rowParts] of rowKeyMap) {
-      const row: (string | number)[] = [...rowParts];
-      for (const colKey of colKeys) {
-        for (let vfIdx = 0; vfIdx < config.values.length; vfIdx++) {
-          const vf = config.values[vfIdx];
-          const vfKey = `${rowKey}||${colKey}||${vfIdx}`;
-          const values = valueAggMap.get(vfKey) || [];
-          switch (vf.aggregation) {
-            case 'sum': row.push(values.reduce((a, b) => a + b, 0)); break;
-            case 'average': row.push(values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0); break;
-            case 'count': row.push(values.length); break;
-            case 'min': row.push(values.length ? Math.min(...values) : 0); break;
-            case 'max': row.push(values.length ? Math.max(...values) : 0); break;
-            case 'distinctCount': row.push(new Set(values).size); break;
-          }
-        }
-      }
-      resultRows.push(row);
-    }
-
-    return { headers, rows: resultRows, grandTotals: [] };
+    return computePivotTable(cells, config, startRow, endRow, startCol, endCol);
   }
 
   destroy(): void {

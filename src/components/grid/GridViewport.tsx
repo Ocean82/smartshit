@@ -4,9 +4,11 @@
  */
 
 import { useMemo, useState, useCallback, useEffect, useRef } from 'react';
-import { colToLetter, refToCell, cellToRef } from '@/engine/spreadsheet';
+import type { Dispatch, RefObject, SetStateAction, UIEvent } from 'react';
+import { cellToRef } from '@/engine/spreadsheet';
 import { findHeaderRow, findLastDataRow } from '@/lib/sheetSort';
 import { buildFilteredRowIndex } from '@/lib/rowFilter';
+import type { SheetData, FilterConfig } from '@/types';
 
 const CELL_HEIGHT = 28;
 const BUFFER_ROWS = 5;
@@ -15,40 +17,23 @@ const MAX_ROWS = 10000;
 const MAX_COLS = 100;
 const EMPTY_ROWS_BUFFER = 50;
 const EMPTY_COLS_BUFFER = 10;
-const COL_HEADER_HEIGHT = 26;
-const ROW_HEADER_WIDTH = 46;
-const DEFAULT_CELL_WIDTH = 100;
 
 interface GridViewportConfig {
-  sheet: any;
+  sheet: SheetData;
   getComputedValue: (row: number, col: number) => string;
-  columnWidths: Record<number, number>;
-  activeFilters: any[];
-  activeSortConfig: any;
+  activeFilters: FilterConfig[];
   getColWidth: (col: number) => number;
 }
 
-interface ViewportState {
+interface ScrollState {
   scrollTop: number;
   scrollLeft: number;
   viewportHeight: number;
   viewportWidth: number;
 }
 
-interface VisibleRange {
-  startRow: number;
-  endRow: number;
-  startCol: number;
-  endCol: number;
-}
-
-interface VisibleColOffsets {
-  offsets: number[];
-  baseOffset: number;
-}
-
 interface GridViewportReturn {
-  gridRef: React.RefObject<HTMLDivElement | null>;
+  gridRef: RefObject<HTMLDivElement | null>;
   TOTAL_ROWS: number;
   TOTAL_COLS: number;
   displayRowCount: number;
@@ -58,17 +43,17 @@ interface GridViewportReturn {
   totalHeight: number;
   rowOffset: number;
   visibleColOffsets: { offsets: number[]; baseOffset: number };
-  scrollState: { scrollTop: number; scrollLeft: number; viewportHeight: number; viewportWidth: number };
-  setScrollState: React.Dispatch<React.SetStateAction<any>>;
+  scrollState: ScrollState;
+  setScrollState: Dispatch<SetStateAction<ScrollState>>;
   handleScroll: () => void;
-  onGridScroll: (e: React.UIEvent<HTMLDivElement>) => void;
+  onGridScroll: (e: UIEvent<HTMLDivElement>) => void;
 }
 
 export function useGridViewport(config: GridViewportConfig): GridViewportReturn {
-  const { sheet, getComputedValue, columnWidths, activeFilters, activeSortConfig, getColWidth } = config;
+  const { sheet, getComputedValue, activeFilters, getColWidth } = config;
 
   const gridRef = useRef<HTMLDivElement>(null);
-  const [scrollState, setScrollState] = useState({ scrollTop: 0, scrollLeft: 0, viewportHeight: 600, viewportWidth: 800 });
+  const [scrollState, setScrollState] = useState<ScrollState>({ scrollTop: 0, scrollLeft: 0, viewportHeight: 600, viewportWidth: 800 });
 
   // Dynamic grid bounds
   const { TOTAL_ROWS, TOTAL_COLS } = useMemo(() => {
@@ -120,7 +105,7 @@ export function useGridViewport(config: GridViewportConfig): GridViewportReturn 
     }
     
     return { startRow, endRow, startCol: colStart, endCol: colEnd };
-  }, [scrollState, getColWidth, displayRowCount, TOTAL_COLS, TOTAL_ROWS]);
+  }, [scrollState, getColWidth, displayRowCount, TOTAL_COLS]);
 
   // Total dimensions
   const totalWidth = useMemo(() => {
@@ -176,6 +161,6 @@ export function useGridViewport(config: GridViewportConfig): GridViewportReturn 
     scrollState,
     setScrollState,
     handleScroll,
-    onGridScroll: (e: React.UIEvent<HTMLDivElement>) => { handleScroll(); },
+    onGridScroll: () => { handleScroll(); },
   };
 }

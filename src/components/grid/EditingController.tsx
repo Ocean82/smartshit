@@ -4,8 +4,9 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { KeyboardEvent } from 'react';
 import { useStore } from '@/store/useStore';
-import { cellToRef, refToCell } from '@/engine/spreadsheet';
+import { cellToRef } from '@/engine/spreadsheet';
 
 interface EditingControllerConfig {
   setEditingCell: (id: string | null) => void;
@@ -31,7 +32,6 @@ export function useEditingController(config: EditingControllerConfig) {
   const [autocompletePos, setAutocompletePos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
   const editingCell = useStore(s => s.editingCell);
   const editValue = useStore(s => s.editValue);
-  const getActiveSheet = useStore(s => s.getActiveSheet);
 
   // Focus input when editing starts
   useEffect(() => {
@@ -74,14 +74,14 @@ export function useEditingController(config: EditingControllerConfig) {
 
     setEditingCell(null);
     setEditValue('');
-  }, [editingCell, editValue, pushHistory, setCellValue, validateCellValue]);
+  }, [editingCell, editValue, pushHistory, setCellValue, setEditingCell, setEditValue, validateCellValue]);
 
   const cancelEdit = useCallback(() => {
     setEditingCell(null);
     setEditValue('');
   }, [setEditingCell, setEditValue]);
 
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (!editingCell) return;
     
     if (e.key === 'Enter') {
@@ -99,7 +99,7 @@ export function useEditingController(config: EditingControllerConfig) {
       const newCol = e.shiftKey ? Math.max(0, ref.col - 1) : ref.col + 1;
       setSelection({ startRow: ref.row, startCol: newCol, endRow: ref.row, endCol: newCol });
     }
-  }, [editingCell]);
+  }, [editingCell, commitEdit, setSelection, setEditingCell, setEditValue]);
 
   const handleAutocompleteSelect = useCallback((functionName: string) => {
     if (!functionName) return;
@@ -114,11 +114,11 @@ export function useEditingController(config: EditingControllerConfig) {
     setSelection({ startRow: cellToRef(cellId).row, startCol: cellToRef(cellId).col, endRow: cellToRef(cellId).row, endCol: cellToRef(cellId).col });
     requestAnimationFrame(() => {
       if (editContainerRef.current) {
-        const rect = editContainerRef.current.getBoundingClientRect();
+        editContainerRef.current.getBoundingClientRect();
         // Autocomplete position will be set by parent
       }
     });
-  }, []);
+  }, [setEditingCell, setEditValue, setSelection]);
 
   return {
     inputRef,

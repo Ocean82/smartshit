@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { BG_COLORS, FULL_COLORS } from '@/data/colors';
 import { useRef, useState, useEffect, useCallback } from 'react';
+import type { ChangeEvent, ReactNode } from 'react';
 import { v4 as uuid } from 'uuid';
 import './Toolbar.css';
 
@@ -94,7 +95,7 @@ export function Toolbar() {
     setShowExportMenu(false);
   }, []);
 
-  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImportFile = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -129,7 +130,7 @@ export function Toolbar() {
     handleImportCSV(e);
   };
 
-  const handleImportCSV = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImportCSV = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
@@ -488,7 +489,7 @@ function ToolButton({
   disabled,
   className = '',
 }: {
-  icon: React.ReactNode;
+  icon: ReactNode;
   title: string;
   onClick: () => void;
   active?: boolean;

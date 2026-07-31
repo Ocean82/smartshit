@@ -7,7 +7,6 @@
 
 import { useStore } from '@/store/useStore';
 import { useMemo } from 'react';
-import { cellToRef } from '@/engine/spreadsheet';
 
 // ─── Core State ────────────────────────────────────────────────────────────────
 

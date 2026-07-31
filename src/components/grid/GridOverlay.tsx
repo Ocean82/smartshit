@@ -7,11 +7,12 @@ import { useStore } from '@/store/useStore';
 import { FindReplaceDialog } from '@/components/FindReplaceDialog';
 import { ContextMenu } from '@/components/ContextMenu';
 import { Check, XCircle } from 'lucide-react';
+import type { PendingPreviewAction } from '@/lib/pendingActionPreview';
 
 interface GridOverlayProps {
   showFindReplace: boolean;
   setShowFindReplace: (show: boolean) => void;
-  pendingPreview: any;
+  pendingPreview: PendingPreviewAction | null;
   applyAction: (actionId: string) => void;
   rejectAction: (actionId: string) => void;
 }

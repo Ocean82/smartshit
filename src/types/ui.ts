@@ -4,9 +4,6 @@
  * Types related to component state, dialogs, and visual configuration.
  */
 
-import type { CellRef } from './domain';
-import React from 'react';
-
 export interface Toast {
   id: string;
   type: 'success' | 'error' | 'info' | 'warning';

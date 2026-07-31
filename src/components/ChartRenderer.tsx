@@ -4,13 +4,8 @@ import { X, Move } from 'lucide-react';
 import React, { useState, useCallback, useRef, useMemo } from 'react';
 import type { ChartConfig, TrendLineConfig, AxisConfig } from '@/types';
 import {
-  linearRegression,
   computeTrendValues,
   formatTrendEquation,
-  parseRangeRef,
-  columnLetterToIndex,
-  columnIndexToLetter,
-  cellRefToString,
 } from '@/lib/chartMath';
 
 export function ChartOverlay() {

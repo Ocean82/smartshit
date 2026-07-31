@@ -11,13 +11,21 @@
  *   AIFunctionRegistry manages registration, lifecycle, caching, and execution.
  */
 
-export interface AIFunctionParam {
+export type AIFunctionParam = {
   name: string
   description: string
   required: boolean
   type: 'string' | 'number' | 'range' | 'any'
   example?: string
 }
+
+/** Ref-error sentinel emitted by range resolution. */
+export interface RefErrorCell {
+  __refError: boolean
+}
+
+/** Values produced by the formula AST evaluator (may be nested for ranges). */
+export type EvalValue = string | number | boolean | null | RefErrorCell | EvalValue[][];
 
 export interface AIFunctionInfo {
   /** Function name as used in formulas, e.g. "AI.CATEGORIZE" */
@@ -37,11 +45,11 @@ export interface AIFunctionInfo {
 }
 
 export type AIFunctionExecutor = (
-  ...args: Array<string | number | boolean | null | (string | number | boolean | null)[][]>
+  ...args: EvalValue[]
 ) => string | number | boolean | null
 
 export type AsyncAIFunctionExecutor = (
-  ...args: Array<string | number | boolean | null | (string | number | boolean | null)[][]>
+  ...args: EvalValue[]
 ) => Promise<string | number | boolean | null>
 
 interface RegisteredAIFunction {
@@ -162,7 +170,7 @@ export class AIFunctionRegistry {
   execute(
     name: string,
     cellId: string,
-    args: Array<string | number | boolean | null | (string | number | boolean | null)[][]>,
+    args: EvalValue[],
   ): string | number | boolean | null {
     const key = name.toUpperCase()
     const entry = this._functions.get(key)
@@ -242,7 +250,7 @@ export class AIFunctionRegistry {
       }
 
       if (this._runningCalls < this._concurrencyLimit) {
-        run()
+        void run()
       } else {
         this._callQueue.push(run)
       }
@@ -252,7 +260,7 @@ export class AIFunctionRegistry {
   private _processQueue() {
     if (this._callQueue.length > 0 && this._runningCalls < this._concurrencyLimit) {
       const next = this._callQueue.shift()!
-      next()
+      void next()
     }
   }
 
@@ -310,7 +318,7 @@ export class AIFunctionRegistry {
 
   private _buildCacheKey(
     funcName: string,
-    args: Array<string | number | boolean | null | (string | number | boolean | null)[][]>,
+    args: EvalValue[],
   ): string {
     const argStr = args
       .map((a) => {

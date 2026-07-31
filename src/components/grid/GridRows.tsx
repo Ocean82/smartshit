@@ -4,55 +4,51 @@
  */
 
 import { useMemo } from 'react';
+import type { MouseEvent, ReactElement, RefObject } from 'react';
 import { useStore } from '@/store/useStore';
-import { colToLetter, refToCell, cellToRef } from '@/engine/spreadsheet';
+import { refToCell } from '@/engine/spreadsheet';
+import { getCheckboxToggleValue } from '@/lib/checkbox';
+import { isInMultiSelection } from '@/lib/selection';
+import type { CellNotesService } from '@/lib/cellNotes';
+import type { PendingPreviewAction } from '@/lib/pendingActionPreview';
+import type { SheetData, Selection } from '@/types';
 import { GridCell } from './GridCell';
 import { SelectionOverlay } from '../SelectionOverlay';
 
 interface GridRowsProps {
   visibleRange: { startRow: number; endRow: number; startCol: number; endCol: number };
   filteredRows: number[] | null;
-  displayRowCount: number;
   rowOffset: number;
-  totalWidth: number;
   visibleColOffsets: { offsets: number[]; baseOffset: number };
   getColWidth: (col: number) => number;
   CELL_HEIGHT: number;
   ROW_HEADER_WIDTH: number;
   COL_HEADER_HEIGHT: number;
-  sheet: any;
-  selection: any;
-  additionalSelections: any[];
+  sheet: SheetData;
+  selection: Selection | null;
+  additionalSelections: Selection[];
   editingCell: string | null;
   editValue: string;
-  activeFilters: any[];
-  activeSortConfig: any;
   getComputedValue: (row: number, col: number) => string;
   dataBarPeersByCol: Map<number, number[]>;
   colorScalePeersByCol: Map<number, number[]>;
   iconSetPeersByCol: Map<number, number[]>;
-  notesService: any;
-  pendingPreview: any;
-  pendingChangeByCell: Map<string, any>;
-  editContainerRef: React.RefObject<HTMLDivElement>;
-  inputRef: React.RefObject<HTMLInputElement>;
-  onMouseDown: (row: number, col: number, e: React.MouseEvent) => void;
+  notesService: CellNotesService;
+  pendingPreview: PendingPreviewAction | null;
+  editContainerRef: RefObject<HTMLDivElement>;
+  inputRef: RefObject<HTMLInputElement>;
+  onMouseDown: (row: number, col: number, e: MouseEvent) => void;
   onMouseMove: (row: number, col: number) => void;
   onDoubleClick: (row: number, col: number) => void;
-  onContextMenu: (e: React.MouseEvent, row: number, col: number) => void;
+  onContextMenu: (e: MouseEvent, row: number, col: number) => void;
   onEditChange: (val: string) => void;
   onEditBlur: () => void;
-  onCheckboxToggle: (cellId: string, cellData: any) => void;
-  applyAction: (actionId: string) => void;
-  rejectAction: (actionId: string) => void;
 }
 
 export function GridRows({
   visibleRange,
   filteredRows,
-  displayRowCount,
   rowOffset,
-  totalWidth,
   visibleColOffsets,
   getColWidth,
   CELL_HEIGHT,
@@ -63,15 +59,12 @@ export function GridRows({
   additionalSelections,
   editingCell,
   editValue,
-  activeFilters,
-  activeSortConfig,
   getComputedValue,
   dataBarPeersByCol,
   colorScalePeersByCol,
   iconSetPeersByCol,
   notesService,
   pendingPreview,
-  pendingChangeByCell,
   editContainerRef,
   inputRef,
   onMouseDown,
@@ -80,43 +73,28 @@ export function GridRows({
   onContextMenu,
   onEditChange,
   onEditBlur,
-  onCheckboxToggle,
-  applyAction,
-  rejectAction,
 }: GridRowsProps) {
-  const handleRowSelect = (row: number) => {
-    useStore.getState().setSelection({ startRow: row, startCol: 0, endRow: row, endCol: 9999 });
-  };
-
-  const isSelected = (row: number, col: number) => {
-    if (!selection) return false;
-    const minR = Math.min(selection.startRow, selection.endRow);
-    const maxR = Math.max(selection.startRow, selection.endRow);
-    const minC = Math.min(selection.startCol, selection.endCol);
-    const maxC = Math.max(selection.startCol, selection.endCol);
-    if (row >= minR && row <= maxR && col >= minC && col <= maxC) return true;
-    for (const sel of additionalSelections) {
-      const r0 = Math.min(sel.startRow, sel.endRow);
-      const r1 = Math.max(sel.startRow, sel.endRow);
-      const c0 = Math.min(sel.startCol, sel.endCol);
-      const c1 = Math.max(sel.startCol, sel.endCol);
-      if (row >= r0 && row <= r1 && col >= c0 && col <= c1) return true;
-    }
-    return false;
-  };
-
-  const isActiveCell = (row: number, col: number) => {
-    return selection?.startRow === row && selection?.startCol === col;
-  };
-
-  const isCrosshair = (row: number, col: number) => {
-    return !isActiveCell(row, col) && !isSelected(row, col) && selection != null &&
-      (row === selection.startRow || col === selection.startCol);
-  };
-
   // Grid rows
   const rows = useMemo(() => {
-    const rows: React.ReactElement[] = [];
+    const handleRowSelect = (row: number) => {
+      useStore.getState().setSelection({ startRow: row, startCol: 0, endRow: row, endCol: 9999 });
+    };
+
+    const isSelected = (row: number, col: number) => {
+      if (!selection) return false;
+      return isInMultiSelection(row, col, { primary: selection, additional: additionalSelections });
+    };
+
+    const isActiveCell = (row: number, col: number) => {
+      return selection?.startRow === row && selection?.startCol === col;
+    };
+
+    const isCrosshair = (row: number, col: number) => {
+      return !isActiveCell(row, col) && !isSelected(row, col) && selection != null &&
+        (row === selection.startRow || col === selection.startCol);
+    };
+
+    const rows: ReactElement[] = [];
     Array.from({ length: Math.max(0, visibleRange.endRow - visibleRange.startRow + 1) }, (_, i) => {
       const displayIndex = visibleRange.startRow + i;
       const row = filteredRows ? filteredRows[displayIndex] : displayIndex;
@@ -199,7 +177,6 @@ export function GridRows({
                   dataBarPeers={dataBarPeersByCol.get(col) ?? []}
                   colorScalePeers={colorScalePeersByCol.get(col) ?? []}
                   iconSetPeers={iconSetPeersByCol.get(col) ?? []}
-                  colOffset={visibleColOffsets.offsets[j]}
                   editContainerRef={isEditingCell ? editContainerRef : undefined}
                   inputRef={isEditingCell ? inputRef : undefined}
                   onMouseDown={onMouseDown}
@@ -209,11 +186,8 @@ export function GridRows({
                   onEditChange={onEditChange}
                   onEditBlur={onEditBlur}
                   onCheckboxToggle={(cid, cd) => {
-                    const checked = cd.validation?.checkedValue ?? 'TRUE';
-                    const unchecked = cd.validation?.uncheckedValue ?? 'FALSE';
-                    const isChecked = cd.value === checked || (typeof cd.value === 'string' && cd.value.toUpperCase() === checked.toUpperCase()) || cd.value === 1 || cd.value === true;
                     useStore.getState().pushHistory('Toggle checkbox');
-                    useStore.getState().setCellValue(cid, isChecked ? unchecked : checked);
+                    useStore.getState().setCellValue(cid, getCheckboxToggleValue(cd));
                   }}
                 />
               );
@@ -226,20 +200,16 @@ export function GridRows({
   }, [
     visibleRange,
     filteredRows,
-    displayRowCount,
     selection,
     additionalSelections,
     editingCell,
     editValue,
-    activeFilters,
-    activeSortConfig,
     getComputedValue,
     dataBarPeersByCol,
     colorScalePeersByCol,
     iconSetPeersByCol,
     notesService,
     pendingPreview,
-    pendingChangeByCell,
     editContainerRef,
     inputRef,
     visibleColOffsets,
@@ -247,14 +217,12 @@ export function GridRows({
     sheet,
     CELL_HEIGHT,
     ROW_HEADER_WIDTH,
-    handleRowSelect,
     onMouseDown,
     onMouseMove,
     onDoubleClick,
     onContextMenu,
     onEditChange,
     onEditBlur,
-    onCheckboxToggle,
   ]);
 
   return (

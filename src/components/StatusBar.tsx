@@ -1,6 +1,7 @@
 import { useStore } from '@/store/useStore';
 import { refToCell } from '@/engine/spreadsheet';
 import { useMemo, useEffect, useCallback } from 'react';
+import type { ChangeEvent } from 'react';
 import { Minus, Plus } from 'lucide-react';
 
 const ZOOM_LEVELS = [50, 75, 85, 100, 125, 150, 175, 200];
@@ -32,7 +33,7 @@ export function StatusBar() {
     setGridZoom(prev);
   }, [gridZoom, setGridZoom]);
 
-  const handleZoomSelect = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
+  const handleZoomSelect = useCallback((e: ChangeEvent<HTMLSelectElement>) => {
     setGridZoom(Number(e.target.value));
   }, [setGridZoom]);
 

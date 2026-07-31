@@ -12,11 +12,13 @@
  * only unrelated cells change).
  */
 
-import React, { memo, useMemo } from 'react'
+import React, { memo } from 'react'
+import type { CSSProperties, MouseEvent, Ref } from 'react'
 import type { CellData, CellFormat } from '@/types'
 import { formatCellValue } from '@/lib/formatUtils'
 import { resolveCellFormat, getDataBarRule, getDataBarInfo, getColorScaleRule, computeColorScaleBg, getIconSetRule, computeIconForCell } from '@/lib/conditionalFormat'
 import { getBorderCSS, isNegativeRedFormat } from '@/lib/formatUtils'
+import { isCellChecked } from '@/lib/checkbox'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -46,15 +48,14 @@ export interface GridCellProps {
   dataBarPeers: number[]
   colorScalePeers: number[]
   iconSetPeers: number[]
-  colOffset: number
   // Refs
-  editContainerRef?: React.Ref<HTMLDivElement>
-  inputRef?: React.Ref<HTMLInputElement>
+  editContainerRef?: Ref<HTMLDivElement>
+  inputRef?: Ref<HTMLInputElement>
   // Event handlers
-  onMouseDown: (row: number, col: number, e: React.MouseEvent) => void
+  onMouseDown: (row: number, col: number, e: MouseEvent) => void
   onMouseMove: (row: number, col: number) => void
   onDoubleClick: (row: number, col: number) => void
-  onContextMenu: (e: React.MouseEvent, row: number, col: number) => void
+  onContextMenu: (e: MouseEvent, row: number, col: number) => void
   onEditChange: (val: string) => void
   onEditBlur: () => void
   onCheckboxToggle: (cellId: string, cellData: CellData) => void
@@ -62,19 +63,13 @@ export interface GridCellProps {
 
 // ─── Helper ──────────────────────────────────────────────────────────────────
 
-function isCellChecked(value: string | number | boolean | null | undefined, checkedValue?: string): boolean {
-  const checked = checkedValue ?? 'TRUE'
-  const current = String(value ?? '').toUpperCase()
-  return current === checked.toUpperCase() || current === '1' || current === 'YES' || current === 'TRUE'
-}
-
 /** Resolve and compute cell style inline to avoid callback prop breaking memo */
 function getCellStyle(
   format: CellFormat | undefined,
   cellValue?: string | number | boolean | null
-): React.CSSProperties {
+): CSSProperties {
   if (!format) return {}
-  const style: React.CSSProperties = {
+  const style: CSSProperties = {
     fontWeight: format.bold ? 700 : undefined,
     fontStyle: format.italic ? 'italic' : undefined,
     textDecoration: format.underline ? 'underline' : undefined,
@@ -112,7 +107,6 @@ export const GridCell = memo(function GridCell({
   dataBarPeers,
   colorScalePeers,
   iconSetPeers,
-  colOffset,
   editContainerRef,
   inputRef,
   onMouseDown,

@@ -4,6 +4,7 @@
  * and touch-drag for multi-cell selection.
  */
 import { useCallback, useRef } from 'react';
+import type { TouchEvent } from 'react';
 
 interface UseTouchOptions {
   onTap: (row: number, col: number) => void;
@@ -67,7 +68,7 @@ export function useTouch({
     return { row, col };
   }, [cellHeight, rowHeaderWidth, colHeaderHeight, getColWidth, getScrollOffset]);
 
-  const handleTouchStart = useCallback((e: React.TouchEvent, gridRect: DOMRect) => {
+  const handleTouchStart = useCallback((e: TouchEvent, gridRect: DOMRect) => {
     if (e.touches.length !== 1) return;
     const touch = e.touches[0];
     const cell = getCellFromTouch(touch.clientX, touch.clientY, gridRect);
@@ -86,7 +87,7 @@ export function useTouch({
     }, LONG_PRESS_MS);
   }, [getCellFromTouch, onLongPress]);
 
-  const handleTouchMove = useCallback((e: React.TouchEvent, gridRect: DOMRect) => {
+  const handleTouchMove = useCallback((e: TouchEvent, gridRect: DOMRect) => {
     if (e.touches.length !== 1 || !touchStart.current) return;
     const touch = e.touches[0];
     const dx = Math.abs(touch.clientX - touchStart.current.x);
@@ -110,7 +111,7 @@ export function useTouch({
     }
   }, [getCellFromTouch, onDragSelect]);
 
-  const handleTouchEnd = useCallback((e: React.TouchEvent, gridRect: DOMRect) => {
+  const handleTouchEnd = useCallback((e: TouchEvent, gridRect: DOMRect) => {
     if (longPressTimer.current) {
       clearTimeout(longPressTimer.current);
       longPressTimer.current = null;

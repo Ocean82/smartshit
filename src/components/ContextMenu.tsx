@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import type { KeyboardEvent } from 'react';
 import { useStore } from '@/store/useStore';
 import { cellToRef } from '@/engine/spreadsheet';
 import { getCellNotesService } from '@/lib/cellNotes';
@@ -71,7 +72,7 @@ export function ContextMenu() {
     setContextMenu(null);
   };
 
-  const handleNoteKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+  const handleNoteKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
       commitNote();

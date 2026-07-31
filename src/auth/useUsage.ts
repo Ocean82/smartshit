@@ -131,7 +131,7 @@ function useTrackedUsage() {
   // This prevents the flash of "3 questions remaining" before the server responds.
   const isCheckingPro = !claimsPro && !hasByok && serverIsPro === null
   const { canAsk, remaining } = getUsageState(isPro, hasByok, isCheckingPro, usage)
-  const recordUsage = useCallback(createRecordUsage(isPro, hasByok, setUsage), [isPro, hasByok, setUsage])
+  const recordUsage = useCallback(() => createRecordUsage(isPro, hasByok, setUsage)(), [isPro, hasByok, setUsage])
 
   return {
     isPro,

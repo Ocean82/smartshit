@@ -5,9 +5,9 @@
  * Keeps component-specific interfaces organized.
  */
 
-import type { CellRef, Selection } from './domain';
-import type { CellData, CellFormat, FilterConfig, ChartConfig } from './domain';
-import type { ChatMessage, AgentAction } from './api';
+import type { CellData, CellFormat, ChartConfig } from './domain';
+import type { ChatMessage } from './api';
+import type { CSSProperties, KeyboardEvent, MouseEvent, ReactNode, Ref } from 'react';
 
 /** Grid cell rendering props */
 export interface GridCellProps {
@@ -29,14 +29,14 @@ export interface GridCellProps {
   dataBarPeers: number[];
   colorScalePeers: number[];
   iconSetPeers: number[];
-  getCellStyle: (format: CellFormat | undefined, cellValue?: string | number | boolean | null) => React.CSSProperties;
+  getCellStyle: (format: CellFormat | undefined, cellValue?: string | number | boolean | null) => CSSProperties;
   colOffset: number;
-  editContainerRef?: React.Ref<HTMLDivElement>;
-  inputRef?: React.Ref<HTMLInputElement>;
-  onMouseDown: (row: number, col: number, e: React.MouseEvent) => void;
+  editContainerRef?: Ref<HTMLDivElement>;
+  inputRef?: Ref<HTMLInputElement>;
+  onMouseDown: (row: number, col: number, e: MouseEvent) => void;
   onMouseMove: (row: number, col: number) => void;
   onDoubleClick: (row: number, col: number) => void;
-  onContextMenu: (e: React.MouseEvent, row: number, col: number) => void;
+  onContextMenu: (e: MouseEvent, row: number, col: number) => void;
   onEditChange: (val: string) => void;
   onEditBlur: () => void;
   onCheckboxToggle: (cellId: string, cellData: CellData) => void;
@@ -141,9 +141,9 @@ export interface PanelRailProps {
 /** Dock panel props */
 export interface DockPanelProps {
   panelId: 'chat' | 'insights' | 'auditor' | 'inspector';
-  children: React.ReactNode;
+  children: ReactNode;
   title?: string;
-  headerActions?: React.ReactNode;
+  headerActions?: ReactNode;
 }
 
 /** Sheet tabs props */
@@ -164,7 +164,7 @@ export interface FormulaBarProps {
   onBarClick: () => void;
   onCommit: (value: string) => void;
   onCancel: () => void;
-  onKeyDown: (e: React.KeyboardEvent) => void;
+  onKeyDown: (e: KeyboardEvent) => void;
 }
 
 /** Chat panel props */

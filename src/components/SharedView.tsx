@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import type { CSSProperties } from 'react'
 import { Globe, Copy, Check, AlertCircle, Loader2 } from 'lucide-react'
 import type { WorkbookData, SheetData } from '@/types'
 import { refToCell, cellToRef } from '@/engine/spreadsheet'
@@ -48,11 +49,11 @@ export function SharedView({ token }: SharedViewProps) {
       }
     }
 
-    load()
+    void load()
   }, [token])
 
   const handleCopyLink = () => {
-    navigator.clipboard.writeText(window.location.href)
+    navigator.clipboard.writeText(window.location.href).catch(() => {})
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
@@ -249,7 +250,7 @@ function ReadOnlyGrid({ sheet }: { sheet: SheetData }) {
               const cellData = sheet.cells[cellId]
               const fmt = cellData?.format
 
-              const style: React.CSSProperties = {
+              const style: CSSProperties = {
                 fontWeight: fmt?.bold ? 'bold' : undefined,
                 fontStyle: fmt?.italic ? 'italic' : undefined,
                 textDecoration: fmt?.underline ? 'underline' : undefined,

@@ -160,7 +160,6 @@ export function applyUndo(current: WorkbookData, entry: HistoryEntry): WorkbookD
 
     for (const cellPatch of sheetPatch.cells) {
       if (cellPatch.before === null) {
-        // eslint-disable-next-line @typescript-eslint/no-array-delete
         delete sheet.cells[cellPatch.cellId]
       } else {
         sheet.cells[cellPatch.cellId] = cellPatch.before
@@ -199,7 +198,6 @@ export function applyRedo(current: WorkbookData, entry: HistoryEntry): WorkbookD
 
     for (const cellPatch of sheetPatch.cells) {
       if (cellPatch.after === null) {
-        // eslint-disable-next-line @typescript-eslint/no-array-delete
         delete sheet.cells[cellPatch.cellId]
       } else {
         sheet.cells[cellPatch.cellId] = cellPatch.after

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
+import type { ReactNode } from 'react';
 import { useStore } from '@/store/useStore';
 
 interface Props {
@@ -166,7 +167,7 @@ export function FormulaAutocomplete({ visible, editValue, onSelect, position }: 
 }
 
 /** Wrap the matched portion of a function name in a <strong> for visual emphasis. */
-function highlightMatch(name: string, token: string): React.ReactNode {
+function highlightMatch(name: string, token: string): ReactNode {
   if (!token) return name;
   const idx = name.indexOf(token);
   if (idx === -1) return name;

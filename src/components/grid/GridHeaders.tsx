@@ -4,8 +4,10 @@
  */
 
 import { useMemo } from 'react';
+import type { MouseEvent } from 'react';
 import { useStore } from '@/store/useStore';
 import { colToLetter } from '@/engine/spreadsheet';
+import type { Selection, SortConfig, FilterConfig } from '@/types';
 
 interface GridHeadersProps {
   visibleRange: { startCol: number; endCol: number; startRow: number; endRow: number };
@@ -16,15 +18,13 @@ interface GridHeadersProps {
   COL_HEADER_HEIGHT: number;
   ROW_HEADER_WIDTH: number;
   CELL_HEIGHT: number;
-  selection: any;
-  activeSortConfig: any;
-  activeFilters: any[];
+  selection: Selection | null;
+  activeSortConfig: SortConfig | null;
+  activeFilters: FilterConfig[];
   handleColSelect: (col: number) => void;
   handleRowSelect: (row: number) => void;
-  handleResizeStart: (col: number, e: React.MouseEvent) => void;
+  handleResizeStart: (col: number, e: MouseEvent) => void;
   handleAutoFitColumn: (col: number) => void;
-  sheet: any;
-  getComputedValue: (row: number, col: number) => string;
   rowOffset: number;
 }
 
@@ -44,8 +44,6 @@ export function GridHeaders({
   handleRowSelect,
   handleResizeStart,
   handleAutoFitColumn,
-  sheet,
-  getComputedValue,
   rowOffset,
 }: GridHeadersProps) {
   // Top-left corner header
@@ -100,7 +98,7 @@ export function GridHeaders({
         })}
       </div>
     </div>
-  ), [visibleRange, visibleColOffsets, selection, activeSortConfig, activeFilters, getColWidth, totalWidth]);
+  ), [visibleRange, visibleColOffsets, selection, activeSortConfig, activeFilters, getColWidth, totalWidth, COL_HEADER_HEIGHT, handleColSelect, handleResizeStart, handleAutoFitColumn]);
 
   // Row headers
   const rowHeaders = useMemo(() => (
@@ -130,7 +128,7 @@ export function GridHeaders({
         );
       })}
     </div>
-  ), [visibleRange, filteredRows, selection, rowOffset]);
+  ), [visibleRange, filteredRows, selection, rowOffset, ROW_HEADER_WIDTH, CELL_HEIGHT, handleRowSelect]);
 
   return (
     <>

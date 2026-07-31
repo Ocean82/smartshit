@@ -5,7 +5,6 @@
  */
 
 import type { CellRef, CellFormat } from './domain';
-import React from 'react';
 
 export interface ChatMessage {
   id: string;

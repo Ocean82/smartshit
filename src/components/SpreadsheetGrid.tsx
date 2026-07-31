@@ -1,14 +1,12 @@
-import React, { useCallback, useRef, useEffect, useState, useMemo } from 'react';
+import React, { useCallback, useEffect, useState, useMemo } from 'react';
 import { Check, XCircle } from 'lucide-react';
 import { useStore } from '@/store/useStore';
 import { colToLetter, refToCell, cellToRef } from '@/engine/spreadsheet';
 import { FormulaAutocomplete } from './FormulaAutocomplete';
 import { FindReplaceDialog } from './FindReplaceDialog';
 import { SelectionOverlay } from '@/components/SelectionOverlay';
-import type { CellFormat } from '@/types';
-import { getBorderCSS, isNegativeRedFormat } from '@/lib/formatUtils';
-import { buildFilteredRowIndex } from '@/lib/rowFilter';
-import { findHeaderRow, findLastDataRow } from '@/lib/sheetSort';
+import { getCheckboxToggleValue } from '@/lib/checkbox';
+import { findLastDataRow } from '@/lib/sheetSort';
 import { columnDataBarPeerValues, columnColorScalePeerValues, columnIconSetPeerValues } from '@/lib/conditionalFormat';
 import { findActivePendingPreview } from '@/lib/pendingActionPreview';
 import { useTouch } from '@/hooks/useTouch';
@@ -18,39 +16,17 @@ import { useGridViewport } from './grid/GridViewport';
 import { useEditingController } from './grid/EditingController';
 import { useSelectionManager } from './grid/SelectionManager';
 
-/** Check if a cell value represents the "checked" state for a checkbox validation. */
-function isCellChecked(value: string | number | boolean | null | undefined, checkedValue?: string): boolean {
-  const checked = checkedValue ?? 'TRUE'
-  const current = String(value ?? '').toUpperCase()
-  return current === checked.toUpperCase() || current === '1' || current === 'YES' || current === 'TRUE'
-}
-
 const DEFAULT_CELL_WIDTH = 100;
 const CELL_HEIGHT = 28;
 const ROW_HEADER_WIDTH = 46;
 const COL_HEADER_HEIGHT = 26;
-const MAX_ROWS = 10000;
-const MAX_COLS = 100;
-const EMPTY_ROWS_BUFFER = 50; // Extra empty rows shown below data
-const EMPTY_COLS_BUFFER = 10; // Extra empty cols shown beyond data
-const BUFFER_ROWS = 5;
-const BUFFER_COLS = 3;
 
 export function SpreadsheetGrid() {
   const {
-    selection,
-    additionalSelections,
-    editingCell,
-    editValue,
-    setSelection,
-    addSelection,
-    setEditingCell,
-    setEditValue,
     setCellValue,
     pushHistory,
     getActiveSheet,
     getComputedValue,
-    setContextMenu,
     activeFilters,
     activeSortConfig,
     messages,
@@ -141,17 +117,6 @@ export function SpreadsheetGrid() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [iconSetFingerprint]);
 
-  const filteredRows = useMemo(() => {
-    if (!activeFilters.length) return null;
-    const last = Math.max(findLastDataRow(sheet), findHeaderRow(sheet));
-    return buildFilteredRowIndex(
-      last + 1,
-      activeFilters,
-      (row, col) => getComputedValue(row, col),
-      findHeaderRow(sheet),
-    );
-  }, [activeFilters, getComputedValue, sheet]);
-
   // ─── Viewport (virtualization) ─────────────────────────────────────────────
   // Column width & resize state (must be declared before useGridViewport)
   const [columnWidths, setColumnWidths] = useState<Record<number, number>>({});
@@ -167,9 +132,7 @@ export function SpreadsheetGrid() {
   const viewport = useGridViewport({
     sheet,
     getComputedValue,
-    columnWidths: sheet.columnWidths,
     activeFilters,
-    activeSortConfig,
     getColWidth,
   });
 
@@ -237,7 +200,7 @@ export function SpreadsheetGrid() {
     // Cap at a reasonable max
     maxWidth = Math.min(maxWidth, 400);
     setColumnWidths((prev) => ({ ...prev, [col]: Math.ceil(maxWidth) }));
-  }, [sheet.cells, getComputedValue]);
+  }, [getComputedValue, getActiveSheet]);
 
   useEffect(() => {
     if (resizingCol === null) return;
@@ -368,7 +331,7 @@ export function SpreadsheetGrid() {
                 {activeSortConfig?.column === col && (
                   <span className="ml-0.5 text-blue-500 text-[9px]">{activeSortConfig.direction === 'asc' ? '▲' : '▼'}</span>
                 )}
-                {activeFilters.some((f: any) => f.column === col) && (
+                {activeFilters.some((f) => f.column === col) && (
                   <span className="ml-0.5 text-amber-500 text-[9px]">⏷</span>
                 )}
                 <div
@@ -455,7 +418,6 @@ export function SpreadsheetGrid() {
                     dataBarPeers={dataBarPeersByCol.get(col) ?? []}
                     colorScalePeers={colorScalePeersByCol.get(col) ?? []}
                     iconSetPeers={iconSetPeersByCol.get(col) ?? []}
-                    colOffset={0}
                     editContainerRef={editingController.editContainerRef}
                     inputRef={editingController.inputRef}
                     onMouseDown={selectionManager.handleMouseDown}
@@ -465,11 +427,8 @@ export function SpreadsheetGrid() {
                     onEditChange={editingController.setEditValue}
                     onEditBlur={editingController.commitEdit}
                     onCheckboxToggle={(cid, cd) => {
-                      const checked = cd.validation?.checkedValue ?? 'TRUE';
-                      const unchecked = cd.validation?.uncheckedValue ?? 'FALSE';
-                      const isChecked = cd.value === checked || (typeof cd.value === 'string' && cd.value.toUpperCase() === checked.toUpperCase()) || cd.value === 1 || cd.value === true;
                       pushHistory('Toggle checkbox');
-                      setCellValue(cid, isChecked ? unchecked : checked);
+                      setCellValue(cid, getCheckboxToggleValue(cd));
                     }}
                   />
                 );

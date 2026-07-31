@@ -9,7 +9,8 @@
  * - aiFunctionDefinitions (AI function argument splitting)
  */
 
-import { cellToRef, tryCellToRef, refToCell, colToLetter, letterToCol } from './cellRef';
+import { tryCellToRef, refToCell, letterToCol } from './cellRef';
+import type { ReactNode } from 'react';
 
 export interface CellRef {
   row: number;
@@ -219,7 +220,7 @@ export function scoreFunctionMatch(name: string, token: string): number {
  * Highlight the matching portion of a function name for display.
  * Returns React nodes with <strong> around the match.
  */
-export function highlightMatch(name: string, token: string): React.ReactNode {
+export function highlightMatch(name: string, token: string): ReactNode {
   if (!token) return name;
   const idx = name.toUpperCase().indexOf(token.toUpperCase());
   if (idx === -1) return name;

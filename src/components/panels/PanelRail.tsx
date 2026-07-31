@@ -5,11 +5,12 @@
  */
 
 import { useState } from 'react'
+import type { ReactNode } from 'react'
 import { useStore } from '@/store/useStore'
 import { PANELS, type PanelId } from './panelTypes'
 import { MessageSquare, BarChart3, ShieldCheck, Microscope } from 'lucide-react'
 
-const PANEL_ICONS: Record<PanelId, React.ReactNode> = {
+const PANEL_ICONS: Record<PanelId, ReactNode> = {
   chat: <MessageSquare size={18} />,
   insights: <BarChart3 size={18} />,
   auditor: <ShieldCheck size={18} />,

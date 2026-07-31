@@ -4,15 +4,18 @@
  */
 
 import { useCallback, useMemo } from 'react';
+import type { KeyboardEvent, MouseEvent } from 'react';
 import { useStore } from '@/store/useStore';
 import { cellToRef, refToCell, colToLetter } from '@/engine/spreadsheet';
+import { isInMultiSelection } from '@/lib/selection';
+import type { SheetData } from '@/types';
 
 interface SelectionManagerConfig {
   TOTAL_ROWS: number;
   TOTAL_COLS: number;
   pushHistory: (desc: string) => void;
   setShowFindReplace: (show: boolean) => void;
-  findLastDataRow: (sheet: any) => number;
+  findLastDataRow: (sheet: SheetData) => number;
 }
 
 export function useSelectionManager(config: SelectionManagerConfig) {
@@ -28,31 +31,11 @@ export function useSelectionManager(config: SelectionManagerConfig) {
   const selection = useStore(s => s.selection);
   const additionalSelections = useStore(s => s.additionalSelections);
   const setSelection = useStore(s => s.setSelection);
-  const addSelection = useStore(s => s.addSelection);
   const editingCell = useStore(s => s.editingCell);
-  const setEditingCell = useStore(s => s.setEditingCell);
-  const setEditValue = useStore(s => s.setEditValue);
-  const copy = useStore(s => s.copy);
-  const cut = useStore(s => s.cut);
-  const paste = useStore(s => s.paste);
-  const undo = useStore(s => s.undo);
-  const redo = useStore(s => s.redo);
 
   const isSelected = useCallback((row: number, col: number) => {
     if (!selection) return false;
-    const minR = Math.min(selection.startRow, selection.endRow);
-    const maxR = Math.max(selection.startRow, selection.endRow);
-    const minC = Math.min(selection.startCol, selection.endCol);
-    const maxC = Math.max(selection.startCol, selection.endCol);
-    if (row >= minR && row <= maxR && col >= minC && col <= maxC) return true;
-    for (const sel of additionalSelections) {
-      const r0 = Math.min(sel.startRow, sel.endRow);
-      const r1 = Math.max(sel.startRow, sel.endRow);
-      const c0 = Math.min(sel.startCol, sel.endCol);
-      const c1 = Math.max(sel.startCol, sel.endCol);
-      if (row >= r0 && row <= r1 && col >= c0 && col <= c1) return true;
-    }
-    return false;
+    return isInMultiSelection(row, col, { primary: selection, additional: additionalSelections });
   }, [selection, additionalSelections]);
 
   const isActiveCell = useCallback((row: number, col: number) => {
@@ -64,7 +47,7 @@ export function useSelectionManager(config: SelectionManagerConfig) {
       (row === selection.startRow || col === selection.startCol);
   }, [selection, isActiveCell, isSelected]);
 
-  const handleCellClick = useCallback((row: number, col: number, e: React.MouseEvent) => {
+  const handleCellClick = useCallback((row: number, col: number, e: MouseEvent) => {
     if (e.shiftKey && selection) {
       setSelection({
         startRow: selection.startRow,
@@ -82,15 +65,7 @@ export function useSelectionManager(config: SelectionManagerConfig) {
     if (editingCell) useStore.getState().setEditingCell(null);
   }, [selection, setSelection, editingCell]);
 
-  const handleCellDoubleClick = useCallback((row: number, col: number) => {
-    const cellId = refToCell(row, col);
-    const cellData = sheet.cells[cellId];
-    useStore.getState().setEditingCell(cellId);
-    useStore.getState().setEditValue(cellData?.formula || String(cellData?.value ?? ''));
-    setSelection({ startRow: row, startCol: col, endRow: row, endCol: col });
-  }, [sheet.cells]);
-
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (useStore.getState().editingCell) {
       // Handled by EditingController
       return;
@@ -198,9 +173,9 @@ export function useSelectionManager(config: SelectionManagerConfig) {
           }
         }
     }
-  }, [selection, editingCell, sheet, TOTAL_ROWS, TOTAL_COLS, findLastDataRow, pushHistory, setSelection, setEditingCell, setEditValue, setShowFindReplace]);
+  }, [selection, sheet, TOTAL_ROWS, TOTAL_COLS, findLastDataRow, pushHistory, setSelection, setShowFindReplace]);
 
-  const handleMouseDown = useCallback((row: number, col: number, e: React.MouseEvent) => {
+  const handleMouseDown = useCallback((row: number, col: number, e: MouseEvent) => {
     if (e.button !== 0) return;
     handleCellClick(row, col, e);
   }, [handleCellClick]);
@@ -218,18 +193,10 @@ export function useSelectionManager(config: SelectionManagerConfig) {
   const handleMouseUp = useCallback(() => {
   }, []);
 
-  const handleContextMenu = useCallback((e: React.MouseEvent, row: number, col: number) => {
+  const handleContextMenu = useCallback((e: MouseEvent, row: number, col: number) => {
     e.preventDefault();
     useStore.getState().setContextMenu({ x: e.clientX, y: e.clientY, cell: refToCell(row, col) });
   }, []);
-
-  const handleColSelect = useCallback((col: number) => {
-    setSelection({ startRow: 0, startCol: col, endRow: 9999, endCol: col });
-  }, [setSelection]);
-
-  const handleRowSelect = useCallback((row: number) => {
-    setSelection({ startRow: row, startCol: 0, endRow: row, endCol: 9999 });
-  }, [setSelection]);
 
   const getSelectionInfo = useMemo(() => {
     if (!selection) return null;
