@@ -220,4 +220,39 @@ describe('auditor integration — full audit run', () => {
     expect(div0!.fixActions).toHaveLength(1)
     expect(div0!.fixActions![0].formula).toBe('=IFERROR(1/0, 0)')
   })
+
+  it('hardcoded-constants findings are auto-fixable with two writes', () => {
+    const cells: SheetData['cells'] = {
+      'A0': { value: 'Label' },
+      'B0': { value: 'Value' },
+      'A1': { value: 'x' },
+      'B1': { value: 100 },
+      'A2': { value: 'Total' },
+      'B2': { value: null, formula: '=B1*0.335' },
+    }
+    const sheet: SheetData = {
+      id: 'mc',
+      name: 'Magic',
+      cells,
+      columnWidths: {},
+      rowHeights: {},
+      charts: [],
+    }
+    const getValue = (row: number, col: number) => {
+      const id = refToCell(row, col)
+      const c = cells[id]
+      return c?.value == null ? '' : String(c.value)
+    }
+
+    const result = runAudit(sheet, getValue)
+    const finding = result.findings.find((f) => f.ruleId === 'hardcoded-constants' && f.cells[0]?.cellId === 'B2')
+
+    expect(finding).toBeDefined()
+    expect(finding!.autoFixable).toBe(true)
+    expect(finding!.fixActions).toHaveLength(2)
+    // write 1: constant moved into the first empty cell right of B2 → C2
+    expect(finding!.fixActions![0]).toEqual({ cellId: 'C2', value: 0.335 })
+    // write 2: formula rewritten to reference the input cell
+    expect(finding!.fixActions![1]).toEqual({ cellId: 'B2', formula: '=B1*C2' })
+  })
 })

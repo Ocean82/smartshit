@@ -5,8 +5,8 @@
  * are excluded.
  */
 
-import type { AuditRule, AuditFinding, AuditContext } from '../types'
-import { findingId } from '../utils'
+import type { AuditRule, AuditFinding, AuditContext, FixWrite } from '../types'
+import { findingId, refToCell } from '../utils'
 
 /** Numbers that are commonly used as formula constants and aren't suspicious. */
 const ACCEPTABLE_CONSTANTS = new Set([
@@ -20,6 +20,14 @@ const ACCEPTABLE_CONSTANTS = new Set([
   // Common denominators and statistical
   '4', '7', '14', '26', '90', '180', '360',
 ])
+
+/** First empty cell in the row, scanning right from the formula's column. */
+function findFirstEmptyCellRight(ctx: AuditContext, row: number, col: number): string | null {
+  for (let c = col + 1; c <= col + 50; c++) {
+    if (!ctx.getCellAt(row, c)) return refToCell(row, c)
+  }
+  return null
+}
 
 export const hardcodedConstantsRule: AuditRule = {
   id: 'hardcoded-constants',
@@ -47,6 +55,17 @@ export const hardcodedConstantsRule: AuditRule = {
       // Only report the first suspicious constant per cell to avoid noise
       if (suspicious.length > 0) {
         const num = suspicious[0]
+        const target = findFirstEmptyCellRight(ctx, cell.row, cell.col)
+        const escaped = num.replace(/\./g, '\\.')
+        const replacePattern = new RegExp(`(?<![A-Za-z0-9_.])${escaped}(?![A-Za-z0-9_.])`)
+        const fixActions: FixWrite[] | undefined =
+          target && replacePattern.test(cell.formula)
+            ? [
+                { cellId: target, value: Number(num) },
+                { cellId: cell.cellId, formula: `=${cell.formula.replace(replacePattern, target)}` },
+              ]
+            : undefined
+
         findings.push({
           id: findingId(),
           ruleId: 'hardcoded-constants',
@@ -55,7 +74,8 @@ export const hardcodedConstantsRule: AuditRule = {
           message: `Cell ${cell.cellId} has hardcoded value ${num} in formula =${cell.formula}. Hardcoded values are fragile — if the number changes, you have to find every formula that uses it.`,
           cells: [{ cellId: cell.cellId, row: cell.row, col: cell.col }],
           suggestion: `Move ${num} to a dedicated input cell and reference that cell instead`,
-          autoFixable: false,
+          autoFixable: !!fixActions,
+          fixActions,
         })
       }
     }
