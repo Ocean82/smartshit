@@ -209,4 +209,15 @@ describe('auditor integration — full audit run', () => {
     expect(result.findings.length).toBe(0)
     expect(result.summary).toContain('✅')
   })
+
+  it('marks #DIV/0! errors as auto-fixable with an IFERROR wrap', () => {
+    const { sheet, getComputedValue } = createAuditFixture()
+    const result = runAudit(sheet, getComputedValue)
+
+    const div0 = result.findings.find((f) => f.ruleId === 'error-cells' && f.cells[0]?.cellId === 'B7')
+    expect(div0).toBeDefined()
+    expect(div0!.autoFixable).toBe(true)
+    expect(div0!.fixActions).toHaveLength(1)
+    expect(div0!.fixActions![0].formula).toBe('=IFERROR(1/0, 0)')
+  })
 })

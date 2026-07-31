@@ -48,15 +48,17 @@ export function AuditPanelContent() {
   }, [])
 
   const handleFix = useCallback((finding: AuditFinding) => {
-    if (!finding.fixAction) return
+    if (!finding.fixActions?.length) return
     const store = useStore.getState()
-    const { cellId, formula, value } = finding.fixAction
     store.pushHistory('Audit auto-fix')
-    if (formula) {
-      const formulaStr = formula.startsWith('=') ? formula : `=${formula}`
-      store.setCellValue(cellId, null, formulaStr)
-    } else if (value !== undefined) {
-      store.setCellValue(cellId, value)
+    for (const action of finding.fixActions) {
+      const { cellId, formula, value } = action
+      if (formula) {
+        const formulaStr = formula.startsWith('=') ? formula : `=${formula}`
+        store.setCellValue(cellId, null, formulaStr)
+      } else if (value !== undefined) {
+        store.setCellValue(cellId, value)
+      }
     }
     setTimeout(() => handleRunAudit(), 200)
   }, [handleRunAudit])

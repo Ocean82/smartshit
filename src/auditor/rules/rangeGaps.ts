@@ -51,10 +51,10 @@ export const rangeGapsRule: AuditRule = {
                 ],
                 suggestion: `Extend range to ${extendedStart}:${end}`,
                 autoFixable: true,
-                fixAction: {
+                fixActions: [{
                   cellId: cell.cellId,
                   formula: `=${cell.formula!.replace(range, `${extendedStart}:${end}`)}`,
-                },
+                }],
               })
             }
           }
@@ -76,10 +76,10 @@ export const rangeGapsRule: AuditRule = {
                 ],
                 suggestion: `Extend range to ${start}:${extendedEnd}`,
                 autoFixable: true,
-                fixAction: {
+                fixActions: [{
                   cellId: cell.cellId,
                   formula: `=${cell.formula!.replace(range, `${start}:${extendedEnd}`)}`,
-                },
+                }],
               })
             }
           }
@@ -107,10 +107,10 @@ export const rangeGapsRule: AuditRule = {
                 ],
                 suggestion: `Extend range to ${extendedStart}:${end}`,
                 autoFixable: true,
-                fixAction: {
+                fixActions: [{
                   cellId: cell.cellId,
                   formula: `=${cell.formula.replace(range, `${extendedStart}:${end}`)}`,
-                },
+                }],
               })
             }
           }
@@ -131,10 +131,10 @@ export const rangeGapsRule: AuditRule = {
                 ],
                 suggestion: `Extend range to ${start}:${extendedEnd}`,
                 autoFixable: true,
-                fixAction: {
+                fixActions: [{
                   cellId: cell.cellId,
                   formula: `=${cell.formula.replace(range, `${start}:${extendedEnd}`)}`,
-                },
+                }],
               })
             }
           }

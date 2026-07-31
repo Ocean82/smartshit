@@ -57,8 +57,8 @@ export const errorCellsRule: AuditRule = {
 
       // Auto-fixable: #DIV/0! can be wrapped in IFERROR
       const autoFixable = errorType === '#DIV/0!' && !!cell.formula
-      const fixAction = autoFixable && cell.formula
-        ? { cellId: cell.cellId, formula: `=IFERROR(${cell.formula}, 0)` }
+      const fixActions = autoFixable && cell.formula
+        ? [{ cellId: cell.cellId, formula: `=IFERROR(${cell.formula}, 0)` }]
         : undefined
 
       findings.push({
@@ -70,7 +70,7 @@ export const errorCellsRule: AuditRule = {
         cells: [{ cellId: cell.cellId, row: cell.row, col: cell.col }],
         suggestion,
         autoFixable,
-        fixAction,
+        fixActions,
       })
     }
 

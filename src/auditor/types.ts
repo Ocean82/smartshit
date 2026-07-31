@@ -14,6 +14,12 @@ export interface CellLocation {
   col: number
 }
 
+export interface FixWrite {
+  cellId: string
+  formula?: string
+  value?: string | number | null
+}
+
 export interface AuditFinding {
   id: string
   ruleId: string
@@ -24,8 +30,8 @@ export interface AuditFinding {
   suggestion?: string
   /** Whether this finding can be auto-fixed */
   autoFixable: boolean
-  /** Fix descriptor: formula to set on the target cell */
-  fixAction?: { cellId: string; formula?: string; value?: string | number | null }
+  /** Fix writes: set formula/value on each target cell, in order */
+  fixActions?: FixWrite[]
 }
 
 export interface AuditResult {
