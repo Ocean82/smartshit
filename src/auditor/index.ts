@@ -11,21 +11,26 @@
 import type { SheetData } from '@/types'
 import type { AuditResult, AuditContext, AuditFinding, CellInfo, Severity } from './types'
 import { ALL_RULES } from './rules'
+import { createCustomAuditRule, type CustomAuditRule } from './customRules'
 import { refToCell, cellToRef, classifyCellType, isErrorValue, getErrorType } from './utils'
 
 export type { AuditResult, AuditFinding, CellInfo, Severity } from './types'
 export type { CellLocation, AuditRule, AuditContext } from './types'
+export { createCustomAuditRule, loadCustomRules, saveCustomRules, ruleMatches, OPERATOR_LABELS } from './customRules'
+export type { CustomAuditRule, CustomRuleOperator, NumericRuleOperator, TextRuleOperator, EmptyRuleOperator } from './customRules'
 
 /**
  * Run a full audit on a sheet.
  *
  * @param sheet - The sheet data from the Zustand store.
  * @param getComputedValue - Function to get Formualizer-computed value for a cell.
+ * @param customRules - Optional user-defined custom audit rules to run alongside the built-ins.
  * @returns Structured audit result with findings and score.
  */
 export function runAudit(
   sheet: SheetData,
   getComputedValue: (row: number, col: number) => string,
+  customRules: CustomAuditRule[] = [],
 ): AuditResult {
   const startTime = performance.now()
 
@@ -88,9 +93,10 @@ export function runAudit(
     },
   }
 
-  // Execute all rules, catching errors so one bad rule doesn't crash the audit
+  // Execute all rules (built-in + custom), catching errors so one bad rule doesn't crash the audit
   const findings: AuditFinding[] = []
-  for (const rule of ALL_RULES) {
+  const rules = [...ALL_RULES, ...customRules.map(createCustomAuditRule)]
+  for (const rule of rules) {
     try {
       const ruleFindings = rule.run(ctx)
       findings.push(...ruleFindings)
