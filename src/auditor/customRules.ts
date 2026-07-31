@@ -80,8 +80,7 @@ export function ruleMatches(rule: CustomAuditRule, cell: CellInfo): boolean {
       return haystack.includes(String(rule.value).toLowerCase())
     }
     case 'notContains': {
-      if (typeof cell.rawValue !== 'string') return false
-      const haystack = cell.rawValue.toLowerCase()
+      const haystack = cell.rawValue == null || cell.rawValue === '' ? '' : String(cell.rawValue).toLowerCase()
       if (haystack === '') return false
       return !haystack.includes(String(rule.value).toLowerCase())
     }

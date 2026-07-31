@@ -109,11 +109,11 @@ describe('custom audit rules', () => {
     expect(findings.map((f) => f.cells[0].cellId).sort()).toEqual(['B1', 'B2'])
   })
 
-  it('notContains does not flag numeric cells', () => {
-    const { sheet, getComputedValue } = makeColumnB([1500, 6000, 8200])
-    const result = runAudit(sheet, getComputedValue, [rule({ column: 'B', operator: 'notContains', value: 'zzz' })])
+  it('notContains is the exact complement of contains on numeric cells', () => {
+    const { sheet, getComputedValue } = makeColumnB([1500, 6000, 8205])
+    const result = runAudit(sheet, getComputedValue, [rule({ column: 'B', operator: 'notContains', value: '00' })])
     const findings = result.findings.filter((f) => f.ruleId === 'custom:r1')
-    expect(findings).toHaveLength(0)
+    expect(findings.map((f) => f.cells[0].cellId).sort()).toEqual(['B3'])
   })
 
   it('notContains flags non-matching text rows', () => {
