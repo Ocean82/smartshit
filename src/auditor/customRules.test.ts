@@ -52,6 +52,28 @@ function rule(overrides: Partial<CustomAuditRule> = {}): CustomAuditRule {
   }
 }
 
+/** Fixture with values in column B only (no header row, avoids the 0-based-ID quirk of makeSheet). */
+function makeColumnB(values: Array<string | number>): { sheet: SheetData; getComputedValue: (row: number, col: number) => string } {
+  const cells: SheetData['cells'] = {}
+  values.forEach((v, i) => {
+    cells[`A${i + 1}`] = { value: `Item ${i + 1}` }
+    cells[`B${i + 1}`] = { value: v }
+  })
+  const sheet: SheetData = {
+    id: 'col-b',
+    name: 'Numbers',
+    cells,
+    columnWidths: {},
+    rowHeights: {},
+    charts: [],
+  }
+  const getComputedValue = (row: number, col: number) => {
+    const cell = cells[refToCell(row, col)]
+    return cell?.value == null ? '' : String(cell.value)
+  }
+  return { sheet, getComputedValue }
+}
+
 describe('custom audit rules', () => {
   it('flags rows whose numeric value exceeds the threshold', () => {
     const { sheet, getComputedValue } = makeSheet()
@@ -78,6 +100,43 @@ describe('custom audit rules', () => {
     const result = runAudit(sheet, getComputedValue, [rule({ column: 'A', operator: 'contains', value: 'ark' })])
     const findings = result.findings.filter((f) => f.ruleId === 'custom:r1')
     expect(findings.map((f) => f.cells[0].cellId)).toEqual(['A3'])
+  })
+
+  it('contains matches numeric cells by their string form', () => {
+    const { sheet, getComputedValue } = makeColumnB([1500, 6000, 8205])
+    const result = runAudit(sheet, getComputedValue, [rule({ column: 'B', operator: 'contains', value: '00' })])
+    const findings = result.findings.filter((f) => f.ruleId === 'custom:r1')
+    expect(findings.map((f) => f.cells[0].cellId).sort()).toEqual(['B1', 'B2'])
+  })
+
+  it('notContains does not flag numeric cells', () => {
+    const { sheet, getComputedValue } = makeColumnB([1500, 6000, 8200])
+    const result = runAudit(sheet, getComputedValue, [rule({ column: 'B', operator: 'notContains', value: 'zzz' })])
+    const findings = result.findings.filter((f) => f.ruleId === 'custom:r1')
+    expect(findings).toHaveLength(0)
+  })
+
+  it('notContains flags non-matching text rows', () => {
+    const { sheet, getComputedValue } = makeColumnB(['Rent', 'Servers', 'Marketing', 'Note', 'Blank label'])
+    const result = runAudit(sheet, getComputedValue, [rule({ column: 'B', operator: 'notContains', value: 'ark' })])
+    const findings = result.findings.filter((f) => f.ruleId === 'custom:r1')
+    expect(findings.map((f) => f.cells[0].cellId).sort()).toEqual(['B1', 'B2', 'B4', 'B5'])
+  })
+
+  it('supports lt with a strict less-than comparison', () => {
+    const { sheet, getComputedValue } = makeSheet()
+    const result = runAudit(sheet, getComputedValue, [rule({ operator: 'lt', value: 6000 })])
+    const findings = result.findings.filter((f) => f.ruleId === 'custom:r1')
+    expect(findings.map((f) => f.cells[0].cellId)).toEqual(['B1'])
+  })
+
+  it('supports isNotEmpty, skipping empty cells', () => {
+    const { sheet, getComputedValue } = makeSheet()
+    const result = runAudit(sheet, getComputedValue, [rule({ operator: 'isNotEmpty', value: '' })])
+    const findings = result.findings.filter((f) => f.ruleId === 'custom:r1')
+    const cellIds = findings.map((f) => f.cells[0].cellId).sort()
+    expect(cellIds).toEqual(['B1', 'B2', 'B3', 'B4'])
+    expect(cellIds).not.toContain('B5')
   })
 
   it('supports isEmpty', () => {

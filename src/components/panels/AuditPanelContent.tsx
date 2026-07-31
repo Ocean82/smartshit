@@ -25,11 +25,13 @@ export function AuditPanelContent() {
   const activeSheet = workbook.sheets.find((s) => s.id === activeSheetId)
 
   const handleRunAudit = useCallback(() => {
-    if (!activeSheet) return
+    const state = useStore.getState()
+    const sheet = state.workbook.sheets.find((s) => s.id === state.activeSheetId)
+    if (!sheet) return
     setLoading(true)
     requestAnimationFrame(() => {
       try {
-        const auditResult = runAudit(activeSheet, getComputedValue, loadCustomRules())
+        const auditResult = runAudit(sheet, getComputedValue, loadCustomRules())
         setResult(auditResult)
       } catch (err) {
         console.error('Audit failed:', err)
@@ -37,14 +39,19 @@ export function AuditPanelContent() {
         setLoading(false)
       }
     })
-  }, [activeSheet, getComputedValue, ruleVersion]) // eslint-disable-line react-hooks/exhaustive-deps
+    // ruleVersion is read here solely as a version-bump trigger so the callback is
+    // recreated (and the auto-run effect re-fires) when custom rules change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [getComputedValue, ruleVersion])
 
   // Auto-run on first open and whenever custom rules change
   useEffect(() => {
-    if (activeSheet && Object.keys(activeSheet.cells).length > 0) {
+    const state = useStore.getState()
+    const sheet = state.workbook.sheets.find((s) => s.id === state.activeSheetId)
+    if (sheet && Object.keys(sheet.cells).length > 0) {
       handleRunAudit()
     }
-  }, [handleRunAudit, activeSheet])
+  }, [handleRunAudit])
 
   const handleCellNavigate = useCallback((row: number, col: number) => {
     useStore.getState().setSelection({ startRow: row, startCol: col, endRow: row, endCol: col })
@@ -52,15 +59,27 @@ export function AuditPanelContent() {
 
   const handleFix = useCallback((finding: AuditFinding) => {
     if (!finding.fixActions?.length) return
-    const store = useStore.getState()
-    store.pushHistory('Audit auto-fix')
+    const state = useStore.getState()
+    const sheet = state.workbook.sheets.find((s) => s.id === state.activeSheetId)
+    if (!sheet) return
+    // Pre-flight: value writes must land in currently-empty cells. If any target
+    // is occupied (e.g. a stale card picked the same cell as a fresh fix), abort
+    // the whole batch so we never silently overwrite data.
+    for (const action of finding.fixActions) {
+      if (action.formula || action.value === undefined) continue
+      const target = sheet.cells[action.cellId]
+      const occupied = target && (target.formula ||
+        (target.value !== null && target.value !== undefined && target.value !== ''))
+      if (occupied) return
+    }
+    state.pushHistory('Audit auto-fix')
     for (const action of finding.fixActions) {
       const { cellId, formula, value } = action
       if (formula) {
         const formulaStr = formula.startsWith('=') ? formula : `=${formula}`
-        store.setCellValue(cellId, null, formulaStr)
+        state.setCellValue(cellId, null, formulaStr)
       } else if (value !== undefined) {
-        store.setCellValue(cellId, value)
+        state.setCellValue(cellId, value)
       }
     }
     setTimeout(() => handleRunAudit(), 200)

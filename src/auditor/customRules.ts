@@ -75,11 +75,14 @@ function compareNumeric(op: NumericRuleOperator, num: number, threshold: number)
 export function ruleMatches(rule: CustomAuditRule, cell: CellInfo): boolean {
   switch (rule.operator) {
     case 'contains': {
-      const haystack = typeof cell.rawValue === 'string' ? cell.rawValue.toLowerCase() : ''
+      const haystack = cell.rawValue == null || cell.rawValue === '' ? '' : String(cell.rawValue).toLowerCase()
+      if (haystack === '') return false
       return haystack.includes(String(rule.value).toLowerCase())
     }
     case 'notContains': {
-      const haystack = typeof cell.rawValue === 'string' ? cell.rawValue.toLowerCase() : ''
+      if (typeof cell.rawValue !== 'string') return false
+      const haystack = cell.rawValue.toLowerCase()
+      if (haystack === '') return false
       return !haystack.includes(String(rule.value).toLowerCase())
     }
     case 'isEmpty':
@@ -122,7 +125,9 @@ export function createCustomAuditRule(rule: CustomAuditRule): AuditRule {
           title: rule.name,
           message: `${cell.cellId}: ${rule.column} ${label}${valueText}`,
           cells: [{ cellId: cell.cellId, row: cell.row, col: cell.col }],
-          suggestion: `${rule.name}: ${rule.column} must be ${label}${valueText}`,
+          suggestion: rule.operator === 'isEmpty' || rule.operator === 'isNotEmpty'
+            ? `${rule.name}: ${rule.column} ${label}`
+            : `${rule.name}: ${rule.column} must be ${label}${valueText}`,
           autoFixable: false,
         })
       }

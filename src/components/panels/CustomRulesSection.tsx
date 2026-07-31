@@ -75,7 +75,8 @@ export function CustomRulesSection({ sheet, onRulesChanged }: CustomRulesSection
   const startEdit = (rule: CustomAuditRule) => {
     setEditing(rule)
     setName(rule.name)
-    setColumn(rule.column)
+    const columnExists = columns.some((c) => c.letter === rule.column)
+    setColumn(columnExists ? rule.column : (columns[0]?.letter ?? 'A'))
     setOperator(rule.operator)
     setSeverity(rule.severity)
     setValue(rule.operator === 'isEmpty' || rule.operator === 'isNotEmpty' ? '' : String(rule.value))
@@ -97,6 +98,7 @@ export function CustomRulesSection({ sheet, onRulesChanged }: CustomRulesSection
 
   const handleSubmit = () => {
     if (needsValue && value.trim() === '') return
+    if (numericOp && !Number.isFinite(Number(value))) return
     const rule: CustomAuditRule = {
       id: editing?.id ?? newId(),
       name: name.trim() || 'Untitled rule',
@@ -115,30 +117,32 @@ export function CustomRulesSection({ sheet, onRulesChanged }: CustomRulesSection
 
   return (
     <div className="border-b border-slate-100 bg-white/60">
-      <button
-        type="button"
-        className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-slate-50 transition-colors"
-        onClick={() => setOpen(!open)}
-        aria-expanded={open}
-      >
-        <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-500">
+      <div className="flex items-center px-3 py-2.5 hover:bg-slate-50 transition-colors">
+        <button
+          type="button"
+          className="flex-1 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-500 text-left"
+          onClick={() => setOpen(!open)}
+          aria-expanded={open}
+        >
           {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
           Custom Rules
           <span className="ml-1 px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 text-[9px]">
             {enabledCount}
           </span>
-        </span>
-        <Plus
-          size={13}
-          className="text-slate-400 hover:text-blue-600"
-          onClick={(e) => {
-            e.stopPropagation()
+        </button>
+        <button
+          type="button"
+          aria-label="Add rule"
+          className="p-1 rounded-md text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+          onClick={() => {
             resetForm()
             setShowForm(true)
             setOpen(true)
           }}
-        />
-      </button>
+        >
+          <Plus size={13} />
+        </button>
+      </div>
 
       {open && (
         <div className="px-3 pb-3 space-y-2">
@@ -206,7 +210,7 @@ export function CustomRulesSection({ sheet, onRulesChanged }: CustomRulesSection
                 <button
                   type="button"
                   className="px-3 py-1.5 text-[10px] font-bold rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-all shadow-sm active:scale-95 disabled:opacity-40"
-                  disabled={needsValue && value.trim() === ''}
+                  disabled={needsValue && (value.trim() === '' || (numericOp && !Number.isFinite(Number(value))))}
                   onClick={handleSubmit}
                 >
                   {editing ? 'Save' : 'Add'}
