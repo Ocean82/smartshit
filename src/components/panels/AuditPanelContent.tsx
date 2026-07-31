@@ -6,8 +6,10 @@
 import { useState, useCallback, useEffect } from 'react'
 import { useStore } from '@/store/useStore'
 import { runAudit } from '@/auditor'
+import { loadCustomRules } from '@/auditor/customRules'
 import type { AuditResult, AuditFinding, Severity } from '@/auditor/types'
 import { AuditFindingCard } from '@/components/AuditFindingCard'
+import { CustomRulesSection } from './CustomRulesSection'
 import { ShieldCheck, Loader2, RefreshCw } from 'lucide-react'
 
 const SEVERITY_FILTERS = ['all', 'critical', 'high', 'medium', 'low', 'info'] as const
@@ -18,6 +20,7 @@ export function AuditPanelContent() {
   const [result, setResult] = useState<AuditResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [filter, setFilter] = useState<FilterValue>('all')
+  const [ruleVersion, setRuleVersion] = useState(0)
 
   const activeSheet = workbook.sheets.find((s) => s.id === activeSheetId)
 
@@ -26,7 +29,7 @@ export function AuditPanelContent() {
     setLoading(true)
     requestAnimationFrame(() => {
       try {
-        const auditResult = runAudit(activeSheet, getComputedValue)
+        const auditResult = runAudit(activeSheet, getComputedValue, loadCustomRules())
         setResult(auditResult)
       } catch (err) {
         console.error('Audit failed:', err)
@@ -34,14 +37,14 @@ export function AuditPanelContent() {
         setLoading(false)
       }
     })
-  }, [activeSheet, getComputedValue])
+  }, [activeSheet, getComputedValue, ruleVersion]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auto-run on first open
+  // Auto-run on first open and whenever custom rules change
   useEffect(() => {
-    if (!result && activeSheet && Object.keys(activeSheet.cells).length > 0) {
+    if (activeSheet && Object.keys(activeSheet.cells).length > 0) {
       handleRunAudit()
     }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [handleRunAudit, activeSheet])
 
   const handleCellNavigate = useCallback((row: number, col: number) => {
     useStore.getState().setSelection({ startRow: row, startCol: col, endRow: row, endCol: col })
@@ -181,6 +184,13 @@ export function AuditPanelContent() {
             )
           })}
         </div>
+      )}
+
+      {activeSheet && (
+        <CustomRulesSection
+          sheet={activeSheet}
+          onRulesChanged={() => setRuleVersion((v) => v + 1)}
+        />
       )}
 
       {/* Findings list */}
