@@ -53,16 +53,19 @@ export function SheetTabs() {
       setActiveSheet(sheets[sheets.length - 1].id);
       const tabs = tabsRef.current?.querySelectorAll<HTMLElement>('[role="tab"]');
       tabs?.[sheets.length - 1]?.focus();
+    } else if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      setActiveSheet(sheets[index].id);
     }
   }, [workbook.sheets, setActiveSheet]);
 
   return (
     <div
-      className="border-t border-gray-200 flex items-center px-2 h-8 overflow-x-auto shrink-0"
+      className="border-t flex items-center px-2 h-8 overflow-x-auto shrink-0"
       ref={tabsRef}
       role="tablist"
       aria-label="Sheet tabs"
-      style={{ background: 'var(--surface-secondary)' }}
+      style={{ background: 'var(--surface-secondary)', borderColor: 'var(--neutral-200)' }}
     >
       {workbook.sheets.map((sheet, index) => (
         <div
@@ -74,7 +77,7 @@ export function SheetTabs() {
           className={`flex items-center gap-1 px-3 py-1 text-[11px] font-medium cursor-pointer transition-colors group ${
             sheet.id === activeSheetId
               ? 'rounded-t-md border border-b-white -mb-px shadow-sm'
-              : 'hover:bg-gray-100 rounded-md'
+              : 'rounded-md'
           }`}
           style={sheet.id === activeSheetId
             ? { background: 'var(--surface-panel)', borderColor: 'var(--neutral-200)', color: 'var(--accent-700)' }
@@ -87,7 +90,8 @@ export function SheetTabs() {
           {renamingId === sheet.id ? (
             <div className="flex items-center gap-1">
               <input
-                className="w-24 text-xs px-1 py-0 border border-blue-300 rounded outline-none"
+                className="w-24 text-xs px-1 py-0 border rounded outline-none"
+                style={{ borderColor: 'var(--accent-400)' }}
                 value={renameValue}
                 onChange={(e) => setRenameValue(e.target.value)}
                 onBlur={handleFinishRename}
@@ -97,7 +101,7 @@ export function SheetTabs() {
                 }}
                 autoFocus
               />
-              <button onClick={handleFinishRename} className="text-green-600 hover:text-green-700">
+              <button type="button" onClick={handleFinishRename} style={{ color: 'var(--success)' }}>
                 <Check size={12} />
               </button>
             </div>
@@ -105,17 +109,22 @@ export function SheetTabs() {
             <>
               <span>{sheet.name}</span>
               <button
-                className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-gray-600 ml-1"
+                type="button"
+                className="opacity-0 group-hover:opacity-100 ml-1 transition-opacity"
+                style={{ color: 'var(--neutral-400)' }}
                 onClick={(e) => {
                   e.stopPropagation();
                   handleStartRename(sheet.id, sheet.name);
                 }}
+                aria-label={`Rename sheet ${sheet.name}`}
               >
                 <Edit3 size={10} />
               </button>
               {workbook.sheets.length > 1 && (
                 <button
-                  className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 ml-0.5"
+                  type="button"
+                  className="opacity-0 group-hover:opacity-100 ml-0.5 transition-opacity"
+                  style={{ color: 'var(--neutral-400)' }}
                   onClick={(e) => {
                     e.stopPropagation();
                     const sheetName = sheet.name;
@@ -144,7 +153,8 @@ export function SheetTabs() {
         </div>
       ))}
       <button
-        className="p-1 ml-1 text-gray-400 hover:text-gray-600 hover:bg-gray-200 rounded"
+        className="p-1 ml-1 rounded transition-colors"
+        style={{ color: 'var(--neutral-400)' }}
         onClick={() => addSheet()}
         title="Add Sheet"
       >

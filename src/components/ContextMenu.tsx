@@ -130,18 +130,20 @@ export function ContextMenu() {
 
   return (
     <div
-      className="fixed bg-white rounded-xl shadow-xl border border-gray-200 py-1.5 z-50 overflow-hidden"
-      style={{ left, top, minWidth: menuW }}
+      className="fixed rounded-xl shadow-xl border py-1.5 z-50 overflow-hidden"
+      style={{ left, top, minWidth: menuW, background: 'var(--surface-panel)', borderColor: 'var(--neutral-200)', boxShadow: '0 8px 24px oklch(0.1 0 0 / 0.15), 0 2px 6px oklch(0.1 0 0 / 0.08)' }}
       // Prevent the document click handler from immediately closing the menu
       onClick={(e) => e.stopPropagation()}
+      role="menu"
+      aria-label={`Context menu for cell ${contextMenu.cell}`}
     >
-      <div className="px-3 py-1 text-[10px] text-gray-400 font-mono select-none">
+      <div className="px-3 py-1 text-[10px] font-mono select-none" style={{ color: 'var(--ink-muted)' }}>
         {contextMenu.cell}
       </div>
 
       {noteMode === 'editing' ? (
         <div className="px-3 pb-3 space-y-2">
-          <p className="text-[11px] font-medium text-gray-600">
+          <p className="text-[11px] font-medium" style={{ color: 'var(--ink-secondary)' }}>
             {existingNote ? 'Edit note' : 'Add note'}
           </p>
           <textarea
@@ -151,20 +153,23 @@ export function ContextMenu() {
             onKeyDown={handleNoteKeyDown}
             rows={3}
             placeholder="Type a note… (Ctrl+Enter to save)"
-            className="w-full resize-none rounded-lg border border-gray-200 px-2.5 py-2 text-xs focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none"
+            className="w-full resize-none rounded-lg border px-2.5 py-2 text-xs outline-none transition-colors focus:ring-2"
+            style={{ borderColor: 'var(--neutral-200)', color: 'var(--ink-primary)' }}
           />
           <div className="flex gap-1.5 justify-end">
             <button
               type="button"
               onClick={() => setContextMenu(null)}
-              className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+              className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] rounded-lg border transition-colors"
+              style={{ borderColor: 'var(--neutral-200)', color: 'var(--ink-secondary)' }}
             >
               <X size={11} /> Cancel
             </button>
             <button
               type="button"
               onClick={commitNote}
-              className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+              className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] rounded-lg text-white transition-colors"
+              style={{ background: 'var(--accent-600)' }}
             >
               <Check size={11} /> Save
             </button>
@@ -173,18 +178,22 @@ export function ContextMenu() {
       ) : (
         menuItems.map((item, i) => {
           if (!item) {
-            return <div key={i} className="border-t border-gray-100 my-1" />;
+            return <div key={i} className="my-1" style={{ borderTop: '1px solid var(--neutral-100)' }} />;
           }
           return (
             <button
               key={i}
-              className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition-colors"
+              className="w-full flex items-center gap-2 px-3 py-1.5 text-xs transition-colors"
+              style={{ color: 'var(--ink-primary)' }}
+              onMouseOver={(e) => { e.currentTarget.style.background = 'var(--accent-50)'; e.currentTarget.style.color = 'var(--accent-700)' }}
+              onMouseOut={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--ink-primary)' }}
               onClick={item.action}
+              role="menuitem"
             >
-              <span className="text-gray-400">{item.icon}</span>
+              <span style={{ color: 'var(--neutral-400)' }}>{item.icon}</span>
               <span className="flex-1 text-left">{item.label}</span>
               {'shortcut' in item && item.shortcut && (
-                <span className="text-[10px] text-gray-400">{item.shortcut}</span>
+                <span className="text-[10px]" style={{ color: 'var(--ink-muted)' }}>{item.shortcut}</span>
               )}
             </button>
           );

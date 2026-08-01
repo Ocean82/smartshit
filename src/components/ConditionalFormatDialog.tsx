@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { useStore } from '@/store/useStore'
 import { colToLetter, refToCell } from '@/engine/spreadsheet'
 import type { ConditionalFormatCondition } from '@/lib/conditionalFormat'
@@ -22,6 +22,22 @@ export function ConditionalFormatDialog({ isOpen, onClose }: Props) {
   const [color, setColor] = useState('#FEE2E2')
   const [colorScaleId, setColorScaleId] = useState('gyr')
   const [iconSetType, setIconSetType] = useState<IconSetType>('3Arrows')
+  const dialogRef = useRef<HTMLDivElement>(null)
+
+  // Close on Escape key
+  useEffect(() => {
+    if (!isOpen) return
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { e.preventDefault(); onClose() }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [isOpen, onClose])
+
+  // Focus the dialog on open
+  useEffect(() => {
+    if (isOpen) dialogRef.current?.focus()
+  }, [isOpen])
 
   if (!isOpen) return null
 
@@ -71,31 +87,42 @@ export function ConditionalFormatDialog({ isOpen, onClose }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
-      <div className="bg-white rounded-xl shadow-xl w-[380px] p-4 space-y-3">
+    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'oklch(0.1 0.02 250 / 0.5)', backdropFilter: 'blur(3px)' }}>
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="cf-dialog-title"
+        tabIndex={-1}
+        className="rounded-xl shadow-xl w-[380px] p-5 space-y-3 outline-none"
+        style={{ background: 'var(--surface-panel)', boxShadow: '0 24px 48px oklch(0.1 0 0 / 0.18), 0 4px 12px oklch(0.1 0 0 / 0.08)' }}
+      >
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-gray-900">Conditional Format</h3>
-          <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600" aria-label="Close">✕</button>
+          <h3 id="cf-dialog-title" className="text-sm font-semibold" style={{ color: 'var(--ink-primary)' }}>Conditional Format</h3>
+          <button type="button" onClick={onClose} className="p-1 rounded-md transition-colors" style={{ color: 'var(--neutral-400)' }} onMouseOver={(e) => e.currentTarget.style.color = 'var(--neutral-700)'} onMouseOut={(e) => e.currentTarget.style.color = 'var(--neutral-400)'} aria-label="Close">✕</button>
         </div>
 
         {!selection ? (
-          <p className="text-xs text-amber-700">Select a column cell first.</p>
+          <p className="text-xs" style={{ color: 'oklch(0.55 0.14 70)' }}>Select a column cell first.</p>
         ) : (
           <>
-            <p className="text-xs text-gray-500">
+            <p className="text-xs" style={{ color: 'var(--ink-secondary)' }}>
               Apply to column {colToLetter(column)}
             </p>
 
             {/* Category tabs */}
-            <div className="flex gap-1 p-0.5 bg-gray-100 rounded-lg">
+            <div className="flex gap-1 p-0.5 rounded-lg" style={{ background: 'var(--neutral-100)' }}>
               {(['highlight', 'dataBar', 'colorScale', 'iconSet'] as RuleCategory[]).map((cat) => (
                 <button
                   key={cat}
                   type="button"
                   onClick={() => setCategory(cat)}
-                  className={`flex-1 px-2 py-1.5 text-[11px] font-medium rounded-md transition-colors ${
-                    category === cat ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-                  }`}
+                  className="flex-1 px-2 py-1.5 text-[11px] font-medium rounded-md transition-colors"
+                  style={
+                    category === cat
+                      ? { background: 'var(--surface-panel)', color: 'var(--ink-primary)', boxShadow: 'var(--shadow-sm)' }
+                      : { color: 'var(--ink-secondary)' }
+                  }
                 >
                   {cat === 'highlight' ? 'Highlight' : cat === 'dataBar' ? 'Data Bar' : cat === 'colorScale' ? 'Color Scale' : 'Icons'}
                 </button>
@@ -105,12 +132,13 @@ export function ConditionalFormatDialog({ isOpen, onClose }: Props) {
             {/* Highlight config */}
             {category === 'highlight' && (
               <>
-                <label className="block text-xs text-gray-600">
+                <label className="block text-xs" style={{ color: 'var(--ink-secondary)' }}>
                   Condition
                   <select
                     value={condition}
                     onChange={(e) => setCondition(e.target.value as ConditionalFormatCondition)}
-                    className="mt-1 w-full border border-gray-200 rounded px-2 py-1.5 text-sm"
+                    className="mt-1 w-full border rounded px-2 py-1.5 text-sm outline-none transition-colors focus:ring-2"
+                    style={{ borderColor: 'var(--neutral-200)', background: 'var(--surface-panel)', color: 'var(--ink-primary)' }}
                   >
                     <option value="negative">Negative numbers</option>
                     <option value="positive">Positive numbers</option>
@@ -120,23 +148,25 @@ export function ConditionalFormatDialog({ isOpen, onClose }: Props) {
                   </select>
                 </label>
                 {(condition === 'gt' || condition === 'lt' || condition === 'eq') && (
-                  <label className="block text-xs text-gray-600">
+                  <label className="block text-xs" style={{ color: 'var(--ink-secondary)' }}>
                     Threshold
                     <input
                       type="number"
                       value={threshold}
                       onChange={(e) => setThreshold(e.target.value)}
-                      className="mt-1 w-full border border-gray-200 rounded px-2 py-1.5 text-sm"
+                      className="mt-1 w-full border rounded px-2 py-1.5 text-sm outline-none transition-colors focus:ring-2"
+                      style={{ borderColor: 'var(--neutral-200)', background: 'var(--surface-panel)', color: 'var(--ink-primary)' }}
                     />
                   </label>
                 )}
-                <label className="block text-xs text-gray-600">
+                <label className="block text-xs" style={{ color: 'var(--ink-secondary)' }}>
                   Highlight color
                   <input
                     type="color"
                     value={color}
                     onChange={(e) => setColor(e.target.value)}
-                    className="mt-1 w-full h-8 border border-gray-200 rounded cursor-pointer"
+                    className="mt-1 w-full h-8 border rounded cursor-pointer"
+                    style={{ borderColor: 'var(--neutral-200)' }}
                   />
                 </label>
               </>
@@ -144,13 +174,14 @@ export function ConditionalFormatDialog({ isOpen, onClose }: Props) {
 
             {/* Data Bar config */}
             {category === 'dataBar' && (
-              <label className="block text-xs text-gray-600">
+              <label className="block text-xs" style={{ color: 'var(--ink-secondary)' }}>
                 Bar color
                 <input
                   type="color"
                   value={color}
                   onChange={(e) => setColor(e.target.value)}
-                  className="mt-1 w-full h-8 border border-gray-200 rounded cursor-pointer"
+                  className="mt-1 w-full h-8 border rounded cursor-pointer"
+                  style={{ borderColor: 'var(--neutral-200)' }}
                 />
               </label>
             )}
@@ -158,16 +189,19 @@ export function ConditionalFormatDialog({ isOpen, onClose }: Props) {
             {/* Color Scale config */}
             {category === 'colorScale' && (
               <div className="space-y-2">
-                <p className="text-xs text-gray-500">Choose a color gradient scale:</p>
+                <p className="text-xs" style={{ color: 'var(--ink-secondary)' }}>Choose a color gradient scale:</p>
                 <div className="grid grid-cols-2 gap-2">
                   {PRESET_COLOR_SCALES.map((preset) => (
                     <button
                       key={preset.id}
                       type="button"
                       onClick={() => setColorScaleId(preset.id)}
-                      className={`p-2 rounded-lg border text-left transition-colors ${
-                        colorScaleId === preset.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
-                      }`}
+                      className="p-2 rounded-lg border text-left transition-all"
+                      style={
+                        colorScaleId === preset.id
+                          ? { borderColor: 'var(--accent-500)', background: 'var(--accent-50)' }
+                          : { borderColor: 'var(--neutral-200)' }
+                      }
                     >
                       <div
                         className="h-4 rounded mb-1"
@@ -175,7 +209,7 @@ export function ConditionalFormatDialog({ isOpen, onClose }: Props) {
                           background: `linear-gradient(to right, ${preset.stops.map((s) => s.color).join(', ')})`,
                         }}
                       />
-                      <span className="text-[10px] text-gray-600">{preset.name}</span>
+                      <span className="text-[10px]" style={{ color: 'var(--ink-secondary)' }}>{preset.name}</span>
                     </button>
                   ))}
                 </div>
@@ -185,19 +219,22 @@ export function ConditionalFormatDialog({ isOpen, onClose }: Props) {
             {/* Icon Set config */}
             {category === 'iconSet' && (
               <div className="space-y-2">
-                <p className="text-xs text-gray-500">Choose an icon set:</p>
+                <p className="text-xs" style={{ color: 'var(--ink-secondary)' }}>Choose an icon set:</p>
                 <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto">
                   {(Object.keys(ICON_SETS) as IconSetType[]).map((key) => (
                     <button
                       key={key}
                       type="button"
                       onClick={() => setIconSetType(key)}
-                      className={`p-2 rounded-lg border text-left transition-colors ${
-                        iconSetType === key ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
-                      }`}
+                      className="p-2 rounded-lg border text-left transition-all"
+                      style={
+                        iconSetType === key
+                          ? { borderColor: 'var(--accent-500)', background: 'var(--accent-50)' }
+                          : { borderColor: 'var(--neutral-200)' }
+                      }
                     >
                       <div className="text-sm mb-0.5">{ICON_SETS[key].join(' ')}</div>
-                      <span className="text-[10px] text-gray-500">{key}</span>
+                      <span className="text-[10px]" style={{ color: 'var(--ink-muted)' }}>{key}</span>
                     </button>
                   ))}
                 </div>
@@ -207,14 +244,15 @@ export function ConditionalFormatDialog({ isOpen, onClose }: Props) {
         )}
 
         <div className="flex justify-end gap-2 pt-2">
-          <button type="button" onClick={onClose} className="px-3 py-1.5 text-xs rounded border border-gray-200 text-gray-600 hover:bg-gray-50">
+          <button type="button" onClick={onClose} className="px-3 py-1.5 text-xs rounded-lg border transition-colors" style={{ borderColor: 'var(--neutral-200)', color: 'var(--ink-secondary)', background: 'var(--surface-panel)' }}>
             Cancel
           </button>
           <button
             type="button"
             onClick={handleApply}
             disabled={!selection}
-            className="px-3 py-1.5 text-xs rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40"
+            className="px-3 py-1.5 text-xs rounded-lg font-medium text-white transition-colors disabled:opacity-40"
+            style={{ background: 'var(--accent-600)' }}
           >
             Apply
           </button>

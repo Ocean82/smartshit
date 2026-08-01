@@ -128,12 +128,13 @@ export function StatusBar() {
       )}
 
       {/* Zoom controls — state lives in the store, applied via CSS custom property */}
-      <div className="flex items-center gap-1.5 border-l border-gray-200 pl-3 ml-1">
+      <div className="flex items-center gap-1.5 border-l pl-3 ml-1" style={{ borderColor: 'var(--neutral-200)' }}>
         <button
           type="button"
           onClick={zoomOut}
           disabled={gridZoom <= 50}
-          className="p-0.5 rounded hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed"
+          className="p-0.5 rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+          style={{ color: 'var(--neutral-500)' }}
           title="Zoom out"
         >
           <Minus size={11} />
@@ -141,7 +142,8 @@ export function StatusBar() {
         <select
           value={gridZoom}
           onChange={handleZoomSelect}
-          className="text-[10px] bg-transparent border-none cursor-pointer text-slate-600 font-medium w-[42px] text-center appearance-none"
+          className="text-[10px] bg-transparent border-none cursor-pointer font-medium w-[42px] text-center appearance-none"
+          style={{ color: 'var(--neutral-600)' }}
           title="Zoom level"
         >
           {ZOOM_LEVELS.map((z) => (
@@ -152,7 +154,8 @@ export function StatusBar() {
           type="button"
           onClick={zoomIn}
           disabled={gridZoom >= 200}
-          className="p-0.5 rounded hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed"
+          className="p-0.5 rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+          style={{ color: 'var(--neutral-500)' }}
           title="Zoom in"
         >
           <Plus size={11} />

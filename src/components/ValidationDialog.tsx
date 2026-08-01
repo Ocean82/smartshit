@@ -95,15 +95,23 @@ export function ValidationDialog({ isOpen, onClose }: Props) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-2xl w-96 p-6" onClick={e => e.stopPropagation()}>
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Data Validation</h3>
+    <div className="fixed inset-0 flex items-center justify-center z-50" onClick={onClose} style={{ background: 'oklch(0.1 0.02 250 / 0.5)', backdropFilter: 'blur(3px)' }}>
+      <div
+        className="rounded-xl shadow-2xl w-96 p-6"
+        style={{ background: 'var(--surface-panel)', boxShadow: '0 24px 48px oklch(0.1 0 0 / 0.18), 0 4px 12px oklch(0.1 0 0 / 0.08)' }}
+        onClick={e => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="validation-dialog-title"
+      >
+        <h3 id="validation-dialog-title" className="text-lg font-semibold mb-4" style={{ color: 'var(--ink-primary)' }}>Data Validation</h3>
 
-        <label className="block text-sm font-medium text-gray-700 mb-1">Allow:</label>
+        <label className="block text-sm font-medium mb-1" style={{ color: 'var(--ink-primary)' }}>Allow:</label>
         <select
           value={type}
           onChange={e => setType(e.target.value as DataValidation['type'])}
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 mb-3 text-sm"
+          className="w-full border rounded-lg px-3 py-2 mb-3 text-sm outline-none transition-colors focus:ring-2"
+          style={{ borderColor: 'var(--neutral-200)', color: 'var(--ink-primary)', background: 'var(--surface-panel)' }}
         >
           <option value="number">Number</option>
           <option value="list">List (dropdown)</option>
@@ -117,14 +125,14 @@ export function ValidationDialog({ isOpen, onClose }: Props) {
           <>
             <div className="flex gap-2 mb-3">
               <div className="flex-1">
-                <label className="block text-xs text-gray-500 mb-1">Min</label>
+                <label className="block text-xs mb-1" style={{ color: 'var(--ink-secondary)' }}>Min</label>
                 <input type="number" value={min} onChange={e => setMin(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="No min" />
+                  className="w-full border rounded-lg px-3 py-2 text-sm outline-none transition-colors focus:ring-2" style={{ borderColor: 'var(--neutral-200)', color: 'var(--ink-primary)' }} placeholder="No min" />
               </div>
               <div className="flex-1">
-                <label className="block text-xs text-gray-500 mb-1">Max</label>
+                <label className="block text-xs mb-1" style={{ color: 'var(--ink-secondary)' }}>Max</label>
                 <input type="number" value={max} onChange={e => setMax(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="No max" />
+                  className="w-full border rounded-lg px-3 py-2 text-sm outline-none transition-colors focus:ring-2" style={{ borderColor: 'var(--neutral-200)', color: 'var(--ink-primary)' }} placeholder="No max" />
               </div>
             </div>
           </>
@@ -132,25 +140,25 @@ export function ValidationDialog({ isOpen, onClose }: Props) {
 
         {type === 'list' && (
           <div className="mb-3">
-            <label className="block text-xs text-gray-500 mb-1">Values (comma-separated)</label>
+            <label className="block text-xs mb-1" style={{ color: 'var(--ink-secondary)' }}>Values (comma-separated)</label>
             <input value={valuesText} onChange={e => setValuesText(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Option1, Option2, Option3" />
+              className="w-full border rounded-lg px-3 py-2 text-sm outline-none transition-colors focus:ring-2" style={{ borderColor: 'var(--neutral-200)', color: 'var(--ink-primary)' }} placeholder="Option1, Option2, Option3" />
           </div>
         )}
 
         {type === 'checkbox' && (
-          <div className="mb-3 p-3 bg-gray-50 rounded-lg">
-            <p className="text-xs text-gray-500 mb-2">Cells will display as clickable checkboxes.</p>
+          <div className="mb-3 p-3 rounded-lg" style={{ background: 'var(--neutral-100)' }}>
+            <p className="text-xs mb-2" style={{ color: 'var(--ink-secondary)' }}>Cells will display as clickable checkboxes.</p>
             <div className="flex gap-2">
               <div className="flex-1">
-                <label className="block text-xs text-gray-500 mb-1">Checked value</label>
+                <label className="block text-xs mb-1" style={{ color: 'var(--ink-secondary)' }}>Checked value</label>
                 <input value={criteria || 'TRUE'} onChange={e => setCriteria(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="TRUE" />
+                  className="w-full border rounded-lg px-3 py-2 text-sm outline-none transition-colors focus:ring-2" style={{ borderColor: 'var(--neutral-200)', color: 'var(--ink-primary)', background: 'var(--surface-panel)' }} placeholder="TRUE" />
               </div>
               <div className="flex-1">
-                <label className="block text-xs text-gray-500 mb-1">Unchecked value</label>
+                <label className="block text-xs mb-1" style={{ color: 'var(--ink-secondary)' }}>Unchecked value</label>
                 <input value={containsText || 'FALSE'} onChange={e => setContainsText(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="FALSE" />
+                  className="w-full border rounded-lg px-3 py-2 text-sm outline-none transition-colors focus:ring-2" style={{ borderColor: 'var(--neutral-200)', color: 'var(--ink-primary)', background: 'var(--surface-panel)' }} placeholder="FALSE" />
               </div>
             </div>
           </div>
@@ -158,9 +166,9 @@ export function ValidationDialog({ isOpen, onClose }: Props) {
 
         {type === 'text' && (
           <div className="mb-3">
-            <label className="block text-xs text-gray-500 mb-1">Criteria</label>
+            <label className="block text-xs mb-1" style={{ color: 'var(--ink-secondary)' }}>Criteria</label>
             <select value={criteria} onChange={e => setCriteria(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+              className="w-full border rounded-lg px-3 py-2 text-sm outline-none transition-colors focus:ring-2" style={{ borderColor: 'var(--neutral-200)', color: 'var(--ink-primary)', background: 'var(--surface-panel)' }}>
               <option value="">Any text</option>
               <option value="length">Minimum length</option>
               <option value="contains">Contains text</option>
@@ -168,43 +176,43 @@ export function ValidationDialog({ isOpen, onClose }: Props) {
             {criteria === 'length' && (
               <div className="flex gap-2 mt-2">
                 <input type="number" value={min} onChange={e => setMin(e.target.value)}
-                  className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Min length" />
+                  className="flex-1 border rounded-lg px-3 py-2 text-sm outline-none transition-colors focus:ring-2" style={{ borderColor: 'var(--neutral-200)', color: 'var(--ink-primary)' }} placeholder="Min length" />
                 <input type="number" value={max} onChange={e => setMax(e.target.value)}
-                  className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Max length" />
+                  className="flex-1 border rounded-lg px-3 py-2 text-sm outline-none transition-colors focus:ring-2" style={{ borderColor: 'var(--neutral-200)', color: 'var(--ink-primary)' }} placeholder="Max length" />
               </div>
             )}
             {criteria === 'contains' && (
               <input value={containsText} onChange={e => setContainsText(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mt-2" placeholder="Text to contain" />
+                className="w-full border rounded-lg px-3 py-2 text-sm mt-2 outline-none transition-colors focus:ring-2" style={{ borderColor: 'var(--neutral-200)', color: 'var(--ink-primary)' }} placeholder="Text to contain" />
             )}
           </div>
         )}
 
         {type === 'custom' && (
           <div className="mb-3">
-            <label className="block text-xs text-gray-500 mb-1">Formula (returns true = valid)</label>
+            <label className="block text-xs mb-1" style={{ color: 'var(--ink-secondary)' }}>Formula (returns true = valid)</label>
             <input value={criteria} onChange={e => setCriteria(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono" placeholder="value > 0" />
+              className="w-full border rounded-lg px-3 py-2 text-sm font-mono outline-none transition-colors focus:ring-2" style={{ borderColor: 'var(--neutral-200)', color: 'var(--ink-primary)' }} placeholder="value > 0" />
           </div>
         )}
 
         <div className="mb-4">
-          <label className="block text-xs text-gray-500 mb-1">Error message (optional)</label>
+          <label className="block text-xs mb-1" style={{ color: 'var(--ink-secondary)' }}>Error message (optional)</label>
           <input value={message} onChange={e => setMessage(e.target.value)}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Custom error message" />
+            className="w-full border rounded-lg px-3 py-2 text-sm outline-none transition-colors focus:ring-2" style={{ borderColor: 'var(--neutral-200)', color: 'var(--ink-primary)' }} placeholder="Custom error message" />
         </div>
 
         <div className="flex gap-2 justify-end">
-          <button onClick={handleClear}
-            className="px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+          <button type="button" onClick={handleClear}
+            className="px-4 py-2 text-sm rounded-lg transition-colors" style={{ color: 'var(--error)' }}>
             Clear
           </button>
-          <button onClick={onClose}
-            className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+          <button type="button" onClick={onClose}
+            className="px-4 py-2 text-sm rounded-lg border transition-colors" style={{ color: 'var(--ink-secondary)', borderColor: 'var(--neutral-200)' }}>
             Cancel
           </button>
-          <button onClick={handleApply}
-            className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+          <button type="button" onClick={handleApply}
+            className="px-4 py-2 text-sm text-white rounded-lg transition-colors" style={{ background: 'var(--accent-600)' }}>
             Apply
           </button>
         </div>

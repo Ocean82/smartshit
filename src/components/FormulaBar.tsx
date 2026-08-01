@@ -153,7 +153,7 @@ export function FormulaBar() {
         ) : (
           <button
             type="button"
-            className="w-full h-full px-2 text-xs font-mono text-center transition-colors cursor-text hover:bg-blue-50 hover:text-blue-700"
+            className="w-full h-full px-2 text-xs font-mono text-center transition-colors cursor-text"
             style={{ color: 'var(--ink-secondary)' }}
             onClick={() => {
               setNameBoxEditing(true);
@@ -173,7 +173,8 @@ export function FormulaBar() {
             <button
               type="button"
               onClick={cancelEdit}
-              className="p-1 rounded text-red-500 hover:bg-red-50 transition-colors"
+              className="p-1 rounded transition-colors"
+              style={{ color: 'var(--error)' }}
               title="Cancel (Esc)"
             >
               <X size={13} />
@@ -181,7 +182,8 @@ export function FormulaBar() {
             <button
               type="button"
               onClick={commitEdit}
-              className="p-1 rounded text-green-600 hover:bg-green-50 transition-colors"
+              className="p-1 rounded transition-colors"
+              style={{ color: 'var(--success)' }}
               title="Confirm (Enter)"
             >
               <Check size={13} />
@@ -189,11 +191,11 @@ export function FormulaBar() {
           </>
         ) : (
           <>
-            <span className="p-1 text-gray-300"><X size={13} /></span>
-            <span className="p-1 text-gray-300"><Check size={13} /></span>
+            <span className="p-1" style={{ color: 'var(--neutral-300)' }}><X size={13} /></span>
+            <span className="p-1" style={{ color: 'var(--neutral-300)' }}><Check size={13} /></span>
           </>
         )}
-        <span className="p-1 text-gray-400" title="Function">
+        <span className="p-1" style={{ color: 'var(--neutral-400)' }} title="Function">
           <FunctionSquare size={13} />
         </span>
       </div>
@@ -203,18 +205,20 @@ export function FormulaBar() {
         {isEditing ? (
           <input
             ref={inputRef}
-            className="w-full h-full px-2 text-[13px] font-mono text-gray-800 outline-none border-none bg-white"
+            className="w-full h-full px-2 text-[13px] font-mono outline-none border-none"
+            style={{ color: 'var(--ink-primary)', background: 'var(--surface-panel)' }}
             value={editValue}
             onChange={(e) => setEditValue(e.target.value)}
             onKeyDown={handleKeyDown}
           />
         ) : (
           <div
-            className="w-full h-full flex items-center px-2 text-[13px] font-mono text-gray-700 cursor-text hover:bg-blue-50/30 hover:text-blue-800 transition-colors truncate"
+            className="w-full h-full flex items-center px-2 text-[13px] font-mono cursor-text transition-colors truncate"
+            style={{ color: 'var(--ink-primary)' }}
             onClick={handleBarClick}
             title={cellContent || 'Click to edit'}
           >
-            {cellContent || <span className="text-gray-300 italic">Empty</span>}
+            {cellContent || <span style={{ color: 'var(--neutral-300)' }} className="italic">Empty</span>}
           </div>
         )}
       </div>

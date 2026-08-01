@@ -217,14 +217,15 @@ export function CommandPalette({
   }
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-start justify-center bg-black/40 backdrop-blur-sm pt-[12vh] px-4">
+    <div className="fixed inset-0 z-[70] flex items-start justify-center pt-[12vh] px-4" style={{ background: 'oklch(0.1 0.02 250 / 0.5)', backdropFilter: 'blur(3px)' }}>
       <div
-        className="w-full max-w-xl rounded-2xl bg-white shadow-2xl border border-gray-200 overflow-hidden"
+        className="w-full max-w-xl rounded-2xl shadow-2xl border overflow-hidden"
+        style={{ background: 'var(--surface-panel)', borderColor: 'var(--neutral-200)', boxShadow: '0 24px 48px oklch(0.1 0 0 / 0.18), 0 4px 12px oklch(0.1 0 0 / 0.08)' }}
         role="dialog"
         aria-label="Command palette"
       >
-        <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100">
-          <Search size={16} className="text-gray-400 shrink-0" />
+        <div className="flex items-center gap-2 px-4 py-3 border-b" style={{ borderColor: 'var(--neutral-100)' }}>
+          <Search size={16} className="shrink-0" style={{ color: 'var(--neutral-400)' }} />
           <input
             ref={inputRef}
             value={query}
@@ -245,16 +246,17 @@ export function CommandPalette({
               }
             }}
             placeholder="Type a command…"
-            className="flex-1 text-sm outline-none bg-transparent placeholder:text-gray-400"
+            className="flex-1 text-sm outline-none bg-transparent"
+            style={{ color: 'var(--ink-primary)' }}
           />
-          <button type="button" onClick={onClose} className="p-1 rounded-lg text-gray-400 hover:bg-gray-100">
+          <button type="button" onClick={onClose} className="p-1 rounded-lg transition-colors" style={{ color: 'var(--neutral-400)' }}>
             <X size={16} />
           </button>
         </div>
 
         <div className="max-h-[50vh] overflow-y-auto py-2">
           {filtered.length === 0 ? (
-            <p className="px-4 py-6 text-sm text-gray-400 text-center">No matching commands</p>
+            <p className="px-4 py-6 text-sm text-center" style={{ color: 'var(--ink-muted)' }}>No matching commands</p>
           ) : (
             filtered.map((cmd, index) => (
               <button
@@ -262,22 +264,21 @@ export function CommandPalette({
                 type="button"
                 onClick={() => runSelected(index)}
                 onMouseEnter={() => setSelectedIndex(index)}
-                className={`w-full flex items-start gap-3 px-4 py-2.5 text-left transition-colors ${
-                  index === selectedIndex ? 'bg-blue-50' : 'hover:bg-gray-50'
-                }`}
+                className="w-full flex items-start gap-3 px-4 py-2.5 text-left transition-colors"
+                style={index === selectedIndex ? { background: 'var(--accent-50)' } : undefined}
               >
                 <span className="mt-0.5 shrink-0">{cmd.icon}</span>
                 <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-medium text-gray-900 truncate">{cmd.label}</span>
-                  <span className="block text-xs text-gray-500 truncate">{cmd.description}</span>
+                  <span className="block text-sm font-medium truncate" style={{ color: 'var(--ink-primary)' }}>{cmd.label}</span>
+                  <span className="block text-xs truncate" style={{ color: 'var(--ink-secondary)' }}>{cmd.description}</span>
                 </span>
-                <span className="text-[10px] text-gray-400 shrink-0 mt-1">{cmd.category}</span>
+                <span className="text-[10px] shrink-0 mt-1" style={{ color: 'var(--ink-muted)' }}>{cmd.category}</span>
               </button>
             ))
           )}
         </div>
 
-        <div className="px-4 py-2 border-t border-gray-100 text-[10px] text-gray-400 flex gap-3">
+        <div className="px-4 py-2 border-t text-[10px] flex gap-3" style={{ borderColor: 'var(--neutral-100)', color: 'var(--ink-muted)' }}>
           <span>↑↓ navigate</span>
           <span>Enter run</span>
           <span>Esc close</span>

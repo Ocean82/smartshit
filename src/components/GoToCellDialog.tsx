@@ -70,15 +70,23 @@ export function GoToCellDialog({ open, onClose }: GoToCellDialogProps) {
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center pt-[20vh]">
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/20" onClick={onClose} />
+      <div className="absolute inset-0" onClick={onClose} style={{ background: 'oklch(0.1 0.02 250 / 0.4)', backdropFilter: 'blur(2px)' }} />
       {/* Dialog */}
-      <div className="relative bg-white rounded-xl shadow-2xl border border-gray-200 w-80 p-4 animate-slide-up">
+      <div
+        className="relative rounded-xl shadow-2xl border w-80 p-4 animate-slide-up"
+        style={{ background: 'var(--surface-panel)', borderColor: 'var(--neutral-200)', boxShadow: '0 24px 48px oklch(0.1 0 0 / 0.18), 0 4px 12px oklch(0.1 0 0 / 0.08)' }}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="goto-dialog-title"
+      >
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold text-gray-800">Go to Cell</h3>
+          <h3 id="goto-dialog-title" className="text-sm font-semibold" style={{ color: 'var(--ink-primary)' }}>Go to Cell</h3>
           <button
             type="button"
             onClick={onClose}
-            className="p-1 text-gray-400 hover:text-gray-600 rounded"
+            className="p-1 rounded transition-colors"
+            style={{ color: 'var(--neutral-400)' }}
+            aria-label="Close"
           >
             <X size={14} />
           </button>
@@ -91,21 +99,24 @@ export function GoToCellDialog({ open, onClose }: GoToCellDialogProps) {
             onChange={(e) => { setValue(e.target.value.toUpperCase()); setError(''); }}
             onKeyDown={handleKeyDown}
             placeholder="Cell reference (e.g. A1, B10, A1:C5)"
-            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 font-mono"
+            className="w-full px-3 py-2 text-sm border rounded-lg outline-none transition-colors focus:ring-2 font-mono"
+            style={{ borderColor: 'var(--neutral-200)', color: 'var(--ink-primary)' }}
           />
-          {error && <p className="text-[11px] text-red-500">{error}</p>}
+          {error && <p className="text-[11px]" style={{ color: 'var(--error)' }}>{error}</p>}
           <div className="flex justify-end gap-2">
             <button
               type="button"
               onClick={onClose}
-              className="px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              className="px-3 py-1.5 text-xs rounded-lg border transition-colors"
+              style={{ color: 'var(--ink-secondary)', borderColor: 'var(--neutral-200)' }}
             >
               Cancel
             </button>
             <button
               type="button"
               onClick={handleSubmit}
-              className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+              className="px-3 py-1.5 text-xs text-white rounded-lg transition-colors font-medium"
+              style={{ background: 'var(--accent-600)' }}
             >
               Go
             </button>

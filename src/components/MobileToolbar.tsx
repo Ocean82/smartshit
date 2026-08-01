@@ -39,10 +39,10 @@ export function MobileToolbar() {
   };
 
   return (
-    <div className="md:hidden fixed bottom-0 left-0 right-0 z-20 bg-white border-t border-gray-200 safe-area-bottom">
+    <div className="md:hidden fixed bottom-0 left-0 right-0 z-20 border-t safe-area-bottom" style={{ background: 'var(--surface-panel)', borderColor: 'var(--neutral-200)' }}>
       {/* Expanded tray */}
       {expandedGroup && (
-        <div className="border-b border-gray-100 px-3 py-2 flex items-center gap-1 overflow-x-auto scrollbar-hide">
+        <div className="border-b px-3 py-2 flex items-center gap-1 overflow-x-auto scrollbar-hide" style={{ borderColor: 'var(--neutral-100)' }}>
           {expandedGroup === 'format' && (
             <>
               <MobileToolBtn
@@ -63,9 +63,10 @@ export function MobileToolbar() {
                 onClick={() => setRangeFormat({ underline: !selectedCellData?.format?.underline })}
                 label="Underline"
               />
-              <div className="w-px h-6 bg-gray-200 mx-1" />
+              <div className="w-px h-6 mx-1" style={{ background: 'var(--neutral-200)' }} />
               <select
-                className="h-9 px-2 text-sm bg-gray-50 border border-gray-200 rounded-lg"
+                className="h-9 px-2 text-sm border rounded-lg"
+                style={{ background: 'var(--neutral-100)', borderColor: 'var(--neutral-200)', color: 'var(--ink-primary)' }}
                 value={selectedCellData?.format?.fontSize || 13}
                 onChange={(e) => setRangeFormat({ fontSize: parseInt(e.target.value) })}
                 aria-label="Font size"
@@ -100,8 +101,8 @@ export function MobileToolbar() {
               {BG_COLORS.map((color) => (
                 <button
                   key={color}
-                  className="w-8 h-8 rounded-lg border border-gray-200 shrink-0 active:scale-90 transition-transform"
-                  style={{ backgroundColor: color }}
+                  className="w-10 h-10 rounded-lg border shrink-0 active:scale-90 transition-transform"
+                  style={{ backgroundColor: color, borderColor: 'var(--neutral-200)' }}
                   onClick={() => setRangeFormat({ bgColor: color })}
                   aria-label={`Set background color ${color}`}
                 />
@@ -111,7 +112,8 @@ export function MobileToolbar() {
           <button
             type="button"
             onClick={() => setExpandedGroup(null)}
-            className="ml-auto p-2 text-gray-400 hover:text-gray-600"
+            className="ml-auto p-2 transition-colors"
+            style={{ color: 'var(--neutral-400)' }}
             aria-label="Close toolbar tray"
           >
             <X size={16} />
@@ -134,7 +136,7 @@ export function MobileToolbar() {
           label="Redo"
         />
 
-        <div className="w-px h-6 bg-gray-200" />
+        <div className="w-px h-6" style={{ background: 'var(--neutral-200)' }} />
 
         <MobileToolBtn
           icon={<Type size={20} />}
@@ -155,7 +157,7 @@ export function MobileToolbar() {
           label="Color"
         />
 
-        <div className="w-px h-6 bg-gray-200" />
+        <div className="w-px h-6" style={{ background: 'var(--neutral-200)' }} />
 
         <MobileToolBtn
           icon={<Filter size={20} />}
@@ -190,9 +192,9 @@ function MobileToolBtn({
     <button
       type="button"
       className={`flex items-center justify-center w-10 h-10 rounded-xl transition-colors active:scale-95 ${
-        active ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-100'
-      } ${disabled ? 'opacity-30 pointer-events-none' : ''}`}
-      style={!active ? { color: 'var(--neutral-600)' } : undefined}
+        disabled ? 'opacity-30 pointer-events-none' : ''
+      }`}
+      style={active ? { background: 'var(--accent-100)', color: 'var(--accent-600)' } : { color: 'var(--neutral-600)' }}
       onClick={onClick}
       disabled={disabled}
       aria-label={label}

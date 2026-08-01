@@ -120,18 +120,19 @@ export function MobileMenu() {
             onClick={() => setIsOpen(false)}
           />
           {/* Sheet */}
-          <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl max-h-[80vh] overflow-y-auto animate-slide-up safe-area-bottom">
+          <div className="absolute bottom-0 left-0 right-0 rounded-t-2xl max-h-[80vh] overflow-y-auto motion-safe:animate-slide-up safe-area-bottom" style={{ background: 'var(--surface-panel)' }}>
             {/* Handle */}
             <div className="flex items-center justify-center pt-3 pb-1">
-              <div className="w-10 h-1 bg-gray-300 rounded-full" />
+              <div className="w-10 h-1 rounded-full" style={{ background: 'var(--neutral-300)' }} />
             </div>
             {/* Header */}
-            <div className="flex items-center justify-between px-4 pb-3 border-b border-gray-100">
-              <h2 className="text-base font-semibold text-gray-900">Menu</h2>
+            <div className="flex items-center justify-between px-4 pb-3 border-b" style={{ borderColor: 'var(--neutral-100)' }}>
+              <h2 className="text-base font-semibold" style={{ color: 'var(--ink-primary)' }}>Menu</h2>
               <button
                 type="button"
                 onClick={() => setIsOpen(false)}
-                className="p-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+                className="p-2 rounded-lg transition-colors"
+                style={{ color: 'var(--neutral-400)' }}
                 aria-label="Close menu"
               >
                 <X size={20} />
@@ -142,7 +143,7 @@ export function MobileMenu() {
               {actions.map((item, i) => {
                 if ('section' in item && item.section) {
                   return (
-                    <div key={i} className="px-4 pt-3 pb-1.5 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+                    <div key={i} className="px-4 pt-3 pb-1.5 text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--ink-muted)' }}>
                       {item.section}
                     </div>
                   );
@@ -154,11 +155,12 @@ export function MobileMenu() {
                     type="button"
                     onClick={action}
                     disabled={disabled}
-                    className={`w-full flex items-center gap-3 px-4 py-3 text-sm text-left transition-colors active:bg-gray-50 ${
-                      disabled ? 'opacity-30 pointer-events-none' : 'text-gray-700 hover:bg-gray-50'
+                    className={`w-full flex items-center gap-3 px-4 py-3 text-sm text-left transition-colors ${
+                      disabled ? 'opacity-30 pointer-events-none' : ''
                     }`}
+                    style={{ color: 'var(--ink-primary)' }}
                   >
-                    <span className="text-gray-400">{icon}</span>
+                    <span style={{ color: 'var(--neutral-400)' }}>{icon}</span>
                     <span>{label}</span>
                   </button>
                 );
