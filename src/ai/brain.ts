@@ -16,6 +16,10 @@ import type { SheetInsights } from '@/ai/sheetInsights'
 import { isOutlierFollowUp } from '@/ai/outliers'
 import type { AttachedFilePreview, ToolResult } from '@/ai/types'
 import type { Selection, SheetData, WorkbookData } from '@/types'
+import { planMacro } from '@/ai/nlp/macroPlanner'
+import { createMacroPlanManager } from '@/ai/macro/macroPlanManager'
+import type { MacroPlan, MacroExecutionResult, WorkbookContext, UndoManager } from '@/ai/nlp/types'
+import type { IntentType } from '@shared/intentTypes'
 
 export interface ProcessMessageInput {
   message: string
@@ -29,7 +33,33 @@ export interface ProcessMessageInput {
   userPreferences?: Record<string, string>
   history?: Array<{ role: 'user' | 'assistant'; content: string }>
   onToken?: (token: string) => void
+  /** Undo manager for transactional macro execution */
+  undoManager?: UndoManager
+  /** Macro plan UI callbacks — required for multi-step plan presentation */
+  macroPlanCallbacks?: MacroPlanUICallbacks
 }
+
+// ─── Macro Plan UI Callbacks ────────────────────────────────────────────────
+
+/**
+ * User-facing callbacks for the macro plan confirmation flow.
+ * The Brain uses these to present plans and await user decisions.
+ */
+export interface MacroPlanUICallbacks {
+  /** Present the numbered plan and return the user's decision */
+  presentPlan(planDisplay: string, plan: MacroPlan): Promise<MacroPlanUserDecision>
+  /** Display execution progress */
+  onProgress?(current: number, total: number): void
+  /** Display completion summary */
+  onComplete?(result: MacroExecutionResult): void
+  /** Display error with retry/cancel options, return user decision */
+  onError(message: string): Promise<'retry' | 'cancel'>
+}
+
+export type MacroPlanUserDecision =
+  | { action: 'confirm' }
+  | { action: 'reject' }
+  | { action: 'edit'; stepIndex: number; newParams: Record<string, unknown> }
 
 function withTool(result: ToolResult, toolUsed: string): ToolResult {
   return { ...result, toolUsed }
@@ -212,10 +242,299 @@ function buildDeterministicSummary(
   return mergeToolResultContent(parts.filter(Boolean))
 }
 
+// ─── Macro Plan Integration Helpers ─────────────────────────────────────────
+
+/** Intent types that the macro planner can decompose */
+const MACRO_INTENT_VOCABULARY: IntentType[] = [
+  'read', 'analyze', 'write', 'format', 'create_chart', 'create_formula',
+  'summarize', 'filter', 'sort', 'clean', 'budget', 'report', 'compare',
+  'find', 'calculate', 'export',
+]
+
+/** Maximum time to generate and present a macro plan (ms) */
+const MACRO_PLAN_DEADLINE_MS = 500
+
+/**
+ * Convert WorkbookData (app domain) to WorkbookContext (NLP domain)
+ * for entity resolution and macro planning.
+ */
+function buildWorkbookContext(workbook: WorkbookData, sheet: SheetData, getComputedValue: (row: number, col: number) => string): WorkbookContext {
+  const sheets = workbook.sheets.map((s) => {
+    // Extract column headers from the first row
+    const columns: Array<{ letter: string; headerName: string; index: number }> = []
+    // Detect columns from cell data (check first row for headers)
+    const colCount = Object.keys(s.columnWidths).length || 26 // default 26 cols
+    for (let col = 0; col < colCount; col++) {
+      const letter = String.fromCharCode(65 + col) // A, B, C, ...
+      let headerName = ''
+      // If this is the active sheet, use getComputedValue for the header row
+      if (s.id === sheet.id) {
+        headerName = getComputedValue(0, col)
+      } else {
+        // For other sheets, read raw cell data from row 0
+        const cellKey = `${0},${col}`
+        const cell = s.cells[cellKey]
+        headerName = cell?.value?.toString() ?? ''
+      }
+      if (headerName) {
+        columns.push({ letter, headerName, index: col })
+      }
+    }
+    return {
+      id: s.id,
+      name: s.name,
+      columns,
+    }
+  })
+
+  return {
+    activeSheetId: workbook.activeSheetId,
+    sheets,
+  }
+}
+
+/**
+ * Attempt macro planning for a user message.
+ * Returns a MacroPlan if the message is a multi-step or single-step actionable command.
+ * Returns null if planning fails or the message doesn't decompose into actions.
+ */
+function tryPlanMacro(
+  message: string,
+  workbookContext: WorkbookContext,
+): MacroPlan | null {
+  try {
+    const plan = planMacro(message, workbookContext, MACRO_INTENT_VOCABULARY)
+    // Only handle plans with at least 1 step
+    if (plan.steps.length === 0) return null
+    return plan
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Format a MacroPlan as a numbered list of descriptions for display.
+ * Each step is presented as "{n}. {description}".
+ */
+function formatMacroPlanForDisplay(plan: MacroPlan): string {
+  return plan.steps
+    .map((step, index) => `${index + 1}. ${step.description}`)
+    .join('\n')
+}
+
+/**
+ * Execute a macro plan through the Brain's UI flow.
+ *
+ * Flow:
+ * - Single-step plan → execute directly without confirmation (Req 6.6)
+ * - Multi-step plan → present numbered list → await user decision (Req 6.1)
+ *   - confirm → execute (Req 6.3)
+ *   - reject → cancel (Req 6.4)
+ *   - edit → update step params, re-present (Req 6.5)
+ * - On error → display error with retry/cancel (Req 6.7)
+ *
+ * Returns a ToolResult describing what happened, or null if not applicable.
+ */
+async function handleMacroPlan(
+  plan: MacroPlan,
+  input: ProcessMessageInput,
+  workbookContext: WorkbookContext,
+): Promise<ToolResult | null> {
+  const { undoManager, macroPlanCallbacks } = input
+
+  // Can't run macros without an undo manager
+  if (!undoManager) {
+    return null
+  }
+
+  // Single-step plan → execute directly without confirmation (Req 6.6)
+  if (plan.steps.length === 1) {
+    const manager = createMacroPlanManager({
+      presentPlan() { /* no-op for single step */ },
+      showProgress(current, total) { macroPlanCallbacks?.onProgress?.(current, total) },
+      showSummary(result) { macroPlanCallbacks?.onComplete?.(result) },
+      showError() { /* handled below */ },
+      isConfirmed: () => true,
+      isRejected: () => false,
+      shouldCancel: () => false,
+    })
+
+    try {
+      const result = await manager.processPlan(plan, undoManager)
+      if (result && result.success) {
+        const step = plan.steps[0]
+        recordTelemetry('macroExecution', 'single-step-success')
+        return {
+          success: true,
+          message: `Executed: ${step.description}`,
+          toolUsed: 'macro',
+          actions: [{ tool: step.tool, params: step.params, description: step.description }],
+        }
+      }
+      if (result && !result.success && result.failedStep) {
+        return {
+          success: false,
+          message: `Step failed: ${result.failedStep.reason}`,
+          toolUsed: 'macro',
+        }
+      }
+    } catch (error: unknown) {
+      const errMsg = error instanceof Error ? error.message : 'Unknown error'
+      return {
+        success: false,
+        message: `Macro execution failed: ${errMsg}`,
+        toolUsed: 'macro',
+      }
+    }
+    return null
+  }
+
+  // Multi-step plan → present for confirmation (Req 6.1)
+  if (!macroPlanCallbacks) {
+    // No UI callbacks available — can't present plan, fall through to normal flow
+    return null
+  }
+
+  let currentPlan = plan
+  const startTime = Date.now()
+
+  // Loop to handle edit → re-present cycles
+  while (true) {
+    const planDisplay = formatMacroPlanForDisplay(currentPlan)
+
+    // Validate timing: should present within 500ms of plan generation (Req 6.1)
+    const elapsed = Date.now() - startTime
+    if (elapsed > MACRO_PLAN_DEADLINE_MS) {
+      console.warn(`[Brain] Macro plan presentation exceeded ${MACRO_PLAN_DEADLINE_MS}ms deadline (${elapsed}ms)`)
+    }
+
+    // Present to user and await decision
+    let decision: MacroPlanUserDecision
+    try {
+      decision = await macroPlanCallbacks.presentPlan(planDisplay, currentPlan)
+    } catch (error: unknown) {
+      const errMsg = error instanceof Error ? error.message : 'Failed to present plan'
+      const userChoice = await macroPlanCallbacks.onError(errMsg)
+      if (userChoice === 'retry') {
+        continue // re-present
+      }
+      // cancel
+      recordTelemetry('macroExecution', 'cancelled-on-error')
+      return {
+        success: false,
+        message: 'Macro cancelled.',
+        toolUsed: 'macro',
+      }
+    }
+
+    // Handle user decision
+    if (decision.action === 'reject') {
+      // User rejected → cancel (Req 6.4)
+      recordTelemetry('macroExecution', 'rejected')
+      return {
+        success: true,
+        message: 'Macro plan cancelled.',
+        toolUsed: 'macro',
+      }
+    }
+
+    if (decision.action === 'edit') {
+      // User edited a step → update params and re-present (Req 6.5)
+      const { stepIndex, newParams } = decision
+      if (stepIndex >= 0 && stepIndex < currentPlan.steps.length) {
+        const updatedSteps = currentPlan.steps.map((step, i) =>
+          i === stepIndex ? { ...step, params: { ...step.params, ...newParams } } : step
+        )
+        currentPlan = { ...currentPlan, steps: updatedSteps }
+      }
+      continue // re-present the edited plan
+    }
+
+    // decision.action === 'confirm' → execute (Req 6.3)
+    try {
+      let cancelled = false
+      const manager = createMacroPlanManager({
+        presentPlan() { /* already presented */ },
+        showProgress(current, total) { macroPlanCallbacks.onProgress?.(current, total) },
+        showSummary(result) { macroPlanCallbacks.onComplete?.(result) },
+        showError() { /* handled via try/catch */ },
+        isConfirmed: () => true, // already confirmed
+        isRejected: () => false,
+        shouldCancel: () => cancelled,
+      })
+
+      const result = await manager.processPlan(currentPlan, undoManager)
+
+      if (result && result.success) {
+        recordTelemetry('macroExecution', 'multi-step-success')
+        const summary = result.completedSteps
+          .map((s, i) => `${i + 1}. ✓ ${s.step.description}`)
+          .join('\n')
+        return {
+          success: true,
+          message: `Macro completed successfully:\n${summary}`,
+          toolUsed: 'macro',
+          actions: result.completedSteps.map((s) => ({
+            tool: s.step.tool,
+            params: s.step.params,
+            description: s.step.description,
+          })),
+        }
+      }
+
+      if (result && !result.success && result.failedStep) {
+        const { index, step, reason } = result.failedStep
+        recordTelemetry('macroExecution', 'step-failed')
+        return {
+          success: false,
+          message: `Macro failed at step ${index + 1} (${step.tool}): ${reason}. All changes have been rolled back.`,
+          toolUsed: 'macro',
+        }
+      }
+
+      // Null result means it was cancelled mid-way
+      return {
+        success: true,
+        message: 'Macro plan cancelled.',
+        toolUsed: 'macro',
+      }
+    } catch (error: unknown) {
+      const errMsg = error instanceof Error ? error.message : 'Unknown error during macro execution'
+      recordTelemetry('macroExecution', 'execution-error')
+      const userChoice = await macroPlanCallbacks.onError(errMsg)
+      if (userChoice === 'retry') {
+        continue // re-present and retry
+      }
+      return {
+        success: false,
+        message: `Macro execution failed: ${errMsg}`,
+        toolUsed: 'macro',
+      }
+    }
+  }
+}
+
 export async function processMessage(input: ProcessMessageInput): Promise<ToolResult> {
   const mode = classifyMode(input.message)
   const intent = parseUserIntent(input.message)
   const target = resolveAnalysisTarget(input)
+
+  // ─── Macro Plan Detection ───────────────────────────────────────────────────
+  // Attempt macro planning for commands that might be multi-step.
+  // Only run if the intent isn't something that fully handled locally (like outlier follow-up).
+  if (input.undoManager && !isOutlierFollowUp(input.message)) {
+    const workbookContext = buildWorkbookContext(input.workbook, input.sheet, input.getComputedValue)
+    const plan = tryPlanMacro(input.message, workbookContext)
+
+    // Multi-step plans (>1 step) always go through macro flow
+    // Single-step plans go through macro flow only when macro callbacks are available
+    if (plan && (plan.steps.length > 1 || (plan.steps.length === 1 && input.macroPlanCallbacks))) {
+      const macroResult = await handleMacroPlan(plan, input, workbookContext)
+      if (macroResult) {
+        return macroResult
+      }
+    }
+  }
 
   const deterministic = runDeterministicSkills(
     target,
