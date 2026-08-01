@@ -1,64 +1,132 @@
-### Task 3: Visual Validation Indicators in Grid
+### Task 3: Magic-number auto-fix (multi-write)
 
 **Files:**
-- Modify: `src/components/SpreadsheetGrid.tsx`
+- Modify: `src/auditor/rules/hardcodedConstants.ts`
+- Test: `src/auditor/__tests__/auditor.integration.test.ts` (add one test)
 
 **Interfaces:**
-- Consumes: `CellData.validation`, `CellData.validationError` from types
-- Produces: Red triangle indicator on cells with validation errors, dropdown arrow on list-validated cells, native `<select>` for editing list-validated cells
+- Consumes: `FixWrite[]` via `AuditFinding.fixActions` (Task 1); `ctx.getCellAt(row, col)` from `AuditContext`; `refToCell` from `./utils`.
+- Produces: hardcoded-constants findings with `autoFixable: true` and a two-write `fixActions` (input-cell value write + rewritten formula write), when a safe target cell exists and the literal is replaceable.
 
-- [ ] **Step 1: Add validation indicators to cell rendering**
+- [ ] **Step 1: Write the failing test**
 
-In `SpreadsheetGrid.tsx`, inside the cell `<div>` rendering (around line 422-471 in the current file), after the display value `<div>` and before the active cell handle `<div>` (the one with `w-2 h-2 bg-blue-500`), add:
+Append to `src/auditor/__tests__/auditor.integration.test.ts` (same describe block):
 
-```tsx
-{/* Validation error indicator */}
-{cellData?.validationError && (
-  <div className="absolute top-0 right-0 w-0 h-0 border-t-[6px] border-t-red-500 border-l-[6px] border-l-transparent z-10"
-    title={cellData.validationError} />
-)}
-{/* List validation dropdown indicator */}
-{cellData?.validation?.type === 'list' && !isEditing && (
-  <div className="absolute right-1 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 pointer-events-none">▾</div>
-)}
+```ts
+  it('hardcoded-constants findings are auto-fixable with two writes', () => {
+    const cells: SheetData['cells'] = {
+      'A0': { value: 'Label' },
+      'B0': { value: 'Value' },
+      'A1': { value: 'x' },
+      'B1': { value: 100 },
+      'A2': { value: 'Total' },
+      'B2': { value: null, formula: '=B1*0.335' },
+    }
+    const sheet: SheetData = {
+      id: 'mc',
+      name: 'Magic',
+      cells,
+      columnWidths: {},
+      rowHeights: {},
+      charts: [],
+    }
+    const getValue = (row: number, col: number) => {
+      const id = refToCell(row, col)
+      const c = cells[id]
+      return c?.value == null ? '' : String(c.value)
+    }
+
+    const result = runAudit(sheet, getValue)
+    const finding = result.findings.find((f) => f.ruleId === 'hardcoded-constants' && f.cells[0]?.cellId === 'B2')
+
+    expect(finding).toBeDefined()
+    expect(finding!.autoFixable).toBe(true)
+    expect(finding!.fixActions).toHaveLength(2)
+    // write 1: constant moved into the first empty cell right of B2 → C2
+    expect(finding!.fixActions![0]).toEqual({ cellId: 'C2', value: 0.335 })
+    // write 2: formula rewritten to reference the input cell
+    expect(finding!.fixActions![1]).toEqual({ cellId: 'B2', formula: '=B1*C2' })
+  })
 ```
 
-- [ ] **Step 2: Render list dropdown when editing list-validated cells**
+- [ ] **Step 2: Run test to verify it fails**
 
-In the editing section of the cell rendering (the `{isEditing ? (...) : (...)}` block), when `cellData?.validation?.type === 'list'`, replace the `<input>` with a `<select>`:
+Run: `npx vitest run src/auditor/__tests__/auditor.integration.test.ts -t "hardcoded-constants findings are auto-fixable"`
+Expected: FAIL — the finding has `autoFixable: false` (or no `fixActions`).
 
-The current editing section looks like:
-```tsx
-{isEditing ? (
-  <input ... />
-) : (
-  <div>...</div>
-)}
+- [ ] **Step 3: Implement the fix in hardcodedConstants.ts**
+
+In `src/auditor/rules/hardcodedConstants.ts`:
+
+Change the import from `../types`:
+
+```ts
+import type { AuditRule, AuditFinding, AuditContext, FixWrite } from '../types'
 ```
 
-Change it to:
-```tsx
-{isEditing && cellData?.validation?.type === 'list' ? (
-  <select
-    className="absolute inset-0 w-full h-full px-1.5 text-[13px] border-0 outline-none bg-white z-20 font-sans"
-    value={editValue}
-    onChange={(e) => { setEditValue(e.target.value); }}
-    onBlur={commitEdit}
-    autoFocus
-  >
-    <option value="">(empty)</option>
-    {cellData.validation.values?.map(v => (
-      <option key={v} value={v}>{v}</option>
-    ))}
-  </select>
-) : isEditing ? (
-  <input ... />
-) : (
-  <div>...</div>
-)}
+Change the import from `../utils`:
+
+```ts
+import { findingId, refToCell } from '../utils'
 ```
 
-- [ ] **Step 3: Run tests**
+Add a helper after the `ACCEPTABLE_CONSTANTS` declaration:
 
-Run: `npm test`
-Expected: All 14 tests pass
+```ts
+/** First empty cell in the row, scanning right from the formula's column. */
+function findFirstEmptyCellRight(ctx: AuditContext, row: number, col: number): string | null {
+  for (let c = col + 1; c <= col + 50; c++) {
+    if (!ctx.getCellAt(row, c)) return refToCell(row, c)
+  }
+  return null
+}
+```
+
+Replace the finding-push block inside the `run` method (the block starting at `const num = suspicious[0]` and ending at the closing `})` of `findings.push({...})`):
+
+```ts
+      const num = suspicious[0]
+      const target = findFirstEmptyCellRight(ctx, cell.row, cell.col)
+      const escaped = num.replace(/\./g, '\\.')
+      const replacePattern = new RegExp(`(?<![A-Za-z0-9_.])${escaped}(?![A-Za-z0-9_.])`)
+      const fixActions: FixWrite[] | undefined =
+        target && replacePattern.test(cell.formula)
+          ? [
+              { cellId: target, value: Number(num) },
+              { cellId: cell.cellId, formula: `=${cell.formula.replace(replacePattern, target)}` },
+            ]
+          : undefined
+
+      findings.push({
+        id: findingId(),
+        ruleId: 'hardcoded-constants',
+        severity: 'medium',
+        title: `Magic number ${num} in ${cell.cellId}`,
+        message: `Cell ${cell.cellId} has hardcoded value ${num} in formula =${cell.formula}. Hardcoded values are fragile — if the number changes, you have to find every formula that uses it.`,
+        cells: [{ cellId: cell.cellId, row: cell.row, col: cell.col }],
+        suggestion: `Move ${num} to a dedicated input cell and reference that cell instead`,
+        autoFixable: !!fixActions,
+        fixActions,
+      })
+```
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+Run: `npx vitest run src/auditor/__tests__/auditor.integration.test.ts src/auditor/customRules.test.ts`
+Expected: PASS (all).
+
+Run: `npx eslint src`
+Expected: no errors, no warnings.
+
+Run: `npx tsc --noEmit`
+Expected: clean.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/auditor/rules/hardcodedConstants.ts src/auditor/__tests__/auditor.integration.test.ts
+git commit -m "feat(audit): magic-number auto-fix moves constants to input cells"
+```
+
+---
+
