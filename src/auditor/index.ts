@@ -26,8 +26,8 @@ export function getFixAbortReason(sheet: SheetData, fixActions: FixWrite[]): str
   for (const action of fixActions) {
     if (action.formula || action.value === undefined) continue
     const target = sheet.cells[action.cellId]
-    const occupied = target && (target.formula ||
-      (target.value !== null && target.value !== undefined && target.value !== ''))
+    const occupied = Boolean(target && (target.formula ||
+      (target.value !== null && target.value !== undefined && target.value !== '')))
     if (occupied) return `Could not apply fix: ${action.cellId} already contains data. Re-run the audit and try again.`
   }
   return null

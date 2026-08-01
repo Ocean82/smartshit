@@ -29,6 +29,7 @@ export function AuditPanelContent() {
     const state = useStore.getState()
     const sheet = state.workbook.sheets.find((s) => s.id === state.activeSheetId)
     if (!sheet) return
+    setFixMessage(null)
     setLoading(true)
     requestAnimationFrame(() => {
       try {

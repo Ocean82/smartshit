@@ -97,6 +97,8 @@ function cellNumber(cell: CellInfo): number {
     const parsed = parseFloat(raw)
     if (isFinite(parsed)) return parsed
   }
+  // Plain cells: getComputedValue returns String(rawValue), so parsing
+  // computedValue is equivalent to parsing rawValue.
   return parseFloat(cell.computedValue)
 }
 
