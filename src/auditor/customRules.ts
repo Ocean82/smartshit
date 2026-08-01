@@ -157,6 +157,7 @@ export function createCustomAuditRule(rule: CustomAuditRule): AuditRule {
       if (col < 0) return findings
 
       for (const cell of ctx.getColumn(col)) {
+        if (cell.row === 0) continue
         if (!ruleMatches(rule, cell)) continue
         const label = OPERATOR_LABELS[rule.operator]
         const hasValue = rule.operator !== 'isEmpty' && rule.operator !== 'isNotEmpty'
