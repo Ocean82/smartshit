@@ -83,6 +83,33 @@ function rule(overrides: Partial<CustomAuditRule> = {}): CustomAuditRule {
   }
 }
 
+/** Fixture whose column B header looks numeric (e.g. a year column), so numeric rules would flag it without the header guard. */
+function makeNumericHeaderSheet(): { sheet: SheetData; getComputedValue: (row: number, col: number) => string } {
+  const cells: SheetData['cells'] = {
+    'A1': { value: 'Year' },
+    'B1': { value: 2024 },
+    'A2': { value: 'Rent' },
+    'B2': { value: 1500 },
+    'A3': { value: 'Servers' },
+    'B3': { value: 6000 },
+    'A4': { value: 'Marketing' },
+    'B4': { value: 8200 },
+  }
+  const sheet: SheetData = {
+    id: 'numeric-header-test',
+    name: 'Years',
+    cells,
+    columnWidths: {},
+    rowHeights: {},
+    charts: [],
+  }
+  const getComputedValue = (row: number, col: number) => {
+    const cell = cells[refToCell(row, col)]
+    return cell?.value == null ? '' : String(cell.value)
+  }
+  return { sheet, getComputedValue }
+}
+
 /** Fixture with values in column B only (no header row; data starts at row 1, i.e. A2/B2). */
 function makeColumnB(values: Array<string | number>): { sheet: SheetData; getComputedValue: (row: number, col: number) => string } {
   const cells: SheetData['cells'] = {}
@@ -176,12 +203,12 @@ describe('custom audit rules', () => {
     expect(findings.map((f) => f.cells[0].cellId).sort()).toEqual(['B2', 'B3', 'B4', 'B5'])
   })
 
-  it('numeric gt with a header present flags only data rows', () => {
-    const { sheet, getComputedValue } = makeHeaderSheet()
-    const result = runAudit(sheet, getComputedValue, [rule()])
+  it('numeric rules do not flag a numeric-looking header cell', () => {
+    const { sheet, getComputedValue } = makeNumericHeaderSheet()
+    const result = runAudit(sheet, getComputedValue, [rule({ value: 1000 })])
     const findings = result.findings.filter((f) => f.ruleId === 'custom:r1')
     expect(findings.some((f) => f.cells[0].cellId === 'B1')).toBe(false)
-    expect(findings.map((f) => f.cells[0].cellId).sort()).toEqual(['B3', 'B4'])
+    expect(findings.map((f) => f.cells[0].cellId).sort()).toEqual(['B2', 'B3', 'B4'])
   })
 
   it('skips non-numeric cells for numeric operators', () => {
