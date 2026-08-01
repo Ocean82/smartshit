@@ -67,26 +67,26 @@ export function ChartDialog() {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setShowChartDialog(false)}>
+    <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50" onClick={() => setShowChartDialog(false)}>
       <div
         ref={containerRef}
-        className="bg-white rounded-2xl shadow-2xl w-[480px] overflow-hidden"
+        className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:w-[480px] max-h-[85vh] sm:max-h-[90vh] flex flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-labelledby="chart-dialog-title"
       >
-        <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-gray-800">Insert Chart</h3>
+        <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between shrink-0">
+          <h3 id="chart-dialog-title" className="text-sm font-semibold text-gray-800">Insert Chart</h3>
           <button
-            className="p-1 text-gray-400 hover:text-gray-600 rounded"
+            className="p-2 -mr-1 text-gray-400 hover:text-gray-600 rounded-lg active:bg-gray-100"
             onClick={() => setShowChartDialog(false)}
           >
-            <X size={16} />
+            <X size={18} />
           </button>
         </div>
 
-        <div className="p-5">
+        <div className="p-5 overflow-y-auto flex-1 overscroll-contain">
           <div className="mb-4">
             <label className="block text-xs font-medium text-gray-600 mb-1.5">Chart Title</label>
             <input
@@ -98,14 +98,14 @@ export function ChartDialog() {
 
           <div className="mb-4">
             <label className="block text-xs font-medium text-gray-600 mb-2">Chart Type</label>
-            <div className="grid grid-cols-5 gap-2">
+            <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
               {chartTypes.map((ct) => (
                 <button
                   key={ct.type}
-                  className={`flex flex-col items-center gap-1 p-3 rounded-xl border-2 transition-colors ${
+                  className={`flex flex-col items-center gap-1 p-3 rounded-xl border-2 transition-colors min-h-[60px] ${
                     selectedType === ct.type
                       ? 'border-blue-500 bg-blue-50 text-blue-700'
-                      : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                      : 'border-gray-200 text-gray-500 hover:border-gray-300 active:bg-gray-50'
                   }`}
                   onClick={() => setSelectedType(ct.type)}
                 >
@@ -216,15 +216,15 @@ export function ChartDialog() {
           )}
         </div>
 
-        <div className="px-5 py-3 border-t border-gray-200 flex justify-end gap-2">
+        <div className="px-5 py-3 border-t border-gray-200 flex justify-end gap-2 shrink-0 safe-area-bottom">
           <button
-            className="px-4 py-2 text-xs text-gray-600 hover:bg-gray-100 rounded-lg"
+            className="px-4 py-2.5 text-xs text-gray-600 hover:bg-gray-100 active:bg-gray-200 rounded-lg min-h-[44px]"
             onClick={() => setShowChartDialog(false)}
           >
             Cancel
           </button>
           <button
-            className="px-4 py-2 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            className="px-4 py-2.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 min-h-[44px]"
             onClick={handleCreate}
           >
             Create Chart

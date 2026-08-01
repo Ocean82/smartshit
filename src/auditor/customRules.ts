@@ -119,14 +119,18 @@ function cellIsEmpty(cell: CellInfo): boolean {
 export function ruleMatches(rule: CustomAuditRule, cell: CellInfo): boolean {
   switch (rule.operator) {
     case 'contains': {
+      const needle = String(rule.value).toLowerCase()
+      if (needle === '') return false // degenerate: empty value matches nothing
       const haystack = cellText(cell)
       if (haystack === '') return false
-      return haystack.includes(String(rule.value).toLowerCase())
+      return haystack.includes(needle)
     }
     case 'notContains': {
+      const needle = String(rule.value).toLowerCase()
+      if (needle === '') return false // degenerate: empty value matches nothing
       const haystack = cellText(cell)
       if (haystack === '') return false
-      return !haystack.includes(String(rule.value).toLowerCase())
+      return !haystack.includes(needle)
     }
     case 'isEmpty':
       return cellIsEmpty(cell)

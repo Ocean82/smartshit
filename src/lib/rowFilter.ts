@@ -127,8 +127,10 @@ function evaluateCondition(
     case 'notEquals':
       return raw.toLowerCase() !== target.toLowerCase()
     case 'contains':
+      if (target === '') return true // degenerate: empty target is a no-op (all non-blank cells pass)
       return raw.toLowerCase().includes(target.toLowerCase())
     case 'notContains':
+      if (target === '') return true // degenerate: empty target is a no-op (all non-blank cells pass)
       return !raw.toLowerCase().includes(target.toLowerCase())
     case 'startsWith':
       return raw.toLowerCase().startsWith(target.toLowerCase())
