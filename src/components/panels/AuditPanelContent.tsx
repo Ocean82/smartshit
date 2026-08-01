@@ -5,12 +5,12 @@
 
 import { useState, useCallback, useEffect } from 'react'
 import { useStore } from '@/store/useStore'
-import { runAudit } from '@/auditor'
+import { runAudit, getFixAbortReason } from '@/auditor'
 import { loadCustomRules } from '@/auditor/customRules'
 import type { AuditResult, AuditFinding, Severity } from '@/auditor/types'
 import { AuditFindingCard } from '@/components/AuditFindingCard'
 import { CustomRulesSection } from './CustomRulesSection'
-import { ShieldCheck, Loader2, RefreshCw } from 'lucide-react'
+import { ShieldCheck, Loader2, RefreshCw, X } from 'lucide-react'
 
 const SEVERITY_FILTERS = ['all', 'critical', 'high', 'medium', 'low', 'info'] as const
 type FilterValue = (typeof SEVERITY_FILTERS)[number]
@@ -21,6 +21,7 @@ export function AuditPanelContent() {
   const [loading, setLoading] = useState(false)
   const [filter, setFilter] = useState<FilterValue>('all')
   const [ruleVersion, setRuleVersion] = useState(0)
+  const [fixMessage, setFixMessage] = useState<string | null>(null)
 
   const activeSheet = workbook.sheets.find((s) => s.id === activeSheetId)
 
@@ -44,14 +45,14 @@ export function AuditPanelContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [getComputedValue, ruleVersion])
 
-  // Auto-run on first open and whenever custom rules change
+  // Auto-run on first open, on sheet switch, and whenever custom rules change
   useEffect(() => {
     const state = useStore.getState()
     const sheet = state.workbook.sheets.find((s) => s.id === state.activeSheetId)
     if (sheet && Object.keys(sheet.cells).length > 0) {
       handleRunAudit()
     }
-  }, [handleRunAudit])
+  }, [handleRunAudit, activeSheetId])
 
   const handleCellNavigate = useCallback((row: number, col: number) => {
     useStore.getState().setSelection({ startRow: row, startCol: col, endRow: row, endCol: col })
@@ -65,13 +66,12 @@ export function AuditPanelContent() {
     // Pre-flight: value writes must land in currently-empty cells. If any target
     // is occupied (e.g. a stale card picked the same cell as a fresh fix), abort
     // the whole batch so we never silently overwrite data.
-    for (const action of finding.fixActions) {
-      if (action.formula || action.value === undefined) continue
-      const target = sheet.cells[action.cellId]
-      const occupied = target && (target.formula ||
-        (target.value !== null && target.value !== undefined && target.value !== ''))
-      if (occupied) return
+    const abortReason = getFixAbortReason(sheet, finding.fixActions)
+    if (abortReason) {
+      setFixMessage(abortReason)
+      return
     }
+    setFixMessage(null)
     state.pushHistory('Audit auto-fix')
     for (const action of finding.fixActions) {
       const { cellId, formula, value } = action
@@ -223,6 +223,23 @@ export function AuditPanelContent() {
         {result && filteredFindings.length === 0 && (
           <div className="text-center text-[11px] text-gray-400 mt-8">
             No findings for this filter ✨
+          </div>
+        )}
+
+        {fixMessage && (
+          <div
+            role="alert"
+            className="flex items-start justify-between gap-2 bg-amber-50 border border-amber-200 text-amber-800 rounded-lg px-3 py-2 text-[11px] leading-relaxed"
+          >
+            <p className="font-medium">{fixMessage}</p>
+            <button
+              type="button"
+              onClick={() => setFixMessage(null)}
+              aria-label="Dismiss"
+              className="shrink-0 p-0.5 text-amber-500 hover:text-amber-800 hover:bg-amber-100 rounded transition-colors"
+            >
+              <X size={14} />
+            </button>
           </div>
         )}
 

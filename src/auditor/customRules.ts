@@ -46,10 +46,28 @@ export function loadCustomRules(): CustomAuditRule[] {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return []
     const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed : []
+    return Array.isArray(parsed) ? parsed.filter(isValidCustomRule) : []
   } catch {
     return []
   }
+}
+
+const VALID_SEVERITIES: readonly Severity[] = ['critical', 'high', 'medium', 'low', 'info']
+const VALID_OPERATORS: readonly CustomRuleOperator[] = ['gt', 'lt', 'gte', 'lte', 'eq', 'neq', 'contains', 'notContains', 'isEmpty', 'isNotEmpty']
+
+/** True if the parsed value is a well-formed custom audit rule. */
+function isValidCustomRule(r: unknown): r is CustomAuditRule {
+  if (typeof r !== 'object' || r === null) return false
+  const rule = r as Record<string, unknown>
+  return (
+    typeof rule.id === 'string' &&
+    typeof rule.name === 'string' &&
+    typeof rule.column === 'string' &&
+    typeof rule.enabled === 'boolean' &&
+    VALID_SEVERITIES.includes(rule.severity as Severity) &&
+    VALID_OPERATORS.includes(rule.operator as CustomRuleOperator) &&
+    (typeof rule.value === 'string' || typeof rule.value === 'number')
+  )
 }
 
 export function saveCustomRules(rules: CustomAuditRule[]): void {
@@ -71,25 +89,49 @@ function compareNumeric(op: NumericRuleOperator, num: number, threshold: number)
   }
 }
 
+/** Numeric value of a cell, falling back to its computed value when rawValue is not numeric. */
+function cellNumber(cell: CellInfo): number {
+  const raw = cell.rawValue
+  if (typeof raw === 'number') return raw
+  if (typeof raw === 'string' && raw !== '') {
+    const parsed = parseFloat(raw)
+    if (isFinite(parsed)) return parsed
+  }
+  return parseFloat(cell.computedValue)
+}
+
+/** Visible text of a cell, falling back to its computed value when rawValue has no content. */
+function cellText(cell: CellInfo): string {
+  const raw = cell.rawValue
+  return raw == null || raw === '' ? cell.computedValue.toLowerCase() : String(raw).toLowerCase()
+}
+
+/** True if the cell has no visible content (formula cells only count as empty when they compute nothing). */
+function cellIsEmpty(cell: CellInfo): boolean {
+  if (cell.rawValue !== null && cell.rawValue !== '') return false
+  if (cell.formula) return cell.computedValue.trim() === ''
+  return true
+}
+
 /** True if the cell satisfies the rule's condition. */
 export function ruleMatches(rule: CustomAuditRule, cell: CellInfo): boolean {
   switch (rule.operator) {
     case 'contains': {
-      const haystack = cell.rawValue == null || cell.rawValue === '' ? '' : String(cell.rawValue).toLowerCase()
+      const haystack = cellText(cell)
       if (haystack === '') return false
       return haystack.includes(String(rule.value).toLowerCase())
     }
     case 'notContains': {
-      const haystack = cell.rawValue == null || cell.rawValue === '' ? '' : String(cell.rawValue).toLowerCase()
+      const haystack = cellText(cell)
       if (haystack === '') return false
       return !haystack.includes(String(rule.value).toLowerCase())
     }
     case 'isEmpty':
-      return cell.rawValue === null || cell.rawValue === ''
+      return cellIsEmpty(cell)
     case 'isNotEmpty':
-      return cell.rawValue !== null && cell.rawValue !== ''
+      return !cellIsEmpty(cell)
     default: {
-      const num = typeof cell.rawValue === 'number' ? cell.rawValue : parseFloat(String(cell.rawValue))
+      const num = cellNumber(cell)
       if (!isFinite(num)) return false
       const threshold = typeof rule.value === 'number' ? rule.value : parseFloat(String(rule.value))
       if (!isFinite(threshold)) return false

@@ -9,7 +9,7 @@
  */
 
 import type { SheetData } from '@/types'
-import type { AuditResult, AuditContext, AuditFinding, CellInfo, Severity } from './types'
+import type { AuditResult, AuditContext, AuditFinding, CellInfo, FixWrite, Severity } from './types'
 import { ALL_RULES } from './rules'
 import { createCustomAuditRule, type CustomAuditRule } from './customRules'
 import { refToCell, cellToRef, classifyCellType, isErrorValue, getErrorType } from './utils'
@@ -18,6 +18,20 @@ export type { AuditResult, AuditFinding, CellInfo, Severity } from './types'
 export type { CellLocation, AuditRule, AuditContext } from './types'
 export { createCustomAuditRule, loadCustomRules, saveCustomRules, ruleMatches, OPERATOR_LABELS } from './customRules'
 export type { CustomAuditRule, CustomRuleOperator, NumericRuleOperator, TextRuleOperator, EmptyRuleOperator } from './customRules'
+
+/**
+ * Reason a batch of fix writes cannot be applied, or null if all targets are free.
+ */
+export function getFixAbortReason(sheet: SheetData, fixActions: FixWrite[]): string | null {
+  for (const action of fixActions) {
+    if (action.formula || action.value === undefined) continue
+    const target = sheet.cells[action.cellId]
+    const occupied = target && (target.formula ||
+      (target.value !== null && target.value !== undefined && target.value !== ''))
+    if (occupied) return `Could not apply fix: ${action.cellId} already contains data. Re-run the audit and try again.`
+  }
+  return null
+}
 
 /**
  * Run a full audit on a sheet.
