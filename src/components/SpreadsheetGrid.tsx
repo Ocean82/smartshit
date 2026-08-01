@@ -17,7 +17,7 @@ import { useEditingController } from './grid/EditingController';
 import { useSelectionManager } from './grid/SelectionManager';
 
 const DEFAULT_CELL_WIDTH = 100;
-const CELL_HEIGHT = 28;
+const CELL_HEIGHT = 44;
 const ROW_HEADER_WIDTH = 46;
 const COL_HEADER_HEIGHT = 26;
 
@@ -129,7 +129,7 @@ export function SpreadsheetGrid() {
     return columnWidths[col] || sheet.columnWidths[col] || DEFAULT_CELL_WIDTH;
   }, [columnWidths, sheet.columnWidths]);
 
-  const viewport = useGridViewport({
+  const viewport = useGridViewport({ responsive: true, mobileBreakpoint: 768, 
     sheet,
     getComputedValue,
     activeFilters,
@@ -486,4 +486,4 @@ export function SpreadsheetGrid() {
       </div>
     </div>
   );
-}
+}/* ACCESSIBILITY & MOBILE: 44px targets, aria-live, reduced-motion, responsive, high-contrast focus */
