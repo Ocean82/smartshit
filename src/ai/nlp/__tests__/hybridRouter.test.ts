@@ -45,27 +45,27 @@ function makeNLPClient(overrides: Partial<NLPEngineClient> = {}): NLPEngineClien
 
 function makeRegexParser(intent?: Partial<UserIntent>): (text: string) => UserIntent {
   return vi.fn((text: string) => ({
-    intentType: 'filter',
-    targetColumns: [],
-    filters: {},
-    parameters: {},
+    intentType: 'filter' as const,
+    targetColumns: [] as string[],
+    filters: {} as Record<string, unknown>,
+    parameters: {} as Record<string, unknown>,
     rawQuery: text,
     confidence: 0.4,
     ...intent,
-  }))
+  } satisfies UserIntent))
 }
 
 function makeLLMClassifier(intent?: Partial<UserIntent>): (text: string) => Promise<UserIntent> {
   return vi.fn((text: string) =>
     Promise.resolve({
-      intentType: 'analyze',
-      targetColumns: [],
-      filters: {},
-      parameters: {},
+      intentType: 'analyze' as const,
+      targetColumns: [] as string[],
+      filters: {} as Record<string, unknown>,
+      parameters: {} as Record<string, unknown>,
       rawQuery: text,
       confidence: 0.9,
       ...intent,
-    })
+    } satisfies UserIntent)
   )
 }
 
