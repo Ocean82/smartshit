@@ -122,6 +122,55 @@ function isDefaultBg(hex: string): boolean {
 }
 
 /**
+ * Map an Excel number format string to the app's internal format key.
+ * Excel numFmt examples: "0.00%", "#,##0", "$#,##0.00", "0%"
+ */
+function mapExcelNumFmt(fmt: string): string | null {
+  const lower = fmt.toLowerCase()
+  // Percentage formats
+  if (lower.includes('%')) {
+    if (lower.includes('.')) return 'percent'
+    return 'percent-int'
+  }
+  // Currency formats
+  if (lower.includes('$') || lower.includes('€') || lower.includes('£') || lower.includes('¥')) {
+    if (lower.includes('€')) return 'currency-eur'
+    if (lower.includes('£')) return 'currency-gbp'
+    if (lower.includes('¥')) return 'currency-jpy'
+    if (lower.includes('.00') || lower.includes('.##')) return 'currency'
+    return 'currency-int'
+  }
+  // Accounting (parentheses for negatives)
+  if (lower.includes('(') && lower.includes(')') && (lower.includes('#') || lower.includes('0'))) {
+    return 'accounting-neg'
+  }
+  // Number with decimals and thousands separator
+  if ((lower.includes('#,##0') || lower.includes('#,###')) && (lower.includes('.00') || lower.includes('.##'))) {
+    return 'number'
+  }
+  // Integer with thousands separator
+  if (lower.includes('#,##0') || lower.includes('#,###')) {
+    return 'number-int'
+  }
+  // Date formats
+  if ((lower.includes('m') || lower.includes('d') || lower.includes('y')) && !lower.includes('#') && !lower.includes('0')) {
+    if (lower.includes('yyyy') && lower.includes('mm') && lower.includes('dd')) return 'date-iso'
+    if (lower.includes('mmm') && lower.includes('d')) return 'date-d-mmm'
+    if (lower.includes('d') && lower.includes('m') && lower.includes('y')) return 'date'
+    return 'date'
+  }
+  // Time formats  
+  if (lower.includes('h') && lower.includes('m') && !lower.includes('d') && !lower.includes('y')) {
+    if (lower.includes('ss')) return 'time-seconds'
+    if (lower.includes('am') || lower.includes('pm')) return 'time'
+    return 'time-24'
+  }
+  // Scientific
+  if (lower.includes('e+') || lower.includes('e-')) return 'scientific'
+  return null
+}
+
+/**
  * Map an XLSX border definition to a CSS-like border string.
  */
 function mapBorderStyle(border: { style?: string; color?: { rgb?: string; argb?: string } }): string {
@@ -211,10 +260,29 @@ export async function importWorkbookFromFileWithMeta(file: File): Promise<Workbo
             }
           }
 
+          // Extract number format from rawCell.z (available even without cellStyles)
+          if (rawCell.z && typeof rawCell.z === 'string' && rawCell.z !== 'General') {
+            const mappedFormat = mapExcelNumFmt(rawCell.z)
+            if (mappedFormat) {
+              if (!sheet.cells[cellId]) {
+                sheet.cells[cellId] = { value: rawCell.v ?? null, format: { numberFormat: mappedFormat } }
+              } else {
+                sheet.cells[cellId].format = { ...sheet.cells[cellId].format, numberFormat: mappedFormat }
+              }
+            }
+          }
+
           // Extract styles (background color, borders)
           if (rawCell.s) {
             const style = rawCell.s
             const format: Record<string, unknown> = {}
+
+            // Number format — from rawCell.z or style.numFmt
+            const numFmt = rawCell.z || style.numFmt?.fmt || style.numFmt
+            if (numFmt && typeof numFmt === 'string') {
+              const mappedFormat = mapExcelNumFmt(numFmt)
+              if (mappedFormat) format.numberFormat = mappedFormat
+            }
 
             // Background color
             if (style.fgColor || style.bgColor || style.fill?.fgColor || style.fill?.bgColor) {
