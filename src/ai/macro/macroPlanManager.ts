@@ -67,7 +67,7 @@ export interface MacroPlanManager {
 const CONFIRMATION_POLL_INTERVAL_MS = 50
 
 /** Maximum time to present plan within (from design: 500ms) */
-const PRESENT_PLAN_DEADLINE_MS = 500
+const _PRESENT_PLAN_DEADLINE_MS = 500
 
 // ─── Implementation ─────────────────────────────────────────────────────────
 

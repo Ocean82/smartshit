@@ -177,7 +177,7 @@ export function useSelectionManager(config: SelectionManagerConfig) {
           }
         }
     }
-  }, [selection, sheet, TOTAL_ROWS, TOTAL_COLS, findLastDataRow, pushHistory, setSelection, setShowFindReplace]);
+  }, [selection, sheet, TOTAL_ROWS, TOTAL_COLS, findLastDataRow, pushHistory, setSelection, setShowFindReplace, scrollCellIntoView]);
 
   const handleMouseDown = useCallback((row: number, col: number, e: MouseEvent) => {
     if (e.button !== 0) return;

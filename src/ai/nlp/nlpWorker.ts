@@ -37,7 +37,7 @@ const INIT_TIMEOUT_MS = 10_000
 
 let state: NLPEngineState = 'loading'
 let modelData: ArrayBuffer | null = null
-let initAttempts = 0
+let _initAttempts = 0
 const pendingOperations = new Map<string, { cancel: () => void }>()
 
 // Default config — will be set properly during init if needed
@@ -129,16 +129,16 @@ async function loadModel(
 
 async function handleInit(modelUrl: string, checksum: string): Promise<void> {
   setState('loading')
-  initAttempts = 0
+  _initAttempts = 0
 
   try {
-    initAttempts = 1
+    _initAttempts = 1
     modelData = await loadModelWithTimeout(modelUrl, checksum)
     setState('ready')
   } catch {
     // First attempt failed — retry once
     try {
-      initAttempts = 2
+      _initAttempts = 2
       // Transition to retrying state (internal, not in the type union as a separate post)
       // The design shows Loading → Retrying → Ready/Fallback
       modelData = await loadModelWithTimeout(modelUrl, checksum)
@@ -157,7 +157,7 @@ async function handleInit(modelUrl: string, checksum: string): Promise<void> {
 
 function handleClassify(
   id: string,
-  text: string,
+  _text: string,
   _workbookContext: WorkbookContext
 ): void {
   if (state !== 'ready') {

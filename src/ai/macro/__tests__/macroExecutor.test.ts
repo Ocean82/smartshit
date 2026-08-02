@@ -291,7 +291,7 @@ describe('executeMacro', () => {
 
     it('handles unknown error types gracefully', async () => {
       const failingExecutor: StepExecutor = async () => {
-        throw 'non-error-object' // eslint-disable-line no-throw-literal
+        throw 'non-error-object'
       }
 
       const plan = createPlan([createStep('filter')])

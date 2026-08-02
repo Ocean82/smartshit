@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useStore } from '@/store/useStore'
 import { colToLetter, refToCell } from '@/engine/spreadsheet'
 import type { ConditionalFormatCondition } from '@/lib/conditionalFormat'

@@ -229,7 +229,7 @@ function extractNumbers(text: string): MatchResult[] {
  */
 function extractColumns(text: string, ctx: WorkbookContext): MatchResult[] {
   const results: MatchResult[] = []
-  const lowerText = text.toLowerCase()
+  const _lowerText = text.toLowerCase()
 
   // Get active sheet columns
   const activeSheet = ctx.sheets.find(s => s.id === ctx.activeSheetId)

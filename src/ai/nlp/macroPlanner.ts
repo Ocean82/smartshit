@@ -76,7 +76,7 @@ export function segmentClauses(text: string): string[] {
       const start = numberedMatches[i]
       const end = i + 1 < numberedMatches.length ? numberedMatches[i + 1] : trimmed.length
       // Remove the number prefix (e.g., "1. ")
-      let clause = trimmed.slice(start, end).replace(/^\s*\d+\.\s*/, '').trim()
+      const clause = trimmed.slice(start, end).replace(/^\s*\d+\.\s*/, '').trim()
       if (clause) clauses.push(clause)
     }
     return clauses.filter(c => c.length > 0)

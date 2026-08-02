@@ -140,7 +140,7 @@ export function resetNLPEngine(): void {
  * The update is non-blocking — the engine continues serving requests with the
  * current model while downloading. If the update fails, the old model is retained.
  */
-async function checkForModelUpdate(config: NLPConfig): Promise<void> {
+async function checkForModelUpdate(_config: NLPConfig): Promise<void> {
   if (!modelManagerInstance || !engineInstance) return
 
   try {

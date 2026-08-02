@@ -266,7 +266,7 @@ function buildWorkbookContext(workbook: WorkbookData, sheet: SheetData, getCompu
     const colCount = Object.keys(s.columnWidths).length || 26 // default 26 cols
     for (let col = 0; col < colCount; col++) {
       const letter = String.fromCharCode(65 + col) // A, B, C, ...
-      let headerName = ''
+      let headerName: string
       // If this is the active sheet, use getComputedValue for the header row
       if (s.id === sheet.id) {
         headerName = getComputedValue(0, col)
@@ -338,7 +338,7 @@ function formatMacroPlanForDisplay(plan: MacroPlan): string {
 async function handleMacroPlan(
   plan: MacroPlan,
   input: ProcessMessageInput,
-  workbookContext: WorkbookContext,
+  _workbookContext: WorkbookContext,
 ): Promise<ToolResult | null> {
   const { undoManager, macroPlanCallbacks } = input
 
@@ -452,7 +452,7 @@ async function handleMacroPlan(
 
     // decision.action === 'confirm' → execute (Req 6.3)
     try {
-      let cancelled = false
+      const cancelled = false
       const manager = createMacroPlanManager({
         presentPlan() { /* already presented */ },
         showProgress(current, total) { macroPlanCallbacks.onProgress?.(current, total) },
