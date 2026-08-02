@@ -61,7 +61,7 @@ function sheetToMatrix(sheet: SheetData): (string | number | null)[][] {
 }
 
 function parseSheetRows(
-  rows: (string | number | null)[][],
+  rows: (string | number | boolean | null)[][],
   maxRows: number,
   maxCols: number,
 ): {
@@ -78,11 +78,17 @@ function parseSheetRows(
     row.slice(0, rowImportedCols).forEach((value, colIndex) => {
       if (value === undefined || value === null || value === '') return
       const cellId = refToCell(rowIndex, colIndex)
-      const coerced = coerceCellValue(String(value))
-      if (typeof coerced === 'string' && coerced.startsWith('=')) {
-        cells[cellId] = { value: null, formula: coerced }
-      } else {
-        cells[cellId] = { value: coerced }
+      // With raw: true, values come as native types (number, boolean, string)
+      if (typeof value === 'number' || typeof value === 'boolean') {
+        cells[cellId] = { value }
+      } else if (typeof value === 'string') {
+        if (value.startsWith('=')) {
+          cells[cellId] = { value: null, formula: value }
+        } else {
+          // Try to coerce string to number only if it looks numeric
+          const num = Number(value)
+          cells[cellId] = { value: (value !== '' && Number.isFinite(num)) ? num : value }
+        }
       }
     })
   })
@@ -167,9 +173,9 @@ export async function importWorkbookFromFileWithMeta(file: File): Promise<Workbo
   const sheets: SheetData[] = book.SheetNames.map((name) => {
     const sheet = createEmptySheet(name.slice(0, 31))
     const ws = book.Sheets[name]
-    const rows = XLSX.utils.sheet_to_json<(string | number | null)[]>(ws, {
+    const rows = XLSX.utils.sheet_to_json<(string | number | boolean | null)[]>(ws, {
       header: 1,
-      raw: false,
+      raw: true,
       defval: null,
     })
     const originalRows = rows.length
@@ -188,13 +194,20 @@ export async function importWorkbookFromFileWithMeta(file: File): Promise<Workbo
 
           const cellId = refToCell(r, c)
 
-          // Extract formula
+          // Extract formula — preserve Excel's computed value as fallback
           if (rawCell.f) {
             const formula = '=' + rawCell.f
+            // rawCell.v holds the value Excel computed before saving
+            const computedValue = rawCell.v ?? null
             if (!sheet.cells[cellId]) {
-              sheet.cells[cellId] = { value: rawCell.v ?? null, formula }
+              sheet.cells[cellId] = { value: computedValue, formula }
             } else {
               sheet.cells[cellId].formula = formula
+              // Keep Excel's computed value so the cell shows something meaningful
+              // even if our engine can't evaluate the formula
+              if (computedValue !== null && computedValue !== undefined) {
+                sheet.cells[cellId].value = computedValue
+              }
             }
           }
 
