@@ -3,7 +3,7 @@
  * Extracted from SpreadsheetGrid to isolate selection logic.
  */
 
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import type { KeyboardEvent, MouseEvent } from 'react';
 import { useStore } from '@/store/useStore';
 import { cellToRef, refToCell, colToLetter } from '@/engine/spreadsheet';
@@ -16,6 +16,7 @@ interface SelectionManagerConfig {
   pushHistory: (desc: string) => void;
   setShowFindReplace: (show: boolean) => void;
   findLastDataRow: (sheet: SheetData) => number;
+  scrollCellIntoView?: (row: number, col: number) => void;
 }
 
 export function useSelectionManager(config: SelectionManagerConfig) {
@@ -25,6 +26,7 @@ export function useSelectionManager(config: SelectionManagerConfig) {
     pushHistory,
     setShowFindReplace,
     findLastDataRow,
+    scrollCellIntoView,
   } = config;
 
   const sheet = useStore.getState().getActiveSheet();
@@ -32,6 +34,7 @@ export function useSelectionManager(config: SelectionManagerConfig) {
   const additionalSelections = useStore(s => s.additionalSelections);
   const setSelection = useStore(s => s.setSelection);
   const editingCell = useStore(s => s.editingCell);
+  const isDragging = useRef(false);
 
   const isSelected = useCallback((row: number, col: number) => {
     if (!selection) return false;
@@ -95,6 +98,7 @@ export function useSelectionManager(config: SelectionManagerConfig) {
       } else {
         setSelection({ startRow: nr, startCol: nc, endRow: nr, endCol: nc });
       }
+      scrollCellIntoView?.(nr, nc);
     };
 
     switch (e.key) {
@@ -177,11 +181,19 @@ export function useSelectionManager(config: SelectionManagerConfig) {
 
   const handleMouseDown = useCallback((row: number, col: number, e: MouseEvent) => {
     if (e.button !== 0) return;
+    isDragging.current = true;
     handleCellClick(row, col, e);
+
+    // Listen for mouseup on document to stop dragging even if mouse leaves grid
+    const stopDrag = () => {
+      isDragging.current = false;
+      document.removeEventListener('mouseup', stopDrag);
+    };
+    document.addEventListener('mouseup', stopDrag);
   }, [handleCellClick]);
 
   const handleMouseMove = useCallback((row: number, col: number) => {
-    if (!selection) return;
+    if (!isDragging.current || !selection) return;
     setSelection({
       startRow: selection.startRow,
       startCol: selection.startCol,
@@ -191,6 +203,7 @@ export function useSelectionManager(config: SelectionManagerConfig) {
   }, [selection, setSelection]);
 
   const handleMouseUp = useCallback(() => {
+    isDragging.current = false;
   }, []);
 
   const handleContextMenu = useCallback((e: MouseEvent, row: number, col: number) => {

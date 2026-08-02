@@ -144,12 +144,41 @@ export function SpreadsheetGrid() {
   }, [workbookId]);
 
   // ─── Selection & Editing ───────────────────────────────────────────────────
+  const scrollCellIntoView = useCallback((row: number, col: number) => {
+    const gridEl = viewport.gridRef.current;
+    if (!gridEl) return;
+    const CELL_HEIGHT = 28;
+    const cellTop = row * CELL_HEIGHT;
+    const cellBottom = cellTop + CELL_HEIGHT;
+    const { scrollTop, clientHeight } = gridEl;
+
+    // Vertical scroll
+    if (cellBottom > scrollTop + clientHeight) {
+      gridEl.scrollTop = cellBottom - clientHeight;
+    } else if (cellTop < scrollTop) {
+      gridEl.scrollTop = cellTop;
+    }
+
+    // Horizontal scroll
+    let cellLeft = 0;
+    for (let i = 0; i < col; i++) cellLeft += getColWidth(i);
+    const cellRight = cellLeft + getColWidth(col);
+    const { scrollLeft, clientWidth } = gridEl;
+
+    if (cellRight > scrollLeft + clientWidth) {
+      gridEl.scrollLeft = cellRight - clientWidth;
+    } else if (cellLeft < scrollLeft) {
+      gridEl.scrollLeft = cellLeft;
+    }
+  }, [viewport.gridRef, getColWidth]);
+
   const selectionManager = useSelectionManager({
     TOTAL_ROWS: viewport.TOTAL_ROWS,
     TOTAL_COLS: viewport.TOTAL_COLS,
     pushHistory,
     setShowFindReplace: (show: boolean) => setShowFindReplace(show),
     findLastDataRow,
+    scrollCellIntoView,
   });
 
   const editingController = useEditingController({

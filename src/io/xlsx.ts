@@ -93,6 +93,43 @@ function parseSheetRows(
 const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype'])
 
 /**
+ * Extract a hex color string from an XLSX color object.
+ * Handles rgb, argb, theme-based colors.
+ */
+function extractColorHex(color: { rgb?: string; argb?: string; theme?: number; tint?: number } | undefined): string | null {
+  if (!color) return null
+  // ARGB format (8 chars: AARRGGBB) — strip alpha
+  if (color.argb && color.argb.length === 8) {
+    return '#' + color.argb.slice(2)
+  }
+  // RGB format (6 chars)
+  if (color.rgb && color.rgb.length >= 6) {
+    return '#' + color.rgb.slice(0, 6)
+  }
+  return null
+}
+
+/** Returns true if the color is effectively white/default and shouldn't be imported as a bg */
+function isDefaultBg(hex: string): boolean {
+  const lower = hex.toLowerCase()
+  return lower === '#ffffff' || lower === '#000000'
+}
+
+/**
+ * Map an XLSX border definition to a CSS-like border string.
+ */
+function mapBorderStyle(border: { style?: string; color?: { rgb?: string; argb?: string } }): string {
+  const weight = border.style === 'thick' ? '2px' : border.style === 'medium' ? '1.5px' : '1px'
+  let color = '#000000'
+  if (border.color) {
+    const hex = extractColorHex(border.color)
+    if (hex) color = hex
+    else color = '#d1d5db' // neutral gray fallback
+  }
+  return `${weight} solid ${color}`
+}
+
+/**
  * Strip prototype-polluting keys from a parsed workbook.
  *
  * The pinned `xlsx@0.18.5` carries an unpatched prototype-pollution advisory
@@ -112,7 +149,7 @@ function stripUnsafeKeys<T extends object>(value: T): T {
 
 export async function importWorkbookFromFileWithMeta(file: File): Promise<WorkbookImportResult> {
   const buffer = await file.arrayBuffer()
-  const book = XLSX.read(buffer, { type: 'array' })
+  const book = XLSX.read(buffer, { type: 'array', cellStyles: true, cellFormula: true })
 
   // Harden the parsed structures before we iterate over them (see above).
   stripUnsafeKeys(book.Sheets)
@@ -129,7 +166,8 @@ export async function importWorkbookFromFileWithMeta(file: File): Promise<Workbo
 
   const sheets: SheetData[] = book.SheetNames.map((name) => {
     const sheet = createEmptySheet(name.slice(0, 31))
-    const rows = XLSX.utils.sheet_to_json<(string | number | null)[]>(book.Sheets[name], {
+    const ws = book.Sheets[name]
+    const rows = XLSX.utils.sheet_to_json<(string | number | null)[]>(ws, {
       header: 1,
       raw: false,
       defval: null,
@@ -138,6 +176,84 @@ export async function importWorkbookFromFileWithMeta(file: File): Promise<Workbo
     const originalCols = rows.reduce((max, row) => Math.max(max, row.length), 0)
     const parsed = parseSheetRows(rows, maxRows, maxCols)
     sheet.cells = parsed.cells
+
+    // Extract formulas, background colors, and borders from raw cell objects
+    if (ws) {
+      const range = XLSX.utils.decode_range(ws['!ref'] || 'A1')
+      for (let r = range.s.r; r <= Math.min(range.e.r, maxRows - 1); r++) {
+        for (let c = range.s.c; c <= Math.min(range.e.c, maxCols - 1); c++) {
+          const addr = XLSX.utils.encode_cell({ r, c })
+          const rawCell = ws[addr]
+          if (!rawCell) continue
+
+          const cellId = refToCell(r, c)
+
+          // Extract formula
+          if (rawCell.f) {
+            const formula = '=' + rawCell.f
+            if (!sheet.cells[cellId]) {
+              sheet.cells[cellId] = { value: rawCell.v ?? null, formula }
+            } else {
+              sheet.cells[cellId].formula = formula
+            }
+          }
+
+          // Extract styles (background color, borders)
+          if (rawCell.s) {
+            const style = rawCell.s
+            const format: Record<string, unknown> = {}
+
+            // Background color
+            if (style.fgColor || style.bgColor || style.fill?.fgColor || style.fill?.bgColor) {
+              const fg = style.fill?.fgColor || style.fgColor
+              const bg = style.fill?.bgColor || style.bgColor
+              const colorSource = fg || bg
+              if (colorSource) {
+                const hex = extractColorHex(colorSource)
+                if (hex && !isDefaultBg(hex)) format.bgColor = hex
+              }
+            }
+
+            // Font color
+            if (style.font?.color) {
+              const hex = extractColorHex(style.font.color)
+              if (hex) format.fontColor = hex
+            }
+
+            // Bold/Italic
+            if (style.font?.bold) format.bold = true
+            if (style.font?.italic) format.italic = true
+
+            // Borders
+            if (style.border) {
+              const borders: Record<string, string> = {}
+              if (style.border.top?.style) borders.top = mapBorderStyle(style.border.top)
+              if (style.border.right?.style) borders.right = mapBorderStyle(style.border.right)
+              if (style.border.bottom?.style) borders.bottom = mapBorderStyle(style.border.bottom)
+              if (style.border.left?.style) borders.left = mapBorderStyle(style.border.left)
+              if (Object.keys(borders).length > 0) format.borders = borders
+            }
+
+            // Text alignment
+            if (style.alignment?.horizontal) {
+              const align = style.alignment.horizontal
+              if (align === 'left' || align === 'center' || align === 'right') {
+                format.textAlign = align
+              }
+            }
+
+            // Apply format to cell
+            if (Object.keys(format).length > 0) {
+              if (!sheet.cells[cellId]) {
+                sheet.cells[cellId] = { value: null, format: format as CellData['format'] }
+              } else {
+                sheet.cells[cellId].format = { ...sheet.cells[cellId].format, ...format } as CellData['format']
+              }
+            }
+          }
+        }
+      }
+    }
 
     if (originalRows > parsed.importedRows || originalCols > parsed.importedCols) {
       sheetLimitHits.push({
