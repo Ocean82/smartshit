@@ -21,7 +21,21 @@ export function VersionHistoryPanel() {
 
   const cloudId = getCloudWorkbookId()
 
-  // Version history is Pro-only
+  const fetchVersions = useCallback(async () => {
+    if (!cloudId || !isCloudConfigured()) return
+    setLoading(true)
+    const result = await listVersions(cloudId)
+    setVersions(result)
+    setLoading(false)
+  }, [cloudId])
+
+  useEffect(() => {
+    if (showVersionHistory && isPro) {
+      void fetchVersions()
+    }
+  }, [showVersionHistory, fetchVersions, isPro])
+
+  // Version history is Pro-only — render gate after all hooks
   if (showVersionHistory && !isPro) {
     return (
       <div className="w-[300px] border-l border-gray-200 bg-white h-full flex flex-col shrink-0 p-4">
@@ -35,20 +49,6 @@ export function VersionHistoryPanel() {
       </div>
     )
   }
-
-  const fetchVersions = useCallback(async () => {
-    if (!cloudId || !isCloudConfigured()) return
-    setLoading(true)
-    const result = await listVersions(cloudId)
-    setVersions(result)
-    setLoading(false)
-  }, [cloudId])
-
-  useEffect(() => {
-    if (showVersionHistory) {
-      void fetchVersions()
-    }
-  }, [showVersionHistory, fetchVersions])
 
   if (!showVersionHistory) return null
 

@@ -28,14 +28,6 @@ export interface WorkbookImportResult {
   meta: WorkbookImportMeta
 }
 
-function coerceCellValue(raw: string): string | number | null {
-  const trimmed = raw.trim()
-  if (trimmed.startsWith('=')) return trimmed
-  const num = Number(trimmed)
-  if (trimmed !== '' && Number.isFinite(num)) return num
-  return trimmed || null
-}
-
 function sheetToMatrix(sheet: SheetData): (string | number | null)[][] {
   let maxRow = 0
   let maxCol = 0
