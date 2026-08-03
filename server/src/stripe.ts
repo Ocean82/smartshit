@@ -24,6 +24,9 @@ export async function createCheckoutSession(userId: string, email: string): Prom
   params.set('line_items[0][price]', config.stripePriceId)
   params.set('line_items[0][quantity]', '1')
   params.set('metadata[userId]', userId)
+  // CRITICAL: Set userId on the subscription itself so webhooks
+  // (customer.subscription.deleted/updated) can identify the user.
+  params.set('subscription_data[metadata][userId]', userId)
 
   const res = await fetch('https://api.stripe.com/v1/checkout/sessions', {
     method: 'POST',
@@ -123,6 +126,21 @@ export function handleStripeWebhook(event: {
     const userId = metadata?.userId
     if (userId) {
       return { userId, plan: 'free', stripeSubscriptionId: null }
+    }
+  }
+
+  // Handle subscription status changes (past_due, canceled, unpaid)
+  if (event.type === 'customer.subscription.updated') {
+    const metadata = obj.metadata as Record<string, string> | undefined
+    const userId = metadata?.userId
+    const status = obj.status as string | undefined
+    if (userId && (status === 'past_due' || status === 'canceled' || status === 'unpaid')) {
+      return { userId, plan: 'free', stripeSubscriptionId: null }
+    }
+    // If subscription is re-activated (active), restore Pro
+    if (userId && status === 'active') {
+      const subId = typeof obj.id === 'string' ? obj.id : null
+      return { userId, plan: 'pro', stripeSubscriptionId: subId }
     }
   }
 

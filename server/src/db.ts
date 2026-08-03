@@ -18,7 +18,7 @@ export function getPool(): pg.Pool {
     pool = new Pool({
       connectionString: config.databaseUrl,
       ssl: config.databaseUrl.includes('sslmode=require')
-        ? { rejectUnauthorized: false }
+        ? { rejectUnauthorized: true }
         : undefined,
       max: 10,
       idleTimeoutMillis: 30_000,

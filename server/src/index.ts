@@ -290,20 +290,29 @@ async function runLlmChat(params: {
 
 // ─── Health ──────────────────────────────────────────────────────────────────
 
-app.get('/health', async (_req, res) => {
+app.get('/health', async (req, res) => {
   const ollama = await ollamaReachable()
   const modelReady = ollama ? await modelIsRegistered() : false
   const assistReady = ollama ? await assistModelAvailable() : false
   const groq = groqAvailable()
   const openrouter = providerIsConfigured('openrouter')
   const huggingface = providerIsConfigured('huggingface')
-  const order = providerOrder()
 
-  // Cloud infrastructure checks
+  // Public: only expose operational status (ok/not ok)
+  const isOk = groq || openrouter || huggingface || (ollama && modelReady)
+
+  // Authenticated requests get full diagnostics; public gets minimal status
+  const userId = getRequestUserId(req)
+  if (!userId) {
+    res.json({ ok: isOk, service: 'smartsht-server' })
+    return
+  }
+
+  const order = providerOrder()
   const [db, s3] = await Promise.all([dbHealthCheck(), s3HealthCheck()])
 
   res.json({
-    ok: groq || openrouter || huggingface || (ollama && modelReady),
+    ok: isOk,
     service: 'smartsht-server',
     groq,
     openrouter,
@@ -315,7 +324,6 @@ app.get('/health', async (_req, res) => {
     assistModelRegistered: assistReady,
     modelName: config.modelName,
     assistModelName: config.assistModelName,
-    port: config.port,
     cloud: {
       database: db,
       s3: s3,
@@ -478,6 +486,21 @@ app.post('/api/chat', requireAuth, chatRateLimiter, validateBody(chatBodySchema)
     return
   }
 
+  // ─── Usage gate (free tier enforcement) ────────────────────────────────────
+  const hasByok = Boolean(body.byok?.apiKey && body.byok?.baseUrl)
+  const userId = getRequestUserId(req) ?? undefined
+  const isPro = hasByok || await resolveIsPro(userId ?? null)
+  const usage = await checkUsage(userId, isPro)
+
+  if (!usage.allowed) {
+    res.status(429).json({
+      message: `You've used all ${usage.limit} free AI questions for today. Upgrade to Pro for unlimited access.`,
+      actions: [],
+      source: 'fallback',
+    })
+    return
+  }
+
   const mode = classifyMode(userMessage)
   const userIntent = parseIntentWithKeyword(userMessage)
 
@@ -536,6 +559,10 @@ app.post('/api/chat', requireAuth, chatRateLimiter, validateBody(chatBodySchema)
       userIntent,
       stream: false,
     })
+    // Record usage for free-tier tracking (only after successful LLM response)
+    if (result.source === 'llm' && !hasByok) {
+      await recordUsage(userId)
+    }
     res.json({ ...result, suggestions })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error'
