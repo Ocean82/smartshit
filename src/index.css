@@ -150,6 +150,8 @@ body {
 
 /* ========================================
    MOBILE / RESPONSIVE STYLES
+   Breakpoint: 768px (synced with src/lib/layoutConstants.ts MOBILE_BREAKPOINT)
+   Tailwind's `md:` prefix uses this same value by default.
    ======================================== */
 
 /* Safe area insets for notched phones */
