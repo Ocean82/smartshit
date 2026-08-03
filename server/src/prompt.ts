@@ -78,6 +78,8 @@ export interface SpreadsheetContextInput {
   selectionSnapshot?: Record<string, string | number | null>
   insights?: SheetInsightsInput
   profile?: SheetProfileInput
+  /** SpreadsheetLLM-style compressed encoding (inverted-index + structural anchors) */
+  compressedEncoding?: string
   deterministicSummary?: string
   userPreferences?: Record<string, string>
   /** @deprecated legacy flat cell map */
@@ -165,6 +167,10 @@ function formatContextBlock(context?: SpreadsheetContextInput): string {
     if (context.sampleRowsTruncated) {
       lines.push('Data preview is truncated. Mention this limitation before giving high-confidence conclusions.')
     }
+  }
+
+  if (context.compressedEncoding) {
+    lines.push(`Compressed data (inverted-index format — value:"addresses"):\n${context.compressedEncoding}`)
   }
 
   if (context.deterministicSummary?.trim()) {

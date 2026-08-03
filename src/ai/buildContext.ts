@@ -5,6 +5,7 @@ import { computeSheetInsights, type SheetInsights } from '@/ai/sheetInsights'
 import { buildSheetProfile } from '@/ai/sheetProfile'
 import type { SheetProfile } from '@/ai/types'
 import { AI_ANALYSIS_CONFIG } from '@/ai/config'
+import { compressSheet, type CompressedSheet } from '@/ai/sheetCompressor'
 
 export interface SheetDimensions {
   rows: number
@@ -35,6 +36,8 @@ export interface SpreadsheetContextPayload {
   selectionSnapshot: Record<string, string | number | null>
   insights: SheetInsights
   profile?: SheetProfile
+  /** SpreadsheetLLM-style compressed encoding for token-efficient LLM consumption */
+  compressedEncoding?: string
   deterministicSummary?: string
   userPreferences?: Record<string, string>
   /** @deprecated kept for backward compatibility */
@@ -146,6 +149,16 @@ export function buildSpreadsheetContext(
   const sampleRowsTruncated = maxRow + 1 > MAX_SAMPLE_ROWS
   const sheetSummaries = workbook.sheets.map((s) => summarizeSheet(s, s.id === sheet.id))
 
+  // Generate compressed encoding for large sheets (>120 rows benefits most)
+  let compressedEncoding: string | undefined
+  const populatedCells = Object.keys(sheet.cells).length
+  if (populatedCells > 50) {
+    const compressed = compressSheet(sheet, getComputedValue, {
+      mode: populatedCells > 500 ? 'full' : 'lossless',
+    })
+    compressedEncoding = compressed.encoded
+  }
+
   return {
     workbookName: workbook.name,
     activeSheet: sheet.name,
@@ -155,7 +168,7 @@ export function buildSpreadsheetContext(
     dimensions: {
       rows: maxRow + 1,
       cols: maxCol + 1,
-      populatedCells: Object.keys(sheet.cells).length,
+      populatedCells,
     },
     headers: insights.headers,
     sampleRows,
@@ -163,5 +176,6 @@ export function buildSpreadsheetContext(
     selectionSnapshot,
     insights,
     profile,
+    compressedEncoding,
   }
 }
