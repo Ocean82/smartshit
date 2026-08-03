@@ -632,17 +632,102 @@
     /* ─── Responsive ─── */
     @media (max-width: 768px) {
       .nav-links a:not(.btn) { display: none; }
+      .nav-hamburger { display: flex; }
       .hero h1 { letter-spacing: -1px; }
       .hero-actions { flex-direction: column; align-items: stretch; }
       .hero-actions .btn { justify-content: center; }
       .chat-mockup { margin: 0 -12px; border-radius: 14px; }
       .product-shot { margin-left: -12px; margin-right: -12px; }
       .product-shot-frame { border-radius: 12px; }
+      .values-grid { grid-template-columns: 1fr; }
+      .value-item.value-featured { grid-column: 1; }
+    }
+
+    /* ─── Mobile nav hamburger ─── */
+    .nav-hamburger {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      border-radius: 8px;
+      transition: background 0.15s;
+    }
+    .nav-hamburger:hover { background: var(--surface-tint); }
+    .nav-hamburger svg { color: var(--ink); }
+
+    .mobile-nav {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      background: oklch(0.1 0.01 250 / 0.5);
+      backdrop-filter: blur(4px);
+    }
+    .mobile-nav.open { display: flex; align-items: flex-start; justify-content: center; padding-top: 80px; }
+    .mobile-nav-content {
+      background: var(--surface);
+      border-radius: var(--radius-lg);
+      padding: 32px;
+      width: calc(100% - 48px);
+      max-width: 320px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      box-shadow: var(--shadow-lg);
+    }
+    .mobile-nav-content a {
+      display: block;
+      padding: 12px 16px;
+      font-size: 1rem;
+      font-weight: 500;
+      color: var(--ink);
+      border-radius: 10px;
+      text-decoration: none;
+      transition: background 0.15s;
+    }
+    .mobile-nav-content a:hover { background: var(--surface-tint); text-decoration: none; }
+
+    /* ─── Hover guard for touch devices ─── */
+    @media (hover: none) {
+      .chat-mockup:hover { transform: none; box-shadow: var(--shadow-md); }
+      .feature-card:hover { transform: none; box-shadow: none; border-color: var(--border); }
+      .value-item:hover { transform: none; box-shadow: none; border-color: var(--border); }
+      .price-card:hover { transform: none; box-shadow: none; }
+    }
+
+    /* ─── Featured value items (top differentiators) ─── */
+    .value-item.value-featured {
+      grid-column: span 2;
+      border-color: var(--accent);
+      background: linear-gradient(135deg, var(--surface) 0%, var(--accent-soft) 100%);
+    }
+    .value-item.value-featured h3 { color: var(--accent); }
+    @media (max-width: 640px) {
+      .value-item.value-featured { grid-column: 1; }
+    }
+
+    /* ─── Pricing limit styling ─── */
+    .price-card li.limit {
+      color: var(--ink-muted);
+      font-size: 0.82rem;
+    }
+    .price-card li.limit::before {
+      content: '○ ';
+      color: var(--ink-muted);
+    }
+    .price-card li.included::before {
+      content: '✓ ';
+      color: var(--warm);
+      font-weight: 600;
     }
 
     /* ─── Reduced motion ─── */
     @media (prefers-reduced-motion: reduce) {
-      *, *::before, *::after { transition-duration: 0.01ms !important; }
+      *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
       html { scroll-behavior: auto; }
     }
 
@@ -670,8 +755,20 @@
         <a href="#pricing">Pricing</a>
         <a href="/app" class="btn btn-primary" style="padding: 8px 18px; font-size: 0.82rem;">Launch App</a>
       </div>
+      <button class="nav-hamburger" aria-label="Open menu" onclick="document.getElementById('mobile-nav').classList.add('open')">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+      </button>
     </div>
   </nav>
+
+  <!-- Mobile nav overlay -->
+  <div id="mobile-nav" class="mobile-nav" onclick="this.classList.remove('open')">
+    <div class="mobile-nav-content" onclick="event.stopPropagation()">
+      <a href="#features" onclick="document.getElementById('mobile-nav').classList.remove('open')">Features</a>
+      <a href="#pricing" onclick="document.getElementById('mobile-nav').classList.remove('open')">Pricing</a>
+      <a href="/app" class="btn btn-primary" style="text-align:center; color:white; margin-top:8px;">Launch App</a>
+    </div>
+  </div>
 
   <main id="main">
 
@@ -814,21 +911,21 @@
       </div>
 
       <div class="values-grid">
-        <div class="value-item">
-          <h3>Plain English, real results</h3>
-          <p>Say "track my expenses" or "build an invoice" and it happens. The AI spreadsheet assistant handles formulas, formatting, and calculations — a true Excel alternative for people who want results without the learning curve.</p>
+        <div class="value-item value-featured">
+          <h3>The Auditor catches formula errors</h3>
+          <p>An AI-powered spreadsheet auditor checks for skipped cells in SUMs, inconsistent formula patterns, statistical outliers, and hardcoded constants. Finds mistakes before they compound — something Google Sheets and Excel don't do automatically.</p>
+        </div>
+        <div class="value-item value-featured">
+          <h3>Preview before anything changes</h3>
+          <p>Every AI suggestion shows an interactive diff preview first. Approve or reject with one click. Your data is never modified without explicit consent — building trust that no other AI spreadsheet tool offers.</p>
         </div>
         <div class="value-item">
           <h3>Your data stays on your machine</h3>
           <p>Unlike cloud-only tools, your spreadsheet data lives in your browser by default. A privacy-first spreadsheet where nothing syncs to our servers unless you explicitly enable cloud backup. Self-hosted friendly.</p>
         </div>
         <div class="value-item">
-          <h3>The Auditor catches formula errors</h3>
-          <p>An AI-powered spreadsheet auditor checks for skipped cells in SUMs, inconsistent formula patterns, statistical outliers, and hardcoded constants. Finds mistakes before they compound — something Google Sheets and Excel don't do automatically.</p>
-        </div>
-        <div class="value-item">
-          <h3>Preview before anything changes</h3>
-          <p>Every AI suggestion shows an interactive diff preview first. Approve or reject with one click. Your data is never modified without explicit consent — building trust that no other AI spreadsheet tool offers.</p>
+          <h3>Plain English, real results</h3>
+          <p>Say "track my expenses" or "build an invoice" and it happens. The AI spreadsheet assistant handles formulas, formatting, and calculations — a true Excel alternative for people who want results without the learning curve.</p>
         </div>
         <div class="value-item">
           <h3>Excel import and export</h3>
@@ -863,15 +960,15 @@
           <h3>Free</h3>
           <div class="price-amount">$0 forever</div>
           <ul>
-            <li>Full spreadsheet with formulas</li>
-            <li>10 AI questions per day</li>
-            <li>All templates (budgets, invoices, trackers)</li>
-            <li>Excel and CSV import/export</li>
-            <li>Auditor scans + 3 auto-fixes</li>
-            <li>1 cloud workbook</li>
-            <li>Read-only share links</li>
-            <li>Data stays in your browser</li>
-            <li>Bring Your Own Key (unlimited AI)</li>
+            <li class="included">Full spreadsheet with formulas</li>
+            <li class="limit">10 AI questions per day</li>
+            <li class="included">All templates (budgets, invoices, trackers)</li>
+            <li class="included">Excel and CSV import/export</li>
+            <li class="limit">Auditor scans + 3 auto-fixes</li>
+            <li class="limit">1 cloud workbook</li>
+            <li class="limit">Read-only share links</li>
+            <li class="included">Data stays in your browser</li>
+            <li class="included">Bring Your Own Key (unlimited AI)</li>
           </ul>
           <a href="/app" class="btn btn-secondary">Get Started Free</a>
         </div>
@@ -879,13 +976,13 @@
           <h3>Pro</h3>
           <div class="price-amount"><s style="color:var(--ink-muted);font-weight:400;">$12/mo</s> $7/month — early adopter rate</div>
           <ul>
-            <li>Everything in Free</li>
-            <li><strong>Unlimited AI questions</strong></li>
-            <li><strong>Unlimited auto-fix</strong></li>
-            <li>Unlimited cloud backup and sync</li>
-            <li>Version history (restore any save)</li>
-            <li>Edit-sharing with collaborators</li>
-            <li>Priority AI (faster models)</li>
+            <li class="included">Everything in Free</li>
+            <li class="included"><strong>Unlimited AI questions</strong></li>
+            <li class="included"><strong>Unlimited auto-fix</strong></li>
+            <li class="included">Unlimited cloud backup and sync</li>
+            <li class="included">Version history (restore any save)</li>
+            <li class="included">Edit-sharing with collaborators</li>
+            <li class="included">Priority AI (faster models)</li>
           </ul>
           <a href="/app" class="btn btn-primary">Start Free, Upgrade Later</a>
         </div>
@@ -933,7 +1030,7 @@
         <p>Free to start, private by default, and ready when you are.</p>
         <div style="display:flex; gap:16px; justify-content:center; flex-wrap:wrap;">
           <a href="/app" class="btn btn-primary" style="padding: 16px 32px; font-size: 1rem;">Get Started Free</a>
-          <a href="mailto:support@smartsht.com" class="btn btn-secondary" style="background:transparent; border-color:oklch(1 0 0 / 0.2); color:white;">Talk to Sales</a>
+          <a href="mailto:support@smartsht.com" class="btn btn-secondary" style="background:transparent; border-color:oklch(1 0 0 / 0.2); color:white;">Questions? Email us</a>
         </div>
       </div>
     </div>
