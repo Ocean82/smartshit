@@ -12,7 +12,7 @@
 import { config } from './config.js'
 import { query } from './db.js'
 
-const FREE_DAILY_LIMIT = Number(process.env.FREE_DAILY_LIMIT ?? 3)
+const FREE_DAILY_LIMIT = Number(process.env.FREE_DAILY_LIMIT ?? 10)
 
 /** Fallback store used only when no database is configured. */
 const memoryUsage = new Map<string, { count: number; date: string }>()

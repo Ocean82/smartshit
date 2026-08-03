@@ -15,8 +15,8 @@ export function UpgradePrompt({ remaining, dailyLimit }: UpgradePromptProps) {
 
   if (remaining > 0) {
     return (
-      <div className="mx-3 mb-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200">
-        <p className="text-xs text-amber-800">
+      <div className="mx-3 mb-2 px-3 py-2 rounded-lg" style={{ background: 'var(--warning-soft)', border: '1px solid oklch(0.85 0.08 70)' }}>
+        <p className="text-xs" style={{ color: 'oklch(0.4 0.1 70)' }}>
           <span className="font-semibold">{remaining}/{dailyLimit}</span> free AI questions remaining today
         </p>
       </div>

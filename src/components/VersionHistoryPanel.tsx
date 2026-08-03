@@ -7,16 +7,34 @@ import {
   isCloudConfigured,
   type VersionEntry,
 } from '@/lib/cloudSync'
+import { useUsage } from '@/auth'
+import { UpgradeGate } from '@/components/UpgradeGate'
 import { History, RotateCcw, Eye, X, Loader2, CloudOff, Clock, Save } from 'lucide-react'
 
 export function VersionHistoryPanel() {
   const { showVersionHistory, setShowVersionHistory, loadWorkbookData, showConfirm, showToast } = useStore()
+  const { isPro } = useUsage()
   const [versions, setVersions] = useState<VersionEntry[]>([])
   const [loading, setLoading] = useState(false)
   const [actionId, setActionId] = useState<string | null>(null)
   const [previewId, setPreviewId] = useState<string | null>(null)
 
   const cloudId = getCloudWorkbookId()
+
+  // Version history is Pro-only
+  if (showVersionHistory && !isPro) {
+    return (
+      <div className="w-[300px] border-l border-gray-200 bg-white h-full flex flex-col shrink-0 p-4">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-semibold" style={{ color: 'var(--ink-primary)' }}>Version History</h3>
+          <button type="button" onClick={() => setShowVersionHistory(false)} className="p-1 rounded-lg transition-colors" style={{ color: 'var(--neutral-400)' }} aria-label="Close">
+            <X size={16} />
+          </button>
+        </div>
+        <UpgradeGate feature="version-history" onDismiss={() => setShowVersionHistory(false)} />
+      </div>
+    )
+  }
 
   const fetchVersions = useCallback(async () => {
     if (!cloudId || !isCloudConfigured()) return

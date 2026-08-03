@@ -10,6 +10,9 @@ import { loadCustomRules } from '@/auditor/customRules'
 import type { AuditResult, AuditFinding, Severity } from '@/auditor/types'
 import { AuditFindingCard } from '@/components/AuditFindingCard'
 import { CustomRulesSection } from './CustomRulesSection'
+import { UpgradeGate } from '@/components/UpgradeGate'
+import { useUsage } from '@/auth'
+import { canAutoFix, recordAutoFixUse, autoFixRemaining } from '@/lib/featureGates'
 import { ShieldCheck, Loader2, RefreshCw, X } from 'lucide-react'
 
 const SEVERITY_FILTERS = ['all', 'critical', 'high', 'medium', 'low', 'info'] as const
@@ -17,11 +20,13 @@ type FilterValue = (typeof SEVERITY_FILTERS)[number]
 
 export function AuditPanelContent() {
   const { workbook, activeSheetId, getComputedValue } = useStore()
+  const { isPro } = useUsage()
   const [result, setResult] = useState<AuditResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [filter, setFilter] = useState<FilterValue>('all')
   const [ruleVersion, setRuleVersion] = useState(0)
   const [fixMessage, setFixMessage] = useState<string | null>(null)
+  const [showUpgradeGate, setShowUpgradeGate] = useState(false)
 
   const activeSheet = workbook.sheets.find((s) => s.id === activeSheetId)
 
@@ -61,6 +66,13 @@ export function AuditPanelContent() {
 
   const handleFix = useCallback((finding: AuditFinding) => {
     if (!finding.fixActions?.length) return
+
+    // Gate: check if free user has remaining auto-fixes
+    if (!canAutoFix(isPro)) {
+      setShowUpgradeGate(true)
+      return
+    }
+
     const state = useStore.getState()
     const sheet = state.workbook.sheets.find((s) => s.id === state.activeSheetId)
     if (!sheet) return
@@ -73,6 +85,10 @@ export function AuditPanelContent() {
       return
     }
     setFixMessage(null)
+
+    // Record usage for free-tier tracking
+    if (!isPro) recordAutoFixUse()
+
     state.pushHistory('Audit auto-fix')
     for (const action of finding.fixActions) {
       const { cellId, formula, value } = action
@@ -84,7 +100,7 @@ export function AuditPanelContent() {
       }
     }
     setTimeout(() => handleRunAudit(), 200)
-  }, [handleRunAudit])
+  }, [handleRunAudit, isPro])
 
   const filteredFindings = result
     ? filter === 'all'
@@ -242,6 +258,14 @@ export function AuditPanelContent() {
               <X size={14} />
             </button>
           </div>
+        )}
+
+        {showUpgradeGate && (
+          <UpgradeGate
+            feature="auto-fix"
+            contextDetail={`${autoFixRemaining(isPro)} of 3 free fixes used`}
+            onDismiss={() => setShowUpgradeGate(false)}
+          />
         )}
 
         {filteredFindings.map((finding) => (
