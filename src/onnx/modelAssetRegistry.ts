@@ -67,7 +67,7 @@ export class ModelAssetRegistry {
 
     const assets = this.accessor.get();
 
-    if (Object.hasOwn(assets, name)) {
+    if (Object.prototype.hasOwnProperty.call(assets, name)) {
       return {
         success: false,
         error: `A model asset with name "${name}" already exists.`,
@@ -86,7 +86,7 @@ export class ModelAssetRegistry {
    */
   get(name: string): ModelAsset | null {
     const assets = this.accessor.get();
-    return Object.hasOwn(assets, name) ? assets[name] : null;
+    return Object.prototype.hasOwnProperty.call(assets, name) ? assets[name] : null;
   }
 
   /**
@@ -100,7 +100,7 @@ export class ModelAssetRegistry {
   ): DeleteResult {
     const assets = this.accessor.get();
 
-    if (!Object.hasOwn(assets, name)) {
+    if (!Object.prototype.hasOwnProperty.call(assets, name)) {
       return { success: false, affectedCells: [] };
     }
 
