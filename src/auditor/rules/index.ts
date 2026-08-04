@@ -14,6 +14,8 @@ import { magnitudeOutliersRule } from './magnitudeOutliers'
 import { volatileFunctionsRule } from './volatileFunctions'
 import { orphanedFormulasRule } from './orphanedFormulas'
 import { duplicateFormulasRule } from './duplicateFormulas'
+import { onnxFormulaConsistencyRule } from './onnxFormulaConsistency'
+import { hardcodedWeightsRule } from './hardcodedWeights'
 
 export const ALL_RULES: AuditRule[] = [
   // Critical
@@ -22,8 +24,10 @@ export const ALL_RULES: AuditRule[] = [
   // High
   rangeGapsRule,
   inconsistentFormulasRule,
+  onnxFormulaConsistencyRule,
   // Medium
   hardcodedConstantsRule,
+  hardcodedWeightsRule,
   hiddenDependenciesRule,
   // Low
   magnitudeOutliersRule,

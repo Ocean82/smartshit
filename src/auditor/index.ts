@@ -15,7 +15,7 @@ import { createCustomAuditRule, type CustomAuditRule } from './customRules'
 import { refToCell, cellToRef, classifyCellType, isErrorValue, getErrorType } from './utils'
 
 export type { AuditResult, AuditFinding, CellInfo, Severity } from './types'
-export type { CellLocation, AuditRule, AuditContext } from './types'
+export type { CellLocation, AuditRule, AuditContext, DismissedFindingEntry } from './types'
 export { createCustomAuditRule, loadCustomRules, saveCustomRules, ruleMatches, OPERATOR_LABELS } from './customRules'
 export type { CustomAuditRule, CustomRuleOperator, NumericRuleOperator, TextRuleOperator, EmptyRuleOperator } from './customRules'
 

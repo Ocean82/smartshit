@@ -4,6 +4,7 @@ import { v4 as uuid } from 'uuid';
 import { AIFunctionRegistry, type EvalValue } from './aiFunctions';
 import { registerBuiltinAIFunctions, getAIFunctionList } from './aiFunctionDefinitions';
 import { computePivotTable } from './pivot';
+import { initializeOnnxFunction, type OnnxInitOptions } from '@/onnx/onnxInit';
 
 import { colToLetter, letterToCol, tryCellToRef, cellToRef, refToCell } from '@/lib/cellRef';
 export { colToLetter, letterToCol, tryCellToRef, cellToRef, refToCell };
@@ -48,11 +49,15 @@ export class SpreadsheetEngine {
   private sheetMapping: Map<string, string> = new Map();
   private _aiRegistry: AIFunctionRegistry;
   private _disposeAIFunctions: (() => void) | null = null;
+  private _disposeOnnxFunction: (() => void) | null = null;
+  private _onnxInitOptions: OnnxInitOptions | undefined;
 
-  constructor(aiRegistry?: AIFunctionRegistry) {
+  constructor(aiRegistry?: AIFunctionRegistry, onnxInitOptions?: OnnxInitOptions) {
     this._aiRegistry = aiRegistry ?? new AIFunctionRegistry();
+    this._onnxInitOptions = onnxInitOptions;
     this.wb = new Workbook();
     this._disposeAIFunctions = registerBuiltinAIFunctions(this._aiRegistry);
+    this._disposeOnnxFunction = initializeOnnxFunction(this._aiRegistry, this._onnxInitOptions);
     this.invalidateFunctionMap();
   }
 
@@ -71,10 +76,12 @@ export class SpreadsheetEngine {
     this._aiRegistry.clearCache();
     this._aiRegistry.dispose();
     this._disposeAIFunctions?.();
+    this._disposeOnnxFunction?.();
     this._aiRegistry = new AIFunctionRegistry();
     this.wb = new Workbook();
     this.sheetMapping.clear();
     this._disposeAIFunctions = registerBuiltinAIFunctions(this._aiRegistry);
+    this._disposeOnnxFunction = initializeOnnxFunction(this._aiRegistry, this._onnxInitOptions);
     this.invalidateFunctionMap();
   }
 
@@ -178,7 +185,7 @@ export class SpreadsheetEngine {
         }
       }
     } else {
-      const match = formulaText.match(/^=(AI\.[A-Z0-9_-]+)\((.*)\)$/i);
+      const match = formulaText.match(/^=((?:AI|ONNX)\.[A-Z0-9_-]+)\((.*)\)$/i);
       if (!match) return '#NAME?';
       funcName = match[1].toUpperCase();
       if (!this._aiRegistry.has(funcName)) return '#NAME?';
@@ -216,7 +223,7 @@ export class SpreadsheetEngine {
   }
 
   isAIFormula(formula: string): boolean {
-    return /^=AI\.[A-Z0-9_-]+\(/i.test(formula);
+    return /^=(AI\.|ONNX\.)[A-Z0-9_-]+\(/i.test(formula);
   }
 
   executeAllAIFormulas(): void {
@@ -668,6 +675,10 @@ case 'function': {
     if (this._disposeAIFunctions) {
       this._disposeAIFunctions();
       this._disposeAIFunctions = null;
+    }
+    if (this._disposeOnnxFunction) {
+      this._disposeOnnxFunction();
+      this._disposeOnnxFunction = null;
     }
     this._aiRegistry.dispose();
   }

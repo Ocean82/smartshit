@@ -43,7 +43,7 @@ export class SessionCache {
    * Algorithm:
    * 1. Store newSession in cache, update totalMemory
    * 2. WHILE totalMemory > maxMemoryBytes:
-   *    a. Find LRU entry WHERE isExecuting === false
+   *    a. Find LRU entry WHERE isExecuting === false AND hash !== newHash
    *    b. IF no evictable entry found:
    *       - Remove newSession from cache
    *       - RETURN false (rejection)
@@ -55,9 +55,9 @@ export class SessionCache {
     this.cache.set(hash, entry);
 
     if (this.getTotalMemory() > this.maxMemoryBytes) {
-      const evicted = this.evictUntilUnderBudget();
+      const evicted = this.evictUntilUnderBudget(hash);
       if (!evicted) {
-        // Cannot evict enough — all sessions are executing
+        // Cannot evict enough — all other sessions are executing
         this.cache.delete(hash);
         return false;
       }
@@ -120,11 +120,13 @@ export class SessionCache {
   /**
    * Internal: Evict LRU non-executing sessions until total memory is under budget.
    * Returns true if budget is satisfied, false if eviction is impossible
-   * (all remaining sessions are executing).
+   * (all remaining sessions are executing or protected).
+   *
+   * @param excludeHash - Hash of the newly added entry to protect from self-eviction
    */
-  private evictUntilUnderBudget(): boolean {
+  private evictUntilUnderBudget(excludeHash?: string): boolean {
     while (this.getTotalMemory() > this.maxMemoryBytes) {
-      const lruEntry = this.findLruNonExecuting();
+      const lruEntry = this.findLruNonExecuting(excludeHash);
       if (!lruEntry) {
         return false;
       }
@@ -136,12 +138,15 @@ export class SessionCache {
 
   /**
    * Find the least-recently-used entry that is not currently executing.
+   *
+   * @param excludeHash - Hash to exclude from eviction candidates (newly added entry)
    */
-  private findLruNonExecuting(): SessionCacheEntry | null {
+  private findLruNonExecuting(excludeHash?: string): SessionCacheEntry | null {
     let oldest: SessionCacheEntry | null = null;
 
     for (const entry of this.cache.values()) {
       if (entry.isExecuting) continue;
+      if (excludeHash && entry.hash === excludeHash) continue;
       if (oldest === null || entry.lastUsedAt < oldest.lastUsedAt) {
         oldest = entry;
       }

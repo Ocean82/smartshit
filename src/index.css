@@ -118,6 +118,12 @@
   animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
+/* Indeterminate progress bar animation for ONNX inference (Path A) */
+@keyframes indeterminate {
+  0% { left: -24px; }
+  100% { left: 100%; }
+}
+
 /* Marching ants animation for copy/cut feedback */
 @keyframes marching-ants {
   0% { background-position: 0 0, 100% 0, 100% 100%, 0 100%; }

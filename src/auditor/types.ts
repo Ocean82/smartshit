@@ -65,6 +65,13 @@ export interface CellInfo {
   errorType?: string
 }
 
+export interface DismissedFindingEntry {
+  cellIds: string[]
+  dismissedAt: number
+  /** Snapshot of cell values at dismissal time, keyed by cellId */
+  valueSnapshot?: Record<string, string | number | boolean | null>
+}
+
 export interface AuditContext {
   sheetName: string
   allCells: CellInfo[]
@@ -79,4 +86,6 @@ export interface AuditContext {
   maxRow: number
   /** Max populated col index */
   maxCol: number
+  /** User-dismissed findings for suppression (keyed by ruleId) */
+  dismissedFindings?: Record<string, DismissedFindingEntry>
 }
