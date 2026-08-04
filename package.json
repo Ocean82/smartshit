@@ -68,6 +68,7 @@
     "@vitejs/plugin-react": "5.1.1",
     "eslint": "^10.8.0",
     "eslint-plugin-react-hooks": "^7.1.1",
+    "fast-check": "^4.9.0",
     "tailwindcss": "4.1.17",
     "typescript": "5.9.3",
     "typescript-eslint": "^8.65.0",

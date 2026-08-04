@@ -270,6 +270,10 @@ export interface WorkbookData {
   activeSheetId: string;
   createdAt: number;
   updatedAt: number;
+  /** Registered ONNX model assets, keyed by name */
+  modelAssets?: Record<string, import('@/onnx/types').ModelAsset>;
+  /** User-dismissed auditor findings (for suppression) */
+  dismissedFindings?: Record<string, { cellIds: string[]; dismissedAt: number }>;
 }
 
 export interface FileItem {
