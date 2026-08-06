@@ -15,6 +15,7 @@ import type {
 } from '@/types'
 import { refToCell, cellToRef } from '@/engine/spreadsheet'
 import { findHeaderRow, findLastDataRow } from '@/lib/sheetSort'
+import { computeScaleColor } from '@/lib/colorScale'
 
 // ─── Re-exports for backward compat ────────────────────────────────────────
 
@@ -44,37 +45,14 @@ export const ICON_SETS: Record<IconSetType, string[]> = {
   '5Quarters': ['●', '◕', '◑', '◔', '○'],
 }
 
-// ─── Color Interpolation ────────────────────────────────────────────────────
-
-interface RGB { r: number; g: number; b: number }
-
-function hexToRgb(hex: string): RGB {
-  const h = hex.replace('#', '')
-  return {
-    r: parseInt(h.substring(0, 2), 16),
-    g: parseInt(h.substring(2, 4), 16),
-    b: parseInt(h.substring(4, 6), 16),
-  }
-}
-
-function rgbToHex(rgb: RGB): string {
-  const r = Math.round(Math.max(0, Math.min(255, rgb.r))).toString(16).padStart(2, '0')
-  const g = Math.round(Math.max(0, Math.min(255, rgb.g))).toString(16).padStart(2, '0')
-  const b = Math.round(Math.max(0, Math.min(255, rgb.b))).toString(16).padStart(2, '0')
-  return `#${r}${g}${b}`
-}
-
-function interpolateColor(color1: RGB, color2: RGB, t: number): RGB {
-  return {
-    r: color1.r + (color2.r - color1.r) * t,
-    g: color1.g + (color2.g - color1.g) * t,
-    b: color1.b + (color2.b - color1.b) * t,
-  }
-}
+// ─── Color Scale (delegates to colorScale.ts) ───────────────────────────────
 
 /**
  * Compute the interpolated color for a value within a color scale.
- * Supports 2-color and 3-color scales.
+ * Respects stop position types (min, max, percent, percentile, number).
+ *
+ * @deprecated Prefer `computeScaleColor` from `@/lib/colorScale` directly for
+ * new code. This wrapper is kept for backward compatibility.
  */
 export function getColorScaleColor(
   value: number,
@@ -82,30 +60,12 @@ export function getColorScaleColor(
   max: number,
   stops: ColorScaleStop[],
 ): string | null {
-  if (min === max) return stops[0]?.color ?? null
   if (stops.length < 2) return null
+  if (min === max) return stops[0]?.color ?? null
 
-  // Normalize to 0..1
-  const t = Math.max(0, Math.min(1, (value - min) / (max - min)))
-
-  if (stops.length === 2) {
-    const c1 = hexToRgb(stops[0].color)
-    const c2 = hexToRgb(stops[1].color)
-    return rgbToHex(interpolateColor(c1, c2, t))
-  }
-
-  // 3-color scale: first half interpolates stop[0]→stop[1], second half stop[1]→stop[2]
-  if (t <= 0.5) {
-    const localT = t / 0.5
-    const c1 = hexToRgb(stops[0].color)
-    const c2 = hexToRgb(stops[1].color)
-    return rgbToHex(interpolateColor(c1, c2, localT))
-  } else {
-    const localT = (t - 0.5) / 0.5
-    const c1 = hexToRgb(stops[1].color)
-    const c2 = hexToRgb(stops[2].color)
-    return rgbToHex(interpolateColor(c1, c2, localT))
-  }
+  // Build a synthetic peer array [min, max] so computeScaleColor can resolve stops
+  const syntheticPeers = [min, max]
+  return computeScaleColor(value, syntheticPeers, stops)
 }
 
 // ─── Icon Set Evaluation ────────────────────────────────────────────────────
@@ -149,7 +109,27 @@ export function getIconForValue(
 // ─── Core Matching ──────────────────────────────────────────────────────────
 
 export function parseNumericDisplay(computed: string): number {
-  return Number(String(computed).replace(/[$€£¥,\s]/g, ''))
+  let s = String(computed).trim()
+
+  // Handle parenthesized negatives: (1,234) → -1234
+  const isParenNeg = s.startsWith('(') && s.endsWith(')')
+  if (isParenNeg) s = s.slice(1, -1)
+
+  // Strip currency symbols and thousands separators
+  s = s.replace(/[$€£¥₹₩₫₱₽₦฿\s,]/g, '')
+
+  // Handle trailing percentage: 45% → 0.45
+  const isPct = s.endsWith('%')
+  if (isPct) s = s.slice(0, -1)
+
+  const num = Number(s)
+  if (!Number.isFinite(num)) return NaN
+
+  let result = num
+  if (isParenNeg) result *= -1
+  if (isPct) result /= 100
+
+  return result
 }
 
 export function matchesConditionalFormat(
@@ -189,24 +169,51 @@ export function conditionToRule(
 /**
  * Evaluate whether a rule matches a computed cell value.
  * Extended to support new rule types: notEquals, notBetween, duplicateValues, etc.
+ *
+ * For statistical rules (duplicateValues, uniqueValues, top10, bottom10,
+ * aboveAverage, belowAverage) an optional `peerContext` can be provided.
+ * Without peerContext these rules return false (conservative default).
  */
-export function ruleMatchesComputed(rule: ConditionalRule, computed: string): boolean {
+export function ruleMatchesComputed(
+  rule: ConditionalRule,
+  computed: string,
+  peerContext?: StatisticalPeerContext,
+): boolean {
   if (rule.type === 'text') {
     return computed.toLowerCase().includes(String(rule.value).toLowerCase())
   }
   if (rule.type === 'dataBar' || rule.type === 'colorScale' || rule.type === 'iconSet') {
     return Number.isFinite(parseNumericDisplay(computed))
   }
-  // duplicate/unique/top/bottom/average are evaluated at the column level, not per-cell
-  if (
-    rule.type === 'duplicateValues' ||
-    rule.type === 'uniqueValues' ||
-    rule.type === 'top10' ||
-    rule.type === 'bottom10' ||
-    rule.type === 'aboveAverage' ||
-    rule.type === 'belowAverage'
-  ) {
-    return true // These are resolved externally before being applied
+
+  // Statistical rules — require peer context for correct evaluation
+  if (rule.type === 'duplicateValues') {
+    if (!peerContext?.duplicates) return false
+    return peerContext.duplicates.has(computed.toLowerCase().trim())
+  }
+  if (rule.type === 'uniqueValues') {
+    if (!peerContext?.uniques) return false
+    return peerContext.uniques.has(computed.toLowerCase().trim())
+  }
+  if (rule.type === 'top10') {
+    if (peerContext?.topThreshold == null) return false
+    const num = parseNumericDisplay(computed)
+    return Number.isFinite(num) && num >= peerContext.topThreshold
+  }
+  if (rule.type === 'bottom10') {
+    if (peerContext?.bottomThreshold == null) return false
+    const num = parseNumericDisplay(computed)
+    return Number.isFinite(num) && num <= peerContext.bottomThreshold
+  }
+  if (rule.type === 'aboveAverage') {
+    if (peerContext?.mean == null) return false
+    const num = parseNumericDisplay(computed)
+    return Number.isFinite(num) && num > peerContext.mean
+  }
+  if (rule.type === 'belowAverage') {
+    if (peerContext?.mean == null) return false
+    const num = parseNumericDisplay(computed)
+    return Number.isFinite(num) && num < peerContext.mean
   }
 
   const num = parseNumericDisplay(computed)
@@ -229,12 +236,75 @@ export function ruleMatchesComputed(rule: ConditionalRule, computed: string): bo
   }
 }
 
+/**
+ * Peer context for evaluating statistical conditional formatting rules.
+ * Pre-computed at the column level and passed into per-cell evaluation.
+ */
+export interface StatisticalPeerContext {
+  /** Set of lowercase-trimmed values that appear more than once. */
+  duplicates?: Set<string>
+  /** Set of lowercase-trimmed values that appear exactly once. */
+  uniques?: Set<string>
+  /** Threshold: values >= this are in the top N. */
+  topThreshold?: number
+  /** Threshold: values <= this are in the bottom N. */
+  bottomThreshold?: number
+  /** Mean of numeric peer values (for above/below average). */
+  mean?: number
+}
+
+/**
+ * Build a StatisticalPeerContext for a column given its computed values.
+ * Only computes the fields relevant to the rule types present.
+ */
+export function buildStatisticalPeerContext(
+  computedValues: string[],
+  ruleTypes: Set<string>,
+): StatisticalPeerContext {
+  const ctx: StatisticalPeerContext = {}
+
+  if (ruleTypes.has('duplicateValues')) {
+    ctx.duplicates = findDuplicateValues(computedValues)
+  }
+  if (ruleTypes.has('uniqueValues')) {
+    ctx.uniques = findUniqueValues(computedValues)
+  }
+
+  const needsNumeric = ruleTypes.has('top10') || ruleTypes.has('bottom10') ||
+    ruleTypes.has('aboveAverage') || ruleTypes.has('belowAverage')
+
+  if (needsNumeric) {
+    const nums = computedValues
+      .map(parseNumericDisplay)
+      .filter((n) => Number.isFinite(n))
+
+    if (nums.length > 0) {
+      if (ruleTypes.has('aboveAverage') || ruleTypes.has('belowAverage')) {
+        ctx.mean = calculateMean(nums)
+      }
+      if (ruleTypes.has('top10')) {
+        ctx.topThreshold = getTopNThreshold(nums, 10)
+      }
+      if (ruleTypes.has('bottom10')) {
+        ctx.bottomThreshold = getBottomNThreshold(nums, 10)
+      }
+    }
+  }
+
+  return ctx
+}
+
 // ─── Format Resolution ──────────────────────────────────────────────────────
 
-/** Merge base format with styles from matching conditional rules. */
+/**
+ * Merge base format with styles from matching conditional rules.
+ * Rules are evaluated in array order. If a rule has `stopIfTrue` set and
+ * matches, no further rules are evaluated (mimics Excel behavior).
+ */
 export function resolveCellFormat(
   format: CellFormat | undefined,
   computedValue: string,
+  peerContext?: StatisticalPeerContext,
 ): CellFormat | undefined {
   if (!format) return undefined
   const rules = format.conditionalRules
@@ -243,7 +313,7 @@ export function resolveCellFormat(
   let merged: CellFormat = { ...format }
   for (const rule of rules) {
     if (rule.type === 'dataBar' || rule.type === 'colorScale' || rule.type === 'iconSet') continue
-    if (!ruleMatchesComputed(rule, computedValue)) continue
+    if (!ruleMatchesComputed(rule, computedValue, peerContext)) continue
     merged = {
       ...merged,
       ...rule.style,
@@ -251,6 +321,8 @@ export function resolveCellFormat(
         ? { ...merged.borders, ...rule.style.borders }
         : merged.borders,
     }
+    // stopIfTrue: once a matching rule applies, skip remaining rules
+    if ((rule as ConditionalRule & { stopIfTrue?: boolean }).stopIfTrue) break
   }
   return merged
 }
@@ -270,7 +342,9 @@ export function getDataBarRule(
 
 /**
  * Proportional fill 0–100 for a numeric value among peer column values.
- * Enhanced: supports negative values with bidirectional bars.
+ *
+ * @deprecated Prefer `getDataBarInfo` which supports bidirectional (negative) bars.
+ * Kept for backward compatibility with callers that only need a simple 0-100 width.
  */
 export function dataBarWidthPercent(computed: string, peerValues: number[]): number | null {
   const num = parseNumericDisplay(computed)
@@ -329,6 +403,7 @@ export function getColorScaleRule(format: CellFormat | undefined): ConditionalRu
 
 /**
  * Compute a color scale background for a cell given its column peer values.
+ * Delegates to `computeScaleColor` which respects stop position types.
  */
 export function computeColorScaleBg(
   computed: string,
@@ -337,9 +412,7 @@ export function computeColorScaleBg(
 ): string | null {
   const num = parseNumericDisplay(computed)
   if (!Number.isFinite(num) || peerValues.length === 0 || config.length < 2) return null
-  const min = Math.min(...peerValues)
-  const max = Math.max(...peerValues)
-  return getColorScaleColor(num, min, max, config)
+  return computeScaleColor(num, peerValues, config)
 }
 
 // ─── Icon Set Helpers ───────────────────────────────────────────────────────
@@ -403,6 +476,9 @@ export function findUniqueValues(computedValues: string[]): Set<string> {
 
 /**
  * Get the top N values from numeric peer values.
+ *
+ * @deprecated Prefer `getTopNThreshold` for conditional formatting evaluation.
+ * This returns a Set which collapses duplicate values — use threshold instead.
  */
 export function getTopNValues(peerValues: number[], n: number): Set<number> {
   const sorted = [...peerValues].sort((a, b) => b - a)
@@ -411,10 +487,35 @@ export function getTopNValues(peerValues: number[], n: number): Set<number> {
 
 /**
  * Get the bottom N values from numeric peer values.
+ *
+ * @deprecated Prefer `getBottomNThreshold` for conditional formatting evaluation.
+ * This returns a Set which collapses duplicate values — use threshold instead.
  */
 export function getBottomNValues(peerValues: number[], n: number): Set<number> {
   const sorted = [...peerValues].sort((a, b) => a - b)
   return new Set(sorted.slice(0, n))
+}
+
+/**
+ * Get the threshold value for "top N" — any value >= this threshold qualifies.
+ * Handles ties correctly (includes all values at the boundary).
+ */
+export function getTopNThreshold(peerValues: number[], n: number): number {
+  if (peerValues.length === 0) return Infinity
+  const sorted = [...peerValues].sort((a, b) => b - a)
+  const idx = Math.min(n - 1, sorted.length - 1)
+  return sorted[idx]
+}
+
+/**
+ * Get the threshold value for "bottom N" — any value <= this threshold qualifies.
+ * Handles ties correctly (includes all values at the boundary).
+ */
+export function getBottomNThreshold(peerValues: number[], n: number): number {
+  if (peerValues.length === 0) return -Infinity
+  const sorted = [...peerValues].sort((a, b) => a - b)
+  const idx = Math.min(n - 1, sorted.length - 1)
+  return sorted[idx]
 }
 
 /**
@@ -522,6 +623,11 @@ export function columnCellIdsInUsedRange(sheet: SheetData, columnIndex: number):
   return ids
 }
 
+/**
+ * Attach a conditional rule to all data cells in a column.
+ * Merges with existing rules: replaces any existing rule of the same type,
+ * preserves rules of different types. Clears legacy paint-once bgColor.
+ */
 export function attachConditionalRuleToColumn(
   sheet: SheetData,
   columnIndex: number,
@@ -530,7 +636,12 @@ export function attachConditionalRuleToColumn(
 ): number {
   const ids = columnDataCellIds(sheet, columnIndex)
   for (const cellId of ids) {
-    setCellFormat(cellId, { conditionalRules: [rule], bgColor: undefined })
+    const cell = sheet.cells[cellId]
+    const existingRules = cell?.format?.conditionalRules ?? []
+    // Remove any existing rule of the same type, then append the new one
+    const merged = existingRules.filter((r) => r.type !== rule.type)
+    merged.push(rule)
+    setCellFormat(cellId, { conditionalRules: merged, bgColor: undefined })
   }
   return ids.length
 }

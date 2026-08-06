@@ -105,7 +105,7 @@ async function handleInfer(
     const outputDims = outputTensor.dims as number[];
 
     // Copy output data into a transferable ArrayBuffer
-    const outputBuffer = outputData.buffer.slice(
+    const outputBuffer = (outputData.buffer as ArrayBuffer).slice(
       outputData.byteOffset,
       outputData.byteOffset + outputData.byteLength
     );

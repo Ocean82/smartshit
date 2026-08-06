@@ -4,7 +4,7 @@
  */
 import { config } from './config.js'
 import { chatWithOllama, chatWithOllamaStream, assistModelAvailable, chatWithAssistModel } from './ollama.js'
-import { groqAvailable, chatWithGroqStream } from './groq.js'
+import { groqAvailable, chatWithGroqStream, recordGroqFallback, type GroqCallOptions } from './groq.js'
 import { chatWithOpenAiCompatible, chatWithOpenAiCompatibleStream, openAiCompatibleAvailable } from './openaiCompatible.js'
 
 export type ProviderName = 'openrouter' | 'huggingface' | 'groq' | 'ollama'
@@ -37,11 +37,17 @@ export function providerIsConfigured(provider: ProviderName): boolean {
   return true
 }
 
+export interface ProviderCallOptions {
+  /** Enable JSON mode for structured output (action mode). */
+  jsonMode?: boolean
+}
+
 export async function callProviderStream(
   provider: ProviderName,
   messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
   onChunk: (chunk: string) => void,
   signal: AbortSignal,
+  options: ProviderCallOptions = {},
 ): Promise<string> {
   if (provider === 'openrouter') {
     return chatWithOpenAiCompatibleStream(
@@ -67,7 +73,9 @@ export async function callProviderStream(
       signal,
     )
   }
-  if (provider === 'groq') return chatWithGroqStream(messages, onChunk, signal)
+  if (provider === 'groq') {
+    return chatWithGroqStream(messages, onChunk, signal, { jsonMode: options.jsonMode })
+  }
 
   return chatWithOllamaStream(messages, onChunk, signal)
 }
@@ -75,6 +83,7 @@ export async function callProviderStream(
 export async function callProvider(
   provider: ProviderName,
   messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
+  options: ProviderCallOptions = {},
 ): Promise<string> {
   if (provider === 'openrouter') {
     return chatWithOpenAiCompatible(
@@ -98,7 +107,7 @@ export async function callProvider(
   }
   if (provider === 'groq') {
     const { chatWithGroq } = await import('./groq.js')
-    return chatWithGroq(messages)
+    return chatWithGroq(messages, { jsonMode: options.jsonMode })
   }
   // Prefer the finetuned assist model for structured JSON output when available
   if (await assistModelAvailable()) {
@@ -106,3 +115,5 @@ export async function callProvider(
   }
   return chatWithOllama(messages)
 }
+
+export { recordGroqFallback }

@@ -46,6 +46,8 @@ export interface ConditionalRule {
   colorScaleConfig?: ColorScaleStop[];
   /** Icon set configuration. */
   iconSetConfig?: IconSetConfig;
+  /** When true, stop evaluating subsequent rules if this rule matches. */
+  stopIfTrue?: boolean;
 }
 
 export type ConditionalRuleType =

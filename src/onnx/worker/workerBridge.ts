@@ -210,7 +210,7 @@ export class OnnxWorkerBridge {
     const request = this.requestQueue.shift()!;
 
     // Convert TensorData to transferable ArrayBuffer
-    const inputBuffer = request.input.data.buffer.slice(
+    const inputBuffer = (request.input.data.buffer as ArrayBuffer).slice(
       request.input.data.byteOffset,
       request.input.data.byteOffset + request.input.data.byteLength
     );

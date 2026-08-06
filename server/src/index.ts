@@ -229,10 +229,11 @@ async function runLlmChat(params: {
   if (!usedProvider) {
     for (const provider of availableProviders) {
       try {
+        const providerOpts = { jsonMode: !llmOnly }
         if (stream && onChunk && signal) {
-          fullText = await callProviderStream(provider, messages, onChunk, signal)
+          fullText = await callProviderStream(provider, messages, onChunk, signal, providerOpts)
         } else {
-          fullText = await callProvider(provider, messages)
+          fullText = await callProvider(provider, messages, providerOpts)
         }
         usedProvider = provider
         break
@@ -240,6 +241,11 @@ async function runLlmChat(params: {
         const msg = err instanceof Error ? err.message : String(err)
         providerErrors.push(`${provider}: ${msg}`)
         console.warn(`[llm] provider ${provider} failed:`, msg)
+        // Track Groq failures for rate-limit alerting
+        if (provider === 'groq') {
+          const { recordGroqFallback } = await import('./providers.js')
+          recordGroqFallback()
+        }
       }
     }
   }
@@ -310,6 +316,7 @@ app.get('/health', async (req, res) => {
 
   const order = providerOrder()
   const [db, s3] = await Promise.all([dbHealthCheck(), s3HealthCheck()])
+  const { getGroqUsageStats } = await import('./groq.js')
 
   res.json({
     ok: isOk,
@@ -319,6 +326,7 @@ app.get('/health', async (req, res) => {
     huggingface,
     providerOrder: order,
     groqModel: groq ? config.groqModel : null,
+    groqUsage: groq ? getGroqUsageStats() : null,
     ollama,
     modelRegistered: modelReady,
     assistModelRegistered: assistReady,
