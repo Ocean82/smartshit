@@ -4,7 +4,7 @@
  */
 import { config } from './config.js'
 import { chatWithOllama, chatWithOllamaStream, assistModelAvailable, chatWithAssistModel } from './ollama.js'
-import { groqAvailable, chatWithGroqStream, recordGroqFallback, type GroqCallOptions } from './groq.js'
+import { groqAvailable, chatWithGroqStream, recordGroqFallback } from './groq.js'
 import { chatWithOpenAiCompatible, chatWithOpenAiCompatibleStream, openAiCompatibleAvailable } from './openaiCompatible.js'
 
 export type ProviderName = 'openrouter' | 'huggingface' | 'groq' | 'ollama'

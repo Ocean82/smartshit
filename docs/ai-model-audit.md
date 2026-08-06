@@ -310,7 +310,7 @@ When these limits are hit:
    - Last 429 timestamp
    - Provider success/failure counts
 
-### Why This Matters Now
+### Why This Matters Now (checked this statement to verify. this statement is false. grok was never even being called except for one day. so no limit was ever reached.)
 
 You're the only user testing and you've already experienced degraded quality (likely hitting limits). With actual users, Groq free tier will be exhausted rapidly. Adding your own additional API keys (OpenRouter, HuggingFace) as fallbacks is smart, but you need to **know when to act** rather than discovering it through broken UX.
 

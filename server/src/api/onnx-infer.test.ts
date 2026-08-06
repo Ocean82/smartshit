@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Unit Tests for ONNX SSE Inference Endpoint
  *
  * Tests validation, chunking logic, operator scanning,
@@ -15,7 +15,7 @@ import {
   createOnnxRouter,
 } from './onnx-infer.js';
 
-// ─── Pure function tests ─────────────────────────────────────────────────────
+// â”€â”€â”€ Pure function tests â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 describe('calculateTotalRows', () => {
   it('returns first dimension as total rows', () => {
@@ -36,7 +36,7 @@ describe('calculateTotalRows', () => {
 });
 
 describe('calculateChunks', () => {
-  it('returns single chunk for ≤ 100 rows', () => {
+  it('returns single chunk for â‰¤ 100 rows', () => {
     expect(calculateChunks(50)).toEqual({ totalChunks: 1, chunkSize: 50 });
     expect(calculateChunks(100)).toEqual({ totalChunks: 1, chunkSize: 100 });
     expect(calculateChunks(1)).toEqual({ totalChunks: 1, chunkSize: 1 });
@@ -70,7 +70,7 @@ describe('extractChunk', () => {
   });
 
   it('extracts correct chunk with multiple columns', () => {
-    // 4 rows × 3 columns = 12 elements
+    // 4 rows Ã— 3 columns = 12 elements
     const results = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
     // chunkSize=2, totalRows=4, columnsPerRow=3
     expect(extractChunk(results, 0, 2, 4, 3)).toEqual([1, 2, 3, 4, 5, 6]);
@@ -116,7 +116,7 @@ describe('scanForNonStandardOperators', () => {
   });
 });
 
-// ─── Validation tests ────────────────────────────────────────────────────────
+// â”€â”€â”€ Validation tests â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 describe('validateInferRequest', () => {
   const validRequest = {
@@ -227,7 +227,7 @@ describe('validateInferRequest', () => {
   });
 });
 
-// ─── Router integration tests (mocked session pool) ──────────────────────────
+// â”€â”€â”€ Router integration tests (mocked session pool) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 describe('createOnnxRouter (integration)', () => {
   let mockRes: {
@@ -282,7 +282,7 @@ describe('createOnnxRouter (integration)', () => {
 
     const router = createOnnxRouter(mockPool);
     // Access the route handler directly
-    const handler = (router as unknown as { stack: Array<{ route: { path: string; methods: Record<string, boolean>; stack: Array<{ handle: Function }> } }> }).stack[0].route.stack[0].handle;
+    const handler = (router as unknown as { stack: Array<{ route: { path: string; methods: Record<string, boolean>; stack: Array<{ handle: (...args: unknown[]) => unknown }> } }> }).stack[0].route.stack[0].handle;
 
     mockReq.body = { modelName: 'test', inputData: [1], inputDims: [1] };
     await handler(mockReq, mockRes);
@@ -294,7 +294,7 @@ describe('createOnnxRouter (integration)', () => {
 
   it('emits error event for invalid request', async () => {
     const router = createOnnxRouter();
-    const handler = (router as unknown as { stack: Array<{ route: { path: string; methods: Record<string, boolean>; stack: Array<{ handle: Function }> } }> }).stack[0].route.stack[0].handle;
+    const handler = (router as unknown as { stack: Array<{ route: { path: string; methods: Record<string, boolean>; stack: Array<{ handle: (...args: unknown[]) => unknown }> } }> }).stack[0].route.stack[0].handle;
 
     mockReq.body = { modelName: 123 }; // Invalid
     await handler(mockReq, mockRes);
@@ -307,7 +307,7 @@ describe('createOnnxRouter (integration)', () => {
 
   it('emits error when session pool not configured', async () => {
     const router = createOnnxRouter(undefined);
-    const handler = (router as unknown as { stack: Array<{ route: { path: string; methods: Record<string, boolean>; stack: Array<{ handle: Function }> } }> }).stack[0].route.stack[0].handle;
+    const handler = (router as unknown as { stack: Array<{ route: { path: string; methods: Record<string, boolean>; stack: Array<{ handle: (...args: unknown[]) => unknown }> } }> }).stack[0].route.stack[0].handle;
 
     mockReq.body = { modelName: 'test', inputData: [1, 2], inputDims: [2] };
     await handler(mockReq, mockRes);
@@ -332,7 +332,7 @@ describe('createOnnxRouter (integration)', () => {
     } as unknown as import('../onnx/sessionPool.js').SessionPool;
 
     const router = createOnnxRouter(mockPool);
-    const handler = (router as unknown as { stack: Array<{ route: { path: string; methods: Record<string, boolean>; stack: Array<{ handle: Function }> } }> }).stack[0].route.stack[0].handle;
+    const handler = (router as unknown as { stack: Array<{ route: { path: string; methods: Record<string, boolean>; stack: Array<{ handle: (...args: unknown[]) => unknown }> } }> }).stack[0].route.stack[0].handle;
 
     mockReq.body = { modelName: 'test', inputData: [1, 2], inputDims: [2] };
     await handler(mockReq, mockRes);
@@ -359,13 +359,13 @@ describe('createOnnxRouter (integration)', () => {
     } as unknown as import('../onnx/sessionPool.js').SessionPool;
 
     const router = createOnnxRouter(mockPool);
-    const handler = (router as unknown as { stack: Array<{ route: { path: string; methods: Record<string, boolean>; stack: Array<{ handle: Function }> } }> }).stack[0].route.stack[0].handle;
+    const handler = (router as unknown as { stack: Array<{ route: { path: string; methods: Record<string, boolean>; stack: Array<{ handle: (...args: unknown[]) => unknown }> } }> }).stack[0].route.stack[0].handle;
 
     mockReq.body = { modelName: 'linear_reg', inputData: [1, 2, 3, 4, 5], inputDims: [5] };
     await handler(mockReq, mockRes);
 
     const events = getSSEEvents();
-    // metadata, chunk (single since ≤ 100), done
+    // metadata, chunk (single since â‰¤ 100), done
     const metaEvent = events.find(e => e.type === 'metadata');
     expect(metaEvent).toBeDefined();
     expect(metaEvent!.totalChunks).toBe(1);
@@ -395,7 +395,7 @@ describe('createOnnxRouter (integration)', () => {
     } as unknown as import('../onnx/sessionPool.js').SessionPool;
 
     const router = createOnnxRouter(mockPool);
-    const handler = (router as unknown as { stack: Array<{ route: { path: string; methods: Record<string, boolean>; stack: Array<{ handle: Function }> } }> }).stack[0].route.stack[0].handle;
+    const handler = (router as unknown as { stack: Array<{ route: { path: string; methods: Record<string, boolean>; stack: Array<{ handle: (...args: unknown[]) => unknown }> } }> }).stack[0].route.stack[0].handle;
 
     mockReq.body = { modelName: 'test', inputData: [1], inputDims: [1] };
     await handler(mockReq, mockRes);
@@ -422,7 +422,7 @@ describe('createOnnxRouter (integration)', () => {
     } as unknown as import('../onnx/sessionPool.js').SessionPool;
 
     const router = createOnnxRouter(mockPool);
-    const handler = (router as unknown as { stack: Array<{ route: { path: string; methods: Record<string, boolean>; stack: Array<{ handle: Function }> } }> }).stack[0].route.stack[0].handle;
+    const handler = (router as unknown as { stack: Array<{ route: { path: string; methods: Record<string, boolean>; stack: Array<{ handle: (...args: unknown[]) => unknown }> } }> }).stack[0].route.stack[0].handle;
 
     mockReq.body = { modelName: 'test', inputData: [1], inputDims: [1] };
     await handler(mockReq, mockRes);
@@ -443,7 +443,7 @@ describe('createOnnxRouter (integration)', () => {
     } as unknown as import('../onnx/sessionPool.js').SessionPool;
 
     const router = createOnnxRouter(mockPool);
-    const handler = (router as unknown as { stack: Array<{ route: { path: string; methods: Record<string, boolean>; stack: Array<{ handle: Function }> } }> }).stack[0].route.stack[0].handle;
+    const handler = (router as unknown as { stack: Array<{ route: { path: string; methods: Record<string, boolean>; stack: Array<{ handle: (...args: unknown[]) => unknown }> } }> }).stack[0].route.stack[0].handle;
 
     mockReq.body = { modelName: 'test', inputData: [1], inputDims: [1] };
     await handler(mockReq, mockRes);
@@ -458,9 +458,9 @@ describe('createOnnxRouter (integration)', () => {
   });
 
   it('supports resumeFromChunk parameter', async () => {
-    // 200 rows → totalChunks = 1 (ceil(200/500) = 1 since >100, using CHUNK_SIZE)
+    // 200 rows â†’ totalChunks = 1 (ceil(200/500) = 1 since >100, using CHUNK_SIZE)
     // Actually, 200 > 100, so ceil(200/500) = 1 chunk of 500 (but only 200 rows)
-    // Let's use a larger dataset: 1500 rows → 3 chunks of 500
+    // Let's use a larger dataset: 1500 rows â†’ 3 chunks of 500
     const outputData = Float32Array.from(new Array(1500).fill(0).map((_, i) => i));
     const mockSession = {
       inputNames: ['input'],
@@ -476,7 +476,7 @@ describe('createOnnxRouter (integration)', () => {
     } as unknown as import('../onnx/sessionPool.js').SessionPool;
 
     const router = createOnnxRouter(mockPool);
-    const handler = (router as unknown as { stack: Array<{ route: { path: string; methods: Record<string, boolean>; stack: Array<{ handle: Function }> } }> }).stack[0].route.stack[0].handle;
+    const handler = (router as unknown as { stack: Array<{ route: { path: string; methods: Record<string, boolean>; stack: Array<{ handle: (...args: unknown[]) => unknown }> } }> }).stack[0].route.stack[0].handle;
 
     // Resume from chunk 1 (skip first chunk)
     mockReq.body = {
@@ -497,12 +497,12 @@ describe('createOnnxRouter (integration)', () => {
 
   it('rejects resumeFromChunk exceeding total chunks', async () => {
     const router = createOnnxRouter();
-    const handler = (router as unknown as { stack: Array<{ route: { path: string; methods: Record<string, boolean>; stack: Array<{ handle: Function }> } }> }).stack[0].route.stack[0].handle;
+    const handler = (router as unknown as { stack: Array<{ route: { path: string; methods: Record<string, boolean>; stack: Array<{ handle: (...args: unknown[]) => unknown }> } }> }).stack[0].route.stack[0].handle;
 
     mockReq.body = {
       modelName: 'test',
       inputData: [1, 2],
-      inputDims: [2], // 2 rows → 1 chunk
+      inputDims: [2], // 2 rows â†’ 1 chunk
       resumeFromChunk: 5, // exceeds total chunks
     };
     await handler(mockReq, mockRes);
@@ -525,7 +525,7 @@ describe('createOnnxRouter (integration)', () => {
     } as unknown as import('../onnx/sessionPool.js').SessionPool;
 
     const router = createOnnxRouter(mockPool);
-    const handler = (router as unknown as { stack: Array<{ route: { path: string; methods: Record<string, boolean>; stack: Array<{ handle: Function }> } }> }).stack[0].route.stack[0].handle;
+    const handler = (router as unknown as { stack: Array<{ route: { path: string; methods: Record<string, boolean>; stack: Array<{ handle: (...args: unknown[]) => unknown }> } }> }).stack[0].route.stack[0].handle;
 
     mockReq.body = { modelName: 'test', inputData: [1], inputDims: [1] };
     await handler(mockReq, mockRes);
@@ -546,7 +546,7 @@ describe('createOnnxRouter (integration)', () => {
     } as unknown as import('../onnx/sessionPool.js').SessionPool;
 
     const router = createOnnxRouter(mockPool);
-    const handler = (router as unknown as { stack: Array<{ route: { path: string; methods: Record<string, boolean>; stack: Array<{ handle: Function }> } }> }).stack[0].route.stack[0].handle;
+    const handler = (router as unknown as { stack: Array<{ route: { path: string; methods: Record<string, boolean>; stack: Array<{ handle: (...args: unknown[]) => unknown }> } }> }).stack[0].route.stack[0].handle;
 
     mockReq.body = { modelName: 'test', inputData: [1, 2], inputDims: [2] };
     await handler(mockReq, mockRes);
@@ -558,5 +558,5 @@ describe('createOnnxRouter (integration)', () => {
   });
 });
 
-// ─── SSEChunk type import for use in tests ───────────────────────────────────
+// â”€â”€â”€ SSEChunk type import for use in tests â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 import type { SSEChunk } from './onnx-infer.js';
