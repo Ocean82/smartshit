@@ -351,11 +351,11 @@ export class SessionPool {
       }, timeoutMs);
 
       ort.InferenceSession.create(modelPath)
-        .then((session) => {
+        .then((session: ort.InferenceSession) => {
           clearTimeout(timer);
           resolve(session);
         })
-        .catch((err) => {
+        .catch((err: unknown) => {
           clearTimeout(timer);
           reject(err);
         });
