@@ -1,10 +1,12 @@
 /**
  * Chat Service — orchestrates the full message flow for the AI chat.
  *
- * Extracted from the monolithic useStore to:
- * 1. Make the logic testable in isolation
- * 2. Decouple AI orchestration from Zustand state management
- * 3. Enable future multi-provider or streaming strategies
+ * Uses the unified PipelineRouter to process messages through ordered stages:
+ * 1. @-mention sheet switching (pre-pipeline input normalization)
+ * 2. AgentParser — instant regex tool calls
+ * 3. TemplateResolver — gallery template matching
+ * 4. IntentClassifier — enriches context (never claims)
+ * 5. BrainDispatcher — deterministic skills + LLM fallback
  *
  * The service receives thin callbacks for state mutations rather than
  * depending on the store directly. This allows tests to verify behavior
@@ -13,18 +15,20 @@
 
 import type { ChatMessage, SheetData, Selection, WorkbookData } from '@/types'
 import type { ExecutionContext } from '@/agent/executor'
-import { parseMessage, executeToolAsync } from '@/agent'
-import { executeTemplateTool, resolveGalleryTemplate } from '@/templates'
-import { processMessage } from '@/ai/brain'
-import { buildSpreadsheetContext } from '@/ai/buildContext'
 import { toolResultToChatMessage } from '@/ai/responseBuilder'
+import { buildSpreadsheetContext } from '@/ai/buildContext'
 import { classifyMode, isLlmOnlyMode } from '@/ai/mode'
-import { findHeaderRow, findLastDataRow } from '@/lib/sheetSort'
-import { cellToRef } from '@/engine/spreadsheet'
 import type { SheetInsights } from '@/ai/sheetInsights'
 import type { AttachedFilePreview } from '@/ai/types'
-import { getToolDefinition } from '@shared/toolRegistry'
-import { findDeleteRowMatches, resolveDeleteRow } from '@/lib/deleteRowPreview'
+import {
+  createPipelineRouter,
+  createAgentParserStage,
+  createTemplateResolverStage,
+  createIntentClassifierStage,
+  createBrainDispatcherStage,
+  type PipelineContext,
+  type StageResult,
+} from '@/ai/pipeline'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -64,12 +68,13 @@ export interface ChatServiceDeps {
 // ─── Service ─────────────────────────────────────────────────────────────────
 
 /**
- * Process a user chat message through the full AI pipeline:
- * 1. @-mention sheet switching
- * 2. Local parser (instant, no LLM)
- * 3. Gallery template matching
- * 4. LLM server for complex queries
- * 5. Local fallback if server fails
+ * Process a user chat message through the unified pipeline.
+ *
+ * Stage order (first to claim wins):
+ * 1. AgentParser — instant regex tool calls (sort, filter, add/delete row, etc.)
+ * 2. TemplateResolver — gallery template matching ("Create a budget")
+ * 3. IntentClassifier — enriches context with intent/mode (never claims)
+ * 4. BrainDispatcher — deterministic skills + LLM server (always claims)
  */
 export async function processChatMessage(
   input: string,
@@ -95,7 +100,7 @@ export async function processChatMessage(
   } = deps
 
   try {
-    // ─── @-mention sheet switching ─────────────────────────────────────────
+    // ─── @-mention sheet switching (pre-pipeline input normalization) ─────
     const sheetMention = input.match(/@([A-Za-z0-9_ -]+)/)
     if (sheetMention) {
       const mentionedName = sheetMention[1].trim()
@@ -108,6 +113,7 @@ export async function processChatMessage(
       }
     }
 
+    // ─── Build pipeline context ──────────────────────────────────────────
     const sheet = getActiveSheet()
     const messages = getMessages()
     const history = messages
@@ -120,155 +126,7 @@ export async function processChatMessage(
       .filter((m) => m.role === 'assistant' && m.insightsSnapshot)
       .at(-1)?.insightsSnapshot as SheetInsights | undefined
 
-    const context = buildSpreadsheetContext(
-      getWorkbook(),
-      sheet,
-      getSelection(),
-      getComputedValue,
-    )
-
-    // ─── Agent Parser (instant, no LLM) ──────────────────────────────────
-    const headerRowIdx = findHeaderRow(sheet)
-    const lastDataRowIdx = findLastDataRow(sheet)
-    let lastDataColIdx = 0
-    const headers: string[] = []
-    for (const cellId of Object.keys(sheet.cells)) {
-      lastDataColIdx = Math.max(lastDataColIdx, cellToRef(cellId).col)
-    }
-    for (let c = 0; c <= lastDataColIdx; c++) {
-      headers.push(getComputedValue(headerRowIdx, c))
-    }
-
-    const parsed = parseMessage(input, {
-      headerRow: headerRowIdx,
-      lastDataRow: lastDataRowIdx,
-      lastDataCol: lastDataColIdx,
-      headers,
-      columns: context.profile?.columns,
-    })
-
-    // Destructive row deletion is always staged as an Apply/Reject action. The
-    // match is resolved to an exact row now, so a later edit cannot make Apply
-    // delete a different row than the one shown in the preview.
-    if (parsed.understood && parsed.calls.length === 1 && parsed.calls[0].tool === 'delete_row') {
-      const deleteParams = parsed.calls[0].params
-      if (typeof deleteParams.match === 'string') {
-        const matches = findDeleteRowMatches(sheet, deleteParams.match, getComputedValue)
-        if (matches.length > 1) {
-          finalizeMessage(streamingMsgId, {
-            id: streamingMsgId,
-            role: 'assistant',
-            content: `I found ${matches.length} rows containing **${deleteParams.match}** (rows ${matches.map((row) => row + 1).join(', ')}). Which exact row should I remove? Nothing was deleted.`,
-            timestamp: Date.now(),
-          })
-          setProcessing(false)
-          return
-        }
-      }
-
-      const resolved = resolveDeleteRow(sheet, deleteParams, getComputedValue)
-      if (!resolved) {
-        finalizeMessage(streamingMsgId, {
-          id: streamingMsgId,
-          role: 'assistant',
-          content: `I couldn't find the row you asked to remove. Nothing was deleted.`,
-          timestamp: Date.now(),
-        })
-      } else {
-        const previewResult = {
-          success: true,
-          message: `I found row ${resolved.rowNumber}: **${resolved.summary}**. Nothing has been deleted yet—review it, then choose Apply or Reject.`,
-          toolUsed: 'delete-row-preview',
-          actions: [{
-            tool: 'delete_row',
-            params: { row: resolved.rowNumber, expectedRowSignature: resolved.signature },
-            description: `Delete row ${resolved.rowNumber}: ${resolved.summary}`,
-          }],
-        }
-        finalizeMessage(streamingMsgId, toolResultToChatMessage(previewResult, {
-          id: streamingMsgId,
-          previewContext: { sheet, getComputedValue },
-        }))
-      }
-      setProcessing(false)
-      return
-    }
-
-    // A recognized ambiguity (for example "sort my data") is answered locally
-    // with a focused clarification instead of being sent to the LLM.
-    if (parsed.understood && parsed.calls.length === 0 && parsed.explanation) {
-      finalizeMessage(streamingMsgId, {
-        id: streamingMsgId,
-        role: 'assistant',
-        content: parsed.explanation,
-        timestamp: Date.now(),
-      })
-      setProcessing(false)
-      return
-    }
-
-    if (parsed.understood && parsed.calls.length > 0) {
-      const hasMutation = parsed.calls.some((call) => {
-        const category = getToolDefinition(call.tool)?.category
-        return category === 'mutate' || category === 'template'
-      })
-      if (hasMutation) {
-        pushHistory(`AI: ${parsed.explanation || parsed.calls.map((c) => c.description).join(', ')}`)
-      }
-      const execCtx = buildExecContext({ suppressHistory: true })
-
-      // Preserve request order for compound mutations (clear then build, etc.).
-      // Promise.all allowed later tools to race async tools and observe stale data.
-      const results = []
-      for (const call of parsed.calls) {
-        results.push(await executeToolAsync(call, execCtx))
-      }
-      const allSuccess = results.every((r) => r.success)
-      const totalModified = results.reduce((sum, r) => sum + r.modified, 0)
-
-      const resultMessages = results.map((r) => r.message)
-      const allReadOnly = parsed.calls.every((call) => getToolDefinition(call.tool)?.category === 'read')
-      // Read tools must show their computed answer; the parser explanation is
-      // only a future-tense status message ("Finding...").
-      const explanation = allReadOnly
-        ? resultMessages.join('. ')
-        : (parsed.explanation || resultMessages.join('. '))
-      const responseText = allSuccess
-        ? `✓ ${explanation}${totalModified > 0 ? ` (${totalModified} cell${totalModified === 1 ? '' : 's'} modified)` : ''}`
-        : `⚠️ ${resultMessages.join('. ')}`
-
-      finalizeMessage(streamingMsgId, {
-        id: streamingMsgId,
-        role: 'assistant',
-        content: responseText,
-        timestamp: Date.now(),
-      })
-      setProcessing(false)
-      return
-    }
-
-    // ─── Gallery template prompt (instant build, no LLM) ─────────────────
-    const galleryMatch = resolveGalleryTemplate(input)
-    if (galleryMatch) {
-      pushHistory(`Template: ${galleryMatch.label}`)
-      const execCtx = buildExecContext({ suppressHistory: true })
-      const result = executeTemplateTool(galleryMatch.tool, {}, execCtx)
-      const responseText = result.success
-        ? `✓ ${result.message}${result.modified > 0 ? ` (${result.modified} cell${result.modified === 1 ? '' : 's'} filled)` : ''}`
-        : `⚠️ ${result.message}`
-
-      finalizeMessage(streamingMsgId, {
-        id: streamingMsgId,
-        role: 'assistant',
-        content: responseText,
-        timestamp: Date.now(),
-      })
-      setProcessing(false)
-      return
-    }
-
-    // ─── LLM Path (server-side AI for complex/open-ended requests) ───────
-    const result = await processMessage({
+    const pipelineContext: PipelineContext = {
       message: input,
       workbook: getWorkbook(),
       sheet,
@@ -278,23 +136,28 @@ export async function processChatMessage(
       attachedPreview: getAttachedPreview(),
       priorInsights: priorInsights ?? null,
       history,
-      onToken: (token) => {
-        appendToken(streamingMsgId, token)
-      },
-    })
-
-    let finalMsg = toolResultToChatMessage(result, {
-      id: streamingMsgId,
-      insightsSnapshot: context.insights as unknown as Record<string, unknown>,
-      previewContext: {
-        sheet,
-        getComputedValue,
-      },
-    })
-
-    if (!result.success && !isLlmOnlyMode(classifyMode(input))) {
-      finalMsg = { ...processLocalFallback(input), id: streamingMsgId }
+      onToken: (token) => appendToken(streamingMsgId, token),
     }
+
+    // ─── Create and run pipeline ─────────────────────────────────────────
+    const router = createPipelineRouter([
+      createAgentParserStage({ buildExecContext, pushHistory }),
+      createTemplateResolverStage({ buildExecContext, pushHistory }),
+      createIntentClassifierStage(),
+      // Future: MacroPlanner stage inserts here (between classifier and brain)
+      createBrainDispatcherStage(),
+    ])
+
+    const result = await router.process(pipelineContext)
+
+    // ─── Convert StageResult → ChatMessage ───────────────────────────────
+    const finalMsg = stageResultToChatMessage(result, streamingMsgId, {
+      sheet,
+      getComputedValue,
+      input,
+      processLocalFallback,
+      insightsSnapshot: buildSpreadsheetContext(getWorkbook(), sheet, getSelection(), getComputedValue).insights as unknown as Record<string, unknown>,
+    })
 
     finalizeMessage(streamingMsgId, finalMsg)
     setProcessing(false)
@@ -308,5 +171,82 @@ export async function processChatMessage(
       timestamp: Date.now(),
     })
     setProcessing(false)
+  }
+}
+
+// ─── Result Conversion ───────────────────────────────────────────────────────
+
+interface ConversionContext {
+  sheet: SheetData
+  getComputedValue: (row: number, col: number) => string
+  input: string
+  processLocalFallback: (input: string) => ChatMessage
+  insightsSnapshot?: Record<string, unknown>
+}
+
+/**
+ * Convert a pipeline StageResult into a ChatMessage for display.
+ *
+ * For the brain-dispatcher stage, uses toolResultToChatMessage for full
+ * action preview rendering. For simpler stages, creates a direct text message.
+ */
+function stageResultToChatMessage(
+  result: StageResult,
+  msgId: string,
+  ctx: ConversionContext,
+): ChatMessage {
+  // Brain dispatcher produces ToolResult-compatible output that needs
+  // full rendering (actions with previews, insights, suggestions)
+  if (result.stageName === 'brain-dispatcher') {
+    const toolResult = {
+      success: result.success,
+      message: result.message,
+      toolUsed: result.metadata?.toolUsed as string | undefined,
+      reasoning: result.metadata?.reasoning as string | undefined,
+      suggestions: result.suggestions,
+      actions: result.actions?.map((a) => ({
+        tool: a.tool,
+        params: a.params,
+        description: a.description,
+      })),
+    }
+
+    // If brain failed and mode isn't explain/advise, try local fallback
+    if (!result.success && !isLlmOnlyMode(classifyMode(ctx.input))) {
+      return { ...ctx.processLocalFallback(ctx.input), id: msgId }
+    }
+
+    return toolResultToChatMessage(toolResult, {
+      id: msgId,
+      insightsSnapshot: ctx.insightsSnapshot,
+      previewContext: { sheet: ctx.sheet, getComputedValue: ctx.getComputedValue },
+    })
+  }
+
+  // Agent parser with actions (delete-row preview) needs toolResultToChatMessage
+  if (result.stageName === 'agent-parser' && result.actions?.length) {
+    const toolResult = {
+      success: result.success,
+      message: result.message,
+      toolUsed: result.metadata?.toolUsed as string | undefined,
+      actions: result.actions.map((a) => ({
+        tool: a.tool,
+        params: a.params,
+        description: a.description,
+      })),
+    }
+    return toolResultToChatMessage(toolResult, {
+      id: msgId,
+      previewContext: { sheet: ctx.sheet, getComputedValue: ctx.getComputedValue },
+    })
+  }
+
+  // Simple stages (agent-parser text, template-resolver, pipeline-fallback)
+  // produce direct text messages
+  return {
+    id: msgId,
+    role: 'assistant',
+    content: result.message,
+    timestamp: Date.now(),
   }
 }
