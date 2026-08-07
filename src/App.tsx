@@ -1,7 +1,6 @@
 import { useEffect, useState, useRef, lazy, Suspense } from 'react'
 import { useStore } from '@/store/useStore'
 import { fetchServerHealth, type ServerHealth } from '@/ai/agentClient'
-import { useNLPEngineInit } from '@/ai/nlp/useNLPEngineInit'
 import { Toolbar } from '@/components/Toolbar'
 import { SpreadsheetGrid } from '@/components/SpreadsheetGrid'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
@@ -50,10 +49,9 @@ const VersionHistoryPanel = lazy(() => import('@/components/VersionHistoryPanel'
 const TelemetryDebugPanel = lazy(() => import('@/components/TelemetryDebugPanel').then(m => ({ default: m.TelemetryDebugPanel })))
 
 function App() {
-  // Initialize NLP engine as a non-blocking background task on app start.
-  // The engine loads the bundled model first, then checks for CDN updates.
-  // State (loading/ready/fallback) is exposed to UI via useNLPEngineState hook.
-  useNLPEngineInit()
+  // NLP engine initialization removed as part of intent system unification.
+  // The NLP worker was a stub (always returned 'unknown'). When NLP is re-enabled
+  // in the future, it will be integrated as a pipeline stage.
 
   const {
     workbook,
