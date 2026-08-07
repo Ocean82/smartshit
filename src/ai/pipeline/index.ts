@@ -11,3 +11,12 @@ export type {
   StageAction,
   StageTiming,
 } from './types'
+
+// Stage factories
+export {
+  createAgentParserStage,
+  createTemplateResolverStage,
+  createIntentClassifierStage,
+  createBrainDispatcherStage,
+} from './stages'
+export type { AgentParserDeps, TemplateResolverDeps } from './stages'
