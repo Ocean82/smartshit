@@ -76,10 +76,13 @@ export async function checkUsage(
     )
     return resultFor(result.rows[0]?.request_count ?? 0)
   } catch (err) {
-    // Fail open: a metering outage must not take the product down. The request
-    // is still bounded by the per-user rate limiter.
-    console.error('[usage] check failed, allowing request:', err instanceof Error ? err.message : err)
-    return resultFor(0)
+    // Fail closed: unknown metering state → deny and fall back to in-memory
+    // counter. This ensures a DB outage doesn't grant unlimited free requests,
+    // while still allowing users who haven't hit the memory limit to proceed.
+    console.error('[usage] DB check failed, falling back to memory limiter:', err instanceof Error ? err.message : err)
+    const entry = memoryUsage.get(key)
+    const used = !entry || entry.date !== getToday() ? 0 : entry.count
+    return resultFor(used)
   }
 }
 

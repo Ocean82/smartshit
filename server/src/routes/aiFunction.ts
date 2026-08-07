@@ -15,6 +15,8 @@ import { requireAuth, getRequestUserId } from '../auth/clerk.js'
 import { resolveIsPro } from '../plan.js'
 import { checkUsage, recordUsage } from '../usage.js'
 import { aiFunctionRateLimiter } from '../middleware/rateLimit.js'
+import { validateBody } from '../middleware/validate.js'
+import { aiFunctionBodySchema } from '../schemas/aiFunction.js'
 
 export const aiFunctionRouter = Router()
 
@@ -22,6 +24,13 @@ export const aiFunctionRouter = Router()
 // this endpoint is an open inference proxy that bills the app owner, so the
 // gate is applied at the router level rather than per-route.
 aiFunctionRouter.use(requireAuth)
+
+// ─── Experimental function burst protection ──────────────────────────────────
+// AI.PREDICT and AI.SCORE use an LLM for numeric output, which is inherently
+// nondeterministic and expensive. Limit burst calls (e.g., fill-down) per user.
+const EXPERIMENTAL_FUNCTIONS = new Set(['AI.PREDICT', 'AI.SCORE'])
+const EXPERIMENTAL_BURST_LIMIT = 5
+const experimentalBursts = new Map<string, { count: number; resetAt: number }>()
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -40,6 +49,9 @@ interface AIFunctionRequest {
 interface AIFunctionResponse {
   result: string | number | null
   cached?: boolean
+  /** Signals to the client that this function is experimental / LLM-based. */
+  experimental?: boolean
+  warning?: string
 }
 
 // ─── System prompts per function ─────────────────────────────────────────────
@@ -187,19 +199,36 @@ function parseResult(funcName: string, raw: string): string | number | null {
 
 // Rate limiting is handled by the shared express-rate-limit middleware, which
 // keys on the Clerk user id and falls back to an IPv6-safe address key.
-aiFunctionRouter.post('/', aiFunctionRateLimiter, async (req, res) => {
+// validateBody ensures Zod schema validation (including SSRF-hardened BYOK URLs)
+// runs before the handler — invalid requests get a 400 with field-level errors.
+aiFunctionRouter.post('/', aiFunctionRateLimiter, validateBody(aiFunctionBodySchema), async (req, res) => {
   const body = req.body as AIFunctionRequest
-
-  // Validate request
-  if (!body.function || !body.args) {
-    res.status(400).json({ error: 'function and args are required' })
-    return
-  }
 
   const funcName = body.function.toUpperCase()
   if (!FUNCTION_PROMPTS[funcName]) {
     res.status(400).json({ error: `Unknown AI function: ${body.function}` })
     return
+  }
+
+  // ─── Experimental function burst protection ──────────────────────────────
+  // Prevents fill-down from generating dozens of expensive LLM calls.
+  if (EXPERIMENTAL_FUNCTIONS.has(funcName)) {
+    const userId = getRequestUserId(req) ?? '__anon__'
+    const now = Date.now()
+    const burst = experimentalBursts.get(userId)
+    if (burst && burst.resetAt > now) {
+      if (burst.count >= EXPERIMENTAL_BURST_LIMIT) {
+        res.status(429).json({
+          error: `${funcName} is limited to ${EXPERIMENTAL_BURST_LIMIT} calls per minute. Use deterministic formulas (FORECAST, TREND) for bulk predictions.`,
+          result: null,
+          experimental: true,
+        })
+        return
+      }
+      burst.count++
+    } else {
+      experimentalBursts.set(userId, { count: 1, resetAt: now + 60_000 })
+    }
   }
 
   // Validate input isn't empty
@@ -280,5 +309,12 @@ aiFunctionRouter.post('/', aiFunctionRateLimiter, async (req, res) => {
   if (!hasByok) await recordUsage(userId)
 
   const result = parseResult(funcName, rawResult)
-  res.json({ result } satisfies AIFunctionResponse)
+  const response: AIFunctionResponse = { result }
+
+  if (EXPERIMENTAL_FUNCTIONS.has(funcName)) {
+    response.experimental = true
+    response.warning = `${funcName} uses AI estimation — results are non-deterministic and should not be used for financial decisions.`
+  }
+
+  res.json(response)
 })
