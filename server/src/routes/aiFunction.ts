@@ -17,6 +17,8 @@ import { checkUsage, recordUsage } from '../usage.js'
 import { aiFunctionRateLimiter } from '../middleware/rateLimit.js'
 import { validateBody } from '../middleware/validate.js'
 import { aiFunctionBodySchema } from '../schemas/aiFunction.js'
+import { forecast } from '../forecast.js'
+import { score } from '../scoring.js'
 
 export const aiFunctionRouter = Router()
 
@@ -26,11 +28,14 @@ export const aiFunctionRouter = Router()
 aiFunctionRouter.use(requireAuth)
 
 // ─── Experimental function burst protection ──────────────────────────────────
-// AI.PREDICT and AI.SCORE use an LLM for numeric output, which is inherently
-// nondeterministic and expensive. Limit burst calls (e.g., fill-down) per user.
-const EXPERIMENTAL_FUNCTIONS = new Set(['AI.PREDICT', 'AI.SCORE'])
+// AI.PREDICT.LLM is the deprecated LLM-based path (kept as escape hatch).
+// Standard AI.PREDICT and AI.SCORE are now deterministic — no burst limits needed.
+const LLM_EXPERIMENTAL_FUNCTIONS = new Set(['AI.PREDICT.LLM'])
 const EXPERIMENTAL_BURST_LIMIT = 5
 const experimentalBursts = new Map<string, { count: number; resetAt: number }>()
+
+// ─── Deterministic functions (no LLM, no rate limits, no cost) ───────────────
+const DETERMINISTIC_FUNCTIONS = new Set(['AI.PREDICT', 'AI.SCORE'])
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -52,6 +57,12 @@ interface AIFunctionResponse {
   /** Signals to the client that this function is experimental / LLM-based. */
   experimental?: boolean
   warning?: string
+  /** Signals deterministic computation (no LLM involved). */
+  deterministic?: boolean
+  /** Method used for deterministic computation. */
+  method?: string
+  /** Confidence metric for deterministic computation. */
+  confidence?: number
 }
 
 // ─── System prompts per function ─────────────────────────────────────────────
@@ -205,21 +216,59 @@ aiFunctionRouter.post('/', aiFunctionRateLimiter, validateBody(aiFunctionBodySch
   const body = req.body as AIFunctionRequest
 
   const funcName = body.function.toUpperCase()
-  if (!FUNCTION_PROMPTS[funcName]) {
+
+  // ─── Deterministic functions (AI.PREDICT, AI.SCORE) ─────────────────────
+  // These use local math — no LLM, no API costs, no rate limits.
+  if (funcName === 'AI.PREDICT') {
+    const values = body.args.values
+    if (!Array.isArray(values) || values.length === 0) {
+      res.status(400).json({ error: 'AI.PREDICT requires a non-empty "values" array of numbers', result: null })
+      return
+    }
+    const numericValues = (values as unknown[]).map(Number).filter((v) => !isNaN(v))
+    if (numericValues.length === 0) {
+      res.status(400).json({ error: 'AI.PREDICT requires numeric values', result: null })
+      return
+    }
+    const periods = typeof body.args.periods === 'number' ? body.args.periods : 1
+    const method = typeof body.args.method === 'string' ? body.args.method as 'linear' | 'moving_average' | 'seasonal_naive' : undefined
+    const result = forecast(numericValues, { periods, method })
+    res.json({ result: result.value, method: result.method, confidence: result.confidence, deterministic: true })
+    return
+  }
+
+  if (funcName === 'AI.SCORE') {
+    const input = body.args.input ?? body.args.value ?? body.args.text ?? ''
+    const criteria = typeof body.args.criteria === 'string' ? body.args.criteria : 'quality'
+    const distribution = Array.isArray(body.args.distribution)
+      ? (body.args.distribution as unknown[]).map(Number).filter((v) => !isNaN(v))
+      : undefined
+    const mean = typeof body.args.mean === 'number' ? body.args.mean : undefined
+    const stddev = typeof body.args.stddev === 'number' ? body.args.stddev : undefined
+    const value = typeof input === 'number' ? input : String(input)
+    const result = score(value, { criteria, distribution, mean, stddev })
+    res.json({ result: result.score, method: result.method, deterministic: true })
+    return
+  }
+
+  // ─── AI.PREDICT.LLM — Deprecated LLM-based path (escape hatch) ─────────
+  // Users can explicitly call AI.PREDICT.LLM to get the old nondeterministic behavior.
+  const effectiveFuncName = funcName === 'AI.PREDICT.LLM' ? 'AI.PREDICT' : funcName
+
+  if (!FUNCTION_PROMPTS[effectiveFuncName]) {
     res.status(400).json({ error: `Unknown AI function: ${body.function}` })
     return
   }
 
-  // ─── Experimental function burst protection ──────────────────────────────
-  // Prevents fill-down from generating dozens of expensive LLM calls.
-  if (EXPERIMENTAL_FUNCTIONS.has(funcName)) {
+  // ─── LLM experimental function burst protection ──────────────────────────
+  if (LLM_EXPERIMENTAL_FUNCTIONS.has(funcName)) {
     const userId = getRequestUserId(req) ?? '__anon__'
     const now = Date.now()
     const burst = experimentalBursts.get(userId)
     if (burst && burst.resetAt > now) {
       if (burst.count >= EXPERIMENTAL_BURST_LIMIT) {
         res.status(429).json({
-          error: `${funcName} is limited to ${EXPERIMENTAL_BURST_LIMIT} calls per minute. Use deterministic formulas (FORECAST, TREND) for bulk predictions.`,
+          error: `${funcName} is limited to ${EXPERIMENTAL_BURST_LIMIT} calls per minute. Use AI.PREDICT (deterministic) or FORECAST/TREND formulas for bulk predictions.`,
           result: null,
           experimental: true,
         })
@@ -233,7 +282,7 @@ aiFunctionRouter.post('/', aiFunctionRateLimiter, validateBody(aiFunctionBodySch
 
   // Validate input isn't empty
   const input = String(body.args.input ?? body.args.text ?? body.args.values ?? '')
-  if (!input.trim() && funcName !== 'AI.PREDICT') {
+  if (!input.trim() && effectiveFuncName !== 'AI.PREDICT') {
     res.json({ result: '' } satisfies AIFunctionResponse)
     return
   }
@@ -254,7 +303,7 @@ aiFunctionRouter.post('/', aiFunctionRateLimiter, validateBody(aiFunctionBodySch
   }
 
   // Build messages and call LLM
-  const messages = buildMessages(funcName, body.args)
+  const messages = buildMessages(effectiveFuncName, body.args)
   const availableProviders = providerOrder().filter(providerIsConfigured)
 
   if (availableProviders.length === 0 && !body.byok?.apiKey) {
@@ -308,12 +357,12 @@ aiFunctionRouter.post('/', aiFunctionRateLimiter, validateBody(aiFunctionBodySch
   // Only count a request that actually consumed server-side inference
   if (!hasByok) await recordUsage(userId)
 
-  const result = parseResult(funcName, rawResult)
+  const result = parseResult(effectiveFuncName, rawResult)
   const response: AIFunctionResponse = { result }
 
-  if (EXPERIMENTAL_FUNCTIONS.has(funcName)) {
+  if (LLM_EXPERIMENTAL_FUNCTIONS.has(funcName)) {
     response.experimental = true
-    response.warning = `${funcName} uses AI estimation — results are non-deterministic and should not be used for financial decisions.`
+    response.warning = `${funcName} uses AI estimation — results are non-deterministic. Consider using AI.PREDICT (deterministic) instead.`
   }
 
   res.json(response)
