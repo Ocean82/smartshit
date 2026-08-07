@@ -160,7 +160,7 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
         message.inputDims
       );
       if (transfer && transfer.length > 0) {
-        self.postMessage(response, transfer);
+        self.postMessage(response, { transfer });
       } else {
         self.postMessage(response);
       }
