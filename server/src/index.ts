@@ -25,7 +25,9 @@ import {
   providerIsConfigured,
   callProvider,
   callProviderStream,
+  getModelName,
 } from './providers.js'
+import { callProviderStructured, StructuredOutputError } from './structuredOutput.js'
 
 import { checkUsage, recordUsage, getUsageStats } from './usage.js'
 import { dbHealthCheck, closePool } from './db.js'
@@ -101,7 +103,7 @@ app.use('/api/community-templates', templatesRouter)
 app.use('/api/ai-function', aiFunctionRouter)
 
 // Re-export for any modules that still import from index (backwards compat)
-export { providerOrder, providerIsConfigured, callProvider, callProviderStream }
+export { providerOrder, providerIsConfigured, callProvider, callProviderStream, getModelName }
 export type { ProviderName }
 
 /** Human-readable labels for intent types used in clarification messages. */
@@ -229,11 +231,13 @@ async function runLlmChat(params: {
   if (!usedProvider) {
     for (const provider of availableProviders) {
       try {
-        const providerOpts = { jsonMode: !llmOnly }
+        const providerOpts = { jsonMode: !llmOnly, maxTokens: llmOnly ? undefined : 2048 }
         if (stream && onChunk && signal) {
-          fullText = await callProviderStream(provider, messages, onChunk, signal, providerOpts)
+          const response = await callProviderStream(provider, messages, onChunk, signal, providerOpts)
+          fullText = response.text
         } else {
-          fullText = await callProvider(provider, messages, providerOpts)
+          const response = await callProvider(provider, messages, providerOpts)
+          fullText = response.text
         }
         usedProvider = provider
         break
@@ -276,10 +280,33 @@ async function runLlmChat(params: {
       message: text || 'I could not generate a response. Try rephrasing your question.',
       actions: [],
       source: 'llm',
+      meta: usedProvider ? { provider: usedProvider, model: getModelName(usedProvider) } : undefined,
     }
   }
 
   let parsed = parseAgentResponse(fullText)
+
+  // ─── Structured output retry (act mode, non-streaming only) ────────────────
+  // If the LLM returned text that doesn't parse to valid actions, retry once
+  // with a correction hint. This catches the common case where the model
+  // returns prose instead of JSON, or malformed JSON.
+  if (!stream && parsed.actions.length === 0 && fullText.trim().length > 0 && usedProvider) {
+    const retryHint: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+      ...messages,
+      { role: 'assistant', content: fullText },
+      { role: 'user', content: 'Your response was not valid JSON. Please respond with ONLY a JSON object containing "message" (string) and "actions" (array of {tool, params, description}). No markdown, no explanation, just the JSON object.' },
+    ]
+    try {
+      const retryResponse = await callProvider(usedProvider, retryHint, { jsonMode: true, maxTokens: 2048 })
+      const retryParsed = parseAgentResponse(retryResponse.text)
+      if (retryParsed.actions.length > 0) {
+        parsed = retryParsed
+      }
+    } catch {
+      // Retry failed — continue with original parsed result
+    }
+  }
+
   if (isWeakResponse(parsed.message, parsed.actions)) {
     parsed = {
       message: intent.message || fullText || 'Try a specific request like "build a monthly budget".',
@@ -291,6 +318,7 @@ async function runLlmChat(params: {
     message: parsed.message,
     actions: parsed.actions,
     source: 'llm',
+    meta: usedProvider ? { provider: usedProvider, model: getModelName(usedProvider) } : undefined,
   }
 }
 
@@ -336,6 +364,50 @@ app.get('/health', async (req, res) => {
       database: db,
       s3: s3,
     },
+  })
+})
+
+// ─── AI Health endpoint ──────────────────────────────────────────────────────
+
+app.get('/api/health/ai', requireAuth, async (req, res) => {
+  const ollama = await ollamaReachable()
+  const modelReady = ollama ? await modelIsRegistered() : false
+  const groq = groqAvailable()
+  const openrouter = providerIsConfigured('openrouter')
+  const huggingface = providerIsConfigured('huggingface')
+  const { getGroqUsageStats } = await import('./groq.js')
+  const groqStats = groq ? getGroqUsageStats() : null
+
+  res.json({
+    providers: {
+      groq: {
+        configured: groq,
+        healthy: groq, // Groq is healthy if the API key is present (actual check is per-call)
+        model: groq ? config.groqModel : null,
+        remainingRequests: groqStats?.remainingRequests ?? null,
+        rateLimitsToday: groqStats?.rateLimitsToday ?? 0,
+      },
+      openrouter: {
+        configured: openrouter,
+        healthy: openrouter,
+        model: openrouter ? config.openRouterModel : null,
+      },
+      huggingface: {
+        configured: huggingface,
+        healthy: huggingface,
+        model: huggingface ? config.huggingFaceModel : null,
+      },
+      ollama: {
+        configured: true,
+        healthy: ollama && modelReady,
+        model: config.modelName,
+        reachable: ollama,
+        modelRegistered: modelReady,
+      },
+    },
+    providerOrder: providerOrder(),
+    consecutiveFallbacks: groqStats?.consecutiveFallbacks ?? 0,
+    lastFallbackAt: groqStats?.lastRateLimitAt ?? null,
   })
 })
 

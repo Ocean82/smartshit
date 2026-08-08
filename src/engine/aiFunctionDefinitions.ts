@@ -20,37 +20,142 @@ import type { AIFunctionInfo, AsyncAIFunctionExecutor, AIFunctionRegistry } from
 
 const API_BASE = import.meta.env.VITE_AI_API_URL ?? ''
 
-// ─── Helper: Call the AI backend ──────────────────────────────────────────────
+// ─── Batch Queue ──────────────────────────────────────────────────────────────
+// When multiple AI function calls arrive within the same microtask (e.g.,
+// fill-down triggering recalculation of many cells), they are collected into a
+// batch and sent as a single request to /api/ai-function/batch.
+// This reduces N individual LLM calls to ceil(N/10) batched calls.
+
+interface QueuedCall {
+  id: string
+  functionName: string
+  args: Record<string, unknown>
+  resolve: (value: string | number | null) => void
+  reject: (error: Error) => void
+}
+
+let batchQueue: QueuedCall[] = []
+let batchFlushScheduled = false
+let batchIdCounter = 0
+
+function scheduleBatchFlush(): void {
+  if (batchFlushScheduled) return
+  batchFlushScheduled = true
+  // Use queueMicrotask to collect all calls from the same synchronous recalc pass
+  queueMicrotask(() => {
+    batchFlushScheduled = false
+    void flushBatchQueue()
+  })
+}
+
+async function flushBatchQueue(): Promise<void> {
+  const pending = batchQueue
+  batchQueue = []
+
+  if (pending.length === 0) return
+
+  // If only 1-3 items, use individual calls (overhead of batch format not worth it)
+  if (pending.length <= 3) {
+    await Promise.all(pending.map((item) => executeSingleCall(item)))
+    return
+  }
+
+  // Batch mode
+  try {
+    const { getAuthHeaders } = await import('@/lib/cloudSync')
+    const { getByokPayload } = await import('@/lib/userApiKey')
+    const headers = await getAuthHeaders()
+    const byok = getByokPayload()
+
+    const inputs = pending.map((item) => ({
+      id: item.id,
+      function: item.functionName,
+      args: { ...item.args, ...(byok ? { byok } : {}) },
+    }))
+
+    const res = await fetch(`${API_BASE}/api/ai-function/batch`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ inputs }),
+      signal: AbortSignal.timeout(60_000), // Longer timeout for batches
+    })
+
+    if (!res.ok) {
+      // Batch endpoint failed — fall back to individual calls
+      await Promise.all(pending.map((item) => executeSingleCall(item)))
+      return
+    }
+
+    const data = (await res.json()) as {
+      results: Array<{ id: string; result: string | number | null; error?: string }>
+    }
+
+    // Map results back to pending promises
+    const resultMap = new Map(data.results.map((r) => [r.id, r]))
+    for (const item of pending) {
+      const result = resultMap.get(item.id)
+      if (result?.error) {
+        item.resolve(localFallback(item.functionName, item.args))
+      } else {
+        item.resolve(result?.result ?? null)
+      }
+    }
+  } catch {
+    // Network/parse error — fall back to individual calls
+    await Promise.all(pending.map((item) => executeSingleCall(item)))
+  }
+}
+
+async function executeSingleCall(item: QueuedCall): Promise<void> {
+  try {
+    const result = await callAIFunctionDirect(item.functionName, item.args)
+    item.resolve(result)
+  } catch {
+    item.resolve(localFallback(item.functionName, item.args))
+  }
+}
+
+// ─── Helper: Call the AI backend (direct, single request) ─────────────────────
+
+async function callAIFunctionDirect(
+  functionName: string,
+  args: Record<string, unknown>,
+): Promise<string | number | null> {
+  const { getByokPayload } = await import('@/lib/userApiKey')
+  const { getAuthHeaders } = await import('@/lib/cloudSync')
+  const byok = getByokPayload()
+  const headers = await getAuthHeaders()
+  const res = await fetch(`${API_BASE}/api/ai-function`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ function: functionName, args, byok }),
+    signal: AbortSignal.timeout(30_000),
+  })
+
+  if (!res.ok) {
+    return localFallback(functionName, args)
+  }
+
+  const data = (await res.json()) as { result: string | number | null }
+  return data.result
+}
+
+// ─── Helper: Call the AI backend (batched or direct) ──────────────────────────
 
 async function callAIFunction(
   functionName: string,
   args: Record<string, unknown>,
 ): Promise<string | number | null> {
-  try {
-    const { getByokPayload } = await import('@/lib/userApiKey')
-    const { getAuthHeaders } = await import('@/lib/cloudSync')
-    const byok = getByokPayload()
-    // The endpoint requires a Clerk session token — it performs billable LLM
-    // calls and enforces the free-tier quota per user.
-    const headers = await getAuthHeaders()
-    const res = await fetch(`${API_BASE}/api/ai-function`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ function: functionName, args, byok }),
-      signal: AbortSignal.timeout(30_000),
+  return new Promise<string | number | null>((resolve, reject) => {
+    batchQueue.push({
+      id: `cell-${++batchIdCounter}`,
+      functionName,
+      args,
+      resolve,
+      reject,
     })
-
-    if (!res.ok) {
-      // Fallback: try local processing if server is unavailable
-      return localFallback(functionName, args)
-    }
-
-    const data = (await res.json()) as { result: string | number | null }
-    return data.result
-  } catch {
-    // Server unavailable — use local fallback
-    return localFallback(functionName, args)
-  }
+    scheduleBatchFlush()
+  })
 }
 
 /**

@@ -27,20 +27,30 @@ export async function modelIsRegistered(name = config.modelName): Promise<boolea
 }
 
 /** Non-streaming chat — used as fallback */
-export async function chatWithOllama(messages: ChatMessageInput[]): Promise<string> {
+export async function chatWithOllama(
+  messages: ChatMessageInput[],
+  options: { jsonMode?: boolean } = {},
+): Promise<string> {
+  const body: Record<string, unknown> = {
+    model: config.modelName,
+    messages,
+    stream: false,
+    options: {
+      num_ctx: config.numCtx,
+      num_predict: config.numPredict,
+      temperature: 0.2,
+    },
+  }
+
+  // Ollama supports a top-level `format` field for JSON output
+  if (options.jsonMode) {
+    body.format = 'json'
+  }
+
   const res = await fetch(`${config.ollamaBaseUrl}/api/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: config.modelName,
-      messages,
-      stream: false,
-      options: {
-        num_ctx: config.numCtx,
-        num_predict: config.numPredict,
-        temperature: 0.2,
-      },
-    }),
+    body: JSON.stringify(body),
     signal: AbortSignal.timeout(120_000),
   })
 
@@ -56,7 +66,9 @@ export async function chatWithOllama(messages: ChatMessageInput[]): Promise<stri
 
 /**
  * Check if the excel-assist finetuned model is available.
- * This model produces structured JSON output and is preferred for tool routing.
+ * @deprecated — Scheduled for removal. The assist model will be consolidated
+ * into the primary model (single 4B instruct). Kept temporarily for backward
+ * compatibility during migration.
  */
 export async function assistModelAvailable(): Promise<boolean> {
   if (!config.assistModelName) return false
@@ -65,7 +77,8 @@ export async function assistModelAvailable(): Promise<boolean> {
 
 /**
  * Chat with the excel-assist finetuned model (structured JSON output).
- * Lower temperature (0.1) for more deterministic tool routing.
+ * @deprecated — Use chatWithOllama with { jsonMode: true } instead.
+ * Kept temporarily for backward compatibility during migration.
  */
 export async function chatWithAssistModel(messages: ChatMessageInput[]): Promise<string> {
   const model = config.assistModelName
@@ -76,6 +89,7 @@ export async function chatWithAssistModel(messages: ChatMessageInput[]): Promise
       model,
       messages,
       stream: false,
+      format: 'json',
       options: {
         num_ctx: config.numCtx,
         num_predict: config.numPredict,
@@ -103,20 +117,27 @@ export async function chatWithOllamaStream(
   messages: ChatMessageInput[],
   onChunk: (chunk: string) => void,
   signal?: AbortSignal,
+  options: { jsonMode?: boolean } = {},
 ): Promise<string> {
+  const body: Record<string, unknown> = {
+    model: config.modelName,
+    messages,
+    stream: true,
+    options: {
+      num_ctx: config.numCtx,
+      num_predict: config.numPredict,
+      temperature: 0.2,
+    },
+  }
+
+  if (options.jsonMode) {
+    body.format = 'json'
+  }
+
   const res = await fetch(`${config.ollamaBaseUrl}/api/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: config.modelName,
-      messages,
-      stream: true,
-      options: {
-        num_ctx: config.numCtx,
-        num_predict: config.numPredict,
-        temperature: 0.2,
-      },
-    }),
+    body: JSON.stringify(body),
     signal: signal ?? AbortSignal.timeout(120_000),
   })
 

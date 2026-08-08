@@ -7,12 +7,20 @@ interface OpenAICompatibleChoice {
 interface OpenAICompatibleResponse {
   choices?: OpenAICompatibleChoice[]
   error?: { message?: string }
+  usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number }
 }
 
 interface OpenAICompatibleParams {
   baseUrl: string
   apiKey: string
   model: string
+}
+
+export interface OpenAICompatibleCallOptions {
+  /** Enable JSON response format for structured output. */
+  jsonMode?: boolean
+  /** Override max_tokens (default: 768, raised for tool/act calls). */
+  maxTokens?: number
 }
 
 function buildUrl(baseUrl: string): string {
@@ -26,20 +34,29 @@ export function openAiCompatibleAvailable({ apiKey, model, baseUrl }: OpenAIComp
 export async function chatWithOpenAiCompatible(
   params: OpenAICompatibleParams,
   messages: ChatMessageInput[],
+  options: OpenAICompatibleCallOptions = {},
 ): Promise<string> {
+  const { jsonMode = false, maxTokens = 768 } = options
+
+  const body: Record<string, unknown> = {
+    model: params.model,
+    messages,
+    temperature: 0.2,
+    max_tokens: maxTokens,
+    stream: false,
+  }
+
+  if (jsonMode) {
+    body.response_format = { type: 'json_object' }
+  }
+
   const res = await fetch(buildUrl(params.baseUrl), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${params.apiKey}`,
     },
-    body: JSON.stringify({
-      model: params.model,
-      messages,
-      temperature: 0.2,
-      max_tokens: 768,
-      stream: false,
-    }),
+    body: JSON.stringify(body),
     signal: AbortSignal.timeout(30_000),
   })
 
@@ -58,20 +75,29 @@ export async function chatWithOpenAiCompatibleStream(
   messages: ChatMessageInput[],
   onChunk: (chunk: string) => void,
   signal?: AbortSignal,
+  options: OpenAICompatibleCallOptions = {},
 ): Promise<string> {
+  const { jsonMode = false, maxTokens = 768 } = options
+
+  const body: Record<string, unknown> = {
+    model: params.model,
+    messages,
+    temperature: 0.2,
+    max_tokens: maxTokens,
+    stream: true,
+  }
+
+  if (jsonMode) {
+    body.response_format = { type: 'json_object' }
+  }
+
   const res = await fetch(buildUrl(params.baseUrl), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${params.apiKey}`,
     },
-    body: JSON.stringify({
-      model: params.model,
-      messages,
-      temperature: 0.2,
-      max_tokens: 768,
-      stream: true,
-    }),
+    body: JSON.stringify(body),
     signal: signal ?? AbortSignal.timeout(30_000),
   })
 

@@ -19,6 +19,8 @@ import { validateBody } from '../middleware/validate.js'
 import { aiFunctionBodySchema } from '../schemas/aiFunction.js'
 import { forecast } from '../forecast.js'
 import { score } from '../scoring.js'
+import { validateLabel, parseAllowlist, parseSentiment } from '../labelValidation.js'
+import { processBatch, estimateBatchCost, type BatchInput } from '../batch.js'
 
 export const aiFunctionRouter = Router()
 
@@ -34,8 +36,7 @@ const LLM_EXPERIMENTAL_FUNCTIONS = new Set(['AI.PREDICT.LLM'])
 const EXPERIMENTAL_BURST_LIMIT = 5
 const experimentalBursts = new Map<string, { count: number; resetAt: number }>()
 
-// ─── Deterministic functions (no LLM, no rate limits, no cost) ───────────────
-const DETERMINISTIC_FUNCTIONS = new Set(['AI.PREDICT', 'AI.SCORE'])
+// ─── Deterministic functions are handled before this point (no LLM needed) ──
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -80,7 +81,11 @@ Return ONLY the category name, nothing else. No explanation, no quotes, no punct
   'AI.SENTIMENT': () =>
     `You are a sentiment analysis engine inside a spreadsheet.
 Analyze the sentiment of the given text.
-Return ONLY one word: "positive", "negative", or "neutral". Nothing else.`,
+Return ONLY in this exact format: LABEL|CONFIDENCE
+Where LABEL is one of: positive, negative, neutral
+And CONFIDENCE is a decimal between 0 and 1 (e.g., 0.85).
+Example: positive|0.92
+No other text.`,
 
   'AI.SUMMARIZE': (args) => {
     const maxWords = args.maxWords ?? 50
@@ -335,11 +340,12 @@ aiFunctionRouter.post('/', aiFunctionRateLimiter, validateBody(aiFunctionBodySch
   if (rawResult === null) {
     for (const provider of availableProviders) {
       try {
-        rawResult = await callProvider(provider, messages)
+        const response = await callProvider(provider, messages)
+        rawResult = response.text
         break
       } catch (err) {
         lastError = err instanceof Error ? err.message : String(err)
-        console.warn(`[ai-function] Provider ${provider} failed for ${funcName}:`, lastError)
+        console.warn(`[ai-function] Provider ${provider} failed for ${effectiveFuncName}:`, lastError)
       }
     }
   }
@@ -360,10 +366,122 @@ aiFunctionRouter.post('/', aiFunctionRateLimiter, validateBody(aiFunctionBodySch
   const result = parseResult(effectiveFuncName, rawResult)
   const response: AIFunctionResponse = { result }
 
+  // ─── Post-processing: Label validation for CATEGORIZE/CLASSIFY ───────────
+  if ((effectiveFuncName === 'AI.CATEGORIZE' || effectiveFuncName === 'AI.CLASSIFY') && typeof result === 'string') {
+    const allowlist = parseAllowlist(body.args.categories ?? body.args.labels)
+    if (allowlist.length > 0) {
+      const validated = validateLabel(result, allowlist)
+      response.result = validated.label
+      if (validated.warning) {
+        response.warning = validated.warning
+      }
+    }
+  }
+
+  // ─── Post-processing: Sentiment with confidence ──────────────────────────
+  if (effectiveFuncName === 'AI.SENTIMENT' && rawResult) {
+    const sentiment = parseSentiment(rawResult)
+    response.result = sentiment.label
+    response.confidence = sentiment.confidence
+  }
+
   if (LLM_EXPERIMENTAL_FUNCTIONS.has(funcName)) {
     response.experimental = true
     response.warning = `${funcName} uses AI estimation — results are non-deterministic. Consider using AI.PREDICT (deterministic) instead.`
   }
 
   res.json(response)
+})
+
+// ─── Batch Endpoint ──────────────────────────────────────────────────────────
+// POST /api/ai-function/batch
+// Processes multiple AI function inputs in optimized batches.
+// Deduplicates identical inputs, caches results, and coalesces LLM calls.
+
+aiFunctionRouter.post('/batch', aiFunctionRateLimiter, async (req, res) => {
+  const body = req.body as { inputs?: unknown[] }
+
+  if (!Array.isArray(body.inputs) || body.inputs.length === 0) {
+    res.status(400).json({ error: 'Request body must contain a non-empty "inputs" array' })
+    return
+  }
+
+  if (body.inputs.length > 100) {
+    res.status(400).json({ error: 'Maximum 100 inputs per batch request' })
+    return
+  }
+
+  // Validate each input
+  const inputs: BatchInput[] = []
+  for (let i = 0; i < body.inputs.length; i++) {
+    const item = body.inputs[i] as Record<string, unknown> | null
+    if (!item || typeof item !== 'object') {
+      res.status(400).json({ error: `inputs[${i}] must be an object` })
+      return
+    }
+    if (!item.id || typeof item.id !== 'string') {
+      res.status(400).json({ error: `inputs[${i}].id is required and must be a string` })
+      return
+    }
+    if (!item.function || typeof item.function !== 'string') {
+      res.status(400).json({ error: `inputs[${i}].function is required and must be a string` })
+      return
+    }
+    inputs.push({
+      id: item.id,
+      function: String(item.function),
+      args: (item.args && typeof item.args === 'object' ? item.args : {}) as Record<string, unknown>,
+    })
+  }
+
+  // Usage gate
+  const userId = getRequestUserId(req) ?? undefined
+  const isPro = await resolveIsPro(userId)
+  const usage = await checkUsage(userId, isPro)
+  if (!usage.allowed) {
+    res.status(429).json({
+      error: `You've used all ${usage.limit} free AI requests for today. Upgrade to Pro for unlimited access.`,
+    })
+    return
+  }
+
+  try {
+    const response = await processBatch(inputs)
+
+    // Count each LLM call for usage tracking (cached results are free).
+    // This ensures free-tier users are billed per actual inference, not per batch request.
+    for (let i = 0; i < response.llmCalls; i++) {
+      await recordUsage(userId)
+    }
+
+    res.json(response)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error'
+    console.error('[ai-function/batch] Error:', message)
+    res.status(502).json({ error: 'Batch processing failed. Please try again.' })
+  }
+})
+
+// ─── Cost Estimate Endpoint ──────────────────────────────────────────────────
+// POST /api/ai-function/estimate
+// Returns an estimate of how many LLM calls a batch would require.
+
+aiFunctionRouter.post('/estimate', async (req, res) => {
+  const body = req.body as { inputs?: unknown[] }
+
+  if (!Array.isArray(body.inputs) || body.inputs.length === 0) {
+    res.json({ uniqueInputs: 0, estimatedCalls: 0, cachedCount: 0 })
+    return
+  }
+
+  const inputs: BatchInput[] = body.inputs
+    .filter((item): item is Record<string, unknown> => item !== null && typeof item === 'object')
+    .map((item) => ({
+      id: String(item.id ?? ''),
+      function: String(item.function ?? ''),
+      args: (item.args && typeof item.args === 'object' ? item.args : {}) as Record<string, unknown>,
+    }))
+
+  const estimate = estimateBatchCost(inputs)
+  res.json(estimate)
 })

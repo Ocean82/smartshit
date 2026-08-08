@@ -113,6 +113,8 @@ export interface ChatResponseBody {
   source: 'llm' | 'fallback' | 'template' | 'clarification'
   reasoning?: string
   suggestions?: string[]
+  /** Provider metadata — included when the response was produced by an LLM. */
+  meta?: { provider: string; model: string }
 }
 
 function formatContextBlock(context?: SpreadsheetContextInput): string {

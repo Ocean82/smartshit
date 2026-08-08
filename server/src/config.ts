@@ -31,7 +31,7 @@ type AllowedProvider = (typeof ALLOWED_PROVIDERS)[number]
 
 // ─── Parse and validate provider order ───────────────────────────────────────
 
-const rawProviderOrder = (process.env.LLM_PROVIDER_ORDER ?? 'groq,ollama')
+const rawProviderOrder = (process.env.LLM_PROVIDER_ORDER ?? 'groq,openrouter,ollama')
   .split(',')
   .map((p) => p.trim().toLowerCase())
   .filter(Boolean)
