@@ -207,5 +207,6 @@ export function toolResultToChatMessage(
     actions: actions.length > 0 ? actions : undefined,
     toolUsed: result.toolUsed ?? meta?.toolUsed,
     insightsSnapshot: meta?.insightsSnapshot,
+    providerMeta: result.providerMeta,
   }
 }

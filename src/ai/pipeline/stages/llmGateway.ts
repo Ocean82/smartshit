@@ -96,6 +96,7 @@ export function createLLMGatewayStage(): PipelineStage {
             toolUsed: 'llm',
             source: serverResult.source,
             reasoning: serverResult.reasoning,
+            providerMeta: serverResult.meta,
           },
         }
       }

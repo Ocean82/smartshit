@@ -219,6 +219,8 @@ async function runLlmChat(params: {
   const availableProviders = providerOrder().filter(providerIsConfigured)
   let fullText = ''
   let usedProvider: ProviderName | null = null
+  let providerMeta: { provider: string; model: string } | null = null
+  let byokSucceeded = false
   const providerErrors: string[] = []
 
   if (byok?.apiKey && byok?.baseUrl) {
@@ -230,7 +232,17 @@ async function runLlmChat(params: {
       } else {
         fullText = await chatWithOpenAiCompatible(byokParams, messages)
       }
-      usedProvider = 'openrouter' // label it generically
+      let byokHost = 'custom'
+      try {
+        byokHost = new URL(byok.baseUrl).hostname
+      } catch {
+        // keep custom
+      }
+      providerMeta = {
+        provider: byok.provider?.trim() || byokHost || 'byok',
+        model: byok.model?.trim() || byokHost,
+      }
+      byokSucceeded = true
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       providerErrors.push(`byok(${byok.provider}): ${msg}`)
@@ -239,7 +251,7 @@ async function runLlmChat(params: {
     }
   }
 
-  if (!usedProvider) {
+  if (!byokSucceeded) {
     for (const provider of availableProviders) {
       try {
         const providerOpts = { jsonMode: !llmOnly, maxTokens: llmOnly ? undefined : 2048 }
@@ -251,6 +263,7 @@ async function runLlmChat(params: {
           fullText = response.text
         }
         usedProvider = provider
+        providerMeta = { provider, model: getModelName(provider) }
         break
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
@@ -265,7 +278,7 @@ async function runLlmChat(params: {
     }
   }
 
-  if (!usedProvider) {
+  if (!byokSucceeded && !usedProvider) {
     if (providerErrors.length) {
       console.warn('[llm] all providers failed:', providerErrors.join(' | '))
     }
@@ -291,7 +304,7 @@ async function runLlmChat(params: {
       message: text || 'I could not generate a response. Try rephrasing your question.',
       actions: [],
       source: 'llm',
-      meta: usedProvider ? { provider: usedProvider, model: getModelName(usedProvider) } : undefined,
+      meta: providerMeta ?? undefined,
     }
   }
 
@@ -301,6 +314,7 @@ async function runLlmChat(params: {
   // If the LLM returned text that doesn't parse to valid actions, retry once
   // with a correction hint. This catches the common case where the model
   // returns prose instead of JSON, or malformed JSON.
+  // Only retry against server providers (not BYOK) to avoid wrong credentials.
   if (!stream && parsed.actions.length === 0 && fullText.trim().length > 0 && usedProvider) {
     const retryHint: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
       ...messages,
@@ -329,7 +343,7 @@ async function runLlmChat(params: {
     message: parsed.message,
     actions: parsed.actions,
     source: 'llm',
-    meta: usedProvider ? { provider: usedProvider, model: getModelName(usedProvider) } : undefined,
+    meta: providerMeta ?? undefined,
   }
 }
 

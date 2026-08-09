@@ -6,6 +6,12 @@
 
 import type { CellRef, CellFormat } from './domain';
 
+/** Which LLM provider/model produced an assistant reply (when known). */
+export interface ProviderMeta {
+  provider: string;
+  model: string;
+}
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant' | 'system';
@@ -19,6 +25,8 @@ export interface ChatMessage {
   suggestions?: string[];
   /** Whether this message is pinned/bookmarked by the user */
   pinned?: boolean;
+  /** Server-reported provider identity (dev / expandable details). */
+  providerMeta?: ProviderMeta;
 }
 
 export interface AgentAction {

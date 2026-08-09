@@ -692,6 +692,7 @@ export async function processMessage(input: ProcessMessageInput): Promise<ToolRe
       message: combined || 'I looked at your sheet but didn\'t find enough to go on. Try selecting a range or asking a more specific question.',
       toolUsed: deterministic?.toolUsed ?? (finalLlmText ? 'llm' : 'insights'),
       reasoning: serverResult.reasoning,
+      providerMeta: serverResult.meta,
       suggestions: contextualSuggestions.length > 0
         ? contextualSuggestions
         : (deterministic?.suggestions ?? serverResult.suggestions),

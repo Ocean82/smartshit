@@ -195,15 +195,16 @@ function stageResultToChatMessage(
   msgId: string,
   ctx: ConversionContext,
 ): ChatMessage {
-  // Brain dispatcher produces ToolResult-compatible output that needs
+  // Brain dispatcher / LLM gateway produce ToolResult-compatible output that needs
   // full rendering (actions with previews, insights, suggestions)
-  if (result.stageName === 'brain-dispatcher') {
+  if (result.stageName === 'brain-dispatcher' || result.stageName === 'llm-gateway' || result.stageName === 'deterministic-dispatcher') {
     const toolResult = {
       success: result.success,
       message: result.message,
       toolUsed: result.metadata?.toolUsed as string | undefined,
       reasoning: result.metadata?.reasoning as string | undefined,
       suggestions: result.suggestions,
+      providerMeta: result.metadata?.providerMeta as { provider: string; model: string } | undefined,
       actions: result.actions?.map((a) => ({
         tool: a.tool,
         params: a.params,
@@ -211,7 +212,7 @@ function stageResultToChatMessage(
       })),
     }
 
-    // If brain failed and mode isn't explain/advise, try local fallback
+    // If brain/LLM failed and mode isn't explain/advise, try local fallback
     if (!result.success && !isLlmOnlyMode(classifyMode(ctx.input))) {
       return { ...ctx.processLocalFallback(ctx.input), id: msgId }
     }

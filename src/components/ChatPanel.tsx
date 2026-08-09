@@ -320,6 +320,16 @@ export function ChatPanel({ isMobileOpen, onCloseMobile, embedded }: { isMobileO
                   ))}
                 </div>
               )}
+              {isAssistant && import.meta.env.DEV && msg.providerMeta && (
+                <details className="mt-1 px-1 text-[10px] text-slate-400">
+                  <summary className="cursor-pointer select-none hover:text-slate-600">
+                    provider details
+                  </summary>
+                  <span className="font-mono">
+                    {msg.providerMeta.provider} · {msg.providerMeta.model}
+                  </span>
+                </details>
+              )}
               {isAssistant && (
                 <div className="mt-2 flex items-center gap-2 px-1">
                   <button
