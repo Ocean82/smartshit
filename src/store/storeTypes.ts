@@ -27,11 +27,12 @@ import type { HistoryEntry } from '@/lib/historyDiff'
 import type { SortPatch } from '@/lib/sheetSort'
 import type { UIState, UIActions } from './slices/uiSlice'
 import type { FileActions } from './slices/fileSlice'
+import type { ChatActions } from './slices/chatSlice'
 
 /** Maximum undo stack depth — patches are lightweight */
 export const MAX_UNDO_STACK = 150
 
-export interface AppState extends UIState, UIActions, FileActions {
+export interface AppState extends UIState, UIActions, FileActions, ChatActions {
   // Workbook
   workbook: WorkbookData
   engine: SpreadsheetEngine
@@ -95,20 +96,6 @@ export interface AppState extends UIState, UIActions, FileActions {
   pushHistory: (desc: string) => void
   undo: () => void
   redo: () => void
-
-  // Chat
-  setChatInput: (val: string) => void
-  addMessage: (msg: ChatMessage) => void
-  sendMessage: () => void
-  clearChat: () => void
-  togglePinMessage: (messageId: string) => void
-  getPinnedMessages: () => ChatMessage[]
-  runTemplateTool: (tool: string) => void
-  attachFileForChat: (file: File) => Promise<void>
-  importAttachedFile: () => Promise<void>
-  clearAttachedFile: () => void
-  applyAction: (actionId: string) => void
-  rejectAction: (actionId: string) => void
 
   // Clipboard
   copy: () => void

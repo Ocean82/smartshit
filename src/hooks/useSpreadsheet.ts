@@ -264,6 +264,48 @@ export function useScrollPosition() {
   return useStore((s) => ({ scrollRow: s.scrollRow, scrollCol: s.scrollCol }));
 }
 
+// ─── Chat State ────────────────────────────────────────────────────────────────
+
+/** Chat message list */
+export function useMessages() {
+  return useStore((s) => s.messages);
+}
+
+/** Current chat input */
+export function useChatInput() {
+  return useStore((s) => s.chatInput);
+}
+
+/** Whether the AI is processing a reply */
+export function useIsAiProcessing() {
+  return useStore((s) => s.isAiProcessing);
+}
+
+/** Chat skill chips */
+export function useSkills() {
+  return useStore((s) => s.skills);
+}
+
+/** Attached file preview for chat import */
+export function useAttachedFilePreview() {
+  return useStore((s) => s.attachedFilePreview);
+}
+
+/** Chat panel visibility */
+export function useShowChat() {
+  return useStore((s) => s.showChat);
+}
+
+/** Chat panel width */
+export function useChatWidth() {
+  return useStore((s) => s.chatWidth);
+}
+
+/** Run a gallery template tool */
+export function useRunTemplateTool() {
+  return useStore((s) => s.runTemplateTool);
+}
+
 // ─── Chat Actions ──────────────────────────────────────────────────────────────
 
 /** Send chat message */

@@ -1,5 +1,4 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react'
-import { useStore } from '@/store/useStore'
 import { fetchServerHealth, type ServerHealth } from '@/ai/agentClient'
 import {
   Send, Check, XCircle, Sparkles, Bot, User, Loader2, Paperclip, X, ThumbsUp, ThumbsDown, Copy, Download,
@@ -11,6 +10,27 @@ import { exportChatAsReport } from '@/lib/exportChat'
 import { useUsage, UpgradePrompt } from '@/auth'
 import { ApiKeySettings } from './ApiKeySettings'
 import { ChatMarkdown } from './ChatMarkdown'
+import {
+  useMessages,
+  useChatInput,
+  useSetChatInput,
+  useSendMessage,
+  useClearChat,
+  useIsAiProcessing,
+  useApplyAction,
+  useRejectAction,
+  useSkills,
+  useAttachedFilePreview,
+  useAttachFileForChat,
+  useImportAttachedFile,
+  useClearAttachedFile,
+  useWorkbook,
+  useChatWidth,
+  useSetChatWidth,
+  useToggleChat,
+  useShowChat,
+  useTogglePinMessage,
+} from '@/hooks/useSpreadsheet'
 
 function healthFooterMessage(health: ServerHealth | null): string {
   if (!health) return 'Instant analysis active · AI server connecting…'
@@ -31,27 +51,25 @@ function healthFooterMessage(health: ServerHealth | null): string {
  * @returns The assistant chat panel.
  */
 export function ChatPanel({ isMobileOpen, onCloseMobile, embedded }: { isMobileOpen?: boolean; onCloseMobile?: () => void; embedded?: boolean }) {
-  const {
-    messages,
-    chatInput,
-    setChatInput,
-    sendMessage,
-    clearChat,
-    isAiProcessing,
-    applyAction,
-    rejectAction,
-    skills,
-    attachedFilePreview,
-    attachFileForChat,
-    importAttachedFile,
-    clearAttachedFile,
-    workbook,
-    chatWidth,
-    setChatWidth,
-    toggleChat,
-    showChat,
-    togglePinMessage,
-  } = useStore()
+  const messages = useMessages()
+  const chatInput = useChatInput()
+  const setChatInput = useSetChatInput()
+  const sendMessage = useSendMessage()
+  const clearChat = useClearChat()
+  const isAiProcessing = useIsAiProcessing()
+  const applyAction = useApplyAction()
+  const rejectAction = useRejectAction()
+  const skills = useSkills()
+  const attachedFilePreview = useAttachedFilePreview()
+  const attachFileForChat = useAttachFileForChat()
+  const importAttachedFile = useImportAttachedFile()
+  const clearAttachedFile = useClearAttachedFile()
+  const workbook = useWorkbook()
+  const chatWidth = useChatWidth()
+  const setChatWidth = useSetChatWidth()
+  const toggleChat = useToggleChat()
+  const showChat = useShowChat()
+  const togglePinMessage = useTogglePinMessage()
 
   const { canAsk, remaining, dailyLimit, recordUsage, isPro } = useUsage()
 

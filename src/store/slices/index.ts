@@ -14,3 +14,11 @@ export {
   type WorkbookSliceState,
   type WorkbookActions,
 } from './workbookSlice'
+export {
+  createChatActions,
+  createWelcomeMessage,
+  DEFAULT_WELCOME_CONTENT,
+  type ChatState,
+  type ChatActions,
+  type ChatStoreAccess,
+} from './chatSlice'

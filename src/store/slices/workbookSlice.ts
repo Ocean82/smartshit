@@ -14,7 +14,6 @@ import type {
   SortConfig,
   SortRule,
   DataValidation,
-  ChatMessage,
 } from '@/types'
 import {
   createEmptyWorkbook,
@@ -23,13 +22,11 @@ import {
   cellToRef,
   type SpreadsheetEngine,
 } from '@/engine/spreadsheet'
-import { runAudit } from '@/auditor'
 import { computeSortedCellUpdates, computeMultiSortedCellUpdates, type SortPatch } from '@/lib/sheetSort'
 import { conditionToRule, attachConditionalRuleToColumn } from '@/lib/conditionalFormat'
 import { getActionRecorder } from '@/lib/actionRecorder'
 import { validateCell } from '@/lib/validation'
 import type { HistoryEntry } from '@/lib/historyDiff'
-import { v4 as uuid } from 'uuid'
 
 export interface WorkbookSliceState {
   workbook: WorkbookData
@@ -45,9 +42,6 @@ export interface WorkbookSliceState {
   activeSortConfig: SortConfig | null
   undoStack: HistoryEntry[]
   redoStack: HistoryEntry[]
-  messages: ChatMessage[]
-  activePanel: 'chat' | 'insights' | 'auditor' | 'inspector' | null
-  lastAuditResult: import('@/auditor/types').AuditResult | null
   pushHistory: (desc: string) => void
   setCellValue: (cellId: string, value: string | number | boolean | null, formula?: string) => void
   setCellFormat: (cellId: string, format: Partial<CellFormat>) => void
@@ -621,27 +615,11 @@ export function createWorkbookActions(
         });
       },
 
-      importWorkbook: (workbook, meta) => {
+      importWorkbook: (workbook, _meta) => {
+        // Data load only — chat/insights/audit side effects live in importOrchestration
+        // and are applied by the composed store's importWorkbook wrapper.
         const eng = get().engine;
         eng.loadWorkbook(workbook);
-        const sheet = workbook.sheets.find((s) => s.id === workbook.activeSheetId) ?? workbook.sheets[0];
-
-        const sheetLines = workbook.sheets.map((s) => {
-          const keys = Object.keys(s.cells);
-          const rows = keys.length === 0
-            ? 0
-            : Math.max(...keys.map((id) => cellToRef(id).row)) + 1;
-          return { name: s.name, rows };
-        });
-        const activeRows = sheetLines.find((s) => s.name === sheet?.name)?.rows ?? 0;
-        const fileLabel = meta?.fileName ?? 'your file';
-        const multi = workbook.sheets.length > 1;
-        const sheetList = sheetLines
-          .map((s) => `**${s.name}** (${s.rows} row${s.rows === 1 ? '' : 's'})`)
-          .join(', ');
-        const importMessage = multi
-          ? `Imported **${fileLabel}** with **${workbook.sheets.length} sheets**: ${sheetList}.\n\nYou're on **${sheet?.name ?? 'Sheet1'}**. Use the sheet tabs at the bottom to switch — I analyze the active sheet.`
-          : `Imported **${fileLabel}** — ${activeRows} rows on **${sheet?.name ?? 'Sheet 1'}**. Ready to analyze.\n\nAsk me anything about this data — try *"Explain this spreadsheet"* or *"Where am I overspending?"*`;
 
         set((s) => {
           s.workbook = workbook;
@@ -649,18 +627,8 @@ export function createWorkbookActions(
           s.undoStack = [];
           s.redoStack = [];
           s.workbook.updatedAt = Date.now();
-          s.messages.push({
-            id: uuid(),
-            role: 'assistant',
-            content: importMessage,
-            timestamp: Date.now(),
-            suggestions: multi
-              ? sheetLines.slice(0, 4).map((s) => `Explain the "${s.name}" sheet`)
-              : undefined,
-          });
         });
 
-        // Execute AI formulas for the active sheet after state is updated
         const state = get();
         const activeSheet = state.getActiveSheet();
         eng.executeAIFormulasForSheet(
@@ -671,24 +639,6 @@ export function createWorkbookActions(
             return state.engine.getComputedValue(state.activeSheetId, refPos.row, refPos.col) || null;
           }
         );
-
-        // Auto-open Insights panel on import (replaces old auto-chat-explain)
-        if (activeRows > 5) {
-          set((s) => { s.activePanel = 'insights' });
-
-          // Auto-run audit in background (non-blocking)
-          setTimeout(() => {
-            try {
-              const activeSheet = get().getActiveSheet();
-              if (Object.keys(activeSheet.cells).length > 4) {
-                const auditResult = runAudit(activeSheet, get().getComputedValue);
-                set((s) => { s.lastAuditResult = auditResult });
-              }
-            } catch {
-              // Audit failure is non-fatal
-            }
-          }, 500);
-        }
       },
 
       loadWorkbookData: (workbook) => {
