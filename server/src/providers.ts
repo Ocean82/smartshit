@@ -195,8 +195,7 @@ export async function callProviderWithFailover(
 
   for (const provider of providers) {
     try {
-      const response = await callProvider(provider, messages, options)
-      return response
+      return await callProvider(provider, messages, options)
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err))
       console.warn(`[providers] ${provider} failed, trying next:`, lastError.message)

@@ -40,7 +40,7 @@ import { requireAuth, getRequestUserId, getClerkClient } from './auth/clerk.js'
 import { resolveIsPro, invalidateProCache } from './plan.js'
 import { validateBody } from './middleware/validate.js'
 import { chatStreamBodySchema, chatBodySchema } from './schemas/index.js'
-import { chatRateLimiter, checkoutRateLimiter, globalRateLimiter } from './middleware/rateLimit.js'
+import { chatRateLimiter, checkoutRateLimiter, globalRateLimiter, sharedAccessRateLimiter } from './middleware/rateLimit.js'
 
 const app = express()
 
@@ -50,6 +50,18 @@ const app = express()
 app.set('trust proxy', config.trustProxy)
 
 app.use(cors({ origin: config.corsOrigin }))
+
+// ─── Security headers ────────────────────────────────────────────────────────
+// Nginx adds HSTS and CSP for the frontend; these protect the API directly in
+// case it's ever accessed without the reverse proxy (dev, staging, misconfigured).
+app.use((_req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff')
+  res.setHeader('X-Frame-Options', 'DENY')
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin')
+  res.setHeader('X-DNS-Prefetch-Control', 'off')
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
+  next()
+})
 
 // Stripe webhook needs raw body — register BEFORE express.json()
 app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
@@ -95,7 +107,7 @@ app.use(globalRateLimiter)
 app.use('/api/workbooks', requireAuth, workbooksRouter)
 app.use('/api/workbooks', requireAuth, versionsRouter)
 app.use('/api/workbooks', requireAuth, sharesRouter)
-app.use('/api', sharesRouter)  // Public GET /api/shared/:token; mutating routes check auth in-handler
+app.use('/api', sharedAccessRateLimiter, sharesRouter)  // Public GET /api/shared/:token; mutating routes check auth in-handler
 app.use('/api/community-templates', templatesRouter)
 
 // ─── AI Function endpoint (formula-level AI calls) ───────────────────────────

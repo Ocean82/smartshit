@@ -50,11 +50,11 @@ const contextSchema = z.object({
 const byokSchema = z.object({
   apiKey: z.string().min(1),
   baseUrl: z.string().url().refine((url) => {
-    // Block SSRF: reject private/internal IP ranges and non-HTTPS schemes
+    // Block SSRF: reject private/internal IP ranges and non-HTTPS schemes.
+    // HTTPS is mandatory — user API keys must never travel unencrypted.
     try {
       const parsed = new URL(url)
-      // Only allow HTTPS (or HTTP for localhost in dev, which is already blocked below)
-      if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return false
+      if (parsed.protocol !== 'https:') return false
       const hostname = parsed.hostname.toLowerCase()
       // Block internal/private ranges
       if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') return false

@@ -92,3 +92,19 @@ export const globalRateLimiter = rateLimit({
   // Skip health endpoint
   skip: (req) => req.path === '/health',
 })
+
+/**
+ * Rate limiter for public shared workbook access (/api/shared/:token).
+ * 10 requests per minute per IP — prevents token enumeration attempts
+ * while allowing normal viewing (one page load = one request).
+ */
+export const sharedAccessRateLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: 'Too many requests. Please wait before accessing more shared workbooks.',
+  },
+  keyGenerator: ipKey,
+})
