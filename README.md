@@ -66,8 +66,11 @@ npm install --prefix server
 
 **Option A — Local (Ollama, free, private):**
 ```bash
-npm run model:setup
+npm run model:setup   # uses Qwen2.5-Coder-1.5B for dev (fast, lower quality)
 ```
+
+> **Production** uses Spreadsheet-RL-4B (a 4B instruct model trained for spreadsheet tool-use).
+> See `server/Modelfile.spreadsheet-rl` for the production Modelfile.
 
 **Option B — Cloud (faster, no GPU needed):**
 Copy `.env.example` to `.env` in `server/` and add one API key:
@@ -101,23 +104,24 @@ Open **http://localhost:5173**
 ```
 ┌─────────────────────┐        ┌──────────────────┐
 │  React + Vite       │  SSE   │  Express server  │
-│  Formualizer        │◄──────►│  Intent parser   │
-│  Zustand store      │        │  LLM routing     │
+│  Formualizer        │◄──────►│  Pipeline Router │
+│  Zustand store      │        │  LLM failover    │
 │  Auditor engine     │        │  (port 8787)     │
 └─────────────────────┘        └────────┬─────────┘
                                         │
                                ┌────────┴─────────┐
-                               │  Ollama (local)   │
-                               │  OR cloud LLM     │
+                               │  Groq / OpenRouter│
+                               │  OR Ollama (4B)   │
                                └──────────────────┘
 ```
 
 | Layer | Tech |
 |-------|------|
 | Frontend | React 19, Vite 7, Tailwind CSS 4, Zustand, Formualizer |
-| Backend | Express 5, TypeScript, SSE streaming |
-| AI | Ollama (local) / OpenRouter / Groq / Hugging Face / BYOK |
+| Backend | Express 5, TypeScript, SSE streaming, PipelineRouter |
+| AI | Groq (primary) / OpenRouter / Hugging Face / Ollama (fallback) / BYOK |
 | Auditor | TypeScript-native, runs in-browser against Formualizer |
+| Sandbox | QuickJS WASM — isolated script execution with allowlisted API |
 | I/O | SheetJS (`xlsx`) for Excel import/export |
 
 ---
@@ -134,7 +138,7 @@ A rule-based engine that scans your spreadsheet for real problems:
 - **Circular references** — formulas that depend on themselves
 
 ### The Intent Parser
-80% of common operations (sort, format, add a row, sum a column) are handled instantly by a local regex parser — no LLM round-trip, no latency. Complex or open-ended questions route to the AI.
+80% of common operations (sort, format, add a row, sum a column) are handled instantly by a local regex parser — no LLM round-trip, no latency. Complex or open-ended questions route to the AI. Questions and hypotheticals ("Can I delete this?", "Should I add a total row?") are never treated as commands — they pass to the LLM for proper clarification.
 
 ### Hybrid AI
 Deterministic analysis (budget breakdowns, outlier detection, auditor findings) runs locally in the browser. Only open-ended questions or complex requests go to an LLM. This means most of the app works without any AI backend at all.
@@ -149,9 +153,13 @@ Copy `.env.example` to `.env` in the `server/` directory:
 |----------|---------|-------------|
 | `PORT` | `8787` | API port |
 | `OLLAMA_BASE_URL` | `http://127.0.0.1:11434` | Ollama endpoint |
+| `SMARTSHIT_MODEL` | `smartshit` | Ollama model name (prod: Spreadsheet-RL-4B) |
+| `NUM_CTX` | `4096` | Context window size |
+| `NUM_PREDICT` | `768` | Max tokens per response |
 | `OPENROUTER_API_KEY` | — | Recommended cloud provider |
-| `GROQ_API_KEY` | — | Alternative cloud provider |
-| `LLM_PROVIDER_ORDER` | `openrouter,groq,ollama` | Failover order |
+| `GROQ_API_KEY` | — | Alternative cloud provider (fast, free tier) |
+| `LLM_PROVIDER_ORDER` | `groq,openrouter,ollama` | Failover order |
+| `FREE_DAILY_LIMIT` | `10` | Free-tier AI requests per day per user |
 
 ---
 

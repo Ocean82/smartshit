@@ -240,6 +240,7 @@ CREATE INDEX IF NOT EXISTS idx_usage_date ON smartsht.ai_usage_daily(usage_date)
 | Server builds | `npm run build:server` succeeds |
 | All tests pass | `npm test` + `npm test --prefix server` |
 | Release gates | `npm run release:check:v1` |
+| Ollama model correct | `ollama create smartshit -f server/Modelfile.spreadsheet-rl` (Spreadsheet-RL-4B) |
 | HTTPS works | `curl -I https://smartsht.com` → 200 |
 | Health endpoint | `curl https://smartsht.com/health` → ok |
 | Clerk auth | Sign in works, JWT verified |
@@ -247,7 +248,7 @@ CREATE INDEX IF NOT EXISTS idx_usage_date ON smartsht.ai_usage_daily(usage_date)
 | Stripe checkout | Upgrade button → Stripe hosted page |
 | Stripe webhook | Payment → user metadata updated → unlimited |
 | Cloud save | Save workbook → appears in RDS + S3 |
-| Share link | Generate → recipient can view |
+| Share link | Generate → recipient can view (read-only only) |
 
 ---
 

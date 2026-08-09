@@ -11,8 +11,10 @@ Thanks for your interest in helping build an AI spreadsheet that normal people c
 ```bash
 npm install
 npm install --prefix server
-npm run model:setup   # after placing a GGUF model in models/
+npm run model:setup   # creates the Ollama dev model (Qwen2.5-Coder-1.5B)
 ```
+
+> **Note:** Dev uses a 1.5B model for speed. Production uses Spreadsheet-RL-4B (see `server/Modelfile.spreadsheet-rl`). AI quality will differ between dev and prod.
 
 4. Run both processes:
 

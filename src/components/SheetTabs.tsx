@@ -110,7 +110,7 @@ export function SheetTabs() {
               <span>{sheet.name}</span>
               <button
                 type="button"
-                className="opacity-0 group-hover:opacity-100 ml-1 transition-opacity"
+                className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 ml-1 transition-opacity [@media(pointer:coarse)]:opacity-70"
                 style={{ color: 'var(--neutral-400)' }}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -123,7 +123,7 @@ export function SheetTabs() {
               {workbook.sheets.length > 1 && (
                 <button
                   type="button"
-                  className="opacity-0 group-hover:opacity-100 ml-0.5 transition-opacity"
+                  className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 ml-0.5 transition-opacity [@media(pointer:coarse)]:opacity-70"
                   style={{ color: 'var(--neutral-400)' }}
                   onClick={(e) => {
                     e.stopPropagation();

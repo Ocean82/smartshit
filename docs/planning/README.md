@@ -30,7 +30,7 @@ inspectors, and proactive insights that surface automatically.
 | 03 | Data Models | TypeScript types for cells, sheets, workbooks |
 | 04 | Memory Context | How the AI sees the spreadsheet state |
 | 05 | Memory Sheet State | Sheet snapshot construction |
-| 06 | Chat Intent Parser | NL → intent classification |
+| 06 | Chat Intent Parser | NL → intent classification (now PipelineRouter) |
 | 07 | Chat Response Builder | Structured results → user-facing messages |
 | 08 | Tools: Reader | Read-only analysis tools |
 | 09 | Tools: Analyzer | Statistical analysis pipeline |
@@ -43,7 +43,7 @@ inspectors, and proactive insights that surface automatically.
 | 16 | Skills: Cleaning | Data cleaning operations |
 | 17 | Skills: Reporting | Report generation |
 | 18 | Package Exports | Module boundary design |
-| 19 | Brain Orchestrator | Message routing (deterministic → LLM) |
+| 19 | Brain Orchestrator | Message routing (deprecated — replaced by PipelineRouter) |
 | 20 | Integration Example | End-to-end flow walkthrough |
 | 21 | Architecture Overview | System architecture diagram |
 | 22 | Gap Analysis | What's missing vs. the vision |

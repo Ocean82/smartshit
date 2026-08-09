@@ -183,7 +183,7 @@ export function ContextMenu() {
           return (
             <button
               key={i}
-              className="w-full flex items-center gap-2 px-3 py-1.5 text-xs transition-colors"
+              className="w-full flex items-center gap-2.5 px-3 py-2.5 sm:py-1.5 text-sm sm:text-xs transition-colors"
               style={{ color: 'var(--ink-primary)' }}
               onMouseOver={(e) => { e.currentTarget.style.background = 'var(--accent-50)'; e.currentTarget.style.color = 'var(--accent-700)' }}
               onMouseOut={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--ink-primary)' }}

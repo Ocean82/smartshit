@@ -4,6 +4,12 @@
 **Server**: AWS t3.large (2 vCPU, 8 GB RAM, no GPU)  
 **Host**: ubuntu@52.0.207.242
 
+> **Status (Aug 9, 2026):** Issues #2, #3, #4, #7 resolved in code. Issue #1 requires
+> deploying the correct model binary to the server (`ollama create smartshit -f server/Modelfile.spreadsheet-rl`).
+> The dual-model setup (smartshit + smartsht-assist) has been removed — single model only.
+> JSON mode now passes to all providers. Provider identity metadata is returned with every response.
+> Credential rotation (section below) remains the operator's responsibility.
+
 ---
 
 ## Critical Issues

@@ -262,3 +262,30 @@ body {
     max-width: none !important;
   }
 }
+
+/* Touch devices: show interactive buttons that use hover-reveal on desktop.
+   On touch, there is no hover, so these must be visible for discoverability. */
+@media (pointer: coarse) {
+  [role="tab"] .group-hover\:opacity-100 {
+    opacity: 0.6 !important;
+  }
+
+  /* Increase minimum touch targets for context menu items */
+  [role="menuitem"] {
+    min-height: 44px;
+    padding-top: 0.625rem;
+    padding-bottom: 0.625rem;
+  }
+
+  /* Sheet tabs: increase height for easier touch */
+  [role="tablist"] {
+    min-height: 40px;
+  }
+
+  [role="tab"] {
+    min-height: 36px;
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+    font-size: 12px;
+  }
+}

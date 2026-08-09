@@ -4,6 +4,62 @@ Substantive architectural or behavioral changes that affect how the app works, d
 
 ---
 
+## 2026-08-09 — Major Review Remediation (7 Tasks)
+
+**Context:** Systematic pass through findings in `docs/major-review.md`. All 1482 tests pass (1270 client + 212 server).
+
+### Ollama Model Consolidation
+- Removed the deprecated `smartsht-assist` model entirely (code, config, env vars, Modelfile, setup script)
+- Single primary model (`smartshit`) now serves all Ollama requests with `jsonMode` support
+- Production should use `Modelfile.spreadsheet-rl` (Spreadsheet-RL-4B, 4096 ctx, 768 predict)
+- Dev uses `Modelfile` (Qwen2.5-Coder-1.5B for fast iteration; quality differs from prod)
+- `NUM_CTX` default raised from 2048 → 4096; `NUM_PREDICT` from 512 → 768
+
+### Sandbox Security Clarification
+- Rewrote `src/sandbox/validate.ts` with explicit security model documentation
+- Confirmed QuickJS VM is the real isolation boundary (allowlisted APIs only)
+- Regex pre-check is documented as defense-in-depth for UX, not as the security perimeter
+- Resource limits remain enforced: 5s timeout, 16MB memory, 50K mutations max
+
+### Stripe & Workbook Route Tests
+- Added `server/src/stripe.test.ts` — 21 tests (signature verification, replay protection, event routing)
+- Added `server/src/routes/workbooks.test.ts` — 18 tests (auth 401, ownership 403, not found 404, happy paths)
+- Installed `supertest` dev dependency for HTTP route testing
+
+### Share Permission UI Cleanup
+- `ShareDialog.tsx`: Existing shares list always shows "View only" (no more "Can edit" badge for legacy records)
+- `SharedView.tsx`: Same fix for shared workbook header
+- Server already rejects `permission === 'edit'` with 400 (done previously)
+
+### Agent Parser False-Positive Fixes
+- Created 65-test corpus in `src/agent/__tests__/parserFalsePositives.test.ts`
+- Fixed 6 real false-positive mutation bugs:
+  - Added question-prefix guard (sentences starting with "can I", "should I", etc. → no instant mutation)
+  - Added vague-reference guard ("delete that one", "remove it" → no match as row target)
+  - Expanded `NON_ROW_DELETE_TARGETS` with border, background, color, style, highlight, conditional, rule
+  - Added `COMMON_WORDS_NOT_COLUMNS` set (prevents "sum vs" from matching as "sum column VS")
+  - Added educational guard (phrases with "explain", "vs", "compare" skip formula patterns)
+- Zero regressions across all 136 existing agent tests
+
+### Free-Tier Drift Detection
+- Added `src/lib/featureGates.test.ts` to catch client/server free-tier limit divergence in CI
+- Constants currently aligned at 10 (client `featureGates.ts`, `useUsage.ts`, server `usage.ts`)
+
+**Files deleted:**
+- `server/Modelfile.excel-assist`
+- `scripts/setup-assist-model.ps1`
+
+**Dependencies added:**
+- `supertest` + `@types/supertest` (server devDependencies — HTTP route testing)
+
+**Deployment note:**
+After deploying, recreate the Ollama model on the server using the correct Modelfile:
+```bash
+ollama create smartshit -f server/Modelfile.spreadsheet-rl
+```
+
+---
+
 ## 2026-08-03 — XLSX Import Overhaul
 
 **What changed:**

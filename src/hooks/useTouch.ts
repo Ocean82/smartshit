@@ -12,6 +12,7 @@ interface UseTouchOptions {
   onLongPress: (row: number, col: number, x: number, y: number) => void;
   onDragSelect: (row: number, col: number) => void;
   onDragEnd: () => void;
+  onPinchZoom?: (scale: number) => void;
   cellHeight: number;
   rowHeaderWidth: number;
   colHeaderHeight: number;
@@ -31,6 +32,7 @@ export function useTouch({
   onLongPress,
   onDragSelect,
   onDragEnd,
+  onPinchZoom,
   cellHeight,
   rowHeaderWidth,
   colHeaderHeight,
@@ -43,6 +45,8 @@ export function useTouch({
   const touchStart = useRef<{ x: number; y: number } | null>(null);
   const isDragging = useRef(false);
   const didLongPress = useRef(false);
+  const pinchStartDistance = useRef<number | null>(null);
+  const isPinching = useRef(false);
 
   const getCellFromTouch = useCallback((clientX: number, clientY: number, gridRect: DOMRect): { row: number; col: number } | null => {
     const { scrollTop, scrollLeft } = getScrollOffset();
@@ -69,6 +73,19 @@ export function useTouch({
   }, [cellHeight, rowHeaderWidth, colHeaderHeight, getColWidth, getScrollOffset]);
 
   const handleTouchStart = useCallback((e: TouchEvent, gridRect: DOMRect) => {
+    // Pinch-to-zoom: two fingers down
+    if (e.touches.length === 2 && onPinchZoom) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      pinchStartDistance.current = Math.hypot(dx, dy);
+      isPinching.current = true;
+      if (longPressTimer.current) {
+        clearTimeout(longPressTimer.current);
+        longPressTimer.current = null;
+      }
+      return;
+    }
+
     if (e.touches.length !== 1) return;
     const touch = e.touches[0];
     const cell = getCellFromTouch(touch.clientX, touch.clientY, gridRect);
@@ -77,6 +94,7 @@ export function useTouch({
     touchStart.current = { x: touch.clientX, y: touch.clientY };
     isDragging.current = false;
     didLongPress.current = false;
+    isPinching.current = false;
 
     // Set up long press timer
     longPressTimer.current = setTimeout(() => {
@@ -85,10 +103,21 @@ export function useTouch({
         onLongPress(cell.row, cell.col, touch.clientX, touch.clientY);
       }
     }, LONG_PRESS_MS);
-  }, [getCellFromTouch, onLongPress]);
+  }, [getCellFromTouch, onLongPress, onPinchZoom]);
 
   const handleTouchMove = useCallback((e: TouchEvent, gridRect: DOMRect) => {
+    // Pinch-to-zoom tracking
+    if (e.touches.length === 2 && isPinching.current && pinchStartDistance.current && onPinchZoom) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      const currentDistance = Math.hypot(dx, dy);
+      const scale = currentDistance / pinchStartDistance.current;
+      onPinchZoom(scale);
+      return;
+    }
+
     if (e.touches.length !== 1 || !touchStart.current) return;
+    if (isPinching.current) return;
     const touch = e.touches[0];
     const dx = Math.abs(touch.clientX - touchStart.current.x);
     const dy = Math.abs(touch.clientY - touchStart.current.y);
@@ -109,12 +138,20 @@ export function useTouch({
         }
       }
     }
-  }, [getCellFromTouch, onDragSelect]);
+  }, [getCellFromTouch, onDragSelect, onPinchZoom]);
 
   const handleTouchEnd = useCallback((e: TouchEvent, gridRect: DOMRect) => {
     if (longPressTimer.current) {
       clearTimeout(longPressTimer.current);
       longPressTimer.current = null;
+    }
+
+    // End pinch gesture
+    if (isPinching.current) {
+      isPinching.current = false;
+      pinchStartDistance.current = null;
+      touchStart.current = null;
+      return;
     }
 
     if (isDragging.current) {

@@ -152,6 +152,28 @@ function ChartCard({ chart, onRemove }: { chart: ChartConfig; onRemove: () => vo
     setIsDragging(false);
   }, [isDragging, chart.id, updateChartPosition]);
 
+  // Touch drag handlers for mobile chart repositioning
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if (e.touches.length !== 1) return;
+    const touch = e.touches[0];
+    setIsDragging(true);
+    setDragOffset({ x: touch.clientX - pos.x, y: touch.clientY - pos.y });
+  }, [pos]);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (!isDragging || e.touches.length !== 1) return;
+    e.preventDefault();
+    const touch = e.touches[0];
+    const newPos = { x: touch.clientX - dragOffset.x, y: touch.clientY - dragOffset.y };
+    setPos(newPos);
+    posRef.current = newPos;
+  }, [isDragging, dragOffset]);
+
+  const handleTouchEnd = useCallback(() => {
+    if (isDragging) updateChartPosition(chart.id, posRef.current.x, posRef.current.y);
+    setIsDragging(false);
+  }, [isDragging, chart.id, updateChartPosition]);
+
   return (
     <div
       className="absolute bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden z-30"
@@ -164,13 +186,16 @@ function ChartCard({ chart, onRemove }: { chart: ChartConfig; onRemove: () => vo
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
       >
         <div className="flex items-center gap-1.5">
           <Move size={12} className="text-gray-400" />
           <span className="text-xs font-medium text-gray-700">{chart.title}</span>
         </div>
-        <button className="p-0.5 text-gray-400 hover:text-red-500 rounded" onClick={onRemove}>
-          <X size={14} />
+        <button className="p-1.5 text-gray-400 hover:text-red-500 rounded-lg min-w-[36px] min-h-[36px] flex items-center justify-center" onClick={onRemove} aria-label="Remove chart">
+          <X size={16} />
         </button>
       </div>
       <div className="p-3 flex-1" style={{ height: chart.position.height - 40 }}>

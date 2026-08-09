@@ -94,7 +94,7 @@ export function ConditionalFormatDialog({ isOpen, onClose }: Props) {
         aria-modal="true"
         aria-labelledby="cf-dialog-title"
         tabIndex={-1}
-        className="rounded-xl shadow-xl w-[380px] p-5 space-y-3 outline-none"
+        className="rounded-xl shadow-xl w-[380px] max-w-[calc(100vw-2rem)] p-5 space-y-3 outline-none"
         style={{ background: 'var(--surface-panel)', boxShadow: '0 24px 48px oklch(0.1 0 0 / 0.18), 0 4px 12px oklch(0.1 0 0 / 0.08)' }}
       >
         <div className="flex items-center justify-between">

@@ -97,7 +97,7 @@ export function ValidationDialog({ isOpen, onClose }: Props) {
   return (
     <div className="fixed inset-0 flex items-center justify-center z-50" onClick={onClose} style={{ background: 'oklch(0.1 0.02 250 / 0.5)', backdropFilter: 'blur(3px)' }}>
       <div
-        className="rounded-xl shadow-2xl w-96 p-6"
+        className="rounded-xl shadow-2xl w-96 max-w-[calc(100vw-2rem)] p-6"
         style={{ background: 'var(--surface-panel)', boxShadow: '0 24px 48px oklch(0.1 0 0 / 0.18), 0 4px 12px oklch(0.1 0 0 / 0.08)' }}
         onClick={e => e.stopPropagation()}
         role="dialog"
