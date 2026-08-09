@@ -1,0 +1,213 @@
+#!/usr/bin/env node
+/**
+ * Copy (or download) deploy models for ONNX Path B + optional local Ollama GGUF.
+ *
+ * Primary: MiniLM (all-MiniLM-L6-v2) → server/models/minilm/
+ * Optional: --public also copies tokenizer + model into public/models/minilm/ (Path A)
+ * Optional: --with-spreadsheet-rl copies GGUF into models/ for local Ollama
+ *           (skipped by default — production already has Spreadsheet-RL-4B)
+ *
+ * Usage:
+ *   node scripts/copy-deploy-models.mjs
+ *   node scripts/copy-deploy-models.mjs --public
+ *   SMARTSHT_MINILM_SRC=/path/to/dir node scripts/copy-deploy-models.mjs
+ *
+ * Network: Hugging Face download fallback requires outbound HTTPS.
+ */
+
+import fs from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const repoRoot = path.resolve(__dirname, '..')
+
+const TOKENIZER_FILES = [
+  'tokenizer.json',
+  'vocab.txt',
+  'config.json',
+  'tokenizer_config.json',
+  'special_tokens_map.json',
+]
+
+const HF_BASE =
+  'https://huggingface.co/Xenova/all-MiniLM-L6-v2/resolve/main'
+const HF_ONNX_URL = `${HF_BASE}/onnx/model.onnx`
+
+const args = new Set(process.argv.slice(2))
+const withPublic = args.has('--public')
+const withSpreadsheetRl = args.has('--with-spreadsheet-rl')
+
+function exists(p) {
+  try {
+    return fs.existsSync(p)
+  } catch {
+    return false
+  }
+}
+
+/** Shallow walk (maxDepth) looking for a file named model.onnx */
+function findModelOnnx(root, maxDepth = 4) {
+  if (!exists(root)) return null
+  const queue = [{ dir: root, depth: 0 }]
+  while (queue.length > 0) {
+    const { dir, depth } = queue.shift()
+    let entries
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true })
+    } catch {
+      continue
+    }
+    for (const ent of entries) {
+      const full = path.join(dir, ent.name)
+      if (ent.isFile() && ent.name === 'model.onnx') return full
+      if (ent.isDirectory() && depth < maxDepth && !ent.name.startsWith('.')) {
+        queue.push({ dir: full, depth: depth + 1 })
+      }
+    }
+  }
+  return null
+}
+
+function resolveLocalMiniLmSource() {
+  const candidates = [
+    path.join(repoRoot, 'temp/all-MiniLM-L6-v2/onnx/model.onnx'),
+    path.join(repoRoot, 'temp/models/all-MiniLM-L6-v2/onnx/model.onnx'),
+    path.join(repoRoot, 'temp/onnx/model.onnx'),
+  ]
+
+  const envSrc = process.env.SMARTSHT_MINILM_SRC?.trim()
+  if (envSrc) {
+    if (envSrc.endsWith('.onnx')) candidates.unshift(envSrc)
+    else candidates.unshift(path.join(envSrc, 'model.onnx'), path.join(envSrc, 'onnx', 'model.onnx'))
+  }
+
+  for (const c of candidates) {
+    if (exists(c)) return c
+  }
+
+  // Windows local workbook cache (no-op on Linux if path missing)
+  const winRoot = 'D:/spreadsht_workbook'
+  if (exists(winRoot)) {
+    const found = findModelOnnx(winRoot, 5)
+    if (found) return found
+  }
+
+  return null
+}
+
+function companionSearchRoots(modelOnnxPath) {
+  const onnxDir = path.dirname(modelOnnxPath)
+  const modelRoot = path.dirname(onnxDir) // .../all-MiniLM-L6-v2 when under .../onnx/
+  return [onnxDir, modelRoot, path.dirname(modelRoot)]
+}
+
+function findCompanion(modelOnnxPath, fileName) {
+  for (const root of companionSearchRoots(modelOnnxPath)) {
+    const p = path.join(root, fileName)
+    if (exists(p)) return p
+  }
+  return null
+}
+
+async function downloadFile(url, dest) {
+  console.log(`  downloading ${url}`)
+  const res = await fetch(url)
+  if (!res.ok) {
+    throw new Error(`Download failed ${res.status} ${res.statusText}: ${url}`)
+  }
+  const buf = Buffer.from(await res.arrayBuffer())
+  fs.mkdirSync(path.dirname(dest), { recursive: true })
+  fs.writeFileSync(dest, buf)
+  console.log(`  wrote ${dest} (${buf.length} bytes)`)
+}
+
+function copyFile(src, dest) {
+  fs.mkdirSync(path.dirname(dest), { recursive: true })
+  fs.copyFileSync(src, dest)
+  const size = fs.statSync(dest).size
+  console.log(`  copied ${src} → ${dest} (${size} bytes)`)
+}
+
+async function ensureMiniLm(destDir) {
+  fs.mkdirSync(destDir, { recursive: true })
+  const destModel = path.join(destDir, 'model.onnx')
+
+  const localSrc = resolveLocalMiniLmSource()
+  if (localSrc) {
+    console.log(`MiniLM source (local): ${localSrc}`)
+    copyFile(localSrc, destModel)
+    for (const name of TOKENIZER_FILES) {
+      const src = findCompanion(localSrc, name)
+      if (src) copyFile(src, path.join(destDir, name))
+    }
+    return { source: 'local', modelPath: destModel }
+  }
+
+  console.log('MiniLM source: Hugging Face download (requires network)')
+  console.log(`  repo: Xenova/all-MiniLM-L6-v2`)
+  await downloadFile(HF_ONNX_URL, destModel)
+  for (const name of TOKENIZER_FILES) {
+    const url = `${HF_BASE}/${name}`
+    try {
+      await downloadFile(url, path.join(destDir, name))
+    } catch (err) {
+      console.warn(`  skip ${name}: ${err instanceof Error ? err.message : err}`)
+    }
+  }
+  return { source: 'download', modelPath: destModel }
+}
+
+function copySpreadsheetRlOptional() {
+  console.log('')
+  if (!withSpreadsheetRl) {
+    console.log(
+      'Note: Production already has Spreadsheet-RL-4B — verify Modelfile only.',
+    )
+    console.log(
+      '      (Local optional: pass --with-spreadsheet-rl to copy a GGUF into models/)',
+    )
+    return
+  }
+
+  const destDir = path.join(repoRoot, 'models')
+  fs.mkdirSync(destDir, { recursive: true })
+
+  const ggufCandidates = [
+    process.env.SMARTSHT_GGUF_SRC,
+    path.join(repoRoot, 'temp/Spreadsheet-RL-4B.Q4_K_M.gguf'),
+    path.join(repoRoot, 'temp/models/Spreadsheet-RL-4B.Q4_K_M.gguf'),
+    'D:/spreadsht_workbook/Spreadsheet-RL-4B.Q4_K_M.gguf',
+  ].filter(Boolean)
+
+  const src = ggufCandidates.find((p) => exists(p))
+  if (!src) {
+    console.warn('  --with-spreadsheet-rl: no GGUF found; skip copy')
+    return
+  }
+  copyFile(src, path.join(destDir, path.basename(src)))
+  console.log('  Register with: ollama create smartshit -f server/Modelfile.spreadsheet-rl')
+}
+
+async function main() {
+  console.log('copy-deploy-models: MiniLM → server/models/minilm/')
+  const serverDest = path.join(repoRoot, 'server/models/minilm')
+  const result = await ensureMiniLm(serverDest)
+
+  if (withPublic) {
+    console.log('Also copying to public/models/minilm/ (Path A)')
+    const publicDest = path.join(repoRoot, 'public/models/minilm')
+    await ensureMiniLm(publicDest)
+  }
+
+  copySpreadsheetRlOptional()
+
+  console.log('')
+  console.log(`Done (${result.source}). Runtime path: server/models/minilm/model.onnx`)
+  console.log('Do not link the server to temp/ or D:\\spreadsht_workbook — copy only.')
+}
+
+main().catch((err) => {
+  console.error(err)
+  process.exit(1)
+})

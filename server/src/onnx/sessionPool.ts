@@ -408,11 +408,14 @@ export class SessionPool {
 
   /**
    * Resolve a model name to a file path.
+   * Default prefers nested models/{name}/model.onnx, then flat models/{name}.onnx.
+   * Prefer injecting resolveModelPath at mount time (see index.ts + modelPaths.ts).
    */
   private resolveModelPath(modelName: string): string {
     if (this.config.resolveModelPath) {
       return this.config.resolveModelPath(modelName);
     }
+    // Lazy import avoided: keep sync default without fs — mount wiring uses modelPaths.
     return `models/${modelName}.onnx`;
   }
 }

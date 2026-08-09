@@ -1,8 +1,13 @@
 import { randomUUID } from 'node:crypto'
+import fs from 'node:fs'
+import path from 'node:path'
 import cors from 'cors'
 import express from 'express'
 import { clerkMiddleware } from '@clerk/express'
 import { config } from './config.js'
+import { createOnnxRouter } from './api/onnx-infer.js'
+import { SessionPool } from './onnx/sessionPool.js'
+import { getOnnxModelSize, resolveOnnxModelPath } from './onnx/modelPaths.js'
 import { modelIsRegistered, ollamaReachable } from './ollama.js'
 import { groqAvailable } from './groq.js'
 import {
@@ -112,6 +117,19 @@ app.use('/api/community-templates', templatesRouter)
 
 // ─── AI Function endpoint (formula-level AI calls) ───────────────────────────
 app.use('/api/ai-function', aiFunctionRouter)
+
+// ─── ONNX Path B (server-side inference via onnxruntime-node) ────────────────
+// Models live under server/models/ when the process cwd is server/.
+const modelsRoot = path.resolve(process.cwd(), 'models')
+const onnxSessionPool = new SessionPool({
+  maxSessions: 10,
+  idleTimeoutMs: 1_800_000,
+  maxQueueDepth: 50,
+  frequentlyUsedModels: ['minilm'],
+  resolveModelPath: (name) => resolveOnnxModelPath(modelsRoot, name),
+  getModelSize: (name) => getOnnxModelSize(modelsRoot, name),
+})
+app.use('/api/onnx', requireAuth, createOnnxRouter(onnxSessionPool))
 
 // Re-export for any modules that still import from index (backwards compat)
 export { providerOrder, providerIsConfigured, callProvider, callProviderStream, getModelName }
@@ -769,17 +787,27 @@ app.listen(config.port, config.host, () => {
   console.log(`Clerk: ${config.clerkSecretKey ? '✓ (SmartSht secret configured)' : '✗'}`)
   console.log(`Database: ${config.databaseUrl ? '✓ (configured)' : '✗ (no DATABASE_URL)'}`)
   console.log(`S3: ${config.awsAccessKeyId ? `✓ (${config.s3Bucket})` : '✗ (no AWS credentials)'}`)
+  const minilmPath = resolveOnnxModelPath(modelsRoot, 'minilm')
+  console.log(`ONNX Path B: ${fs.existsSync(minilmPath) ? `✓ (${minilmPath})` : `✗ (no model at ${minilmPath} — run npm run model:copy-deploy)`}`)
+
+  onnxSessionPool.startReaper()
+  void onnxSessionPool.warmup().then(() => {
+    const status = onnxSessionPool.getStatus()
+    console.log(`ONNX session pool: warmed ${status.loaded} model(s)`)
+  })
 })
 
 // Graceful shutdown
 process.on('SIGTERM', async () => {
   console.log('SIGTERM received — closing connections...')
+  await onnxSessionPool.dispose()
   await closePool()
   process.exit(0)
 })
 
 process.on('SIGINT', async () => {
   console.log('SIGINT received — closing connections...')
+  await onnxSessionPool.dispose()
   await closePool()
   process.exit(0)
 })
