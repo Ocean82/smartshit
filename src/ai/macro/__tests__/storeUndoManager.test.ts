@@ -78,14 +78,13 @@ describe('createStoreUndoManager', () => {
 describe('createSharedSnapshotUndoManager', () => {
   it('reuses the caller snapshot on rollback without a begin clone', () => {
     const before = makeWorkbook('before')
-    let workbook = makeWorkbook('live')
+    let workbook = makeWorkbook('mutated')
     const undo = createSharedSnapshotUndoManager({
       before,
       restoreWorkbook: (wb) => { workbook = wb },
     })
 
     const gid = undo.beginGroup('macro')
-    workbook = makeWorkbook('mutated')
     undo.rollbackGroup(gid)
     expect(workbook).toBe(before)
     expect(workbook.sheets[0].cells.A1?.value).toBe('before')
