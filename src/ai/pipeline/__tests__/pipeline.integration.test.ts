@@ -8,9 +8,9 @@
  * handles each input type:
  * - "sort by amount" → AgentParser claims (stage 1)
  * - "Create a monthly budget" → TemplateResolver claims (stage 2)
- * - "analyze my expenses" → BrainDispatcher claims (stage 4 — deterministic path)
- * - "Explain my data" → BrainDispatcher claims (stage 5 — LLM path)
- * - Unknown gibberish → BrainDispatcher claims (final fallback)
+ * - "analyze my expenses" → DeterministicDispatcher claims (deterministic path)
+ * - "Explain my data" → LLMGateway claims (LLM path)
+ * - Unknown gibberish → LLMGateway claims (final fallback)
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -40,7 +40,20 @@ vi.mock('@/lib/deleteRowPreview', () => ({
 }))
 
 vi.mock('@/ai/buildContext', () => ({
-  buildSpreadsheetContext: () => ({ profile: { columns: [] }, insights: {} }),
+  buildSpreadsheetContext: () => ({
+    workbookName: 'Test',
+    activeSheet: 'Sheet1',
+    sheetNames: ['Sheet1'],
+    sheetSummaries: [],
+    selectedCells: [],
+    dimensions: { rows: 1, cols: 1, populatedCells: 0 },
+    headers: [],
+    sampleRows: [],
+    sampleRowsTruncated: false,
+    selectionSnapshot: {},
+    insights: { headers: [], columnStats: [], outliers: [] },
+    profile: { name: 'S', rowCount: 1, colCount: 1, columns: [], detectedPurpose: 'generic' },
+  }),
 }))
 
 vi.mock('@shared/toolRegistry', () => ({
@@ -53,21 +66,116 @@ vi.mock('@/templates', () => ({
   executeTemplateTool: vi.fn(),
 }))
 
-// BrainDispatcher depends on @/ai/brain
-vi.mock('@/ai/brain', () => ({
-  processMessage: vi.fn(),
+vi.mock('@/ai/agentClient', () => ({
+  chatWithAgentServerStream: vi.fn(),
+}))
+
+vi.mock('@shared/intentParser', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@shared/intentParser')>()
+  return {
+    ...actual,
+    parseUserIntent: vi.fn(),
+    isQueryIntent: vi.fn(() => false),
+  }
+})
+
+vi.mock('@shared/mode', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@shared/mode')>()
+  return {
+    ...actual,
+    classifyMode: vi.fn(),
+    isBudgetExplainQuery: vi.fn(() => false),
+  }
+})
+
+vi.mock('@/ai/analysis/budget', () => ({
+  analyzeBudget: vi.fn(() => ({})),
+  budgetAnalysisToToolResult: vi.fn(() => ({
+    success: true,
+    message: 'Here is your expense analysis: Total expenses $2,450...',
+  })),
+  savingsRecommendation: vi.fn(),
+}))
+
+vi.mock('@/ai/analysisTarget', () => ({
+  resolveAnalysisTarget: () => ({
+    sheet: { cells: {} },
+    workbook: { sheets: [], name: 'Test' },
+    workbookName: 'Test',
+    getComputedValue: () => '',
+    getSheetComputedValue: () => '',
+    context: {
+      insights: {},
+      profile: { columns: [], detectedPurpose: 'generic', name: 'S', rowCount: 0, colCount: 0 },
+      sampleRows: [],
+    },
+    isAttached: false,
+  }),
+}))
+
+vi.mock('@/ai/sheetProfile', () => ({
+  buildSheetProfile: () => ({
+    name: 'S',
+    rowCount: 1,
+    colCount: 1,
+    columns: [],
+    detectedPurpose: 'budget',
+    hasHeaders: true,
+  }),
+}))
+
+vi.mock('@/ai/analysis/reporting', () => ({
+  generateReport: vi.fn(),
+}))
+
+vi.mock('@/ai/analysis/cleaning', () => ({
+  runCleaningSkill: vi.fn(),
+}))
+
+vi.mock('@/ai/queryEngine', () => ({
+  runQueryFromIntent: vi.fn(),
+}))
+
+vi.mock('@/ai/comparison', () => ({
+  queryComparison: vi.fn(),
+}))
+
+vi.mock('@/ai/responseBuilder', () => ({
+  explainOutliers: vi.fn(() => ''),
+  formatInsights: vi.fn(() => ''),
+  mergeToolResultContent: vi.fn((parts: string[]) => parts.filter(Boolean).join('\n\n')),
+}))
+
+vi.mock('@/ai/outliers', () => ({
+  isOutlierFollowUp: vi.fn(() => false),
+}))
+
+vi.mock('@/ai/mode', () => ({
+  isLlmOnlyMode: vi.fn(() => false),
+}))
+
+vi.mock('@/auditor', () => ({
+  runAudit: vi.fn(() => ({ findings: [], score: 100 })),
+  formatAuditForContext: vi.fn(() => ''),
+}))
+
+vi.mock('@/ai/contextualSuggestions', () => ({
+  getContextualSuggestions: vi.fn(() => []),
 }))
 
 // ─── Imports (after mocks) ──────────────────────────────────────────────────
 
 import { parseMessage, executeToolAsync } from '@/agent'
 import { resolveGalleryTemplate, executeTemplateTool } from '@/templates'
-import { processMessage } from '@/ai/brain'
+import { chatWithAgentServerStream } from '@/ai/agentClient'
+import { parseUserIntent } from '@shared/intentParser'
+import { classifyMode } from '@shared/mode'
 import { createPipelineRouter } from '../router'
 import { createAgentParserStage } from '../stages/agentParser'
 import { createTemplateResolverStage } from '../stages/templateResolver'
 import { createIntentClassifierStage } from '../stages/intentClassifier'
-import { createBrainDispatcherStage } from '../stages/brainDispatcher'
+import { createDeterministicDispatcherStage } from '../stages/deterministicDispatcher'
+import { createLLMGatewayStage } from '../stages/llmGateway'
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -94,9 +202,19 @@ function buildPipeline() {
     createAgentParserStage(deps),
     createTemplateResolverStage(deps),
     createIntentClassifierStage(),
-    createBrainDispatcherStage(),
+    createDeterministicDispatcherStage(),
+    createLLMGatewayStage(),
   ])
   return { router, deps }
+}
+
+function defaultIntent() {
+  return {
+    intentType: 'general' as const,
+    confidence: 0.3,
+    routingSource: 'regex' as const,
+    parameters: {},
+  }
 }
 
 // ─── Tests ──────────────────────────────────────────────────────────────────
@@ -112,9 +230,12 @@ describe('Pipeline Integration: end-to-end routing', () => {
       explanation: undefined,
     })
     vi.mocked(resolveGalleryTemplate).mockReturnValue(null)
-    vi.mocked(processMessage).mockResolvedValue({
-      success: true,
-      message: 'Processed by brain',
+    vi.mocked(parseUserIntent).mockReturnValue(defaultIntent() as ReturnType<typeof parseUserIntent>)
+    vi.mocked(classifyMode).mockReturnValue('chat')
+    vi.mocked(chatWithAgentServerStream).mockResolvedValue({
+      message: 'Processed by LLM',
+      actions: [],
+      source: 'llm',
     })
   })
 
@@ -136,9 +257,9 @@ describe('Pipeline Integration: end-to-end routing', () => {
 
     expect(result.stageName).toBe('agent-parser')
     expect(result.success).toBe(true)
-    // TemplateResolver and BrainDispatcher should NOT have been called
+    // TemplateResolver and LLMGateway should NOT have been called
     expect(resolveGalleryTemplate).not.toHaveBeenCalled()
-    expect(processMessage).not.toHaveBeenCalled()
+    expect(chatWithAgentServerStream).not.toHaveBeenCalled()
   })
 
   it('"Create a monthly budget" → TemplateResolver claims (stage 2)', async () => {
@@ -168,11 +289,11 @@ describe('Pipeline Integration: end-to-end routing', () => {
     expect(result.stageName).toBe('template-resolver')
     expect(result.success).toBe(true)
     expect(result.message).toContain('Monthly Budget template applied')
-    // BrainDispatcher should NOT have been called
-    expect(processMessage).not.toHaveBeenCalled()
+    // LLMGateway should NOT have been called
+    expect(chatWithAgentServerStream).not.toHaveBeenCalled()
   })
 
-  it('"analyze my expenses" → BrainDispatcher claims (stage 4 — deterministic path)', async () => {
+  it('"analyze my expenses" → DeterministicDispatcher claims (deterministic path)', async () => {
     // AgentParser doesn't understand
     vi.mocked(parseMessage).mockReturnValue({
       understood: false,
@@ -182,24 +303,24 @@ describe('Pipeline Integration: end-to-end routing', () => {
     // TemplateResolver doesn't match
     vi.mocked(resolveGalleryTemplate).mockReturnValue(null)
 
-    // BrainDispatcher handles it (deterministic skill internally)
-    vi.mocked(processMessage).mockResolvedValue({
-      success: true,
-      message: 'Here is your expense analysis: Total expenses $2,450...',
-      toolUsed: 'budget',
-      suggestions: ['Show me spending by category', 'Compare to last month'],
-    })
+    vi.mocked(parseUserIntent).mockReturnValue({
+      intentType: 'budget',
+      confidence: 0.9,
+      routingSource: 'regex',
+      parameters: {},
+    } as ReturnType<typeof parseUserIntent>)
+    vi.mocked(classifyMode).mockReturnValue('advise')
 
     const { router } = buildPipeline()
     const result = await router.process(makeContext('analyze my expenses'))
 
-    expect(result.stageName).toBe('brain-dispatcher')
+    expect(result.stageName).toBe('deterministic-dispatcher')
     expect(result.success).toBe(true)
     expect(result.message).toContain('expense analysis')
-    expect(processMessage).toHaveBeenCalledTimes(1)
+    expect(chatWithAgentServerStream).not.toHaveBeenCalled()
   })
 
-  it('"Explain my data" → BrainDispatcher claims (stage 5 — LLM path)', async () => {
+  it('"Explain my data" → LLMGateway claims (LLM path)', async () => {
     // AgentParser doesn't understand
     vi.mocked(parseMessage).mockReturnValue({
       understood: false,
@@ -209,24 +330,25 @@ describe('Pipeline Integration: end-to-end routing', () => {
     // TemplateResolver doesn't match
     vi.mocked(resolveGalleryTemplate).mockReturnValue(null)
 
-    // BrainDispatcher handles it (LLM path internally)
-    vi.mocked(processMessage).mockResolvedValue({
-      success: true,
+    vi.mocked(parseUserIntent).mockReturnValue(defaultIntent() as ReturnType<typeof parseUserIntent>)
+    vi.mocked(classifyMode).mockReturnValue('explain')
+    vi.mocked(chatWithAgentServerStream).mockResolvedValue({
       message: 'Your spreadsheet contains financial data with 3 columns...',
-      toolUsed: 'llm',
+      actions: [],
+      source: 'llm',
       reasoning: 'Used LLM to explain sheet contents',
     })
 
     const { router } = buildPipeline()
     const result = await router.process(makeContext('Explain my data'))
 
-    expect(result.stageName).toBe('brain-dispatcher')
+    expect(result.stageName).toBe('llm-gateway')
     expect(result.success).toBe(true)
     expect(result.message).toContain('financial data')
-    expect(processMessage).toHaveBeenCalledTimes(1)
+    expect(chatWithAgentServerStream).toHaveBeenCalledTimes(1)
   })
 
-  it('unknown gibberish → BrainDispatcher claims (final fallback)', async () => {
+  it('unknown gibberish → LLMGateway claims (final fallback)', async () => {
     // AgentParser doesn't understand
     vi.mocked(parseMessage).mockReturnValue({
       understood: false,
@@ -236,23 +358,24 @@ describe('Pipeline Integration: end-to-end routing', () => {
     // TemplateResolver doesn't match
     vi.mocked(resolveGalleryTemplate).mockReturnValue(null)
 
-    // BrainDispatcher always claims as terminal stage (LLM fallback)
-    vi.mocked(processMessage).mockResolvedValue({
-      success: true,
+    vi.mocked(parseUserIntent).mockReturnValue(defaultIntent() as ReturnType<typeof parseUserIntent>)
+    vi.mocked(classifyMode).mockReturnValue('chat')
+    vi.mocked(chatWithAgentServerStream).mockResolvedValue({
       message: "I'm not sure what you mean. Could you rephrase?",
-      toolUsed: 'llm',
+      actions: [],
+      source: 'llm',
     })
 
     const { router } = buildPipeline()
     const result = await router.process(makeContext('xyzzy wombat platypus 42'))
 
-    expect(result.stageName).toBe('brain-dispatcher')
+    expect(result.stageName).toBe('llm-gateway')
     expect(result.success).toBe(true)
     // IntentClassifier should have enriched context (always passes through)
-    expect(processMessage).toHaveBeenCalledTimes(1)
+    expect(chatWithAgentServerStream).toHaveBeenCalledTimes(1)
   })
 
-  it('IntentClassifier enriches context before BrainDispatcher receives it', async () => {
+  it('IntentClassifier enriches context before downstream stages receive it', async () => {
     // AgentParser and TemplateResolver both pass
     vi.mocked(parseMessage).mockReturnValue({
       understood: false,
@@ -261,11 +384,13 @@ describe('Pipeline Integration: end-to-end routing', () => {
     })
     vi.mocked(resolveGalleryTemplate).mockReturnValue(null)
 
-    // Capture the input passed to processMessage to verify context was enriched
-    vi.mocked(processMessage).mockResolvedValue({
-      success: true,
-      message: 'Budget analysis result',
-    })
+    vi.mocked(parseUserIntent).mockReturnValue({
+      intentType: 'budget',
+      confidence: 0.9,
+      routingSource: 'regex',
+      parameters: {},
+    } as ReturnType<typeof parseUserIntent>)
+    vi.mocked(classifyMode).mockReturnValue('advise')
 
     const { router } = buildPipeline()
     const context = makeContext('analyze my expenses')
@@ -313,17 +438,20 @@ describe('Pipeline Integration: end-to-end routing', () => {
     })
     // TemplateResolver doesn't match
     vi.mocked(resolveGalleryTemplate).mockReturnValue(null)
-    // BrainDispatcher catches it
-    vi.mocked(processMessage).mockResolvedValue({
-      success: true,
-      message: 'Recovered via brain',
+    // LLMGateway catches the fallthrough as terminal stage
+    vi.mocked(parseUserIntent).mockReturnValue(defaultIntent() as ReturnType<typeof parseUserIntent>)
+    vi.mocked(classifyMode).mockReturnValue('chat')
+    vi.mocked(chatWithAgentServerStream).mockResolvedValue({
+      message: 'Recovered via LLM',
+      actions: [],
+      source: 'llm',
     })
 
     const { router } = buildPipeline()
     const result = await router.process(makeContext('sort by amount'))
 
-    // Pipeline should recover — BrainDispatcher catches the fallthrough
-    expect(result.stageName).toBe('brain-dispatcher')
+    // Pipeline should recover — LLMGateway catches the fallthrough
+    expect(result.stageName).toBe('llm-gateway')
     expect(result.success).toBe(true)
   })
 })

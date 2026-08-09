@@ -10,6 +10,9 @@ export type { TemplateResolverDeps } from './templateResolver'
 
 export { createIntentClassifierStage } from './intentClassifier'
 
-export { createBrainDispatcherStage } from './brainDispatcher'
+export { createDeterministicDispatcherStage } from './deterministicDispatcher'
 
 export { createLLMGatewayStage } from './llmGateway'
+
+/** @deprecated Prefer DeterministicDispatcher + LLMGateway. Kept for transitional tests. */
+export { createBrainDispatcherStage } from './brainDispatcher'

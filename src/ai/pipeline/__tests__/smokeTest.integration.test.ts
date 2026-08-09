@@ -9,8 +9,8 @@
  * - "Sort by Amount descending" → instant (AgentParser)
  * - "Highlight cells over 500 red" → instant (AgentParser)
  * - "Create a monthly budget" → instant (TemplateResolver)
- * - "Analyze my expenses" → deterministic (BrainDispatcher, no LLM)
- * - "What does this data mean?" → LLM stream (BrainDispatcher)
+ * - "Analyze my expenses" → deterministic (DeterministicDispatcher, no LLM)
+ * - "What does this data mean?" → LLM stream (LLMGateway)
  * - "Delete row Netflix" → preview/confirm flow (AgentParser)
  */
 
@@ -39,7 +39,20 @@ vi.mock('@/lib/deleteRowPreview', () => ({
 }))
 
 vi.mock('@/ai/buildContext', () => ({
-  buildSpreadsheetContext: () => ({ profile: { columns: [] }, insights: {} }),
+  buildSpreadsheetContext: () => ({
+    workbookName: 'Test',
+    activeSheet: 'Sheet1',
+    sheetNames: ['Sheet1'],
+    sheetSummaries: [],
+    selectedCells: [],
+    dimensions: { rows: 1, cols: 1, populatedCells: 0 },
+    headers: [],
+    sampleRows: [],
+    sampleRowsTruncated: false,
+    selectionSnapshot: {},
+    insights: { headers: [], columnStats: [], outliers: [] },
+    profile: { name: 'S', rowCount: 1, colCount: 1, columns: [], detectedPurpose: 'generic' },
+  }),
 }))
 
 vi.mock('@shared/toolRegistry', () => ({
@@ -51,21 +64,117 @@ vi.mock('@/templates', () => ({
   executeTemplateTool: vi.fn(),
 }))
 
-vi.mock('@/ai/brain', () => ({
-  processMessage: vi.fn(),
+vi.mock('@/ai/agentClient', () => ({
+  chatWithAgentServerStream: vi.fn(),
+}))
+
+vi.mock('@shared/intentParser', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@shared/intentParser')>()
+  return {
+    ...actual,
+    parseUserIntent: vi.fn(),
+    isQueryIntent: vi.fn(() => false),
+  }
+})
+
+vi.mock('@shared/mode', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@shared/mode')>()
+  return {
+    ...actual,
+    classifyMode: vi.fn(),
+    isBudgetExplainQuery: vi.fn(() => false),
+  }
+})
+
+vi.mock('@/ai/analysis/budget', () => ({
+  analyzeBudget: vi.fn(() => ({})),
+  budgetAnalysisToToolResult: vi.fn(() => ({
+    success: true,
+    message: 'Your total expenses are $2,450 across 12 categories. Top spending: Rent ($1,200), Groceries ($450).',
+  })),
+  savingsRecommendation: vi.fn(),
+}))
+
+vi.mock('@/ai/analysisTarget', () => ({
+  resolveAnalysisTarget: () => ({
+    sheet: { cells: {} },
+    workbook: { sheets: [], name: 'Test' },
+    workbookName: 'Test',
+    getComputedValue: () => '',
+    getSheetComputedValue: () => '',
+    context: {
+      insights: {},
+      profile: { columns: [], detectedPurpose: 'generic', name: 'S', rowCount: 0, colCount: 0 },
+      sampleRows: [],
+    },
+    isAttached: false,
+  }),
+}))
+
+vi.mock('@/ai/sheetProfile', () => ({
+  buildSheetProfile: () => ({
+    name: 'S',
+    rowCount: 1,
+    colCount: 1,
+    columns: [],
+    detectedPurpose: 'budget',
+    hasHeaders: true,
+  }),
+}))
+
+vi.mock('@/ai/analysis/reporting', () => ({
+  generateReport: vi.fn(),
+}))
+
+vi.mock('@/ai/analysis/cleaning', () => ({
+  runCleaningSkill: vi.fn(),
+}))
+
+vi.mock('@/ai/queryEngine', () => ({
+  runQueryFromIntent: vi.fn(),
+}))
+
+vi.mock('@/ai/comparison', () => ({
+  queryComparison: vi.fn(),
+}))
+
+vi.mock('@/ai/responseBuilder', () => ({
+  explainOutliers: vi.fn(() => ''),
+  formatInsights: vi.fn(() => ''),
+  mergeToolResultContent: vi.fn((parts: string[]) => parts.filter(Boolean).join('\n\n')),
+}))
+
+vi.mock('@/ai/outliers', () => ({
+  isOutlierFollowUp: vi.fn(() => false),
+}))
+
+vi.mock('@/ai/mode', () => ({
+  isLlmOnlyMode: vi.fn(() => false),
+}))
+
+vi.mock('@/auditor', () => ({
+  runAudit: vi.fn(() => ({ findings: [], score: 100 })),
+  formatAuditForContext: vi.fn(() => ''),
+}))
+
+vi.mock('@/ai/contextualSuggestions', () => ({
+  getContextualSuggestions: vi.fn(() => []),
 }))
 
 // ─── Imports (after mocks) ──────────────────────────────────────────────────
 
 import { parseMessage, executeToolAsync } from '@/agent'
 import { resolveGalleryTemplate, executeTemplateTool } from '@/templates'
-import { processMessage } from '@/ai/brain'
+import { chatWithAgentServerStream } from '@/ai/agentClient'
+import { parseUserIntent } from '@shared/intentParser'
+import { classifyMode } from '@shared/mode'
 import { findDeleteRowMatches } from '@/lib/deleteRowPreview'
 import { createPipelineRouter } from '../router'
 import { createAgentParserStage } from '../stages/agentParser'
 import { createTemplateResolverStage } from '../stages/templateResolver'
 import { createIntentClassifierStage } from '../stages/intentClassifier'
-import { createBrainDispatcherStage } from '../stages/brainDispatcher'
+import { createDeterministicDispatcherStage } from '../stages/deterministicDispatcher'
+import { createLLMGatewayStage } from '../stages/llmGateway'
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -92,9 +201,19 @@ function buildPipeline() {
     createAgentParserStage(deps),
     createTemplateResolverStage(deps),
     createIntentClassifierStage(),
-    createBrainDispatcherStage(),
+    createDeterministicDispatcherStage(),
+    createLLMGatewayStage(),
   ])
   return { router, deps }
+}
+
+function defaultIntent() {
+  return {
+    intentType: 'general' as const,
+    confidence: 0.3,
+    routingSource: 'regex' as const,
+    parameters: {},
+  }
 }
 
 // ─── Smoke Tests ────────────────────────────────────────────────────────────
@@ -110,9 +229,12 @@ describe('Smoke Test: Top commands routing verification', () => {
       explanation: undefined,
     })
     vi.mocked(resolveGalleryTemplate).mockReturnValue(null)
-    vi.mocked(processMessage).mockResolvedValue({
-      success: true,
-      message: 'Processed by brain',
+    vi.mocked(parseUserIntent).mockReturnValue(defaultIntent() as ReturnType<typeof parseUserIntent>)
+    vi.mocked(classifyMode).mockReturnValue('chat')
+    vi.mocked(chatWithAgentServerStream).mockResolvedValue({
+      message: 'Processed by LLM',
+      actions: [],
+      source: 'llm',
     })
   })
 
@@ -136,7 +258,7 @@ describe('Smoke Test: Top commands routing verification', () => {
     expect(result.message).toContain('Sort')
     // Downstream stages NOT called
     expect(resolveGalleryTemplate).not.toHaveBeenCalled()
-    expect(processMessage).not.toHaveBeenCalled()
+    expect(chatWithAgentServerStream).not.toHaveBeenCalled()
   })
 
   it('"Highlight cells over 500 red" → AgentParser claims (instant)', async () => {
@@ -162,7 +284,7 @@ describe('Smoke Test: Top commands routing verification', () => {
     expect(result.success).toBe(true)
     // Downstream stages NOT called
     expect(resolveGalleryTemplate).not.toHaveBeenCalled()
-    expect(processMessage).not.toHaveBeenCalled()
+    expect(chatWithAgentServerStream).not.toHaveBeenCalled()
   })
 
   it('"Create a monthly budget" → TemplateResolver claims (instant)', async () => {
@@ -192,8 +314,8 @@ describe('Smoke Test: Top commands routing verification', () => {
     expect(result.stageName).toBe('template-resolver')
     expect(result.success).toBe(true)
     expect(result.message).toContain('Monthly Budget')
-    // BrainDispatcher NOT called
-    expect(processMessage).not.toHaveBeenCalled()
+    // LLMGateway NOT called
+    expect(chatWithAgentServerStream).not.toHaveBeenCalled()
   })
 
   it('"Analyze my expenses" → deterministic (no LLM)', async () => {
@@ -206,25 +328,26 @@ describe('Smoke Test: Top commands routing verification', () => {
     // TemplateResolver doesn't match
     vi.mocked(resolveGalleryTemplate).mockReturnValue(null)
 
-    // BrainDispatcher handles it via deterministic skill (budget/analyze)
-    vi.mocked(processMessage).mockResolvedValue({
-      success: true,
-      message: 'Your total expenses are $2,450 across 12 categories. Top spending: Rent ($1,200), Groceries ($450).',
-      toolUsed: 'budget',
-      suggestions: ['Show spending by category', 'Compare to last month'],
-    })
+    // IntentClassifier → budget / advise so DeterministicDispatcher claims
+    vi.mocked(parseUserIntent).mockReturnValue({
+      intentType: 'budget',
+      confidence: 0.9,
+      routingSource: 'regex',
+      parameters: {},
+    } as ReturnType<typeof parseUserIntent>)
+    vi.mocked(classifyMode).mockReturnValue('advise')
 
     const { router } = buildPipeline()
     const result = await router.process(makeContext('Analyze my expenses'))
 
-    expect(result.stageName).toBe('brain-dispatcher')
+    expect(result.stageName).toBe('deterministic-dispatcher')
     expect(result.success).toBe(true)
     expect(result.message).toContain('expenses')
-    // Verify the brain handled it (deterministic path — no streaming)
-    expect(processMessage).toHaveBeenCalledTimes(1)
+    // Deterministic path — no LLM streaming
+    expect(chatWithAgentServerStream).not.toHaveBeenCalled()
   })
 
-  it('"What does this data mean?" → LLM stream (BrainDispatcher)', async () => {
+  it('"What does this data mean?" → LLM stream (LLMGateway)', async () => {
     // AgentParser doesn't understand
     vi.mocked(parseMessage).mockReturnValue({
       understood: false,
@@ -234,22 +357,22 @@ describe('Smoke Test: Top commands routing verification', () => {
     // TemplateResolver doesn't match
     vi.mocked(resolveGalleryTemplate).mockReturnValue(null)
 
-    // BrainDispatcher routes to LLM for explanation
-    vi.mocked(processMessage).mockResolvedValue({
-      success: true,
+    // General intent / explain mode → deterministic passes → LLMGateway claims
+    vi.mocked(parseUserIntent).mockReturnValue(defaultIntent() as ReturnType<typeof parseUserIntent>)
+    vi.mocked(classifyMode).mockReturnValue('explain')
+    vi.mocked(chatWithAgentServerStream).mockResolvedValue({
       message: 'This spreadsheet contains monthly expense data with columns for Category, Amount, and Date. It appears to track household spending over the last 6 months.',
-      toolUsed: 'llm',
-      reasoning: 'Used LLM to explain data meaning',
+      actions: [],
+      source: 'llm',
     })
 
     const { router } = buildPipeline()
     const result = await router.process(makeContext('What does this data mean?'))
 
-    expect(result.stageName).toBe('brain-dispatcher')
+    expect(result.stageName).toBe('llm-gateway')
     expect(result.success).toBe(true)
     expect(result.message).toContain('spreadsheet')
-    // Verify LLM path was used
-    expect(processMessage).toHaveBeenCalledTimes(1)
+    expect(chatWithAgentServerStream).toHaveBeenCalledTimes(1)
   })
 
   it('"Delete row Netflix" → AgentParser claims with preview/confirm flow', async () => {
@@ -275,6 +398,6 @@ describe('Smoke Test: Top commands routing verification', () => {
     expect(result.success).toBe(true)
     // Verify it was claimed by AgentParser, not passed to downstream
     expect(resolveGalleryTemplate).not.toHaveBeenCalled()
-    expect(processMessage).not.toHaveBeenCalled()
+    expect(chatWithAgentServerStream).not.toHaveBeenCalled()
   })
 })

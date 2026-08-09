@@ -6,7 +6,8 @@
  * 2. AgentParser — instant regex tool calls
  * 3. TemplateResolver — gallery template matching
  * 4. IntentClassifier — enriches context (never claims)
- * 5. BrainDispatcher — deterministic skills + LLM fallback
+ * 5. DeterministicDispatcher — local skills (clean/report/budget/query)
+ * 6. LLMGateway — server-side LLM terminal stage
  *
  * The service receives thin callbacks for state mutations rather than
  * depending on the store directly. This allows tests to verify behavior
@@ -25,7 +26,8 @@ import {
   createAgentParserStage,
   createTemplateResolverStage,
   createIntentClassifierStage,
-  createBrainDispatcherStage,
+  createDeterministicDispatcherStage,
+  createLLMGatewayStage,
   type PipelineContext,
   type StageResult,
 } from '@/ai/pipeline'
@@ -74,7 +76,8 @@ export interface ChatServiceDeps {
  * 1. AgentParser — instant regex tool calls (sort, filter, add/delete row, etc.)
  * 2. TemplateResolver — gallery template matching ("Create a budget")
  * 3. IntentClassifier — enriches context with intent/mode (never claims)
- * 4. BrainDispatcher — deterministic skills + LLM server (always claims)
+ * 4. DeterministicDispatcher — local skills (may claim or pass)
+ * 5. LLMGateway — server LLM (always claims)
  */
 export async function processChatMessage(
   input: string,
@@ -144,8 +147,9 @@ export async function processChatMessage(
       createAgentParserStage({ buildExecContext, pushHistory }),
       createTemplateResolverStage({ buildExecContext, pushHistory }),
       createIntentClassifierStage(),
-      // Future: MacroPlanner stage inserts here (between classifier and brain)
-      createBrainDispatcherStage(),
+      // Future: MacroPlanner stage inserts here (between classifier and deterministic)
+      createDeterministicDispatcherStage(),
+      createLLMGatewayStage(),
     ])
 
     const result = await router.process(pipelineContext)

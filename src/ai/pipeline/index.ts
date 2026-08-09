@@ -17,6 +17,7 @@ export {
   createAgentParserStage,
   createTemplateResolverStage,
   createIntentClassifierStage,
-  createBrainDispatcherStage,
+  createDeterministicDispatcherStage,
+  createLLMGatewayStage,
 } from './stages'
 export type { AgentParserDeps, TemplateResolverDeps } from './stages'

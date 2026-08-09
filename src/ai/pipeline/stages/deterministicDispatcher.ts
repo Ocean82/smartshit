@@ -13,7 +13,7 @@
  */
 
 import type { PipelineContext, PipelineStage, StageResult } from '../types'
-import type { AnalysisTarget } from '@/ai/analysisTarget'
+import { resolveAnalysisTarget, type AnalysisTarget } from '@/ai/analysisTarget'
 import type { SheetInsights } from '@/ai/sheetInsights'
 import type { ToolResult } from '@/ai/types'
 import { buildSheetProfile } from '@/ai/sheetProfile'
@@ -125,13 +125,12 @@ function toStageResult(result: ToolResult): StageResult {
 /**
  * Creates the DeterministicDispatcher pipeline stage.
  *
- * @param target - The resolved analysis target (sheet, workbook, context)
- * @param workbookName - Display name of the active workbook
- * @param priorInsights - Insights from the previous assistant turn (for follow-ups)
+ * When `target` is omitted, resolves the analysis target from PipelineContext
+ * (production chatService path). Tests may still pass an explicit target.
  */
 export function createDeterministicDispatcherStage(
-  target: AnalysisTarget,
-  workbookName: string,
+  target?: AnalysisTarget,
+  workbookName?: string,
   priorInsights?: SheetInsights | null,
 ): PipelineStage {
   return {
@@ -145,12 +144,23 @@ export function createDeterministicDispatcherStage(
       // If IntentClassifier hasn't enriched context, we can't dispatch
       if (!intent || !mode) return null
 
-      const profile = buildSheetProfile(target.sheet, target.getComputedValue)
-      const insights = target.context.insights
+      const resolvedTarget = target ?? resolveAnalysisTarget({
+        workbook: context.workbook,
+        sheet: context.sheet,
+        selection: context.selection,
+        getComputedValue: context.getComputedValue,
+        getSheetComputedValue: context.getSheetComputedValue,
+        attachedPreview: context.attachedPreview,
+      })
+      const resolvedWorkbookName = workbookName ?? resolvedTarget.workbookName
+      const resolvedPrior = priorInsights !== undefined ? priorInsights : context.priorInsights
+
+      const profile = buildSheetProfile(resolvedTarget.sheet, resolvedTarget.getComputedValue)
+      const insights = resolvedTarget.context.insights
 
       // ─── Outlier Follow-Up ──────────────────────────────────────────────────
       if (isOutlierFollowUp(message)) {
-        const outliers = resolveOutliersForFollowUp(insights, priorInsights)
+        const outliers = resolveOutliersForFollowUp(insights, resolvedPrior)
         const result: ToolResult = {
           success: true,
           message: explainOutliers(outliers),
@@ -171,7 +181,7 @@ export function createDeterministicDispatcherStage(
       if (lower.includes('what do you know') || lower.includes('what context') || lower.includes('what data do you')) {
         const result: ToolResult = {
           success: true,
-          message: buildDataAwarenessResponse(profile, insights, workbookName, target),
+          message: buildDataAwarenessResponse(profile, insights, resolvedWorkbookName, resolvedTarget),
           toolUsed: 'data-awareness',
         }
         return toStageResult(result)
@@ -179,25 +189,25 @@ export function createDeterministicDispatcherStage(
 
       // ─── Clean ──────────────────────────────────────────────────────────────
       if (intent.intentType === 'clean') {
-        return toStageResult({ ...runCleaningSkill(target.sheet), toolUsed: 'cleaning' })
+        return toStageResult({ ...runCleaningSkill(resolvedTarget.sheet), toolUsed: 'cleaning' })
       }
 
       // ─── Report ─────────────────────────────────────────────────────────────
       if (intent.intentType === 'report') {
-        return toStageResult({ ...generateReport(profile, insights, workbookName), toolUsed: 'reporting' })
+        return toStageResult({ ...generateReport(profile, insights, resolvedWorkbookName), toolUsed: 'reporting' })
       }
 
       // ─── Compare ────────────────────────────────────────────────────────────
       if (intent.intentType === 'compare') {
         return toStageResult({
-          ...queryComparison(target.workbook, target.sheet, message, target.getSheetComputedValue),
+          ...queryComparison(resolvedTarget.workbook, resolvedTarget.sheet, message, resolvedTarget.getSheetComputedValue),
           toolUsed: 'comparison',
         })
       }
 
       // ─── Query ──────────────────────────────────────────────────────────────
       if (isQueryIntent(intent)) {
-        const queryResult = runQueryFromIntent(target.sheet, intent, target.getComputedValue, insights)
+        const queryResult = runQueryFromIntent(resolvedTarget.sheet, intent, resolvedTarget.getComputedValue, insights)
         return queryResult ? toStageResult({ ...queryResult, toolUsed: 'query' }) : null
       }
 
