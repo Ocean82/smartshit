@@ -13,6 +13,3 @@ export { createIntentClassifierStage } from './intentClassifier'
 export { createDeterministicDispatcherStage } from './deterministicDispatcher'
 
 export { createLLMGatewayStage } from './llmGateway'
-
-/** @deprecated Prefer DeterministicDispatcher + LLMGateway. Kept for transitional tests. */
-export { createBrainDispatcherStage } from './brainDispatcher'
