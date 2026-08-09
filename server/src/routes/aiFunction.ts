@@ -14,6 +14,7 @@ import { providerOrder, providerIsConfigured, callProvider } from '../providers.
 import { requireAuth, getRequestUserId } from '../auth/clerk.js'
 import { resolveIsPro } from '../plan.js'
 import { checkUsage, recordUsage } from '../usage.js'
+import { decideAiAccess, shouldRecordServerUsage } from '../aiAccess.js'
 import { aiFunctionRateLimiter } from '../middleware/rateLimit.js'
 import { validateBody } from '../middleware/validate.js'
 import { aiFunctionBodySchema } from '../schemas/aiFunction.js'
@@ -293,15 +294,22 @@ aiFunctionRouter.post('/', aiFunctionRateLimiter, validateBody(aiFunctionBodySch
   }
 
   // ─── Usage gate (free tier enforcement) ────────────────────────────────────
-  // BYOK callers pay for their own tokens, so they bypass the quota.
-  const hasByok = Boolean(body.byok?.apiKey && body.byok?.baseUrl)
+  // BYOK credentials alone do NOT grant Pro. Over-quota free users may attempt
+  // BYOK-only; app-funded providers stay locked until BYOK succeeds or they upgrade.
+  const hasByokCredentials = Boolean(body.byok?.apiKey && body.byok?.baseUrl)
   const userId = getRequestUserId(req) ?? undefined
-  const isPro = hasByok || (await resolveIsPro(userId))
+  const isPro = await resolveIsPro(userId)
   const usage = await checkUsage(userId, isPro)
+  const access = decideAiAccess({
+    isPro,
+    usageAllowed: usage.allowed,
+    hasByokCredentials,
+    dailyLimit: usage.limit,
+  })
 
-  if (!usage.allowed) {
+  if (!access.allowed) {
     res.status(429).json({
-      error: `You've used all ${usage.limit} free AI requests for today. Upgrade to Pro for unlimited access.`,
+      error: access.denialMessage ?? `You've used all ${usage.limit} free AI requests for today. Upgrade to Pro for unlimited access.`,
       result: null,
     })
     return
@@ -311,7 +319,7 @@ aiFunctionRouter.post('/', aiFunctionRateLimiter, validateBody(aiFunctionBodySch
   const messages = buildMessages(effectiveFuncName, body.args)
   const availableProviders = providerOrder().filter(providerIsConfigured)
 
-  if (availableProviders.length === 0 && !body.byok?.apiKey) {
+  if (availableProviders.length === 0 && !hasByokCredentials) {
     res.status(503).json({
       error: 'No AI providers available',
       result: null,
@@ -321,9 +329,10 @@ aiFunctionRouter.post('/', aiFunctionRateLimiter, validateBody(aiFunctionBodySch
 
   let rawResult: string | null = null
   let lastError: string | null = null
+  let usedServerProvider = false
 
   // Try BYOK first if provided
-  if (body.byok?.apiKey && body.byok?.baseUrl) {
+  if (hasByokCredentials && body.byok) {
     try {
       const { chatWithOpenAiCompatible } = await import('../openaiCompatible.js')
       rawResult = await chatWithOpenAiCompatible(
@@ -332,16 +341,26 @@ aiFunctionRouter.post('/', aiFunctionRateLimiter, validateBody(aiFunctionBodySch
       )
     } catch (err) {
       lastError = err instanceof Error ? err.message : String(err)
-      // Fall through to server providers
+      if (access.byokOnly) {
+        res.status(402).json({
+          error:
+            'Your own API key failed, and you have used all free AI requests for today. ' +
+            'Fix your BYOK key/settings or upgrade to Pro.',
+          result: null,
+        })
+        return
+      }
+      // Fall through to server providers when quota remains (or Pro)
     }
   }
 
-  // Fall back to server-configured providers
-  if (rawResult === null) {
+  // Fall back to server-configured providers (never when byokOnly)
+  if (rawResult === null && !access.byokOnly) {
     for (const provider of availableProviders) {
       try {
         const response = await callProvider(provider, messages)
         rawResult = response.text
+        usedServerProvider = true
         break
       } catch (err) {
         lastError = err instanceof Error ? err.message : String(err)
@@ -360,8 +379,10 @@ aiFunctionRouter.post('/', aiFunctionRateLimiter, validateBody(aiFunctionBodySch
     return
   }
 
-  // Only count a request that actually consumed server-side inference
-  if (!hasByok) await recordUsage(userId)
+  // Meter only app-funded inference for free users
+  if (shouldRecordServerUsage({ usedServerProvider, isPro })) {
+    await recordUsage(userId)
+  }
 
   const result = parseResult(effectiveFuncName, rawResult)
   const response: AIFunctionResponse = { result }

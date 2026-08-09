@@ -16,14 +16,20 @@ import request from 'supertest'
 // ─── Mocks ──────────────────────────────────────────────────────────────────
 
 let mockUserId: string | null = 'user_owner'
+let mockIsPro = false
 
 vi.mock('../auth/clerk.js', () => ({
   getRequestUserId: () => mockUserId,
 }))
 
+vi.mock('../plan.js', () => ({
+  resolveIsPro: async () => mockIsPro,
+}))
+
 vi.mock('../config.js', () => ({
   config: {
     s3Prefix: 'smartsht',
+    freeCloudWorkbookLimit: 1,
   },
 }))
 
@@ -33,6 +39,9 @@ const mockQueryResults = new Map<string, { rows: Record<string, unknown>[] }>()
 vi.mock('../db.js', () => ({
   query: vi.fn(async (sql: string, _params?: unknown[]) => {
     // Match based on the query pattern — order matters (most specific first)
+    if (sql.includes('COUNT(*)') && sql.includes('workbooks')) {
+      return mockQueryResults.get('count_workbooks') ?? { rows: [{ count: 0 }] }
+    }
     if (sql.includes('ORDER BY last_saved_at')) {
       return mockQueryResults.get('list_workbooks') ?? { rows: [] }
     }
@@ -86,6 +95,7 @@ describe('workbook routes — authentication', () => {
 
   beforeEach(() => {
     mockUserId = null
+    mockIsPro = false
     mockQueryResults.clear()
   })
 
@@ -125,6 +135,7 @@ describe('workbook routes — ownership enforcement', () => {
 
   beforeEach(() => {
     mockUserId = 'user_attacker'
+    mockIsPro = false
     mockQueryResults.clear()
   })
 
@@ -166,6 +177,7 @@ describe('workbook routes — not found', () => {
 
   beforeEach(() => {
     mockUserId = 'user_owner'
+    mockIsPro = false
     mockQueryResults.clear()
     // Empty results = workbook doesn't exist (or is soft-deleted)
   })
@@ -203,6 +215,7 @@ describe('workbook routes — owner access (happy path)', () => {
 
   beforeEach(() => {
     mockUserId = 'user_owner'
+    mockIsPro = false
     mockQueryResults.clear()
   })
 
@@ -239,11 +252,56 @@ describe('workbook routes — owner access (happy path)', () => {
   })
 })
 
+describe('workbook routes — free-tier cloud limit', () => {
+  const app = createApp()
+
+  beforeEach(() => {
+    mockUserId = 'user_free'
+    mockIsPro = false
+    mockQueryResults.clear()
+  })
+
+  it('POST /api/workbooks returns 403 when free user already at the cloud limit', async () => {
+    mockQueryResults.set('count_workbooks', { rows: [{ count: 1 }] })
+
+    const res = await request(app)
+      .post('/api/workbooks')
+      .send({ name: 'Second', data: '{}' })
+
+    expect(res.status).toBe(403)
+    expect(res.body.code).toBe('FREE_CLOUD_WORKBOOK_LIMIT')
+    expect(res.body.limit).toBe(1)
+  })
+
+  it('POST /api/workbooks allows Pro users past the free limit', async () => {
+    mockIsPro = true
+    mockQueryResults.set('count_workbooks', { rows: [{ count: 5 }] })
+
+    const res = await request(app)
+      .post('/api/workbooks')
+      .send({ name: 'Pro Extra', data: '{}' })
+
+    expect(res.status).toBe(201)
+    expect(res.body.id).toBe('wb_new_123')
+  })
+
+  it('POST /api/workbooks allows a free user with zero existing workbooks', async () => {
+    mockQueryResults.set('count_workbooks', { rows: [{ count: 0 }] })
+
+    const res = await request(app)
+      .post('/api/workbooks')
+      .send({ name: 'First', data: '{}' })
+
+    expect(res.status).toBe(201)
+  })
+})
+
 describe('workbook routes — input validation', () => {
   const app = createApp()
 
   beforeEach(() => {
     mockUserId = 'user_owner'
+    mockIsPro = false
     mockQueryResults.clear()
   })
 

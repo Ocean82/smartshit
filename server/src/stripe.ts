@@ -13,6 +13,12 @@ export async function createCheckoutSession(userId: string, email: string): Prom
   if (!config.stripeSecretKey) {
     throw new Error('STRIPE_SECRET_KEY not configured')
   }
+  if (!config.stripePriceId) {
+    throw new Error('STRIPE_PRICE_ID not configured — set the live Pro price ID')
+  }
+  if (config.stripePriceId.startsWith('price_') === false) {
+    throw new Error('STRIPE_PRICE_ID must be a Stripe price id (price_…)')
+  }
 
   const params = new URLSearchParams()
   params.set('mode', 'subscription')

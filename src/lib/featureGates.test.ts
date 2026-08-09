@@ -3,7 +3,7 @@
  *
  * Ensures that the free-tier limits defined in featureGates.ts match the values
  * used elsewhere in the codebase. The server enforces limits via FREE_DAILY_LIMIT
- * env var (defaulting to 10), which must match the client constant.
+ * env var (defaulting to 3), which must match the client constant.
  *
  * If this test fails, it means someone updated one location but not the other.
  * Fix by making all values consistent.
@@ -14,10 +14,10 @@
 import { describe, it, expect } from 'vitest'
 import { FREE_DAILY_CHAT_LIMIT } from './featureGates'
 
-// The server uses `Number(process.env.FREE_DAILY_LIMIT ?? 10)` as the default.
-// The client `useUsage.ts` defines `FREE_DAILY_LIMIT = 10` at the module level.
-// All three must stay aligned.
-const EXPECTED_FREE_DAILY_LIMIT = 10
+// The server uses `Number(process.env.FREE_DAILY_LIMIT ?? 3)` as the default.
+// The client `useUsage.ts` defines `FREE_DAILY_LIMIT = 3` at the module level.
+// All three must stay aligned with server/.env.production and .env.example.
+const EXPECTED_FREE_DAILY_LIMIT = 3
 
 describe('Free-tier limits alignment', () => {
   it('client FREE_DAILY_CHAT_LIMIT matches the expected canonical value', () => {

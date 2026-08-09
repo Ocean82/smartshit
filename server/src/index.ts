@@ -34,6 +34,7 @@ import {
 import { callProviderStructured, StructuredOutputError } from './structuredOutput.js'
 
 import { checkUsage, recordUsage, getUsageStats } from './usage.js'
+import { decideAiAccess, shouldRecordServerUsage } from './aiAccess.js'
 import { dbHealthCheck, closePool } from './db.js'
 import { s3HealthCheck } from './s3.js'
 import { workbooksRouter } from './routes/workbooks.js'
@@ -170,6 +171,8 @@ function sendSseComplete(
   res.end()
 }
 
+type LlmChatResult = ChatResponseBody & { usedServerProvider: boolean }
+
 async function runLlmChat(params: {
   body: ChatRequestBody
   userMessage: string
@@ -177,10 +180,12 @@ async function runLlmChat(params: {
   intent: ReturnType<typeof resolveIntent>
   userIntent: UserIntent
   stream: boolean
+  /** When true, never fall through to app-funded providers after BYOK failure. */
+  byokOnly?: boolean
   onChunk?: (chunk: string) => void
   signal?: AbortSignal
-}): Promise<ChatResponseBody> {
-  const { body, userMessage, mode, intent, userIntent, stream, onChunk, signal } = params
+}): Promise<LlmChatResult> {
+  const { body, userMessage, mode, intent, userIntent, stream, byokOnly = false, onChunk, signal } = params
   const llmOnly = isLlmOnlyMode(mode) || body.forceLlm
 
   const history = (body.history ?? []).filter((m) => m.role === 'user' || m.role === 'assistant')
@@ -265,7 +270,18 @@ async function runLlmChat(params: {
       const msg = err instanceof Error ? err.message : String(err)
       providerErrors.push(`byok(${byok.provider}): ${msg}`)
       console.warn(`[llm] BYOK provider failed:`, msg)
-      // Fall through to server-configured providers
+      // Fall through only when byokOnly is false (free quota still available or Pro)
+    }
+  }
+
+  if (!byokSucceeded && byokOnly) {
+    return {
+      message:
+        'Your own API key failed, and you have used all free AI questions for today. ' +
+        'Fix your BYOK key/settings or upgrade to Pro for unlimited access.',
+      actions: [],
+      source: 'fallback',
+      usedServerProvider: false,
     }
   }
 
@@ -313,6 +329,7 @@ async function runLlmChat(params: {
         : '⚠️ AI is currently unavailable. Please check your connection or try again in a moment.'),
       actions: llmOnly ? [] : intent.actions,
       source: 'fallback',
+      usedServerProvider: false,
     }
   }
 
@@ -323,6 +340,7 @@ async function runLlmChat(params: {
       actions: [],
       source: 'llm',
       meta: providerMeta ?? undefined,
+      usedServerProvider: Boolean(usedProvider),
     }
   }
 
@@ -362,6 +380,7 @@ async function runLlmChat(params: {
     actions: parsed.actions,
     source: 'llm',
     meta: providerMeta ?? undefined,
+    usedServerProvider: Boolean(usedProvider),
   }
 }
 
@@ -523,15 +542,22 @@ app.post('/api/chat/stream', requireAuth, chatRateLimiter, validateBody(chatStre
   }
 
   // ─── Usage gate (free tier enforcement) ────────────────────────────────────
-  // BYOK users bypass the limit — they're paying for their own tokens
-  const hasByok = Boolean(body.byok?.apiKey && body.byok?.baseUrl)
+  // BYOK credentials alone do NOT grant Pro. Over-quota free users may attempt
+  // BYOK-only; server providers stay locked until BYOK succeeds or they upgrade.
+  const hasByokCredentials = Boolean(body.byok?.apiKey && body.byok?.baseUrl)
   const userId = getRequestUserId(req) ?? undefined
-  const isPro = hasByok || await resolveIsPro(userId ?? null)
+  const isPro = await resolveIsPro(userId ?? null)
   const usage = await checkUsage(userId, isPro)
+  const access = decideAiAccess({
+    isPro,
+    usageAllowed: usage.allowed,
+    hasByokCredentials,
+    dailyLimit: usage.limit,
+  })
 
-  if (!usage.allowed) {
+  if (!access.allowed) {
     sendSseComplete(res, {
-      message: `You've used all ${usage.limit} free AI questions for today. Upgrade to Pro for unlimited access.`,
+      message: access.denialMessage ?? `You've used all ${usage.limit} free AI questions for today. Upgrade to Pro for unlimited access.`,
       actions: [],
       source: 'fallback',
     })
@@ -560,6 +586,7 @@ app.post('/api/chat/stream', requireAuth, chatRateLimiter, validateBody(chatStre
       intent,
       userIntent,
       stream: true,
+      byokOnly: access.byokOnly,
       onChunk: (chunk) => {
         if (!res.writableEnded) {
           res.write(`data: ${JSON.stringify({ type: 'token', content: chunk })}\n\n`)
@@ -571,13 +598,15 @@ app.post('/api/chat/stream', requireAuth, chatRateLimiter, validateBody(chatStre
     clearTimeout(llmTimeout)
     clearTimeout(reqTimeout)
 
-    // Record usage for free-tier tracking (only after successful LLM response)
-    if (result.source === 'llm') {
+    const { usedServerProvider, ...payload } = result
+
+    // Meter only app-funded inference for free users
+    if (result.source === 'llm' && shouldRecordServerUsage({ usedServerProvider, isPro })) {
       await recordUsage(userId)
     }
 
     if (!res.writableEnded) {
-      sendSseComplete(res, { ...result, suggestions })
+      sendSseComplete(res, { ...payload, suggestions })
     }
   } catch (err) {
     clearTimeout(llmTimeout)
@@ -607,14 +636,20 @@ app.post('/api/chat', requireAuth, chatRateLimiter, validateBody(chatBodySchema)
   }
 
   // ─── Usage gate (free tier enforcement) ────────────────────────────────────
-  const hasByok = Boolean(body.byok?.apiKey && body.byok?.baseUrl)
+  const hasByokCredentials = Boolean(body.byok?.apiKey && body.byok?.baseUrl)
   const userId = getRequestUserId(req) ?? undefined
-  const isPro = hasByok || await resolveIsPro(userId ?? null)
+  const isPro = await resolveIsPro(userId ?? null)
   const usage = await checkUsage(userId, isPro)
+  const access = decideAiAccess({
+    isPro,
+    usageAllowed: usage.allowed,
+    hasByokCredentials,
+    dailyLimit: usage.limit,
+  })
 
-  if (!usage.allowed) {
+  if (!access.allowed) {
     res.status(429).json({
-      message: `You've used all ${usage.limit} free AI questions for today. Upgrade to Pro for unlimited access.`,
+      message: access.denialMessage ?? `You've used all ${usage.limit} free AI questions for today. Upgrade to Pro for unlimited access.`,
       actions: [],
       source: 'fallback',
     })
@@ -678,12 +713,13 @@ app.post('/api/chat', requireAuth, chatRateLimiter, validateBody(chatBodySchema)
       intent,
       userIntent,
       stream: false,
+      byokOnly: access.byokOnly,
     })
-    // Record usage for free-tier tracking (only after successful LLM response)
-    if (result.source === 'llm' && !hasByok) {
+    const { usedServerProvider, ...payload } = result
+    if (result.source === 'llm' && shouldRecordServerUsage({ usedServerProvider, isPro })) {
       await recordUsage(userId)
     }
-    res.json({ ...result, suggestions })
+    res.json({ ...payload, suggestions })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error'
     res.json({

@@ -9,7 +9,7 @@
 // ─── Limits ──────────────────────────────────────────────────────────────────
 
 /** AI chat questions per day for free users */
-export const FREE_DAILY_CHAT_LIMIT = 10
+export const FREE_DAILY_CHAT_LIMIT = 3
 
 /** Lifetime auto-fix uses before gate (free users get a taste) */
 export const FREE_AUTOFIX_LIFETIME_LIMIT = 3
@@ -61,9 +61,11 @@ export const FEATURE_GATE_COPY: Record<GatedFeature, FeatureGateConfig> = {
   },
   'share-edit': {
     feature: 'share-edit',
-    headline: 'Edit sharing requires Pro',
-    description: 'Free accounts can share read-only links. Upgrade to Pro to let collaborators edit your workbooks directly.',
-    ctaLabel: 'Upgrade for edit sharing',
+    headline: 'Collaborative editing is coming soon',
+    description:
+      'Today every share link is view-only for all plans. Editable collaboration is not shipping yet — ' +
+      'upgrade for unlimited AI, cloud workbooks, and version history in the meantime.',
+    ctaLabel: 'See Pro benefits',
   },
 }
 

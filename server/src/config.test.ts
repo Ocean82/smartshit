@@ -77,3 +77,17 @@ describe('corsOrigin', () => {
     expect((await loadConfig()).corsOrigin).toEqual(['https://a.example', 'https://b.example'])
   })
 })
+
+describe('stripePriceId', () => {
+  it('does not default to a test-mode Stripe price', async () => {
+    delete process.env.STRIPE_PRICE_ID
+    const config = await loadConfig()
+    expect(config.stripePriceId).toBe('')
+    expect(config.stripePriceId).not.toContain('TqYG')
+  })
+
+  it('honours an explicit live price id', async () => {
+    process.env.STRIPE_PRICE_ID = 'price_1Tshf9P38C54URjEpxmSrir2'
+    expect((await loadConfig()).stripePriceId).toBe('price_1Tshf9P38C54URjEpxmSrir2')
+  })
+})

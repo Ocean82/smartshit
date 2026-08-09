@@ -49,7 +49,7 @@ templatesRouter.get('/', async (req, res) => {
       `SELECT
          t.id, t.name, t.description, t.category, t.icon, t.prompt,
          t.downloads, t.rating_sum, t.rating_count, t.created_at,
-         u.display_name AS author_name, u.email AS author_email
+         u.display_name AS author_name
        FROM smartsht.community_templates t
        JOIN smartsht.users u ON u.id = t.author_id
        WHERE ${conditions.join(' AND ')}
@@ -76,7 +76,7 @@ templatesRouter.get('/', async (req, res) => {
         ? Math.round(((row.rating_sum as number) / (row.rating_count as number)) * 10) / 10
         : null,
       ratingCount: row.rating_count,
-      author: (row.author_name as string) || (row.author_email as string) || 'Anonymous',
+      author: (row.author_name as string) || 'Anonymous',
       createdAt: row.created_at,
     }))
 

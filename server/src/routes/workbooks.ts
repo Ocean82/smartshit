@@ -3,6 +3,7 @@ import { query } from '../db.js'
 import { uploadWorkbook, downloadObject, deleteObject } from '../s3.js'
 import { config } from '../config.js'
 import { getRequestUserId } from '../auth/clerk.js'
+import { resolveIsPro } from '../plan.js'
 import { syncWorkbookCells } from '../cellStore.js'
 import { sendServerError } from '../httpError.js'
 
@@ -57,6 +58,29 @@ workbooksRouter.post('/', async (req, res) => {
   }
 
   try {
+    // Free-tier cloud workbook cap (Pro is unlimited). Enforced server-side —
+    // the client gate is UX only and must not be the security boundary.
+    const isPro = await resolveIsPro(userId)
+    if (!isPro) {
+      const countResult = await query<{ count: number }>(
+        `SELECT COUNT(*)::int AS count
+         FROM smartsht.workbooks
+         WHERE owner_id = $1 AND NOT is_deleted`,
+        [userId],
+      )
+      const existing = Number(countResult.rows[0]?.count ?? 0)
+      if (existing >= config.freeCloudWorkbookLimit) {
+        res.status(403).json({
+          error:
+            `Free accounts are limited to ${config.freeCloudWorkbookLimit} cloud workbook. ` +
+            'Upgrade to Pro for unlimited cloud storage.',
+          code: 'FREE_CLOUD_WORKBOOK_LIMIT',
+          limit: config.freeCloudWorkbookLimit,
+        })
+        return
+      }
+    }
+
     // Ensure user exists (upsert on first save)
     await query(
       `INSERT INTO smartsht.users (id, last_seen_at)

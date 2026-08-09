@@ -3,7 +3,7 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { loadUserApiKey } from '@/lib/userApiKey'
 
 const CLERK_PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ?? ''
-const FREE_DAILY_LIMIT = 10
+const FREE_DAILY_LIMIT = 3
 const STORAGE_KEY = 'smartsht_usage'
 
 interface UsageData {

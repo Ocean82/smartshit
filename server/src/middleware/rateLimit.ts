@@ -5,6 +5,7 @@
 
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit'
 import type { Request } from 'express'
+import { getAuth } from '@clerk/express'
 
 /**
  * Build a rate-limit key for an unauthenticated request.
@@ -21,11 +22,16 @@ function ipKey(req: Request): string {
 
 /**
  * Extract user ID from Clerk auth on the request, falling back to client IP.
+ * Must use getAuth() — Clerk Express does not expose a plain `req.auth.userId`.
  */
 function getUserKey(req: Request): string {
-  // Clerk middleware attaches auth to the request
-  const auth = (req as unknown as { auth?: { userId?: string } }).auth
-  return auth?.userId || ipKey(req)
+  try {
+    const auth = getAuth(req)
+    if (auth.userId) return auth.userId
+  } catch {
+    // Middleware may not have attached auth yet — fall back to IP
+  }
+  return ipKey(req)
 }
 
 /**

@@ -167,13 +167,17 @@ export const config = {
   clerkPublishableKey:
     process.env.CLERK_PUBLISHABLE_KEY ?? process.env.VITE_CLERK_PUBLISHABLE_KEY ?? '',
 
-  // Stripe
+  // Stripe — never default to a test-mode price in production code paths.
+  // createCheckoutSession throws if STRIPE_PRICE_ID is unset.
   stripeSecretKey: process.env.STRIPE_SECRET_KEY ?? '',
-  stripePriceId: process.env.STRIPE_PRICE_ID ?? 'price_1TqYGCP38C54URjEZIBJEXDU',
+  stripePriceId: process.env.STRIPE_PRICE_ID ?? '',
   stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET ?? '',
 
   // App URL for redirects
   appUrl: process.env.APP_URL ?? 'https://smartsht.com',
+
+  /** Max cloud workbooks for free-tier users (Pro is unlimited). */
+  freeCloudWorkbookLimit: Math.max(1, Number(process.env.FREE_CLOUD_WORKBOOK_LIMIT ?? 1)),
 
   analysis: {
     maxRowsPreview: 120,
