@@ -2,20 +2,25 @@
 
 exports[`template registry > per-template structure summary (regression snapshot) 1`] = `
 {
-  "create_accounts_payable": {
-    "cells": 36,
-    "formatSteps": 4,
-    "formattedCells": 12,
-  },
-  "create_accounts_receivable": {
-    "cells": 37,
-    "formatSteps": 4,
-    "formattedCells": 13,
-  },
   "create_airbnb_income": {
     "cells": 32,
     "formatSteps": 4,
     "formattedCells": 11,
+  },
+  "create_annual_budget_vs_actual": {
+    "cells": 40,
+    "formatSteps": 4,
+    "formattedCells": 10,
+  },
+  "create_annual_report_data": {
+    "cells": 37,
+    "formatSteps": 2,
+    "formattedCells": 6,
+  },
+  "create_ar_aging": {
+    "cells": 43,
+    "formatSteps": 4,
+    "formattedCells": 15,
   },
   "create_assignment_tracker": {
     "cells": 34,
@@ -27,17 +32,32 @@ exports[`template registry > per-template structure summary (regression snapshot
     "formatSteps": 4,
     "formattedCells": 9,
   },
-  "create_break_even": {
-    "cells": 35,
+  "create_board_meeting_minutes": {
+    "cells": 32,
+    "formatSteps": 2,
+    "formattedCells": 7,
+  },
+  "create_break_even_analysis": {
+    "cells": 33,
     "formatSteps": 4,
-    "formattedCells": 11,
+    "formattedCells": 14,
   },
   "create_budget_template": {
     "cells": 63,
     "formatSteps": 8,
     "formattedCells": 19,
   },
-  "create_cash_flow": {
+  "create_business_expense_report": {
+    "cells": 34,
+    "formatSteps": 4,
+    "formattedCells": 8,
+  },
+  "create_capex_planner": {
+    "cells": 39,
+    "formatSteps": 4,
+    "formattedCells": 11,
+  },
+  "create_cash_flow_forecast": {
     "cells": 43,
     "formatSteps": 2,
     "formattedCells": 7,
@@ -47,40 +67,110 @@ exports[`template registry > per-template structure summary (regression snapshot
     "formatSteps": 2,
     "formattedCells": 7,
   },
+  "create_client_deliverables": {
+    "cells": 39,
+    "formatSteps": 4,
+    "formattedCells": 10,
+  },
   "create_client_tracker": {
     "cells": 33,
     "formatSteps": 4,
     "formattedCells": 12,
+  },
+  "create_college_cost_comparison": {
+    "cells": 33,
+    "formatSteps": 4,
+    "formattedCells": 9,
   },
   "create_college_savings": {
     "cells": 27,
     "formatSteps": 3,
     "formattedCells": 19,
   },
+  "create_competitor_analysis": {
+    "cells": 38,
+    "formatSteps": 4,
+    "formattedCells": 10,
+  },
+  "create_compliance_audit_checklist": {
+    "cells": 44,
+    "formatSteps": 2,
+    "formattedCells": 8,
+  },
+  "create_contract_log": {
+    "cells": 45,
+    "formatSteps": 4,
+    "formattedCells": 13,
+  },
+  "create_contract_renewal_calendar": {
+    "cells": 44,
+    "formatSteps": 4,
+    "formattedCells": 11,
+  },
+  "create_course_registration": {
+    "cells": 41,
+    "formatSteps": 4,
+    "formattedCells": 10,
+  },
+  "create_customer_churn_calculator": {
+    "cells": 39,
+    "formatSteps": 4,
+    "formattedCells": 11,
+  },
   "create_debt_snowball": {
     "cells": 36,
     "formatSteps": 5,
     "formattedCells": 12,
+  },
+  "create_donor_database": {
+    "cells": 38,
+    "formatSteps": 4,
+    "formattedCells": 10,
+  },
+  "create_email_campaign_metrics": {
+    "cells": 47,
+    "formatSteps": 4,
+    "formattedCells": 15,
   },
   "create_emergency_fund": {
     "cells": 36,
     "formatSteps": 3,
     "formattedCells": 8,
   },
+  "create_emergency_fund_planner": {
+    "cells": 33,
+    "formatSteps": 4,
+    "formattedCells": 13,
+  },
   "create_employee_roster": {
     "cells": 47,
     "formatSteps": 2,
     "formattedCells": 9,
+  },
+  "create_employee_schedule": {
+    "cells": 37,
+    "formatSteps": 2,
+    "formattedCells": 8,
   },
   "create_equipment_depreciation": {
     "cells": 33,
     "formatSteps": 4,
     "formattedCells": 12,
   },
+  "create_event_fundraising_pnl": {
+    "cells": 52,
+    "formatSteps": 5,
+    "formattedCells": 13,
+  },
   "create_expense_report": {
     "cells": 25,
     "formatSteps": 4,
     "formattedCells": 8,
+  },
+  "create_freelance_tax_estimator": {
+    "cells": 40,
+    "formatSteps": 4,
+    "formattedCells": 11,
   },
   "create_freelancer_dashboard": {
     "cells": 29,
@@ -97,13 +187,33 @@ exports[`template registry > per-template structure summary (regression snapshot
     "formatSteps": 5,
     "formattedCells": 8,
   },
+  "create_gpa_what_if": {
+    "cells": 46,
+    "formatSteps": 4,
+    "formattedCells": 13,
+  },
+  "create_grant_tracker": {
+    "cells": 38,
+    "formatSteps": 4,
+    "formattedCells": 10,
+  },
   "create_habit_tracker": {
     "cells": 51,
     "formatSteps": 3,
     "formattedCells": 11,
   },
+  "create_hiring_pipeline": {
+    "cells": 36,
+    "formatSteps": 2,
+    "formattedCells": 8,
+  },
   "create_holiday_budget": {
     "cells": 40,
+    "formatSteps": 4,
+    "formattedCells": 11,
+  },
+  "create_homeschool_curriculum": {
+    "cells": 41,
     "formatSteps": 4,
     "formattedCells": 11,
   },
@@ -112,15 +222,25 @@ exports[`template registry > per-template structure summary (regression snapshot
     "formatSteps": 4,
     "formattedCells": 11,
   },
+  "create_in_kind_donation_valuation": {
+    "cells": 38,
+    "formatSteps": 4,
+    "formattedCells": 10,
+  },
   "create_income_expense_log": {
     "cells": 41,
     "formatSteps": 4,
     "formattedCells": 11,
   },
-  "create_inventory_tracker": {
-    "cells": 38,
+  "create_insurance_policy_tracker": {
+    "cells": 43,
     "formatSteps": 4,
-    "formattedCells": 10,
+    "formattedCells": 11,
+  },
+  "create_inventory_reorder": {
+    "cells": 43,
+    "formatSteps": 4,
+    "formattedCells": 11,
   },
   "create_invoice": {
     "cells": 44,
@@ -132,40 +252,120 @@ exports[`template registry > per-template structure summary (regression snapshot
     "formatSteps": 2,
     "formattedCells": 5,
   },
+  "create_lead_tracking": {
+    "cells": 38,
+    "formatSteps": 4,
+    "formattedCells": 10,
+  },
+  "create_lease_comparison": {
+    "cells": 41,
+    "formatSteps": 4,
+    "formattedCells": 20,
+  },
   "create_lease_tracker": {
     "cells": 31,
     "formatSteps": 2,
     "formattedCells": 7,
+  },
+  "create_legal_matter_tracker": {
+    "cells": 43,
+    "formatSteps": 4,
+    "formattedCells": 11,
+  },
+  "create_macro_calculator": {
+    "cells": 58,
+    "formatSteps": 6,
+    "formattedCells": 19,
+  },
+  "create_maintenance_tracker": {
+    "cells": 38,
+    "formatSteps": 4,
+    "formattedCells": 10,
+  },
+  "create_marketing_campaign_budget": {
+    "cells": 41,
+    "formatSteps": 4,
+    "formattedCells": 13,
   },
   "create_meal_planner": {
     "cells": 45,
     "formatSteps": 6,
     "formattedCells": 10,
   },
+  "create_medical_expense_hsa": {
+    "cells": 49,
+    "formatSteps": 6,
+    "formattedCells": 18,
+  },
   "create_medical_expenses": {
     "cells": 35,
     "formatSteps": 4,
     "formattedCells": 11,
+  },
+  "create_medication_schedule": {
+    "cells": 40,
+    "formatSteps": 4,
+    "formattedCells": 12,
+  },
+  "create_meeting_agenda": {
+    "cells": 34,
+    "formatSteps": 4,
+    "formattedCells": 8,
+  },
+  "create_meeting_notes": {
+    "cells": 38,
+    "formatSteps": 2,
+    "formattedCells": 7,
+  },
+  "create_mileage_log": {
+    "cells": 35,
+    "formatSteps": 5,
+    "formattedCells": 10,
   },
   "create_mileage_tracker": {
     "cells": 28,
     "formatSteps": 4,
     "formattedCells": 10,
   },
+  "create_milestone_tracker": {
+    "cells": 38,
+    "formatSteps": 2,
+    "formattedCells": 7,
+  },
+  "create_mood_journal": {
+    "cells": 40,
+    "formatSteps": 6,
+    "formattedCells": 14,
+  },
   "create_mortgage_calculator": {
     "cells": 28,
     "formatSteps": 4,
     "formattedCells": 13,
+  },
+  "create_nda_log": {
+    "cells": 41,
+    "formatSteps": 2,
+    "formattedCells": 9,
+  },
+  "create_net_worth_calculator": {
+    "cells": 31,
+    "formatSteps": 6,
+    "formattedCells": 11,
   },
   "create_net_worth_tracker": {
     "cells": 34,
     "formatSteps": 6,
     "formattedCells": 8,
   },
-  "create_payroll_sheet": {
+  "create_onboarding_checklist": {
     "cells": 37,
+    "formatSteps": 2,
+    "formattedCells": 6,
+  },
+  "create_performance_review": {
+    "cells": 39,
     "formatSteps": 4,
-    "formattedCells": 12,
+    "formattedCells": 10,
   },
   "create_pnl_statement": {
     "cells": 34,
@@ -177,10 +377,30 @@ exports[`template registry > per-template structure summary (regression snapshot
     "formatSteps": 4,
     "formattedCells": 8,
   },
+  "create_program_budget": {
+    "cells": 43,
+    "formatSteps": 4,
+    "formattedCells": 11,
+  },
+  "create_project_budget": {
+    "cells": 42,
+    "formatSteps": 4,
+    "formattedCells": 11,
+  },
+  "create_project_profitability": {
+    "cells": 50,
+    "formatSteps": 4,
+    "formattedCells": 15,
+  },
   "create_project_quote": {
     "cells": 33,
     "formatSteps": 4,
     "formattedCells": 8,
+  },
+  "create_project_timeline": {
+    "cells": 45,
+    "formatSteps": 4,
+    "formattedCells": 10,
   },
   "create_project_tracker": {
     "cells": 49,
@@ -192,10 +412,35 @@ exports[`template registry > per-template structure summary (regression snapshot
     "formatSteps": 3,
     "formattedCells": 13,
   },
+  "create_property_tax_tracker": {
+    "cells": 40,
+    "formatSteps": 4,
+    "formattedCells": 12,
+  },
+  "create_pto_tracker": {
+    "cells": 32,
+    "formatSteps": 2,
+    "formattedCells": 7,
+  },
   "create_quarterly_tax": {
     "cells": 36,
     "formatSteps": 4,
     "formattedCells": 12,
+  },
+  "create_quarterly_tax_estimator": {
+    "cells": 36,
+    "formatSteps": 4,
+    "formattedCells": 11,
+  },
+  "create_rate_calculator": {
+    "cells": 33,
+    "formatSteps": 4,
+    "formattedCells": 8,
+  },
+  "create_regulatory_filing_deadlines": {
+    "cells": 46,
+    "formatSteps": 4,
+    "formattedCells": 10,
   },
   "create_renovation_budget": {
     "cells": 31,
@@ -212,10 +457,25 @@ exports[`template registry > per-template structure summary (regression snapshot
     "formatSteps": 4,
     "formattedCells": 11,
   },
+  "create_resource_allocation": {
+    "cells": 42,
+    "formatSteps": 2,
+    "formattedCells": 9,
+  },
   "create_retirement_calculator": {
     "cells": 23,
     "formatSteps": 3,
     "formattedCells": 17,
+  },
+  "create_revenue_dashboard": {
+    "cells": 36,
+    "formatSteps": 4,
+    "formattedCells": 12,
+  },
+  "create_risk_register": {
+    "cells": 42,
+    "formatSteps": 2,
+    "formattedCells": 9,
   },
   "create_roi_calculator": {
     "cells": 21,
@@ -226,6 +486,11 @@ exports[`template registry > per-template structure summary (regression snapshot
     "cells": 74,
     "formatSteps": 6,
     "formattedCells": 23,
+  },
+  "create_sales_pipeline": {
+    "cells": 44,
+    "formatSteps": 4,
+    "formattedCells": 12,
   },
   "create_sales_tracker": {
     "cells": 53,
@@ -242,8 +507,18 @@ exports[`template registry > per-template structure summary (regression snapshot
     "formatSteps": 6,
     "formattedCells": 11,
   },
-  "create_startup_costs": {
-    "cells": 45,
+  "create_sleep_tracker": {
+    "cells": 44,
+    "formatSteps": 6,
+    "formattedCells": 16,
+  },
+  "create_social_media_calendar": {
+    "cells": 39,
+    "formatSteps": 4,
+    "formattedCells": 11,
+  },
+  "create_sprint_planning": {
+    "cells": 42,
     "formatSteps": 4,
     "formattedCells": 10,
   },
@@ -252,25 +527,60 @@ exports[`template registry > per-template structure summary (regression snapshot
     "formatSteps": 4,
     "formattedCells": 9,
   },
+  "create_student_loan_calculator": {
+    "cells": 37,
+    "formatSteps": 4,
+    "formattedCells": 13,
+  },
   "create_student_loan_payoff": {
     "cells": 39,
     "formatSteps": 4,
     "formattedCells": 15,
+  },
+  "create_study_schedule": {
+    "cells": 31,
+    "formatSteps": 4,
+    "formattedCells": 11,
+  },
+  "create_subscription_tracker": {
+    "cells": 40,
+    "formatSteps": 4,
+    "formattedCells": 10,
+  },
+  "create_teacher_gradebook": {
+    "cells": 38,
+    "formatSteps": 5,
+    "formattedCells": 12,
   },
   "create_travel_budget": {
     "cells": 40,
     "formatSteps": 4,
     "formattedCells": 10,
   },
-  "create_unit_economics": {
-    "cells": 21,
+  "create_tuition_savings": {
+    "cells": 32,
     "formatSteps": 4,
-    "formattedCells": 17,
+    "formattedCells": 12,
+  },
+  "create_vendor_manager": {
+    "cells": 38,
+    "formatSteps": 4,
+    "formattedCells": 10,
+  },
+  "create_volunteer_hours": {
+    "cells": 45,
+    "formatSteps": 4,
+    "formattedCells": 12,
   },
   "create_wedding_budget": {
     "cells": 51,
     "formatSteps": 4,
     "formattedCells": 14,
+  },
+  "create_weight_loss_calculator": {
+    "cells": 51,
+    "formatSteps": 6,
+    "formattedCells": 18,
   },
   "create_weight_tracker": {
     "cells": 33,
@@ -281,6 +591,11 @@ exports[`template registry > per-template structure summary (regression snapshot
     "cells": 41,
     "formatSteps": 6,
     "formattedCells": 11,
+  },
+  "create_workout_progress": {
+    "cells": 42,
+    "formatSteps": 6,
+    "formattedCells": 15,
   },
 }
 `;

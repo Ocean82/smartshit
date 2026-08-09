@@ -22,9 +22,9 @@ function makeRecorder() {
 }
 
 describe('template registry', () => {
-  it('contains 56 data templates with unique tool names', () => {
-    expect(ALL_TEMPLATE_SPECS.length).toBe(56);
-    expect(Object.keys(TEMPLATE_SPECS).length).toBe(56);
+  it('contains 119 data templates with unique tool names', () => {
+    expect(ALL_TEMPLATE_SPECS.length).toBe(119);
+    expect(Object.keys(TEMPLATE_SPECS).length).toBe(119);
   });
 
   it('every spec has cells and a label', () => {

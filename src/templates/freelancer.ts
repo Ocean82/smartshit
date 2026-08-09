@@ -1618,5 +1618,775 @@ export const freelancerTemplates: TemplateSpec[] = [
       }
     }
   ]
+},
+{
+  "tool": "create_freelance_tax_estimator",
+  "label": "annual tax estimator",
+  "cells": {
+    "A1": {
+      "value": "Annual Tax Estimator"
+    },
+    "A3": {
+      "value": "Income Source"
+    },
+    "B3": {
+      "value": "Annual Income"
+    },
+    "C3": {
+      "value": "Deductions"
+    },
+    "D3": {
+      "value": "Taxable Income"
+    },
+    "E3": {
+      "value": "Tax Rate"
+    },
+    "F3": {
+      "value": "Tax Owed"
+    },
+    "A4": {
+      "value": "Web Development"
+    },
+    "B4": {
+      "value": 72000
+    },
+    "C4": {
+      "value": 12000
+    },
+    "D4": {
+      "value": null,
+      "formula": "=B4-C4"
+    },
+    "E4": {
+      "value": 0.22
+    },
+    "F4": {
+      "value": null,
+      "formula": "=D4*E4"
+    },
+    "A5": {
+      "value": "Graphic Design"
+    },
+    "B5": {
+      "value": 28000
+    },
+    "C5": {
+      "value": 5000
+    },
+    "D5": {
+      "value": null,
+      "formula": "=B5-C5"
+    },
+    "E5": {
+      "value": 0.22
+    },
+    "F5": {
+      "value": null,
+      "formula": "=D5*E5"
+    },
+    "A6": {
+      "value": "Consulting"
+    },
+    "B6": {
+      "value": 18000
+    },
+    "C6": {
+      "value": 3000
+    },
+    "D6": {
+      "value": null,
+      "formula": "=B6-C6"
+    },
+    "E6": {
+      "value": 0.12
+    },
+    "F6": {
+      "value": null,
+      "formula": "=D6*E6"
+    },
+    "A7": {
+      "value": "Online Courses"
+    },
+    "B7": {
+      "value": 9500
+    },
+    "C7": {
+      "value": 1500
+    },
+    "D7": {
+      "value": null,
+      "formula": "=B7-C7"
+    },
+    "E7": {
+      "value": 0.12
+    },
+    "F7": {
+      "value": null,
+      "formula": "=D7*E7"
+    },
+    "A9": {
+      "value": "TOTALS"
+    },
+    "B9": {
+      "value": null,
+      "formula": "=SUM(B4:B7)"
+    },
+    "C9": {
+      "value": null,
+      "formula": "=SUM(C4:C7)"
+    },
+    "D9": {
+      "value": null,
+      "formula": "=SUM(D4:D7)"
+    },
+    "F9": {
+      "value": null,
+      "formula": "=SUM(F4:F7)"
+    },
+    "A11": {
+      "value": "Self-Employment Tax (15.3%)"
+    },
+    "F11": {
+      "value": null,
+      "formula": "=D9*0.153"
+    },
+    "A12": {
+      "value": "TOTAL TAX LIABILITY"
+    },
+    "F12": {
+      "value": null,
+      "formula": "=F9+F11"
+    }
+  },
+  "formats": [
+    {
+      "ids": [
+        "A3",
+        "B3",
+        "C3",
+        "D3",
+        "E3",
+        "F3"
+      ],
+      "format": {
+        "bold": true,
+        "bgColor": "#7C3AED",
+        "fontColor": "#FFFFFF",
+        "textAlign": "center"
+      }
+    },
+    {
+      "ids": [
+        "A1"
+      ],
+      "format": {
+        "bold": true,
+        "fontSize": 16,
+        "fontColor": "#7C3AED"
+      }
+    },
+    {
+      "ids": [
+        "A9",
+        "A12"
+      ],
+      "format": {
+        "bold": true
+      }
+    },
+    {
+      "ids": [
+        "F9",
+        "F12"
+      ],
+      "format": {
+        "bold": true,
+        "bgColor": "#EDE9FE"
+      }
+    }
+  ]
+},
+{
+  "tool": "create_rate_calculator",
+  "label": "rate calculator",
+  "cells": {
+    "A1": {
+      "value": "Freelancer Rate Calculator"
+    },
+    "A3": {
+      "value": "Expense Category"
+    },
+    "B3": {
+      "value": "Monthly Cost"
+    },
+    "C3": {
+      "value": "Annual Cost"
+    },
+    "A4": {
+      "value": "Rent / Mortgage"
+    },
+    "B4": {
+      "value": 2200
+    },
+    "C4": {
+      "value": null,
+      "formula": "=B4*12"
+    },
+    "A5": {
+      "value": "Health Insurance"
+    },
+    "B5": {
+      "value": 450
+    },
+    "C5": {
+      "value": null,
+      "formula": "=B5*12"
+    },
+    "A6": {
+      "value": "Software & Tools"
+    },
+    "B6": {
+      "value": 200
+    },
+    "C6": {
+      "value": null,
+      "formula": "=B6*12"
+    },
+    "A7": {
+      "value": "Retirement Savings"
+    },
+    "B7": {
+      "value": 500
+    },
+    "C7": {
+      "value": null,
+      "formula": "=B7*12"
+    },
+    "A8": {
+      "value": "Taxes (30%)"
+    },
+    "B8": {
+      "value": null,
+      "formula": "=SUM(B4:B7)*0.3"
+    },
+    "C8": {
+      "value": null,
+      "formula": "=B8*12"
+    },
+    "A10": {
+      "value": "Total Annual Costs"
+    },
+    "C10": {
+      "value": null,
+      "formula": "=SUM(C4:C8)"
+    },
+    "A11": {
+      "value": "Desired Profit"
+    },
+    "C11": {
+      "value": 30000
+    },
+    "A12": {
+      "value": "Target Annual Revenue"
+    },
+    "C12": {
+      "value": null,
+      "formula": "=C10+C11"
+    },
+    "A14": {
+      "value": "Billable Hours/Week"
+    },
+    "B14": {
+      "value": 30
+    },
+    "A15": {
+      "value": "Weeks Worked/Year"
+    },
+    "B15": {
+      "value": 48
+    },
+    "A16": {
+      "value": "Total Billable Hours"
+    },
+    "B16": {
+      "value": null,
+      "formula": "=B14*B15"
+    },
+    "A18": {
+      "value": "MINIMUM HOURLY RATE"
+    },
+    "B18": {
+      "value": null,
+      "formula": "=C12/B16"
+    }
+  },
+  "formats": [
+    {
+      "ids": [
+        "A3",
+        "B3",
+        "C3"
+      ],
+      "format": {
+        "bold": true,
+        "bgColor": "#7C3AED",
+        "fontColor": "#FFFFFF",
+        "textAlign": "center"
+      }
+    },
+    {
+      "ids": [
+        "A1"
+      ],
+      "format": {
+        "bold": true,
+        "fontSize": 16,
+        "fontColor": "#7C3AED"
+      }
+    },
+    {
+      "ids": [
+        "A10",
+        "A12",
+        "A18"
+      ],
+      "format": {
+        "bold": true
+      }
+    },
+    {
+      "ids": [
+        "B18"
+      ],
+      "format": {
+        "bold": true,
+        "fontSize": 14,
+        "bgColor": "#EDE9FE"
+      }
+    }
+  ]
+},
+{
+  "tool": "create_contract_log",
+  "label": "contract log",
+  "cells": {
+    "A1": {
+      "value": "Contract Log"
+    },
+    "A3": {
+      "value": "Client"
+    },
+    "B3": {
+      "value": "Project"
+    },
+    "C3": {
+      "value": "Start Date"
+    },
+    "D3": {
+      "value": "End Date"
+    },
+    "E3": {
+      "value": "Contract Value"
+    },
+    "F3": {
+      "value": "Status"
+    },
+    "G3": {
+      "value": "Invoiced"
+    },
+    "H3": {
+      "value": "Remaining"
+    },
+    "A4": {
+      "value": "TechStart Inc"
+    },
+    "B4": {
+      "value": "Platform Redesign"
+    },
+    "C4": {
+      "value": "2024-01-15"
+    },
+    "D4": {
+      "value": "2024-06-15"
+    },
+    "E4": {
+      "value": 45000
+    },
+    "F4": {
+      "value": "Active"
+    },
+    "G4": {
+      "value": 22500
+    },
+    "H4": {
+      "value": null,
+      "formula": "=E4-G4"
+    },
+    "A5": {
+      "value": "GreenLeaf Co"
+    },
+    "B5": {
+      "value": "Brand Identity"
+    },
+    "C5": {
+      "value": "2024-02-01"
+    },
+    "D5": {
+      "value": "2024-04-30"
+    },
+    "E5": {
+      "value": 12000
+    },
+    "F5": {
+      "value": "Active"
+    },
+    "G5": {
+      "value": 8000
+    },
+    "H5": {
+      "value": null,
+      "formula": "=E5-G5"
+    },
+    "A6": {
+      "value": "Nova Health"
+    },
+    "B6": {
+      "value": "Mobile App MVP"
+    },
+    "C6": {
+      "value": "2023-09-01"
+    },
+    "D6": {
+      "value": "2024-01-31"
+    },
+    "E6": {
+      "value": 32000
+    },
+    "F6": {
+      "value": "Completed"
+    },
+    "G6": {
+      "value": 32000
+    },
+    "H6": {
+      "value": null,
+      "formula": "=E6-G6"
+    },
+    "A7": {
+      "value": "Apex Fitness"
+    },
+    "B7": {
+      "value": "Dashboard UI"
+    },
+    "C7": {
+      "value": "2024-03-01"
+    },
+    "D7": {
+      "value": "2024-05-31"
+    },
+    "E7": {
+      "value": 18000
+    },
+    "F7": {
+      "value": "Pending"
+    },
+    "G7": {
+      "value": 0
+    },
+    "H7": {
+      "value": null,
+      "formula": "=E7-G7"
+    },
+    "A9": {
+      "value": "TOTALS"
+    },
+    "E9": {
+      "value": null,
+      "formula": "=SUM(E4:E7)"
+    },
+    "G9": {
+      "value": null,
+      "formula": "=SUM(G4:G7)"
+    },
+    "H9": {
+      "value": null,
+      "formula": "=SUM(H4:H7)"
+    }
+  },
+  "formats": [
+    {
+      "ids": [
+        "A3",
+        "B3",
+        "C3",
+        "D3",
+        "E3",
+        "F3",
+        "G3",
+        "H3"
+      ],
+      "format": {
+        "bold": true,
+        "bgColor": "#7C3AED",
+        "fontColor": "#FFFFFF",
+        "textAlign": "center"
+      }
+    },
+    {
+      "ids": [
+        "A1"
+      ],
+      "format": {
+        "bold": true,
+        "fontSize": 16,
+        "fontColor": "#7C3AED"
+      }
+    },
+    {
+      "ids": [
+        "A9"
+      ],
+      "format": {
+        "bold": true
+      }
+    },
+    {
+      "ids": [
+        "E9",
+        "G9",
+        "H9"
+      ],
+      "format": {
+        "bold": true,
+        "bgColor": "#EDE9FE"
+      }
+    }
+  ]
+},
+{
+  "tool": "create_project_profitability",
+  "label": "project profitability",
+  "cells": {
+    "A1": {
+      "value": "Project Profitability Tracker"
+    },
+    "A3": {
+      "value": "Project"
+    },
+    "B3": {
+      "value": "Client"
+    },
+    "C3": {
+      "value": "Revenue"
+    },
+    "D3": {
+      "value": "Hours Spent"
+    },
+    "E3": {
+      "value": "Hourly Rate"
+    },
+    "F3": {
+      "value": "Direct Costs"
+    },
+    "G3": {
+      "value": "Net Profit"
+    },
+    "H3": {
+      "value": "Profit Margin"
+    },
+    "A4": {
+      "value": "E-commerce Site"
+    },
+    "B4": {
+      "value": "RetailMax"
+    },
+    "C4": {
+      "value": 15000
+    },
+    "D4": {
+      "value": 120
+    },
+    "E4": {
+      "value": null,
+      "formula": "=C4/D4"
+    },
+    "F4": {
+      "value": 2200
+    },
+    "G4": {
+      "value": null,
+      "formula": "=C4-F4"
+    },
+    "H4": {
+      "value": null,
+      "formula": "=G4/C4"
+    },
+    "A5": {
+      "value": "SaaS Dashboard"
+    },
+    "B5": {
+      "value": "CloudSync"
+    },
+    "C5": {
+      "value": 22000
+    },
+    "D5": {
+      "value": 180
+    },
+    "E5": {
+      "value": null,
+      "formula": "=C5/D5"
+    },
+    "F5": {
+      "value": 4500
+    },
+    "G5": {
+      "value": null,
+      "formula": "=C5-F5"
+    },
+    "H5": {
+      "value": null,
+      "formula": "=G5/C5"
+    },
+    "A6": {
+      "value": "Brand Refresh"
+    },
+    "B6": {
+      "value": "Bloom Co"
+    },
+    "C6": {
+      "value": 8000
+    },
+    "D6": {
+      "value": 45
+    },
+    "E6": {
+      "value": null,
+      "formula": "=C6/D6"
+    },
+    "F6": {
+      "value": 600
+    },
+    "G6": {
+      "value": null,
+      "formula": "=C6-F6"
+    },
+    "H6": {
+      "value": null,
+      "formula": "=G6/C6"
+    },
+    "A7": {
+      "value": "API Integration"
+    },
+    "B7": {
+      "value": "FinServ Ltd"
+    },
+    "C7": {
+      "value": 11000
+    },
+    "D7": {
+      "value": 95
+    },
+    "E7": {
+      "value": null,
+      "formula": "=C7/D7"
+    },
+    "F7": {
+      "value": 1800
+    },
+    "G7": {
+      "value": null,
+      "formula": "=C7-F7"
+    },
+    "H7": {
+      "value": null,
+      "formula": "=G7/C7"
+    },
+    "A9": {
+      "value": "TOTALS"
+    },
+    "C9": {
+      "value": null,
+      "formula": "=SUM(C4:C7)"
+    },
+    "D9": {
+      "value": null,
+      "formula": "=SUM(D4:D7)"
+    },
+    "F9": {
+      "value": null,
+      "formula": "=SUM(F4:F7)"
+    },
+    "G9": {
+      "value": null,
+      "formula": "=SUM(G4:G7)"
+    },
+    "A10": {
+      "value": "AVG EFFECTIVE RATE"
+    },
+    "E10": {
+      "value": null,
+      "formula": "=C9/D9"
+    },
+    "A11": {
+      "value": "AVG PROFIT MARGIN"
+    },
+    "H11": {
+      "value": null,
+      "formula": "=G9/C9"
+    }
+  },
+  "formats": [
+    {
+      "ids": [
+        "A3",
+        "B3",
+        "C3",
+        "D3",
+        "E3",
+        "F3",
+        "G3",
+        "H3"
+      ],
+      "format": {
+        "bold": true,
+        "bgColor": "#7C3AED",
+        "fontColor": "#FFFFFF",
+        "textAlign": "center"
+      }
+    },
+    {
+      "ids": [
+        "A1"
+      ],
+      "format": {
+        "bold": true,
+        "fontSize": 16,
+        "fontColor": "#7C3AED"
+      }
+    },
+    {
+      "ids": [
+        "A9",
+        "A10",
+        "A11"
+      ],
+      "format": {
+        "bold": true
+      }
+    },
+    {
+      "ids": [
+        "G9",
+        "E10",
+        "H11"
+      ],
+      "format": {
+        "bold": true,
+        "fontSize": 14,
+        "bgColor": "#EDE9FE"
+      }
+    }
+  ]
 }
 ];

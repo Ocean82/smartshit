@@ -1897,5 +1897,518 @@ export const personalFinanceTemplates: TemplateSpec[] = [
       }
     }
   ]
+},
+{
+  "tool": "create_subscription_tracker",
+  "label": "subscription tracker",
+  "cells": {
+    "A1": {
+      "value": "Subscription Tracker"
+    },
+    "A3": {
+      "value": "Service"
+    },
+    "B3": {
+      "value": "Category"
+    },
+    "C3": {
+      "value": "Monthly Cost"
+    },
+    "D3": {
+      "value": "Annual Cost"
+    },
+    "E3": {
+      "value": "Billing Date"
+    },
+    "F3": {
+      "value": "Status"
+    },
+    "A4": {
+      "value": "Netflix"
+    },
+    "B4": {
+      "value": "Streaming"
+    },
+    "C4": {
+      "value": 15.49
+    },
+    "D4": {
+      "value": null,
+      "formula": "=C4*12"
+    },
+    "E4": {
+      "value": "15th"
+    },
+    "F4": {
+      "value": "Active"
+    },
+    "A5": {
+      "value": "Spotify"
+    },
+    "B5": {
+      "value": "Music"
+    },
+    "C5": {
+      "value": 10.99
+    },
+    "D5": {
+      "value": null,
+      "formula": "=C5*12"
+    },
+    "E5": {
+      "value": "3rd"
+    },
+    "F5": {
+      "value": "Active"
+    },
+    "A6": {
+      "value": "Adobe Creative Cloud"
+    },
+    "B6": {
+      "value": "Software"
+    },
+    "C6": {
+      "value": 54.99
+    },
+    "D6": {
+      "value": null,
+      "formula": "=C6*12"
+    },
+    "E6": {
+      "value": "22nd"
+    },
+    "F6": {
+      "value": "Active"
+    },
+    "A7": {
+      "value": "Gym Membership"
+    },
+    "B7": {
+      "value": "Fitness"
+    },
+    "C7": {
+      "value": 39.99
+    },
+    "D7": {
+      "value": null,
+      "formula": "=C7*12"
+    },
+    "E7": {
+      "value": "1st"
+    },
+    "F7": {
+      "value": "Active"
+    },
+    "A8": {
+      "value": "iCloud Storage"
+    },
+    "B8": {
+      "value": "Cloud"
+    },
+    "C8": {
+      "value": 2.99
+    },
+    "D8": {
+      "value": null,
+      "formula": "=C8*12"
+    },
+    "E8": {
+      "value": "10th"
+    },
+    "F8": {
+      "value": "Active"
+    },
+    "A10": {
+      "value": "MONTHLY TOTAL"
+    },
+    "C10": {
+      "value": null,
+      "formula": "=SUM(C4:C8)"
+    },
+    "D10": {
+      "value": null,
+      "formula": "=SUM(D4:D8)"
+    }
+  },
+  "formats": [
+    {
+      "ids": [
+        "A3",
+        "B3",
+        "C3",
+        "D3",
+        "E3",
+        "F3"
+      ],
+      "format": {
+        "bold": true,
+        "bgColor": "#7C3AED",
+        "fontColor": "#FFFFFF",
+        "textAlign": "center"
+      }
+    },
+    {
+      "ids": [
+        "A1"
+      ],
+      "format": {
+        "bold": true,
+        "fontSize": 16,
+        "fontColor": "#7C3AED"
+      }
+    },
+    {
+      "ids": [
+        "A10"
+      ],
+      "format": {
+        "bold": true
+      }
+    },
+    {
+      "ids": [
+        "C10",
+        "D10"
+      ],
+      "format": {
+        "bold": true,
+        "bgColor": "#EDE9FE"
+      }
+    }
+  ]
+},
+{
+  "tool": "create_net_worth_calculator",
+  "label": "net worth calculator",
+  "cells": {
+    "A1": {
+      "value": "Net Worth Calculator"
+    },
+    "A3": {
+      "value": "ASSETS"
+    },
+    "B3": {
+      "value": "Value"
+    },
+    "A4": {
+      "value": "Cash & Checking"
+    },
+    "B4": {
+      "value": 8500
+    },
+    "A5": {
+      "value": "Savings Accounts"
+    },
+    "B5": {
+      "value": 22000
+    },
+    "A6": {
+      "value": "Brokerage Investments"
+    },
+    "B6": {
+      "value": 67000
+    },
+    "A7": {
+      "value": "401(k) / IRA"
+    },
+    "B7": {
+      "value": 125000
+    },
+    "A8": {
+      "value": "Primary Residence"
+    },
+    "B8": {
+      "value": 380000
+    },
+    "A9": {
+      "value": "Vehicle"
+    },
+    "B9": {
+      "value": 18000
+    },
+    "A10": {
+      "value": "Total Assets"
+    },
+    "B10": {
+      "value": null,
+      "formula": "=SUM(B4:B9)"
+    },
+    "A12": {
+      "value": "LIABILITIES"
+    },
+    "B12": {
+      "value": "Balance"
+    },
+    "A13": {
+      "value": "Mortgage"
+    },
+    "B13": {
+      "value": 265000
+    },
+    "A14": {
+      "value": "Auto Loan"
+    },
+    "B14": {
+      "value": 12000
+    },
+    "A15": {
+      "value": "Student Loans"
+    },
+    "B15": {
+      "value": 34000
+    },
+    "A16": {
+      "value": "Credit Card Debt"
+    },
+    "B16": {
+      "value": 4200
+    },
+    "A17": {
+      "value": "Total Liabilities"
+    },
+    "B17": {
+      "value": null,
+      "formula": "=SUM(B13:B16)"
+    },
+    "A19": {
+      "value": "NET WORTH"
+    },
+    "B19": {
+      "value": null,
+      "formula": "=B10-B17"
+    }
+  },
+  "formats": [
+    {
+      "ids": [
+        "A3",
+        "B3"
+      ],
+      "format": {
+        "bold": true,
+        "bgColor": "#7C3AED",
+        "fontColor": "#FFFFFF",
+        "textAlign": "center"
+      }
+    },
+    {
+      "ids": [
+        "A12",
+        "B12"
+      ],
+      "format": {
+        "bold": true,
+        "bgColor": "#7C3AED",
+        "fontColor": "#FFFFFF",
+        "textAlign": "center"
+      }
+    },
+    {
+      "ids": [
+        "A1"
+      ],
+      "format": {
+        "bold": true,
+        "fontSize": 16,
+        "fontColor": "#7C3AED"
+      }
+    },
+    {
+      "ids": [
+        "A10",
+        "B10"
+      ],
+      "format": {
+        "bold": true,
+        "bgColor": "#EDE9FE"
+      }
+    },
+    {
+      "ids": [
+        "A17",
+        "B17"
+      ],
+      "format": {
+        "bold": true,
+        "bgColor": "#FEE2E2"
+      }
+    },
+    {
+      "ids": [
+        "A19",
+        "B19"
+      ],
+      "format": {
+        "bold": true,
+        "fontSize": 14,
+        "bgColor": "#EDE9FE",
+        "fontColor": "#7C3AED"
+      }
+    }
+  ]
+},
+{
+  "tool": "create_emergency_fund_planner",
+  "label": "emergency fund planner",
+  "cells": {
+    "A1": {
+      "value": "Emergency Fund Planner"
+    },
+    "A3": {
+      "value": "Monthly Expenses"
+    },
+    "B3": {
+      "value": 4200
+    },
+    "A4": {
+      "value": "Target Months"
+    },
+    "B4": {
+      "value": 6
+    },
+    "A5": {
+      "value": "Fund Goal"
+    },
+    "B5": {
+      "value": null,
+      "formula": "=B3*B4"
+    },
+    "A6": {
+      "value": "Current Savings"
+    },
+    "B6": {
+      "value": 5600
+    },
+    "A7": {
+      "value": "Monthly Contribution"
+    },
+    "B7": {
+      "value": 600
+    },
+    "A8": {
+      "value": "Months to Goal"
+    },
+    "B8": {
+      "value": null,
+      "formula": "=(B5-B6)/B7"
+    },
+    "A10": {
+      "value": "Month"
+    },
+    "B10": {
+      "value": "Contribution"
+    },
+    "C10": {
+      "value": "Balance"
+    },
+    "D10": {
+      "value": "% of Goal"
+    },
+    "A11": {
+      "value": "Month 1"
+    },
+    "B11": {
+      "value": 600
+    },
+    "C11": {
+      "value": null,
+      "formula": "=B6+B11"
+    },
+    "D11": {
+      "value": null,
+      "formula": "=C11/$B$5"
+    },
+    "A12": {
+      "value": "Month 2"
+    },
+    "B12": {
+      "value": 600
+    },
+    "C12": {
+      "value": null,
+      "formula": "=C11+B12"
+    },
+    "D12": {
+      "value": null,
+      "formula": "=C12/$B$5"
+    },
+    "A13": {
+      "value": "Month 3"
+    },
+    "B13": {
+      "value": 600
+    },
+    "C13": {
+      "value": null,
+      "formula": "=C12+B13"
+    },
+    "D13": {
+      "value": null,
+      "formula": "=C13/$B$5"
+    },
+    "A14": {
+      "value": "Month 4"
+    },
+    "B14": {
+      "value": 600
+    },
+    "C14": {
+      "value": null,
+      "formula": "=C13+B14"
+    },
+    "D14": {
+      "value": null,
+      "formula": "=C14/$B$5"
+    }
+  },
+  "formats": [
+    {
+      "ids": [
+        "A10",
+        "B10",
+        "C10",
+        "D10"
+      ],
+      "format": {
+        "bold": true,
+        "bgColor": "#7C3AED",
+        "fontColor": "#FFFFFF",
+        "textAlign": "center"
+      }
+    },
+    {
+      "ids": [
+        "A1"
+      ],
+      "format": {
+        "bold": true,
+        "fontSize": 16,
+        "fontColor": "#7C3AED"
+      }
+    },
+    {
+      "ids": [
+        "A3",
+        "A4",
+        "A5",
+        "A6",
+        "A7",
+        "A8"
+      ],
+      "format": {
+        "bold": true
+      }
+    },
+    {
+      "ids": [
+        "B5",
+        "B8"
+      ],
+      "format": {
+        "bold": true,
+        "bgColor": "#EDE9FE"
+      }
+    }
+  ]
 }
 ];

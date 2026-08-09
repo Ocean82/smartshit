@@ -65,6 +65,99 @@ const NICHE_TEMPLATES: Array<[string, string]> = [
   ['create_habit_tracker', 'Track daily habits with streaks and completion rates'],
   ['create_medical_expenses', 'Track healthcare costs including insurance, prescriptions, and visits'],
   ['create_saas_financial_model', 'Multi-year SaaS financial model with ARR, opex, and EBITDA margins'],
+
+  // ─── Personal Finance (new) ─────────────────────────────────────────────────
+  ['create_subscription_tracker', 'Track recurring subscriptions with renewal dates, costs, and annual totals'],
+  ['create_net_worth_calculator', 'Calculate net worth by listing all assets and liabilities with monthly snapshots'],
+  ['create_emergency_fund_planner', 'Plan emergency fund savings with target amounts based on monthly expenses'],
+
+  // ─── Freelancer (new) ───────────────────────────────────────────────────────
+  ['create_freelance_tax_estimator', 'Estimate annual self-employment taxes with income brackets and deductions'],
+  ['create_rate_calculator', 'Calculate optimal hourly and project rates based on expenses and target income'],
+  ['create_contract_log', 'Track client contracts with start dates, end dates, values, and renewal status'],
+  ['create_project_profitability', 'Analyze profit per project by comparing revenue against time and expenses'],
+
+  // ─── Real Estate (new) ──────────────────────────────────────────────────────
+  ['create_capex_planner', 'Plan capital expenditures for properties with cost estimates and timelines'],
+  ['create_maintenance_tracker', 'Track property maintenance requests with status, costs, and vendor assignments'],
+  ['create_lease_comparison', 'Compare lease terms across multiple properties with rent, fees, and concessions'],
+  ['create_property_tax_tracker', 'Track property tax assessments, payments, and appeal deadlines by property'],
+
+  // ─── Small Business: Operations & HR (new) ──────────────────────────────────
+  ['create_employee_schedule', 'Create employee work schedules with shifts, days, and coverage tracking'],
+  ['create_pto_tracker', 'Track employee paid time off balances, requests, and approvals'],
+  ['create_hiring_pipeline', 'Track job candidates through hiring stages with interview status'],
+  ['create_vendor_manager', 'Manage vendor contacts, contracts, and performance ratings'],
+  ['create_inventory_reorder', 'Track inventory levels with reorder points and automatic alerts'],
+  ['create_meeting_agenda', 'Structure meeting agendas with topics, time allocations, and action items'],
+  ['create_performance_review', 'Track employee performance reviews with goals, ratings, and feedback'],
+  ['create_onboarding_checklist', 'Manage new employee onboarding tasks with due dates and owners'],
+
+  // ─── Small Business: Sales & Marketing (new) ────────────────────────────────
+  ['create_sales_pipeline', 'Track deals through sales stages with values and close probability'],
+  ['create_revenue_dashboard', 'Monitor revenue metrics with MRR, growth rates, and forecasts'],
+  ['create_marketing_campaign_budget', 'Plan and track marketing campaign spending with ROI'],
+  ['create_lead_tracking', 'Track sales leads with source, status, and follow-up dates'],
+  ['create_customer_churn_calculator', 'Calculate and track customer churn rates with cohort analysis'],
+  ['create_social_media_calendar', 'Plan social media posts with dates, platforms, and content'],
+  ['create_email_campaign_metrics', 'Track email campaign performance with open rates and conversions'],
+  ['create_competitor_analysis', 'Compare competitors on features, pricing, and market position'],
+
+  // ─── Small Business: Accounting & Tax (new) ─────────────────────────────────
+  ['create_cash_flow_forecast', 'Project cash inflows and outflows to avoid shortfalls'],
+  ['create_quarterly_tax_estimator', 'Estimate quarterly business tax payments with income and deductions'],
+  ['create_ar_aging', 'Track accounts receivable aging with 30/60/90 day buckets'],
+  ['create_break_even_analysis', 'Calculate break-even point with fixed costs, variable costs, and price'],
+  ['create_business_expense_report', 'Track business expenses by category with approval status'],
+  ['create_mileage_log', 'Log business miles driven with dates, destinations, and tax deductions'],
+  ['create_annual_budget_vs_actual', 'Compare annual budget plan against actual spending by category'],
+
+  // ─── Education (new) ────────────────────────────────────────────────────────
+  ['create_student_loan_calculator', 'Calculate student loan payoff timelines with principal, rates, and monthly payments'],
+  ['create_college_cost_comparison', 'Compare college costs across institutions with financial aid'],
+  ['create_gpa_what_if', 'Simulate GPA outcomes for different grade scenarios'],
+  ['create_teacher_gradebook', 'Track student grades across assignments with weighted categories'],
+  ['create_homeschool_curriculum', 'Plan homeschool curriculum by subject with resources and schedule'],
+  ['create_study_schedule', 'Build study schedules with subjects, time blocks, and priorities'],
+  ['create_tuition_savings', 'Plan tuition savings with monthly contributions and growth projections'],
+  ['create_course_registration', 'Plan course registration with prerequisites, credits, and schedule conflicts'],
+
+  // ─── Health & Wellness (new) ────────────────────────────────────────────────
+  ['create_medical_expense_hsa', 'Track medical expenses with HSA contributions and reimbursements'],
+  ['create_medication_schedule', 'Organize medications with dosage, frequency, and refill reminders'],
+  ['create_macro_calculator', 'Calculate daily macronutrient intake with protein, carbs, fat, and calories'],
+  ['create_workout_progress', 'Track workout progress with exercises, sets, reps, and personal records'],
+  ['create_mood_journal', 'Log daily mood, energy levels, and mental health indicators'],
+  ['create_sleep_tracker', 'Monitor sleep patterns with duration, quality, and weekly averages'],
+  ['create_weight_loss_calculator', 'Calculate weight loss progress with weigh-ins and goal projections'],
+
+  // ─── Project Management (new) ───────────────────────────────────────────────
+  ['create_project_timeline', 'Plan project tasks with owners, dates, durations, and dependencies'],
+  ['create_sprint_planning', 'Organize sprint stories with assignees, priorities, and story points'],
+  ['create_resource_allocation', 'Track team member allocation across multiple projects'],
+  ['create_project_budget', 'Track estimated vs actual project costs with variance analysis'],
+  ['create_risk_register', 'Document project risks with probability, impact, and mitigations'],
+  ['create_milestone_tracker', 'Track project milestones with target and actual completion dates'],
+  ['create_meeting_notes', 'Capture meeting items with action owners, due dates, and status'],
+  ['create_client_deliverables', 'Track client deliverables with phases, dates, and approval status'],
+
+  // ─── Nonprofit (new) ────────────────────────────────────────────────────────
+  ['create_grant_tracker', 'Track grant applications, awards, reporting deadlines, and amounts'],
+  ['create_donor_database', 'Manage donor contacts with giving history and engagement'],
+  ['create_event_fundraising_pnl', 'Track fundraising event income and expenses with net profit'],
+  ['create_volunteer_hours', 'Log volunteer hours by person, activity, and date'],
+  ['create_program_budget', 'Budget program expenses with funding sources and allocations'],
+  ['create_board_meeting_minutes', 'Record board meeting attendance, decisions, and action items'],
+  ['create_annual_report_data', 'Compile annual report data with program outcomes and financials'],
+  ['create_in_kind_donation_valuation', 'Value in-kind donations with fair market value and donor info'],
+
+  // ─── Legal & Compliance (new) ───────────────────────────────────────────────
+  ['create_contract_renewal_calendar', 'Track contract renewal dates with values and stakeholders'],
+  ['create_legal_matter_tracker', 'Track legal matters with status, attorneys, and deadlines'],
+  ['create_compliance_audit_checklist', 'Manage compliance audit items with status and evidence'],
+  ['create_nda_log', 'Track NDA agreements with parties, dates, and expiration'],
+  ['create_insurance_policy_tracker', 'Track insurance policies with coverage, premiums, and renewals'],
+  ['create_regulatory_filing_deadlines', 'Track regulatory filing deadlines with status and responsible parties'],
 ]
 
 export const TOOL_REGISTRY: ToolDefinition[] = [
