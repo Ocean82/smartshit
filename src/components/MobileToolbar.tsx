@@ -4,6 +4,7 @@
  * Reveals additional tools via expandable tray.
  */
 import React, { useState } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { useStore } from '@/store/useStore';
 import { refToCell } from '@/engine/spreadsheet';
 import {
@@ -27,7 +28,18 @@ export function MobileToolbar() {
     setShowChartDialog,
     setShowFilterDialog,
     activeFilters,
-  } = useStore();
+  } = useStore(useShallow((s) => ({
+    selection: s.selection,
+    setRangeFormat: s.setRangeFormat,
+    undo: s.undo,
+    redo: s.redo,
+    undoStack: s.undoStack,
+    redoStack: s.redoStack,
+    getActiveSheet: s.getActiveSheet,
+    setShowChartDialog: s.setShowChartDialog,
+    setShowFilterDialog: s.setShowFilterDialog,
+    activeFilters: s.activeFilters,
+  })));
 
   const [expandedGroup, setExpandedGroup] = useState<ToolGroup>(null);
   const sheet = getActiveSheet();

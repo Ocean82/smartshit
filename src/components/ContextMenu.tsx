@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { useStore } from '@/store/useStore';
 import { cellToRef } from '@/engine/spreadsheet';
 import { getCellNotesService } from '@/lib/cellNotes';
@@ -22,7 +23,22 @@ export function ContextMenu() {
     deleteColumn,
     setRangeFormat,
     setCellValue,
-  } = useStore();
+    activeSheetId,
+  } = useStore(useShallow((s) => ({
+    contextMenu: s.contextMenu,
+    setContextMenu: s.setContextMenu,
+    copy: s.copy,
+    cut: s.cut,
+    paste: s.paste,
+    pushHistory: s.pushHistory,
+    insertRow: s.insertRow,
+    insertColumn: s.insertColumn,
+    deleteRow: s.deleteRow,
+    deleteColumn: s.deleteColumn,
+    setRangeFormat: s.setRangeFormat,
+    setCellValue: s.setCellValue,
+    activeSheetId: s.activeSheetId,
+  })));
 
   const [noteMode, setNoteMode] = useState<'idle' | 'editing'>('idle');
   const [noteText, setNoteText] = useState('');
@@ -54,7 +70,7 @@ export function ContextMenu() {
 
   const ref = cellToRef(contextMenu.cell);
   const notesService = getCellNotesService();
-  const sheetId = useStore.getState().activeSheetId;
+  const sheetId = activeSheetId;
   const existingNote = notesService.getNote(sheetId, contextMenu.cell);
 
   const openNoteEditor = () => {

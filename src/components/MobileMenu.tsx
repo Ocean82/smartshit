@@ -3,6 +3,7 @@
  * Replaces the desktop MenuBar dropdown pattern with touch-friendly actions.
  */
 import React, { useState, useRef } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { useStore } from '@/store/useStore';
 import { exportWorkbookToXlsx, exportSheetToCsv, importWorkbookFromFileWithMeta } from '@/io/xlsx';
 import { v4 as uuid } from 'uuid';
@@ -38,7 +39,29 @@ export function MobileMenu() {
     showVersionHistory,
     setShowVersionHistory,
     showConfirm,
-  } = useStore();
+  } = useStore(useShallow((s) => ({
+    workbook: s.workbook,
+    undo: s.undo,
+    redo: s.redo,
+    undoStack: s.undoStack,
+    redoStack: s.redoStack,
+    copy: s.copy,
+    cut: s.cut,
+    paste: s.paste,
+    selection: s.selection,
+    pushHistory: s.pushHistory,
+    toggleFileExplorer: s.toggleFileExplorer,
+    getActiveSheet: s.getActiveSheet,
+    setShowChartDialog: s.setShowChartDialog,
+    setShowFilterDialog: s.setShowFilterDialog,
+    setShowPivotDialog: s.setShowPivotDialog,
+    sortByColumn: s.sortByColumn,
+    initWorkbook: s.initWorkbook,
+    addMessage: s.addMessage,
+    showVersionHistory: s.showVersionHistory,
+    setShowVersionHistory: s.setShowVersionHistory,
+    showConfirm: s.showConfirm,
+  })));
 
   const sheet = getActiveSheet();
   const col = selection ? Math.min(selection.startCol, selection.endCol) : 0;
