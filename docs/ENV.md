@@ -9,7 +9,8 @@ See also `docs/NAMING.md` and `.env.example`.
 | `VITE_CLERK_PUBLISHABLE_KEY` | Yes (frontend build) | SmartSht `pk_live_*` for production builds |
 | `CLERK_SECRET_KEY`, `CLERK_PUBLISHABLE_KEY` | Yes (server) | SmartSht instance at `clerk.smartsht.com` |
 | `STRIPE_SECRET_KEY`, `STRIPE_PRICE_ID`, `STRIPE_WEBHOOK_SECRET`, `APP_URL` | Yes | Use **live** keys in production |
-| `SMARTSHIT_MODEL`, `OLLAMA_BASE_URL`, `NUM_CTX`, `NUM_PREDICT` | Yes | Local Ollama; model id spelling is intentional. Prod uses Spreadsheet-RL-4B (4096 ctx, 768 predict) |
+| `SMARTSHIT_MODEL`, `OLLAMA_BASE_URL`, `NUM_CTX`, `NUM_PREDICT` | Yes | Local Ollama; model id spelling is intentional. Prod uses Spreadsheet-RL-4B (4096 ctx, 768 predict) — GGUF already on prod; verify Modelfile only |
+| `SMARTSHT_MINILM_SRC` | Optional | Override source dir/file for `npm run model:copy-deploy` (MiniLM ONNX Path B). Runtime loads from `server/models/minilm/` only — never `temp/` |
 | `LLM_PROVIDER_ORDER`, `GROQ_*`, `OPENROUTER_*`, `HUGGINGFACE_*` | Yes | Optional cloud LLM failover |
 | `PORT`, `HOST` | Yes | Server bind |
 | `TRUST_PROXY` | Yes | Express `trust proxy`. Default `loopback` (nginx on 127.0.0.1). Required for correct client IPs and rate limiting |
@@ -26,6 +27,12 @@ See also `docs/NAMING.md` and `.env.example`.
 - RDS host `burntbeats-db` and bucket `burntbeatz2-storage` are shared accounts.
 - Isolation is via Postgres schema `smartsht` and S3 prefix `smartsht/`.
 
+## ONNX Path B (server models)
+
+- Authenticated `POST /api/onnx/infer` uses `onnxruntime-node` and `server/models/{name}/model.onnx` (flat `{name}.onnx` fallback).
+- Populate MiniLM with `npm run model:copy-deploy` (optional `SMARTSHT_MINILM_SRC`). Download fallback needs network.
+- Spreadsheet-RL-4B GGUF for Ollama chat is already on production — verify `server/Modelfile.spreadsheet-rl` only; do not re-upload.
+
 ## Production cutover checklist
 
 1. Rebuild frontend with `VITE_CLERK_PUBLISHABLE_KEY=pk_live_...` (SmartSht — must decode to `clerk.smartsht.com`, not `amused-mollusk`).
@@ -36,3 +43,5 @@ See also `docs/NAMING.md` and `.env.example`.
 6. Sign in on https://smartsht.com/app/ — Network tab should hit `clerk.smartsht.com`.
 7. Cloud save sends `Authorization: Bearer …` (not `x-user-id`).
 8. Spoofed `x-user-id` alone → 401.
+9. **Ollama:** confirm `ollama show smartshit` points at Spreadsheet-RL-4B (already on server — do not re-upload GGUF by default).
+10. **Ops:** if credentials were ever exposed in chat/logs, rotate Groq/AWS/Clerk/Stripe/DB secrets before shipping.

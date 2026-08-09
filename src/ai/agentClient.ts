@@ -1,5 +1,5 @@
 import { v4 as uuid } from 'uuid'
-import type { AgentAction, ChatMessage } from '@/types'
+import type { AgentAction, ChatMessage, ProviderMeta } from '@/types'
 import type { SpreadsheetContextPayload } from '@/ai/buildContext'
 import { getAuthHeaders } from '@/lib/cloudSync'
 import { getByokPayload } from '@/lib/userApiKey'
@@ -18,6 +18,33 @@ export interface ServerChatResponse {
   source: 'llm' | 'fallback' | 'template'
   reasoning?: string
   suggestions?: string[]
+  meta?: ProviderMeta
+}
+
+/** Parse an SSE `data:` JSON payload into a ServerChatResponse when type=complete. */
+export function parseCompleteSseEvent(jsonStr: string): ServerChatResponse | null {
+  try {
+    const event = JSON.parse(jsonStr) as {
+      type?: string
+      message?: string
+      actions?: ServerAgentAction[]
+      source?: string
+      reasoning?: string
+      suggestions?: string[]
+      meta?: ProviderMeta
+    }
+    if (event.type !== 'complete' || typeof event.message !== 'string') return null
+    return {
+      message: event.message,
+      actions: Array.isArray(event.actions) ? event.actions : [],
+      source: (event.source as ServerChatResponse['source']) ?? 'llm',
+      reasoning: event.reasoning,
+      suggestions: event.suggestions,
+      meta: event.meta,
+    }
+  } catch {
+    return null
+  }
 }
 
 export interface ServerHealth {
@@ -106,21 +133,13 @@ export async function chatWithAgentServerStream(
         if (!jsonStr) continue
 
         try {
-          const event = JSON.parse(jsonStr) as
-            | { type: 'token'; content: string }
-            | { type: 'complete'; message: string; actions: ServerAgentAction[]; source: string; reasoning?: string; suggestions?: string[] }
-
-          if (event.type === 'token') {
-            onToken(event.content)
-          } else if (event.type === 'complete') {
-            finalResponse = {
-              message: event.message,
-              actions: event.actions,
-              source: event.source as ServerChatResponse['source'],
-              reasoning: event.reasoning,
-              suggestions: event.suggestions,
-            }
+          const parsed = JSON.parse(jsonStr) as { type?: string; content?: string }
+          if (parsed.type === 'token' && typeof parsed.content === 'string') {
+            onToken(parsed.content)
+            continue
           }
+          const complete = parseCompleteSseEvent(jsonStr)
+          if (complete) finalResponse = complete
         } catch {
           // Skip malformed events
         }
@@ -153,5 +172,6 @@ export function serverResponseToChatMessage(
     timestamp,
     suggestions: response.suggestions,
     actions: actions.length > 0 ? actions : undefined,
+    providerMeta: response.meta,
   }
 }

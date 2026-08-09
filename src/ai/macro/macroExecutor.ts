@@ -31,9 +31,8 @@ export type StepExecutor = (
 // ─── Default Stub Step Executor ─────────────────────────────────────────────
 
 /**
- * Default stub step executor.
- * Returns a successful result echoing the tool and params.
- * Will be replaced by real tool execution in integration (task 11.2).
+ * Stub step executor for unit tests only.
+ * Production callers must pass createToolStepExecutor (or equivalent).
  */
 export const defaultStepExecutor: StepExecutor = async (step: ActionStep) => {
   return {
@@ -87,13 +86,13 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
  * @param plan - The macro plan to execute
  * @param callbacks - Progress and cancellation callbacks
  * @param undoManager - Manager for transactional undo groups
- * @param stepExecutor - Optional injectable step executor (defaults to stub)
+ * @param stepExecutor - Required step executor (use defaultStepExecutor only in tests)
  */
 export async function executeMacro(
   plan: MacroPlan,
   callbacks: MacroExecutorCallbacks,
   undoManager: UndoManager,
-  stepExecutor: StepExecutor = defaultStepExecutor
+  stepExecutor: StepExecutor
 ): Promise<MacroExecutionResult> {
   const label = 'Macro: ' + plan.originalText.slice(0, 50)
   const groupId = undoManager.beginGroup(label)

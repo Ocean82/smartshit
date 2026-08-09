@@ -28,6 +28,10 @@ import {
 import { executeTool, executeToolAsync, type ExecutionContext, type ExecutionResult } from '@/agent';
 import { executeTemplateTool, resolveGalleryTemplate } from '@/templates';
 import { MUTATION_TOOL_NAMES } from '@shared/toolRegistry';
+import { executeMacro } from '@/ai/macro/macroExecutor';
+import { createStoreUndoManager } from '@/ai/macro/storeUndoManager';
+import { createToolStepExecutor } from '@/ai/macro/toolStepExecutor';
+import type { ActionStep, MacroPlan } from '@/ai/nlp/types';
 import { loadPersistedState } from '@/lib/persistence';
 import { buildSpreadsheetContext } from '@/ai/buildContext';
 import { toolResultToMessage } from '@/ai/responseBuilder';
@@ -811,7 +815,10 @@ export const useStore = create<AppState>()(
               const historyLabel = estimatedChanges > 0
                 ? `AI Action: ${action.description} (~${estimatedChanges} changes)`
                 : `AI Action: ${action.description}`;
-              get().pushHistory(historyLabel);
+              // Macro undo manager owns the transaction — do not pushHistory before
+              if (action.tool !== 'execute_macro') {
+                get().pushHistory(historyLabel);
+              }
 
               const finishAction = (result: ExecutionResult) => {
                 set((s) => {
@@ -1590,6 +1597,9 @@ function executeAction(
   set: any
 ): ExecutionResult | Promise<ExecutionResult> {
   const ctx = buildExecutionContext(get, set, { suppressHistory: true });
+  if (action.tool === 'execute_macro') {
+    return executeMacroAction(action, get, set);
+  }
   if (action.tool === 'execute_script') {
     // Validate that code is a non-empty string before passing to the sandbox.
     // params.code originates from LLM output and must not be run unsanitized.
@@ -1607,4 +1617,95 @@ function executeAction(
     return executeTool({ tool: action.tool, params: action.params, description: action.description }, ctx);
   }
   return executeTemplateTool(action.tool, action.params, ctx);
+}
+
+/**
+ * Run a multi-step macro as one undoable group.
+ * On success, push a single HistoryEntry with structural before/after snapshots.
+ */
+async function executeMacroAction(
+  action: AgentAction,
+  get: () => AppState,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  set: any,
+): Promise<ExecutionResult> {
+  const rawSteps = action.params.steps;
+  const steps: ActionStep[] = Array.isArray(rawSteps)
+    ? rawSteps.map((s) => ({
+        tool: String((s as ActionStep).tool ?? ''),
+        params: ((s as ActionStep).params ?? {}) as Record<string, unknown>,
+        description: String((s as ActionStep).description ?? (s as ActionStep).tool ?? 'step'),
+      }))
+    : [];
+
+  if (steps.length === 0) {
+    return { success: false, message: 'execute_macro requires a non-empty steps array', modified: 0 };
+  }
+
+  const label = action.description || `Macro: ${steps.length} steps`;
+  const before = structuredClone(get().workbook);
+
+  const undoManager = createStoreUndoManager({
+    getWorkbook: () => get().workbook,
+    restoreWorkbook: (wb) => {
+      get().engine.loadWorkbook(wb);
+      set((s: AppState) => {
+        s.workbook = wb;
+        s.activeSheetId = wb.activeSheetId;
+      });
+    },
+  });
+
+  const stepExecutor = createToolStepExecutor(
+    () => buildExecutionContext(get, set, { suppressHistory: true }),
+  );
+
+  const plan: MacroPlan = {
+    steps,
+    originalText: label,
+    truncated: false,
+  };
+
+  const result = await executeMacro(
+    plan,
+    {
+      onProgress() {},
+      onStepComplete() {},
+      shouldCancel: () => false,
+    },
+    undoManager,
+    stepExecutor,
+  );
+
+  if (result.success) {
+    const after = structuredClone(get().workbook);
+    set((s: AppState) => {
+      s.undoStack.push({
+        patch: {
+          sheets: [],
+          activeSheetIdBefore: before.activeSheetId,
+          activeSheetIdAfter: after.activeSheetId,
+          structuralBefore: before,
+          structuralAfter: after,
+        },
+        description: label.startsWith('Macro:') ? label : `Macro: ${label}`,
+      });
+      if (s.undoStack.length > MAX_UNDO_STACK) s.undoStack.shift();
+      s.redoStack = [];
+    });
+
+    const modified = result.completedSteps.reduce((sum, step) => {
+      const data = step.result.data as { modified?: number } | undefined;
+      return sum + (typeof data?.modified === 'number' ? data.modified : 0);
+    }, 0);
+
+    return {
+      success: true,
+      message: `Macro completed (${result.completedSteps.length} steps)`,
+      modified,
+    };
+  }
+
+  const reason = result.failedStep?.reason ?? 'Macro failed';
+  return { success: false, message: reason, modified: 0 };
 }

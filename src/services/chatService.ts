@@ -6,7 +6,9 @@
  * 2. AgentParser — instant regex tool calls
  * 3. TemplateResolver — gallery template matching
  * 4. IntentClassifier — enriches context (never claims)
- * 5. BrainDispatcher — deterministic skills + LLM fallback
+ * 5. MacroPlanner — multi-clause → pending execute_macro
+ * 6. DeterministicDispatcher — local skills (clean/report/budget/query)
+ * 7. LLMGateway — server-side LLM terminal stage
  *
  * The service receives thin callbacks for state mutations rather than
  * depending on the store directly. This allows tests to verify behavior
@@ -25,7 +27,9 @@ import {
   createAgentParserStage,
   createTemplateResolverStage,
   createIntentClassifierStage,
-  createBrainDispatcherStage,
+  createMacroPlannerStage,
+  createDeterministicDispatcherStage,
+  createLLMGatewayStage,
   type PipelineContext,
   type StageResult,
 } from '@/ai/pipeline'
@@ -74,7 +78,9 @@ export interface ChatServiceDeps {
  * 1. AgentParser — instant regex tool calls (sort, filter, add/delete row, etc.)
  * 2. TemplateResolver — gallery template matching ("Create a budget")
  * 3. IntentClassifier — enriches context with intent/mode (never claims)
- * 4. BrainDispatcher — deterministic skills + LLM server (always claims)
+ * 4. MacroPlanner — multi-clause plans as pending execute_macro
+ * 5. DeterministicDispatcher — local skills (may claim or pass)
+ * 6. LLMGateway — server LLM (always claims)
  */
 export async function processChatMessage(
   input: string,
@@ -144,8 +150,9 @@ export async function processChatMessage(
       createAgentParserStage({ buildExecContext, pushHistory }),
       createTemplateResolverStage({ buildExecContext, pushHistory }),
       createIntentClassifierStage(),
-      // Future: MacroPlanner stage inserts here (between classifier and brain)
-      createBrainDispatcherStage(),
+      createMacroPlannerStage({ buildExecContext }),
+      createDeterministicDispatcherStage(),
+      createLLMGatewayStage(),
     ])
 
     const result = await router.process(pipelineContext)
@@ -195,15 +202,16 @@ function stageResultToChatMessage(
   msgId: string,
   ctx: ConversionContext,
 ): ChatMessage {
-  // Brain dispatcher produces ToolResult-compatible output that needs
+  // Brain dispatcher / LLM gateway produce ToolResult-compatible output that needs
   // full rendering (actions with previews, insights, suggestions)
-  if (result.stageName === 'brain-dispatcher') {
+  if (result.stageName === 'brain-dispatcher' || result.stageName === 'llm-gateway' || result.stageName === 'deterministic-dispatcher') {
     const toolResult = {
       success: result.success,
       message: result.message,
       toolUsed: result.metadata?.toolUsed as string | undefined,
       reasoning: result.metadata?.reasoning as string | undefined,
       suggestions: result.suggestions,
+      providerMeta: result.metadata?.providerMeta as { provider: string; model: string } | undefined,
       actions: result.actions?.map((a) => ({
         tool: a.tool,
         params: a.params,
@@ -211,7 +219,7 @@ function stageResultToChatMessage(
       })),
     }
 
-    // If brain failed and mode isn't explain/advise, try local fallback
+    // If brain/LLM failed and mode isn't explain/advise, try local fallback
     if (!result.success && !isLlmOnlyMode(classifyMode(ctx.input))) {
       return { ...ctx.processLocalFallback(ctx.input), id: msgId }
     }
@@ -223,8 +231,11 @@ function stageResultToChatMessage(
     })
   }
 
-  // Agent parser with actions (delete-row preview) needs toolResultToChatMessage
-  if (result.stageName === 'agent-parser' && result.actions?.length) {
+  // Agent parser / macro planner with actions need toolResultToChatMessage
+  if (
+    (result.stageName === 'agent-parser' || result.stageName === 'macro-planner')
+    && result.actions?.length
+  ) {
     const toolResult = {
       success: result.success,
       message: result.message,

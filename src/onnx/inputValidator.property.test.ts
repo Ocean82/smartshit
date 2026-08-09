@@ -122,9 +122,14 @@ describe('Property 4: Input Validation and Tensor Construction', () => {
           expect(result.shapesSatisfied).toBe(true)
           expect(result.tensor).toBeDefined()
           expect(result.tensor!.data).toHaveLength(rows * cols)
-          // Verify row-major order: first element matches first cell's value
+          // Verify row-major order: index i stores value i * 1.5
           expect(result.tensor!.data[0]).toBeCloseTo(0)
-          expect(result.tensor!.data[1]).toBeCloseTo(1.5)
+          if (rows * cols > 1) {
+            expect(result.tensor!.data[1]).toBeCloseTo(1.5)
+          }
+          if (rows * cols > 2) {
+            expect(result.tensor!.data[rows * cols - 1]).toBeCloseTo((rows * cols - 1) * 1.5)
+          }
         },
       ),
       { numRuns: 30 },

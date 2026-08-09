@@ -16,6 +16,11 @@ models/*.onnx_data*
 models/*/
 !models/README.md
 
+# Server ONNX Path B models (weights local-only; keep README + gitkeep)
+server/models/**
+!server/models/README.md
+!server/models/.gitkeep
+
 server/node_modules/
 server/dist/
 

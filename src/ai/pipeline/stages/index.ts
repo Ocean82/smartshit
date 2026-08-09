@@ -10,6 +10,9 @@ export type { TemplateResolverDeps } from './templateResolver'
 
 export { createIntentClassifierStage } from './intentClassifier'
 
-export { createBrainDispatcherStage } from './brainDispatcher'
+export { createMacroPlannerStage } from './macroPlanner'
+export type { MacroPlannerDeps } from './macroPlanner'
+
+export { createDeterministicDispatcherStage } from './deterministicDispatcher'
 
 export { createLLMGatewayStage } from './llmGateway'

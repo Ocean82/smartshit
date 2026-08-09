@@ -49,6 +49,7 @@ export interface ToolResult {
   chartConfig?: ChartConfig
   toolUsed?: string
   reasoning?: string
+  providerMeta?: { provider: string; model: string }
   actions?: Array<{
     tool: string
     params: Record<string, unknown>

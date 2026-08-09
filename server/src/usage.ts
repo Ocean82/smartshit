@@ -113,7 +113,17 @@ export async function recordUsage(userId: string | undefined): Promise<void> {
       [key],
     )
   } catch (err) {
-    console.error('[usage] record failed:', err instanceof Error ? err.message : err)
+    // Fail closed on the write path too: bump the in-memory counter so a DB
+    // outage cannot erase metering. Multi-instance deployments may still
+    // under-count across workers until DB recovers — prefer shared Postgres.
+    console.error('[usage] record failed, bumping memory limiter:', err instanceof Error ? err.message : err)
+    const today = getToday()
+    const entry = memoryUsage.get(key)
+    if (!entry || entry.date !== today) {
+      memoryUsage.set(key, { count: 1, date: today })
+    } else {
+      entry.count += 1
+    }
   }
 }
 

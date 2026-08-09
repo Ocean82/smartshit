@@ -39,6 +39,7 @@
     "test:watch": "vitest",
     "release:check:v1": "node scripts/v1-release-checklist.mjs",
     "model:copy": "powershell -ExecutionPolicy Bypass -File scripts/copy-model.ps1",
+    "model:copy-deploy": "node scripts/copy-deploy-models.mjs",
     "model:setup": "npm run setup-model --prefix server"
   },
   "dependencies": {
