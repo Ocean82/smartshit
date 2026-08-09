@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef, lazy, Suspense } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '@/store/useStore'
 import { fetchServerHealth, type ServerHealth } from '@/ai/agentClient'
 import { Toolbar } from '@/components/Toolbar'
@@ -67,7 +68,21 @@ function App() {
     setActivePanel,
     showToolbar,
     toggleToolbar,
-  } = useStore()
+  } = useStore(useShallow((s) => ({
+    workbook: s.workbook,
+    engine: s.engine,
+    showValidationDialog: s.showValidationDialog,
+    setShowValidationDialog: s.setShowValidationDialog,
+    showPivotDialog: s.showPivotDialog,
+    setShowPivotDialog: s.setShowPivotDialog,
+    showFilterDialog: s.showFilterDialog,
+    setShowFilterDialog: s.setShowFilterDialog,
+    showConditionalFormatDialog: s.showConditionalFormatDialog,
+    setShowConditionalFormatDialog: s.setShowConditionalFormatDialog,
+    setActivePanel: s.setActivePanel,
+    showToolbar: s.showToolbar,
+    toggleToolbar: s.toggleToolbar,
+  })))
   const [isLoaded, setIsLoaded] = useState(false)
   const [showTemplates, setShowTemplates] = useState(false)
   const [showCommandPalette, setShowCommandPalette] = useState(false)
@@ -95,9 +110,11 @@ function App() {
     return () => document.removeEventListener('smartsht:open-share', handler)
   }, [])
 
-  // Ctrl/Cmd+K opens the command palette, ESC closes panels
+  // Ctrl/Cmd+K opens the command palette, ESC closes panels.
+  // All store reads go through getState() so this listener is stable (no re-bind).
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      const store = useStore.getState()
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault()
         setShowCommandPalette(true)
@@ -108,13 +125,13 @@ function App() {
       }
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 't') {
         e.preventDefault()
-        toggleToolbar()
+        store.toggleToolbar()
       }
       // Ctrl+S: Save as Excel
       if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === 's') {
         e.preventDefault()
-        exportWorkbookToXlsx(useStore.getState().workbook)
-        useStore.getState().showToast({ type: 'success', message: 'Saved as Excel' })
+        exportWorkbookToXlsx(store.workbook)
+        store.showToast({ type: 'success', message: 'Saved as Excel' })
       }
       // Ctrl+O: Open file
       if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === 'o') {
@@ -123,39 +140,36 @@ function App() {
       }
       // Ctrl+B/I/U: Text formatting (only when not editing a cell)
       if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === 'b') {
-        const state = useStore.getState()
-        if (state.selection && !state.editingCell) {
+        if (store.selection && !store.editingCell) {
           e.preventDefault()
-          const cellId = refToCell(state.selection.startRow, state.selection.startCol)
-          const cell = state.getActiveSheet().cells[cellId]
-          state.setRangeFormat({ bold: !cell?.format?.bold })
+          const cellId = refToCell(store.selection.startRow, store.selection.startCol)
+          const cell = store.getActiveSheet().cells[cellId]
+          store.setRangeFormat({ bold: !cell?.format?.bold })
         }
       }
       if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === 'i') {
-        const state = useStore.getState()
-        if (state.selection && !state.editingCell) {
+        if (store.selection && !store.editingCell) {
           e.preventDefault()
-          const cellId = refToCell(state.selection.startRow, state.selection.startCol)
-          const cell = state.getActiveSheet().cells[cellId]
-          state.setRangeFormat({ italic: !cell?.format?.italic })
+          const cellId = refToCell(store.selection.startRow, store.selection.startCol)
+          const cell = store.getActiveSheet().cells[cellId]
+          store.setRangeFormat({ italic: !cell?.format?.italic })
         }
       }
       if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === 'u') {
-        const state = useStore.getState()
-        if (state.selection && !state.editingCell) {
+        if (store.selection && !store.editingCell) {
           e.preventDefault()
-          const cellId = refToCell(state.selection.startRow, state.selection.startCol)
-          const cell = state.getActiveSheet().cells[cellId]
-          state.setRangeFormat({ underline: !cell?.format?.underline })
+          const cellId = refToCell(store.selection.startRow, store.selection.startCol)
+          const cell = store.getActiveSheet().cells[cellId]
+          store.setRangeFormat({ underline: !cell?.format?.underline })
         }
       }
-      if (e.key === 'Escape' && useStore.getState().activePanel) {
-        useStore.getState().setActivePanel(null)
+      if (e.key === 'Escape' && store.activePanel) {
+        store.setActivePanel(null)
       }
     }
     document.addEventListener('keydown', handler)
     return () => document.removeEventListener('keydown', handler)
-  }, [toggleToolbar])
+  }, [])
 
   if (!isLoaded) {
     return (
@@ -303,7 +317,10 @@ function App() {
 }
 
 function TitleBar({ onOpenTemplates, onOpenCloudPicker, onOpenShare, onOpenCommandPalette }: { onOpenTemplates: () => void; onOpenCloudPicker: () => void; onOpenShare: () => void; onOpenCommandPalette: () => void }) {
-  const { workbook } = useStore()
+  const { workbookName, workbookUpdatedAt } = useStore(useShallow((s) => ({
+    workbookName: s.workbook.name,
+    workbookUpdatedAt: s.workbook.updatedAt,
+  })))
   const [health, setHealth] = useState<ServerHealth | null>(null)
   const [syncStatus, setSyncStatus] = useState<SyncStatus>(getSyncStatus())
 
@@ -403,7 +420,7 @@ function TitleBar({ onOpenTemplates, onOpenCloudPicker, onOpenShare, onOpenComma
 
       <div className="w-px h-4 hidden md:block" style={{ background: 'var(--neutral-800)' }} />
 
-      <span className="text-xs truncate max-w-[120px] md:max-w-[200px]" style={{ color: 'var(--neutral-400)' }}>{workbook.name}</span>
+      <span className="text-xs truncate max-w-[120px] md:max-w-[200px]" style={{ color: 'var(--neutral-400)' }}>{workbookName}</span>
 
       <div className="flex-1" />
 
@@ -455,7 +472,7 @@ function TitleBar({ onOpenTemplates, onOpenCloudPicker, onOpenShare, onOpenComma
         </div>
         <span className="hidden md:inline">{syncBadge}</span>
         <span className="hidden sm:inline text-[10px]" style={{ color: 'var(--neutral-500)' }}>
-          {new Date(workbook.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          {new Date(workbookUpdatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
         </span>
         <UserNav />
       </div>
@@ -464,11 +481,14 @@ function TitleBar({ onOpenTemplates, onOpenCloudPicker, onOpenShare, onOpenComma
 }
 
 function ChatDockActions() {
-  const { messages, clearChat } = useStore()
+  const { messageCount, clearChat } = useStore(useShallow((s) => ({
+    messageCount: s.messages.length,
+    clearChat: s.clearChat,
+  })))
   const [confirmClear, setConfirmClear] = useState(false)
 
   const handleClear = () => {
-    if (messages.length <= 2) {
+    if (messageCount <= 2) {
       clearChat()
       return
     }
@@ -481,7 +501,7 @@ function ChatDockActions() {
     }
   }
 
-  if (messages.length <= 1) return null
+  if (messageCount <= 1) return null
 
   return (
     <button

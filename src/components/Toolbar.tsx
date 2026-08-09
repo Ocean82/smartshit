@@ -1,3 +1,4 @@
+import { useShallow } from 'zustand/react/shallow';
 import { useStore } from '@/store/useStore';
 import { refToCell } from '@/engine/spreadsheet';
 import { importWorkbookFromFileWithMeta, exportWorkbookToXlsx, exportSheetToCsv } from '@/io/xlsx';
@@ -34,7 +35,25 @@ export function Toolbar() {
     setShowConditionalFormatDialog,
     pushHistory,
     getActiveSheet,
-  } = useStore();
+  } = useStore(useShallow((s) => ({
+    selection: s.selection,
+    setRangeFormat: s.setRangeFormat,
+    undo: s.undo,
+    redo: s.redo,
+    undoStack: s.undoStack,
+    redoStack: s.redoStack,
+    setShowChartDialog: s.setShowChartDialog,
+    setShowPivotDialog: s.setShowPivotDialog,
+    showFormatPanel: s.showFormatPanel,
+    setShowFormatPanel: s.setShowFormatPanel,
+    activeFilters: s.activeFilters,
+    activeSortConfig: s.activeSortConfig,
+    sortByColumn: s.sortByColumn,
+    setShowFilterDialog: s.setShowFilterDialog,
+    setShowConditionalFormatDialog: s.setShowConditionalFormatDialog,
+    pushHistory: s.pushHistory,
+    getActiveSheet: s.getActiveSheet,
+  })));
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const fontColorRef = useRef<HTMLDivElement>(null);
