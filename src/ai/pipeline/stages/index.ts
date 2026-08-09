@@ -11,3 +11,5 @@ export type { TemplateResolverDeps } from './templateResolver'
 export { createIntentClassifierStage } from './intentClassifier'
 
 export { createBrainDispatcherStage } from './brainDispatcher'
+
+export { createLLMGatewayStage } from './llmGateway'

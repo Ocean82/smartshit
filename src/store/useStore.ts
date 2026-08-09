@@ -36,7 +36,7 @@ import { recordTelemetry } from '@/ai/telemetry';
 import { classifyMode, isLlmOnlyMode, isBudgetExplainQuery } from '@/ai/mode';
 import { runAudit } from '@/auditor';
 import { analyzeBudget, budgetAnalysisToToolResult, savingsRecommendation } from '@/ai/analysis/budget';
-import { parseUserIntent } from '@/ai/intentParser';
+import { parseUserIntent } from '@shared/intentParser';
 import { AI_ANALYSIS_CONFIG } from '@/ai/config';
 import { resolveActTemplates } from '@shared/actTemplates';
 import { buildActionPreview } from '@/lib/previewBuilders';

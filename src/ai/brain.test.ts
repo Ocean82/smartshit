@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { resolveAnalysisTarget } from './analysisTarget'
-import { parseUserIntent } from './intentParser'
+import { parseUserIntent } from '@shared/intentParser'
 import { runQueryFromIntent } from './queryEngine'
 import { createEmptyWorkbook, createEmptySheet, refToCell } from '@/engine/spreadsheet'
 import type { SheetData, WorkbookData } from '@/types'

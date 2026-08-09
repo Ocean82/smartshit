@@ -1,4 +1,26 @@
-import { parseUserIntent, isQueryIntent } from '@/ai/intentParser'
+/**
+ * brain.ts — Legacy orchestrator, transitioning to utility module.
+ *
+ * ARCHITECTURE NOTE (Intent Engine NLP Refactor):
+ * This file previously served as the central orchestrator for chat processing.
+ * Its responsibilities are being migrated to the unified pipeline:
+ *
+ * - `runDeterministicSkills()` → replaced by `src/ai/pipeline/stages/deterministicDispatcher.ts`
+ * - LLM gateway logic → replaced by `src/ai/pipeline/stages/llmGateway.ts`
+ * - `processMessage()` → replaced by the PipelineRouter in `src/ai/pipeline/router.ts`
+ *
+ * CURRENT STATUS:
+ * - `processMessage()` is still called by `brainDispatcher.ts` (the active pipeline terminal stage).
+ * - Once `chatService.ts` is rewired to use the split DeterministicDispatcher + LLMGateway stages
+ *   directly, `processMessage()` and `runDeterministicSkills()` can be deleted.
+ * - Utility functions (buildWorkbookContext, buildDataAwarenessResponse, formatMacroPlanForDisplay,
+ *   handleMacroPlan) remain as shared helpers for macro planning (deferred feature).
+ *
+ * @deprecated This module's orchestration role is superseded by the pipeline stages.
+ *   New features should NOT add logic here. Use the pipeline stages instead.
+ */
+
+import { parseUserIntent, isQueryIntent } from '@shared/intentParser'
 import { classifyMode, isBudgetExplainQuery, isLlmOnlyMode } from '@/ai/mode'
 import { resolveAnalysisTarget, type AnalysisTarget } from '@/ai/analysisTarget'
 import { buildSheetProfile } from '@/ai/sheetProfile'
@@ -133,6 +155,14 @@ function buildDataAwarenessResponse(
   return lines.join('\n')
 }
 
+/**
+ * @deprecated Use `createDeterministicDispatcherStage()` from
+ * `src/ai/pipeline/stages/deterministicDispatcher.ts` instead.
+ * This function is only retained because `processMessage()` still calls it
+ * via the brainDispatcher stage. It will be removed once chatService.ts
+ * is fully rewired to use the split pipeline stages.
+ * @internal
+ */
 function runDeterministicSkills(
   target: AnalysisTarget,
   workbookName: string,
@@ -224,6 +254,10 @@ function runDeterministicSkills(
   return null
 }
 
+/**
+ * @deprecated Superseded by `buildSummary()` in `src/ai/pipeline/stages/llmGateway.ts`.
+ * Retained only for the legacy processMessage() path.
+ */
 function buildDeterministicSummary(
   insightsBlock: string,
   deterministicText: string,
@@ -243,6 +277,8 @@ function buildDeterministicSummary(
 }
 
 // ─── Macro Plan Integration Helpers ─────────────────────────────────────────
+// These utility functions are part of brain.ts's role as a utility module.
+// They support macro planning (deferred feature) and remain for future use.
 
 /** Intent types that the macro planner can decompose */
 const MACRO_INTENT_VOCABULARY: IntentType[] = [
@@ -257,8 +293,10 @@ const MACRO_PLAN_DEADLINE_MS = 500
 /**
  * Convert WorkbookData (app domain) to WorkbookContext (NLP domain)
  * for entity resolution and macro planning.
+ *
+ * This is a shared utility function — part of brain.ts's role as a utility module.
  */
-function buildWorkbookContext(workbook: WorkbookData, sheet: SheetData, getComputedValue: (row: number, col: number) => string): WorkbookContext {
+export function buildWorkbookContext(workbook: WorkbookData, sheet: SheetData, getComputedValue: (row: number, col: number) => string): WorkbookContext {
   const sheets = workbook.sheets.map((s) => {
     // Extract column headers from the first row
     const columns: Array<{ letter: string; headerName: string; index: number }> = []
@@ -297,8 +335,10 @@ function buildWorkbookContext(workbook: WorkbookData, sheet: SheetData, getCompu
  * Attempt macro planning for a user message.
  * Returns a MacroPlan if the message is a multi-step or single-step actionable command.
  * Returns null if planning fails or the message doesn't decompose into actions.
+ *
+ * This is a shared utility function — part of brain.ts's role as a utility module.
  */
-function tryPlanMacro(
+export function tryPlanMacro(
   message: string,
   workbookContext: WorkbookContext,
 ): MacroPlan | null {
@@ -315,8 +355,10 @@ function tryPlanMacro(
 /**
  * Format a MacroPlan as a numbered list of descriptions for display.
  * Each step is presented as "{n}. {description}".
+ *
+ * This is a shared utility function — part of brain.ts's role as a utility module.
  */
-function formatMacroPlanForDisplay(plan: MacroPlan): string {
+export function formatMacroPlanForDisplay(plan: MacroPlan): string {
   return plan.steps
     .map((step, index) => `${index + 1}. ${step.description}`)
     .join('\n')
@@ -514,6 +556,14 @@ async function handleMacroPlan(
   }
 }
 
+/**
+ * @deprecated Use the PipelineRouter with split stages (DeterministicDispatcher + LLMGateway)
+ * instead of calling processMessage() directly. This function is retained only as the
+ * implementation behind `brainDispatcher.ts` until chatService.ts adopts the split stages.
+ *
+ * Once the migration is complete, this function and `runDeterministicSkills()` will be removed,
+ * and brain.ts will become a pure utility module (macro planning helpers only).
+ */
 export async function processMessage(input: ProcessMessageInput): Promise<ToolResult> {
   const mode = classifyMode(input.message)
   const intent = parseUserIntent(input.message)

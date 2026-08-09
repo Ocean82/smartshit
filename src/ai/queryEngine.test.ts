@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { queryTopN, queryFilter, queryAggregate, runQueryFromIntent } from './queryEngine'
-import { parseUserIntent } from '@/ai/intentParser'
+import { parseUserIntent } from '@shared/intentParser'
 import { computeSheetInsights } from '@/ai/sheetInsights'
 import type { SheetData } from '@/types'
 

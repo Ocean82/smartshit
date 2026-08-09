@@ -1,7 +1,18 @@
 /**
- * BrainDispatcher Stage — Deterministic skills + LLM gateway (combined).
+ * BrainDispatcher Stage — LEGACY transitional adapter.
  *
- * Wraps the existing brain.ts processMessage() which internally handles:
+ * @deprecated This stage wraps the monolithic brain.ts `processMessage()` function.
+ * It exists as a bridge while chatService.ts still uses the combined brain flow.
+ *
+ * The replacement is the split pipeline with separate stages:
+ * - DeterministicDispatcher (`./deterministicDispatcher.ts`) — handles local skills
+ * - LLMGateway (`./llmGateway.ts`) — handles server-side LLM communication
+ *
+ * Once chatService.ts is updated to use createDeterministicDispatcherStage() and
+ * createLLMGatewayStage() directly, this file and brain.ts's processMessage() can
+ * be deleted.
+ *
+ * Current brain.ts responsibilities handled by this stage:
  * 1. Deterministic skill routing (clean, report, compare, budget, query, outliers)
  * 2. Macro planning (deferred — code exists but executor is a stub)
  * 3. LLM server streaming for explain/advise/chat
@@ -9,10 +20,6 @@
  *
  * This stage ALWAYS claims — it's the terminal stage in the pipeline.
  * No input should fall through past it.
- *
- * Future: Split into separate DeterministicDispatcher and LLMGateway stages
- * once brain.ts internal helpers (runDeterministicSkills, buildDeterministicSummary,
- * resolveAnalysisTarget) are extracted as standalone modules.
  */
 
 import type { PipelineContext, PipelineStage, StageResult } from '../types'
