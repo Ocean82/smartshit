@@ -43,3 +43,5 @@ See also `docs/NAMING.md` and `.env.example`.
 6. Sign in on https://smartsht.com/app/ — Network tab should hit `clerk.smartsht.com`.
 7. Cloud save sends `Authorization: Bearer …` (not `x-user-id`).
 8. Spoofed `x-user-id` alone → 401.
+9. **Ollama:** confirm `ollama show smartshit` points at Spreadsheet-RL-4B (already on server — do not re-upload GGUF by default).
+10. **Ops:** if credentials were ever exposed in chat/logs, rotate Groq/AWS/Clerk/Stripe/DB secrets before shipping.
