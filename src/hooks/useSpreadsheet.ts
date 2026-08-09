@@ -488,6 +488,56 @@ export function useActivePanel() {
   return useStore((s) => s.activePanel);
 }
 
+/** Undo stack (for enabling undo UI) */
+export function useUndoStack() {
+  return useStore((s) => s.undoStack);
+}
+
+/** Redo stack (for enabling redo UI) */
+export function useRedoStack() {
+  return useStore((s) => s.redoStack);
+}
+
+/** File explorer visibility */
+export function useShowFileExplorer() {
+  return useStore((s) => s.showFileExplorer);
+}
+
+/** Format panel visibility */
+export function useShowFormatPanel() {
+  return useStore((s) => s.showFormatPanel);
+}
+
+/** Version history panel visibility */
+export function useShowVersionHistory() {
+  return useStore((s) => s.showVersionHistory);
+}
+
+/** Toolbar visibility */
+export function useShowToolbar() {
+  return useStore((s) => s.showToolbar);
+}
+
+/** Initialize a new workbook */
+export function useInitWorkbook() {
+  return useStore((s) => s.initWorkbook);
+}
+
+/** Set filter dialog visibility */
+export function useSetShowFilterDialog() {
+  return useStore((s) => s.setShowFilterDialog);
+}
+
+/** Set conditional format dialog visibility */
+export function useSetShowConditionalFormatDialog() {
+  return useStore((s) => s.setShowConditionalFormatDialog);
+}
+
+/** Freeze panes */
+export function useSetFreeze() {
+  return useStore((s) => s.setFreeze);
+}
+
 // ─── Toast/Confirm ─────────────────────────────────────────────────────────────
 
 /** Show toast */

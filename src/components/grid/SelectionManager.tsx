@@ -5,6 +5,7 @@
 
 import { useCallback, useMemo, useRef } from 'react';
 import type { KeyboardEvent, MouseEvent } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { useStore } from '@/store/useStore';
 import { cellToRef, refToCell, colToLetter } from '@/engine/spreadsheet';
 import { isInMultiSelection } from '@/lib/selection';
@@ -29,11 +30,23 @@ export function useSelectionManager(config: SelectionManagerConfig) {
     scrollCellIntoView,
   } = config;
 
-  const sheet = useStore.getState().getActiveSheet();
-  const selection = useStore(s => s.selection);
-  const additionalSelections = useStore(s => s.additionalSelections);
-  const setSelection = useStore(s => s.setSelection);
-  const editingCell = useStore(s => s.editingCell);
+  const {
+    sheet,
+    selection,
+    additionalSelections,
+    setSelection,
+    editingCell,
+    setEditingCell,
+    setEditValue,
+  } = useStore(useShallow((s) => ({
+    sheet: s.getActiveSheet(),
+    selection: s.selection,
+    additionalSelections: s.additionalSelections,
+    setSelection: s.setSelection,
+    editingCell: s.editingCell,
+    setEditingCell: s.setEditingCell,
+    setEditValue: s.setEditValue,
+  })));
   const isDragging = useRef(false);
 
   const isSelected = useCallback((row: number, col: number) => {
@@ -65,8 +78,8 @@ export function useSelectionManager(config: SelectionManagerConfig) {
     } else {
       setSelection({ startRow: row, startCol: col, endRow: row, endCol: col });
     }
-    if (editingCell) useStore.getState().setEditingCell(null);
-  }, [selection, setSelection, editingCell]);
+    if (editingCell) setEditingCell(null);
+  }, [selection, setSelection, editingCell, setEditingCell]);
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (useStore.getState().editingCell) {
@@ -123,16 +136,16 @@ export function useSelectionManager(config: SelectionManagerConfig) {
         e.preventDefault();
         const cellId = refToCell(r, c);
         const cellData = useStore.getState().getActiveSheet().cells[cellId];
-        useStore.getState().setEditingCell(cellId);
-        useStore.getState().setEditValue(cellData?.formula || String(cellData?.value ?? ''));
+        setEditingCell(cellId);
+        setEditValue(cellData?.formula || String(cellData?.value ?? ''));
         setSelection({ startRow: r, startCol: c, endRow: r, endCol: c });
         break;
       }
       default:
         if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
           const cellId = refToCell(r, c);
-          useStore.getState().setEditingCell(cellId);
-          useStore.getState().setEditValue(e.key);
+          setEditingCell(cellId);
+          setEditValue(e.key);
           setSelection({ startRow: r, startCol: c, endRow: r, endCol: c });
         }
         if (e.ctrlKey || e.metaKey) {
@@ -177,7 +190,7 @@ export function useSelectionManager(config: SelectionManagerConfig) {
           }
         }
     }
-  }, [selection, sheet, TOTAL_ROWS, TOTAL_COLS, findLastDataRow, pushHistory, setSelection, setShowFindReplace, scrollCellIntoView]);
+  }, [selection, sheet, TOTAL_ROWS, TOTAL_COLS, findLastDataRow, pushHistory, setSelection, setShowFindReplace, scrollCellIntoView, setEditingCell, setEditValue]);
 
   const handleMouseDown = useCallback((row: number, col: number, e: MouseEvent) => {
     if (e.button !== 0) return;
@@ -233,8 +246,8 @@ export function useSelectionManager(config: SelectionManagerConfig) {
     handleCellDoubleClick: (row: number, col: number) => {
       const cellId = refToCell(row, col);
       const cellData = sheet.cells[cellId];
-      useStore.getState().setEditingCell(cellId);
-      useStore.getState().setEditValue(cellData?.formula || String(cellData?.value ?? ''));
+      setEditingCell(cellId);
+      setEditValue(cellData?.formula || String(cellData?.value ?? ''));
       setSelection({ startRow: row, startCol: col, endRow: row, endCol: col });
     },
     handleKeyDown,
@@ -245,8 +258,8 @@ export function useSelectionManager(config: SelectionManagerConfig) {
     getSelectionInfo,
     handleColSelect: (col: number) => setSelection({ startRow: 0, startCol: col, endRow: 9999, endCol: col }),
     handleRowSelect: (row: number) => setSelection({ startRow: row, startCol: 0, endRow: row, endCol: 9999 }),
-    setEditingCell: useStore.getState().setEditingCell,
-    setEditValue: useStore.getState().setEditValue,
+    setEditingCell,
+    setEditValue,
     setSelection,
   };
 }

@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useRef, useEffect } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '@/store/useStore'
 import { exportWorkbookToXlsx, exportSheetToCsv, importWorkbookFromFileWithMeta } from '@/io/xlsx'
 import { exportWorkbookToJson, importWorkbookFromJsonFile, normalizeImportedWorkbook } from '@/io/workbookJson'
@@ -57,7 +58,39 @@ export function MenuBar() {
     showConfirm,
     showToolbar,
     toggleToolbar,
-  } = useStore()
+  } = useStore(useShallow((s) => ({
+    workbook: s.workbook,
+    undo: s.undo,
+    redo: s.redo,
+    undoStack: s.undoStack,
+    redoStack: s.redoStack,
+    copy: s.copy,
+    cut: s.cut,
+    paste: s.paste,
+    selection: s.selection,
+    deleteSelectedCells: s.deleteSelectedCells,
+    pushHistory: s.pushHistory,
+    toggleFileExplorer: s.toggleFileExplorer,
+    showFileExplorer: s.showFileExplorer,
+    showFormatPanel: s.showFormatPanel,
+    setShowFormatPanel: s.setShowFormatPanel,
+    showVersionHistory: s.showVersionHistory,
+    setShowVersionHistory: s.setShowVersionHistory,
+    setShowChartDialog: s.setShowChartDialog,
+    setShowFilterDialog: s.setShowFilterDialog,
+    setShowConditionalFormatDialog: s.setShowConditionalFormatDialog,
+    setShowValidationDialog: s.setShowValidationDialog,
+    setShowPivotDialog: s.setShowPivotDialog,
+    activePanel: s.activePanel,
+    setActivePanel: s.setActivePanel,
+    sortByColumn: s.sortByColumn,
+    initWorkbook: s.initWorkbook,
+    addMessage: s.addMessage,
+    getActiveSheet: s.getActiveSheet,
+    showConfirm: s.showConfirm,
+    showToolbar: s.showToolbar,
+    toggleToolbar: s.toggleToolbar,
+  })))
 
   // Close menu on outside click
   useEffect(() => {
