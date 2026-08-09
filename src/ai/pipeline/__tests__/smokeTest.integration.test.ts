@@ -207,12 +207,15 @@ function buildPipeline() {
   return { router, deps }
 }
 
-function defaultIntent() {
+function defaultIntent(rawQuery = ''): ReturnType<typeof parseUserIntent> {
   return {
-    intentType: 'general' as const,
-    confidence: 0.3,
-    routingSource: 'regex' as const,
+    intentType: 'unknown',
+    targetColumns: [],
+    filters: {},
     parameters: {},
+    rawQuery,
+    confidence: 0.3,
+    routingSource: 'regex',
   }
 }
 
@@ -229,7 +232,7 @@ describe('Smoke Test: Top commands routing verification', () => {
       explanation: undefined,
     })
     vi.mocked(resolveGalleryTemplate).mockReturnValue(null)
-    vi.mocked(parseUserIntent).mockReturnValue(defaultIntent() as ReturnType<typeof parseUserIntent>)
+    vi.mocked(parseUserIntent).mockReturnValue(defaultIntent())
     vi.mocked(classifyMode).mockReturnValue('chat')
     vi.mocked(chatWithAgentServerStream).mockResolvedValue({
       message: 'Processed by LLM',
@@ -331,10 +334,13 @@ describe('Smoke Test: Top commands routing verification', () => {
     // IntentClassifier → budget / advise so DeterministicDispatcher claims
     vi.mocked(parseUserIntent).mockReturnValue({
       intentType: 'budget',
+      targetColumns: [],
+      filters: {},
+      parameters: {},
+      rawQuery: 'Analyze my expenses',
       confidence: 0.9,
       routingSource: 'regex',
-      parameters: {},
-    } as ReturnType<typeof parseUserIntent>)
+    })
     vi.mocked(classifyMode).mockReturnValue('advise')
 
     const { router } = buildPipeline()
@@ -358,7 +364,7 @@ describe('Smoke Test: Top commands routing verification', () => {
     vi.mocked(resolveGalleryTemplate).mockReturnValue(null)
 
     // General intent / explain mode → deterministic passes → LLMGateway claims
-    vi.mocked(parseUserIntent).mockReturnValue(defaultIntent() as ReturnType<typeof parseUserIntent>)
+    vi.mocked(parseUserIntent).mockReturnValue(defaultIntent())
     vi.mocked(classifyMode).mockReturnValue('explain')
     vi.mocked(chatWithAgentServerStream).mockResolvedValue({
       message: 'This spreadsheet contains monthly expense data with columns for Category, Amount, and Date. It appears to track household spending over the last 6 months.',

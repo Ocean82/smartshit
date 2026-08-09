@@ -208,12 +208,15 @@ function buildPipeline() {
   return { router, deps }
 }
 
-function defaultIntent() {
+function defaultIntent(rawQuery = ''): ReturnType<typeof parseUserIntent> {
   return {
-    intentType: 'general' as const,
-    confidence: 0.3,
-    routingSource: 'regex' as const,
+    intentType: 'unknown',
+    targetColumns: [],
+    filters: {},
     parameters: {},
+    rawQuery,
+    confidence: 0.3,
+    routingSource: 'regex',
   }
 }
 
@@ -230,7 +233,7 @@ describe('Pipeline Integration: end-to-end routing', () => {
       explanation: undefined,
     })
     vi.mocked(resolveGalleryTemplate).mockReturnValue(null)
-    vi.mocked(parseUserIntent).mockReturnValue(defaultIntent() as ReturnType<typeof parseUserIntent>)
+    vi.mocked(parseUserIntent).mockReturnValue(defaultIntent())
     vi.mocked(classifyMode).mockReturnValue('chat')
     vi.mocked(chatWithAgentServerStream).mockResolvedValue({
       message: 'Processed by LLM',
@@ -305,10 +308,13 @@ describe('Pipeline Integration: end-to-end routing', () => {
 
     vi.mocked(parseUserIntent).mockReturnValue({
       intentType: 'budget',
+      targetColumns: [],
+      filters: {},
+      parameters: {},
+      rawQuery: 'analyze my expenses',
       confidence: 0.9,
       routingSource: 'regex',
-      parameters: {},
-    } as ReturnType<typeof parseUserIntent>)
+    })
     vi.mocked(classifyMode).mockReturnValue('advise')
 
     const { router } = buildPipeline()
@@ -330,7 +336,7 @@ describe('Pipeline Integration: end-to-end routing', () => {
     // TemplateResolver doesn't match
     vi.mocked(resolveGalleryTemplate).mockReturnValue(null)
 
-    vi.mocked(parseUserIntent).mockReturnValue(defaultIntent() as ReturnType<typeof parseUserIntent>)
+    vi.mocked(parseUserIntent).mockReturnValue(defaultIntent())
     vi.mocked(classifyMode).mockReturnValue('explain')
     vi.mocked(chatWithAgentServerStream).mockResolvedValue({
       message: 'Your spreadsheet contains financial data with 3 columns...',
@@ -358,7 +364,7 @@ describe('Pipeline Integration: end-to-end routing', () => {
     // TemplateResolver doesn't match
     vi.mocked(resolveGalleryTemplate).mockReturnValue(null)
 
-    vi.mocked(parseUserIntent).mockReturnValue(defaultIntent() as ReturnType<typeof parseUserIntent>)
+    vi.mocked(parseUserIntent).mockReturnValue(defaultIntent())
     vi.mocked(classifyMode).mockReturnValue('chat')
     vi.mocked(chatWithAgentServerStream).mockResolvedValue({
       message: "I'm not sure what you mean. Could you rephrase?",
@@ -386,10 +392,13 @@ describe('Pipeline Integration: end-to-end routing', () => {
 
     vi.mocked(parseUserIntent).mockReturnValue({
       intentType: 'budget',
+      targetColumns: [],
+      filters: {},
+      parameters: {},
+      rawQuery: 'analyze my expenses',
       confidence: 0.9,
       routingSource: 'regex',
-      parameters: {},
-    } as ReturnType<typeof parseUserIntent>)
+    })
     vi.mocked(classifyMode).mockReturnValue('advise')
 
     const { router } = buildPipeline()
@@ -439,7 +448,7 @@ describe('Pipeline Integration: end-to-end routing', () => {
     // TemplateResolver doesn't match
     vi.mocked(resolveGalleryTemplate).mockReturnValue(null)
     // LLMGateway catches the fallthrough as terminal stage
-    vi.mocked(parseUserIntent).mockReturnValue(defaultIntent() as ReturnType<typeof parseUserIntent>)
+    vi.mocked(parseUserIntent).mockReturnValue(defaultIntent())
     vi.mocked(classifyMode).mockReturnValue('chat')
     vi.mocked(chatWithAgentServerStream).mockResolvedValue({
       message: 'Recovered via LLM',
