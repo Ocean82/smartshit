@@ -6,8 +6,9 @@
  * 2. AgentParser — instant regex tool calls
  * 3. TemplateResolver — gallery template matching
  * 4. IntentClassifier — enriches context (never claims)
- * 5. DeterministicDispatcher — local skills (clean/report/budget/query)
- * 6. LLMGateway — server-side LLM terminal stage
+ * 5. MacroPlanner — multi-clause → pending execute_macro
+ * 6. DeterministicDispatcher — local skills (clean/report/budget/query)
+ * 7. LLMGateway — server-side LLM terminal stage
  *
  * The service receives thin callbacks for state mutations rather than
  * depending on the store directly. This allows tests to verify behavior
@@ -26,6 +27,7 @@ import {
   createAgentParserStage,
   createTemplateResolverStage,
   createIntentClassifierStage,
+  createMacroPlannerStage,
   createDeterministicDispatcherStage,
   createLLMGatewayStage,
   type PipelineContext,
@@ -76,8 +78,9 @@ export interface ChatServiceDeps {
  * 1. AgentParser — instant regex tool calls (sort, filter, add/delete row, etc.)
  * 2. TemplateResolver — gallery template matching ("Create a budget")
  * 3. IntentClassifier — enriches context with intent/mode (never claims)
- * 4. DeterministicDispatcher — local skills (may claim or pass)
- * 5. LLMGateway — server LLM (always claims)
+ * 4. MacroPlanner — multi-clause plans as pending execute_macro
+ * 5. DeterministicDispatcher — local skills (may claim or pass)
+ * 6. LLMGateway — server LLM (always claims)
  */
 export async function processChatMessage(
   input: string,
@@ -147,7 +150,7 @@ export async function processChatMessage(
       createAgentParserStage({ buildExecContext, pushHistory }),
       createTemplateResolverStage({ buildExecContext, pushHistory }),
       createIntentClassifierStage(),
-      // Future: MacroPlanner stage inserts here (between classifier and deterministic)
+      createMacroPlannerStage({ buildExecContext }),
       createDeterministicDispatcherStage(),
       createLLMGatewayStage(),
     ])
@@ -228,8 +231,11 @@ function stageResultToChatMessage(
     })
   }
 
-  // Agent parser with actions (delete-row preview) needs toolResultToChatMessage
-  if (result.stageName === 'agent-parser' && result.actions?.length) {
+  // Agent parser / macro planner with actions need toolResultToChatMessage
+  if (
+    (result.stageName === 'agent-parser' || result.stageName === 'macro-planner')
+    && result.actions?.length
+  ) {
     const toolResult = {
       success: result.success,
       message: result.message,

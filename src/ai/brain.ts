@@ -1,23 +1,14 @@
 /**
- * brain.ts — Legacy orchestrator, transitioning to utility module.
+ * brain.ts — Legacy orchestrator helpers (macros + transitional processMessage).
  *
- * ARCHITECTURE NOTE (Intent Engine NLP Refactor):
- * This file previously served as the central orchestrator for chat processing.
- * Its responsibilities are being migrated to the unified pipeline:
+ * Production chat uses PipelineRouter stages:
+ * - DeterministicDispatcher + LLMGateway (wired in chatService)
+ * - MacroPlanner (Slice 3) presents multi-step execute_macro actions
  *
- * - `runDeterministicSkills()` → replaced by `src/ai/pipeline/stages/deterministicDispatcher.ts`
- * - LLM gateway logic → replaced by `src/ai/pipeline/stages/llmGateway.ts`
- * - `processMessage()` → replaced by the PipelineRouter in `src/ai/pipeline/router.ts`
+ * `processMessage()` remains for macro unit tests. Prefer pipeline stages
+ * for new chat behavior.
  *
- * CURRENT STATUS:
- * - `processMessage()` is still called by `brainDispatcher.ts` (the active pipeline terminal stage).
- * - Once `chatService.ts` is rewired to use the split DeterministicDispatcher + LLMGateway stages
- *   directly, `processMessage()` and `runDeterministicSkills()` can be deleted.
- * - Utility functions (buildWorkbookContext, buildDataAwarenessResponse, formatMacroPlanForDisplay,
- *   handleMacroPlan) remain as shared helpers for macro planning (deferred feature).
- *
- * @deprecated This module's orchestration role is superseded by the pipeline stages.
- *   New features should NOT add logic here. Use the pipeline stages instead.
+ * @deprecated Orchestration role superseded by pipeline stages.
  */
 
 import { parseUserIntent, isQueryIntent } from '@shared/intentParser'
@@ -40,6 +31,7 @@ import type { AttachedFilePreview, ToolResult } from '@/ai/types'
 import type { Selection, SheetData, WorkbookData } from '@/types'
 import { planMacro } from '@/ai/nlp/macroPlanner'
 import { createMacroPlanManager } from '@/ai/macro/macroPlanManager'
+import { defaultStepExecutor } from '@/ai/macro/macroExecutor'
 import type { MacroPlan, MacroExecutionResult, WorkbookContext, UndoManager } from '@/ai/nlp/types'
 import type { IntentType } from '@shared/intentTypes'
 
@@ -399,7 +391,7 @@ async function handleMacroPlan(
       isConfirmed: () => true,
       isRejected: () => false,
       shouldCancel: () => false,
-    })
+    }, defaultStepExecutor)
 
     try {
       const result = await manager.processPlan(plan, undoManager)
@@ -503,7 +495,7 @@ async function handleMacroPlan(
         isConfirmed: () => true, // already confirmed
         isRejected: () => false,
         shouldCancel: () => cancelled,
-      })
+      }, defaultStepExecutor)
 
       const result = await manager.processPlan(currentPlan, undoManager)
 

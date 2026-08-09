@@ -15,7 +15,7 @@ import type {
   ActionStep,
   UndoManager,
 } from '../nlp/types'
-import { executeMacro } from './macroExecutor'
+import { executeMacro, type StepExecutor } from './macroExecutor'
 
 // ─── Callback Interface ─────────────────────────────────────────────────────
 
@@ -75,9 +75,13 @@ const _PRESENT_PLAN_DEADLINE_MS = 500
  * Create a MacroPlanManager instance.
  *
  * @param callbacks - UI/Brain callbacks for user interaction
+ * @param stepExecutor - Real or test step executor (required; no silent stub default)
  * @returns A MacroPlanManager instance
  */
-export function createMacroPlanManager(callbacks: MacroPlanManagerCallbacks): MacroPlanManager {
+export function createMacroPlanManager(
+  callbacks: MacroPlanManagerCallbacks,
+  stepExecutor: StepExecutor,
+): MacroPlanManager {
   let currentPlan: MacroPlan | null = null
 
   /**
@@ -153,7 +157,8 @@ export function createMacroPlanManager(callbacks: MacroPlanManagerCallbacks): Ma
           return callbacks.shouldCancel()
         },
       },
-      undoManager
+      undoManager,
+      stepExecutor,
     )
 
     if (result.success) {
