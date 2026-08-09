@@ -1,5 +1,7 @@
 # Architecture & Quality Fix Plan
 
+> **⚠️ ARCHIVED** — This plan has been executed. See `MAJOR_CHANGES.md` for the implementation record and `ARCHIVE.md` for context.
+
 Issues identified from the SmartSht review, verified against the actual codebase. Ordered by severity and dependency (foundational fixes first).
 
 ---

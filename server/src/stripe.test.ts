@@ -206,8 +206,7 @@ describe('handleStripeWebhook', () => {
       })
 
       expect(result).toEqual({
-        userId: 'user_pastdue',
-        plan: 'free',
+        userId: 'user_pastdue', plan: 'free',
         stripeSubscriptionId: null,
       })
     })

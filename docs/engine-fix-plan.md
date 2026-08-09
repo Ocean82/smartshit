@@ -1,5 +1,7 @@
 # Engine Fix Plan — Based on docs/engine-review.md
 
+> **⚠️ ARCHIVED** — This plan has been executed. See `MAJOR_CHANGES.md` for the implementation record and `ARCHIVE.md` for context.
+
 This plan addresses all issues identified in the engine code review, organized by severity and dependency order.
 
 ---

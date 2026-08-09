@@ -1,5 +1,7 @@
 # Server Restructure Plan
 
+> **⚠️ ARCHIVED** — This plan has been executed. See `DEPLOY.md` for current deployment documentation and `ARCHIVE.md` for context.
+
 **Server**: ubuntu@52.0.207.242 (AWS t3.large)  
 **Date**: August 6, 2026
 

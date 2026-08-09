@@ -1,5 +1,7 @@
 # Review Corrections Plan
 
+> **⚠️ ARCHIVED** — All corrections applied. See `ARCHIVE.md` for context.
+
 Corrections to apply to `docs/smartsht-review.md` based on verified codebase investigation.
 
 ---
