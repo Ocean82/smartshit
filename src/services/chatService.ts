@@ -150,7 +150,7 @@ export async function processChatMessage(
       createAgentParserStage({ buildExecContext, pushHistory }),
       createTemplateResolverStage({ buildExecContext, pushHistory }),
       createIntentClassifierStage(),
-      createMacroPlannerStage({ buildExecContext }),
+      createMacroPlannerStage(),
       createDeterministicDispatcherStage(),
       createLLMGatewayStage(),
     ])
@@ -194,17 +194,16 @@ interface ConversionContext {
 /**
  * Convert a pipeline StageResult into a ChatMessage for display.
  *
- * For the brain-dispatcher stage, uses toolResultToChatMessage for full
- * action preview rendering. For simpler stages, creates a direct text message.
+ * Active stages that emit ToolResult-compatible output
+ * (`deterministic-dispatcher`, `llm-gateway`) get full action preview rendering.
+ * `macro-planner` / `agent-parser` with actions use the same path.
  */
 function stageResultToChatMessage(
   result: StageResult,
   msgId: string,
   ctx: ConversionContext,
 ): ChatMessage {
-  // Brain dispatcher / LLM gateway produce ToolResult-compatible output that needs
-  // full rendering (actions with previews, insights, suggestions)
-  if (result.stageName === 'brain-dispatcher' || result.stageName === 'llm-gateway' || result.stageName === 'deterministic-dispatcher') {
+  if (result.stageName === 'llm-gateway' || result.stageName === 'deterministic-dispatcher') {
     const toolResult = {
       success: result.success,
       message: result.message,
@@ -219,7 +218,7 @@ function stageResultToChatMessage(
       })),
     }
 
-    // If brain/LLM failed and mode isn't explain/advise, try local fallback
+    // If LLM/deterministic failed and mode isn't explain/advise, try local fallback
     if (!result.success && !isLlmOnlyMode(classifyMode(ctx.input))) {
       return { ...ctx.processLocalFallback(ctx.input), id: msgId }
     }

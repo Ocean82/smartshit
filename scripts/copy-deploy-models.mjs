@@ -13,6 +13,7 @@
  *   SMARTSHT_MINILM_SRC=/path/to/dir node scripts/copy-deploy-models.mjs
  *
  * Network: Hugging Face download fallback requires outbound HTTPS.
+ * Runtime: Node.js 18+ (uses global fetch).
  */
 
 import fs from 'node:fs'
@@ -111,8 +112,14 @@ function findCompanion(modelOnnxPath, fileName) {
 }
 
 async function downloadFile(url, dest) {
+  if (typeof globalThis.fetch !== 'function') {
+    throw new Error(
+      'scripts/copy-deploy-models.mjs requires Node.js 18+ with global fetch (or a fetch polyfill)',
+    )
+  }
+
   console.log(`  downloading ${url}`)
-  const res = await fetch(url)
+  const res = await globalThis.fetch(url)
   if (!res.ok) {
     throw new Error(`Download failed ${res.status} ${res.statusText}: ${url}`)
   }

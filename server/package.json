@@ -35,5 +35,8 @@
     "tsx": "^4.20.5",
     "typescript": "^5.9.3",
     "vitest": "^3.2.4"
+  },
+  "overrides": {
+    "adm-zip": "0.5.18"
   }
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { createStoreUndoManager } from '../storeUndoManager'
+import { createStoreUndoManager, createSharedSnapshotUndoManager } from '../storeUndoManager'
 import type { WorkbookData } from '@/types'
 
 function makeWorkbook(marker: string): WorkbookData {
@@ -48,5 +48,46 @@ describe('createStoreUndoManager', () => {
     undo.commitGroup(gid)
     undo.rollbackGroup(gid)
     expect(workbook.sheets[0].cells.A1?.value).toBe('after')
+  })
+
+  it('rollback does not re-clone — restored object is the begin snapshot', () => {
+    let workbook = makeWorkbook('before')
+    let restored: WorkbookData | null = null
+    const undo = createStoreUndoManager({
+      getWorkbook: () => workbook,
+      restoreWorkbook: (wb) => {
+        restored = wb
+        workbook = wb
+      },
+    })
+
+    const gid = undo.beginGroup('test')
+    const beginSnap = restored // still null
+    void beginSnap
+    workbook = makeWorkbook('mutated')
+    undo.rollbackGroup(gid)
+    expect(restored).not.toBeNull()
+    expect(restored!.sheets[0].cells.A1?.value).toBe('before')
+    // Second rollback is a no-op (snapshot already transferred)
+    const afterFirst = restored
+    undo.rollbackGroup(gid)
+    expect(restored).toBe(afterFirst)
+  })
+})
+
+describe('createSharedSnapshotUndoManager', () => {
+  it('reuses the caller snapshot on rollback without a begin clone', () => {
+    const before = makeWorkbook('before')
+    let workbook = makeWorkbook('live')
+    const undo = createSharedSnapshotUndoManager({
+      before,
+      restoreWorkbook: (wb) => { workbook = wb },
+    })
+
+    const gid = undo.beginGroup('macro')
+    workbook = makeWorkbook('mutated')
+    undo.rollbackGroup(gid)
+    expect(workbook).toBe(before)
+    expect(workbook.sheets[0].cells.A1?.value).toBe('before')
   })
 })

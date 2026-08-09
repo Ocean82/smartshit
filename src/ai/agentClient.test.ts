@@ -1,16 +1,32 @@
 import { describe, expect, it } from 'vitest'
-import { parseCompleteSseEvent, serverResponseToChatMessage } from './agentClient'
+import {
+  parseCompleteSseEvent,
+  parseSseEventPayload,
+  serverResponseToChatMessage,
+} from './agentClient'
+
+describe('parseSseEventPayload', () => {
+  it('parses valid JSON once', () => {
+    const event = parseSseEventPayload(JSON.stringify({ type: 'token', content: 'hi' }))
+    expect(event).toEqual({ type: 'token', content: 'hi' })
+  })
+
+  it('returns null for malformed JSON', () => {
+    expect(parseSseEventPayload('{not-json')).toBeNull()
+  })
+})
 
 describe('parseCompleteSseEvent', () => {
   it('retains provider meta from complete events', () => {
-    const raw = JSON.stringify({
+    const event = parseSseEventPayload(JSON.stringify({
       type: 'complete',
       message: 'Sorted column B',
       actions: [],
       source: 'llm',
       meta: { provider: 'groq', model: 'llama-3.3-70b-versatile' },
-    })
-    const parsed = parseCompleteSseEvent(raw)
+    }))
+    expect(event).not.toBeNull()
+    const parsed = parseCompleteSseEvent(event!)
     expect(parsed).not.toBeNull()
     expect(parsed!.meta).toEqual({
       provider: 'groq',
@@ -19,11 +35,11 @@ describe('parseCompleteSseEvent', () => {
   })
 
   it('returns null for token events', () => {
-    expect(parseCompleteSseEvent(JSON.stringify({ type: 'token', content: 'hi' }))).toBeNull()
+    expect(parseCompleteSseEvent({ type: 'token', content: 'hi' })).toBeNull()
   })
 
-  it('returns null for malformed JSON', () => {
-    expect(parseCompleteSseEvent('{not-json')).toBeNull()
+  it('returns null when message is missing', () => {
+    expect(parseCompleteSseEvent({ type: 'complete' })).toBeNull()
   })
 })
 

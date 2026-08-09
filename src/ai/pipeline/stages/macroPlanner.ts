@@ -8,7 +8,6 @@
  */
 
 import type { PipelineContext, PipelineStage, StageResult } from '../types'
-import type { ExecutionContext } from '@/agent/executor'
 import type { SheetContext, ParsedToolCall } from '@/agent/parser'
 import { parseMessage } from '@/agent'
 import { findHeaderRow, findLastDataRow } from '@/lib/sheetSort'
@@ -16,10 +15,6 @@ import { cellToRef } from '@/engine/spreadsheet'
 import { buildSpreadsheetContext } from '@/ai/buildContext'
 import { segmentClauses } from '@/ai/nlp/macroPlanner'
 import type { ActionStep } from '@/ai/nlp/types'
-
-export interface MacroPlannerDeps {
-  buildExecContext: () => ExecutionContext
-}
 
 function buildSheetContext(context: PipelineContext): SheetContext {
   const { sheet, getComputedValue } = context
@@ -58,7 +53,7 @@ function callsToSteps(calls: ParsedToolCall[]): ActionStep[] {
   }))
 }
 
-export function createMacroPlannerStage(_deps: MacroPlannerDeps): PipelineStage {
+export function createMacroPlannerStage(): PipelineStage {
   return {
     name: 'macro-planner',
 

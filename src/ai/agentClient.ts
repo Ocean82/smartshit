@@ -21,29 +21,36 @@ export interface ServerChatResponse {
   meta?: ProviderMeta
 }
 
-/** Parse an SSE `data:` JSON payload into a ServerChatResponse when type=complete. */
-export function parseCompleteSseEvent(jsonStr: string): ServerChatResponse | null {
+export interface SseEventPayload {
+  type?: string
+  content?: string
+  message?: string
+  actions?: ServerAgentAction[]
+  source?: string
+  reasoning?: string
+  suggestions?: string[]
+  meta?: ProviderMeta
+}
+
+/** Parse a raw SSE `data:` JSON string once. Returns null on malformed JSON. */
+export function parseSseEventPayload(jsonStr: string): SseEventPayload | null {
   try {
-    const event = JSON.parse(jsonStr) as {
-      type?: string
-      message?: string
-      actions?: ServerAgentAction[]
-      source?: string
-      reasoning?: string
-      suggestions?: string[]
-      meta?: ProviderMeta
-    }
-    if (event.type !== 'complete' || typeof event.message !== 'string') return null
-    return {
-      message: event.message,
-      actions: Array.isArray(event.actions) ? event.actions : [],
-      source: (event.source as ServerChatResponse['source']) ?? 'llm',
-      reasoning: event.reasoning,
-      suggestions: event.suggestions,
-      meta: event.meta,
-    }
+    return JSON.parse(jsonStr) as SseEventPayload
   } catch {
     return null
+  }
+}
+
+/** Map a pre-parsed SSE payload into a ServerChatResponse when type=complete. */
+export function parseCompleteSseEvent(event: SseEventPayload): ServerChatResponse | null {
+  if (event.type !== 'complete' || typeof event.message !== 'string') return null
+  return {
+    message: event.message,
+    actions: Array.isArray(event.actions) ? event.actions : [],
+    source: (event.source as ServerChatResponse['source']) ?? 'llm',
+    reasoning: event.reasoning,
+    suggestions: event.suggestions,
+    meta: event.meta,
   }
 }
 
@@ -132,17 +139,16 @@ export async function chatWithAgentServerStream(
         const jsonStr = line.slice(6).trim()
         if (!jsonStr) continue
 
-        try {
-          const parsed = JSON.parse(jsonStr) as { type?: string; content?: string }
-          if (parsed.type === 'token' && typeof parsed.content === 'string') {
-            onToken(parsed.content)
-            continue
-          }
-          const complete = parseCompleteSseEvent(jsonStr)
-          if (complete) finalResponse = complete
-        } catch {
-          // Skip malformed events
+        const event = parseSseEventPayload(jsonStr)
+        if (!event) continue
+
+        if (event.type === 'token' && typeof event.content === 'string') {
+          onToken(event.content)
+          continue
         }
+
+        const complete = parseCompleteSseEvent(event)
+        if (complete) finalResponse = complete
       }
     }
 

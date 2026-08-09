@@ -49,7 +49,7 @@ describe('createMacroPlannerStage', () => {
 
   it('returns null for a single-clause message', async () => {
     vi.mocked(segmentClauses).mockReturnValue(['sort by amount'])
-    const stage = createMacroPlannerStage({ buildExecContext: () => ({} as never) })
+    const stage = createMacroPlannerStage()
     const result = await stage.process(makeContext('sort by amount'))
     expect(result).toBeNull()
     expect(parseMessage).not.toHaveBeenCalled()
@@ -70,7 +70,7 @@ describe('createMacroPlannerStage', () => {
         calls: [{ tool: 'format_cells', params: { bold: true }, description: 'Bold headers' }],
       })
 
-    const stage = createMacroPlannerStage({ buildExecContext: () => ({} as never) })
+    const stage = createMacroPlannerStage()
     const result = await stage.process(makeContext('sort by amount descending then bold the headers'))
 
     expect(result).not.toBeNull()
@@ -95,7 +95,7 @@ describe('createMacroPlannerStage', () => {
         calls: [],
       })
 
-    const stage = createMacroPlannerStage({ buildExecContext: () => ({} as never) })
+    const stage = createMacroPlannerStage()
     const result = await stage.process(makeContext('sort by amount then do something weird'))
     expect(result).toBeNull()
   })

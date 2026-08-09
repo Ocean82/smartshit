@@ -9,7 +9,7 @@ import { executeTool, executeToolAsync, type ExecutionContext, type ExecutionRes
 import { executeTemplateTool, resolveGalleryTemplate } from '@/templates'
 import { MUTATION_TOOL_NAMES } from '@shared/toolRegistry'
 import { executeMacro } from '@/ai/macro/macroExecutor'
-import { createStoreUndoManager } from '@/ai/macro/storeUndoManager'
+import { createSharedSnapshotUndoManager } from '@/ai/macro/storeUndoManager'
 import { createToolStepExecutor } from '@/ai/macro/toolStepExecutor'
 import type { ActionStep, MacroPlan } from '@/ai/nlp/types'
 import { buildSpreadsheetContext } from '@/ai/buildContext'
@@ -328,10 +328,11 @@ export async function executeMacroAction(
   }
 
   const label = action.description || `Macro: ${steps.length} steps`;
+  // Single full-workbook clone for both rollback and (on success) undo history.
   const before = structuredClone(get().workbook);
 
-  const undoManager = createStoreUndoManager({
-    getWorkbook: () => get().workbook,
+  const undoManager = createSharedSnapshotUndoManager({
+    before,
     restoreWorkbook: (wb) => {
       get().engine.loadWorkbook(wb);
       set((s: AppState) => {

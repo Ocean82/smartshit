@@ -21,4 +21,4 @@ export {
   createDeterministicDispatcherStage,
   createLLMGatewayStage,
 } from './stages'
-export type { AgentParserDeps, TemplateResolverDeps, MacroPlannerDeps } from './stages'
+export type { AgentParserDeps, TemplateResolverDeps } from './stages'

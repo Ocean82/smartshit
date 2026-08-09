@@ -40,10 +40,15 @@ function resolveStepTool(raw: string): string {
  * Normalize NLP-style params into shapes the agent executor expects.
  * - columns[] → column (first entry)
  * - values/operators → filter condition + value
+ *
+ * `resolvedTool` is the registry name after alias resolution.
+ * `originalTool` is the NLP/intent name before resolution, so filter-style
+ * normalization still runs if the registry renames `filter` → e.g. `filter_sheet`.
  */
 export function normalizeStepParams(
-  tool: string,
+  resolvedTool: string,
   params: Record<string, unknown>,
+  originalTool?: string,
 ): Record<string, unknown> {
   const next: Record<string, unknown> = { ...params }
 
@@ -51,7 +56,13 @@ export function normalizeStepParams(
     next.column = next.columns[0]
   }
 
-  if (tool === 'filter') {
+  const isFilterTool =
+    resolvedTool === 'filter'
+    || resolvedTool.startsWith('filter')
+    || originalTool === 'filter'
+    || (typeof originalTool === 'string' && originalTool.startsWith('filter'))
+
+  if (isFilterTool) {
     const operators = Array.isArray(next.operators) ? next.operators : []
     const values = Array.isArray(next.values) ? next.values : []
     if (next.condition == null && (operators.length > 0 || values.length > 0)) {
@@ -69,7 +80,7 @@ export function normalizeStepParams(
 export function createToolStepExecutor(getCtx: () => ExecutionContext): StepExecutor {
   return async (step: ActionStep, _context: ToolResult[]): Promise<ToolResult> => {
     const tool = resolveStepTool(step.tool)
-    const params = normalizeStepParams(tool, step.params ?? {})
+    const params = normalizeStepParams(tool, step.params ?? {}, step.tool)
     const result = await executeToolAsync(
       {
         tool,

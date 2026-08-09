@@ -11,7 +11,6 @@ export type { TemplateResolverDeps } from './templateResolver'
 export { createIntentClassifierStage } from './intentClassifier'
 
 export { createMacroPlannerStage } from './macroPlanner'
-export type { MacroPlannerDeps } from './macroPlanner'
 
 export { createDeterministicDispatcherStage } from './deterministicDispatcher'
 

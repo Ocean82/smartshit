@@ -31,6 +31,26 @@ describe('normalizeStepParams', () => {
     expect(params.condition).toBe('gt')
     expect(params.value).toBe(500)
   })
+
+  it('normalizes filter params when resolved tool is filter_sheet but original was filter', () => {
+    const params = normalizeStepParams(
+      'filter_sheet',
+      { columns: ['Amount'], operators: ['less-than'], values: [10] },
+      'filter',
+    )
+    expect(params.column).toBe('Amount')
+    expect(params.condition).toBe('lt')
+    expect(params.value).toBe(10)
+  })
+
+  it('falls back to the raw operator string when unknown', () => {
+    const params = normalizeStepParams('filter', {
+      operators: ['contains-text'],
+      values: ['Rent'],
+    })
+    expect(params.condition).toBe('contains-text')
+    expect(params.value).toBe('Rent')
+  })
 })
 
 describe('createToolStepExecutor', () => {
@@ -61,6 +81,64 @@ describe('createToolStepExecutor', () => {
     )
     expect(result.success).toBe(true)
     expect(result.data).toEqual({ modified: 12, message: 'Sorted' })
+  })
+
+  it('maps filter operators/values through to executeToolAsync', async () => {
+    vi.mocked(executeToolAsync).mockResolvedValue({
+      success: true,
+      message: 'Filtered',
+      modified: 4,
+    })
+
+    const executor = createToolStepExecutor(() => ({} as ExecutionContext))
+    await executor(
+      {
+        tool: 'filter',
+        params: { columns: ['Amount'], operators: ['greater-than'], values: [100] },
+        description: 'Filter Amount > 100',
+      },
+      [],
+    )
+
+    expect(executeToolAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tool: 'filter',
+        params: expect.objectContaining({
+          column: 'Amount',
+          condition: 'gt',
+          value: 100,
+        }),
+      }),
+      expect.anything(),
+    )
+  })
+
+  it('passes unknown filter operators through without throwing', async () => {
+    vi.mocked(executeToolAsync).mockResolvedValue({
+      success: true,
+      message: 'Filtered',
+      modified: 1,
+    })
+
+    const executor = createToolStepExecutor(() => ({} as ExecutionContext))
+    await executor(
+      {
+        tool: 'filter',
+        params: { columns: ['Category'], operators: ['matches-regex'], values: ['^Food'] },
+        description: 'Filter Category',
+      },
+      [],
+    )
+
+    expect(executeToolAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        params: expect.objectContaining({
+          condition: 'matches-regex',
+          value: '^Food',
+        }),
+      }),
+      expect.anything(),
+    )
   })
 
   it('maps format → format_cells', async () => {
