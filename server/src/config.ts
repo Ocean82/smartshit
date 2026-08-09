@@ -140,16 +140,15 @@ export const config = {
   llmProviderOrder: validatedProviderOrder,
 
   // Ollama (fallback — local CPU inference)
+  // The primary model should be a 4B+ instruct-tuned GGUF (e.g., Spreadsheet-RL-4B).
+  // On prod: ollama create smartshit -f server/Modelfile.spreadsheet-rl
   ollamaBaseUrl: process.env.OLLAMA_BASE_URL ?? 'http://127.0.0.1:11434',
   modelName: process.env.SMARTSHIT_MODEL ?? 'smartshit',
-  /** Excel-assist finetuned model (structured JSON output, better tool routing) */
-  assistModelName: process.env.SMARTSHT_ASSIST_MODEL ?? 'smartsht-assist',
-  modelPath: path.join(projectRoot, 'models', 'qwen2.5-coder-1.5b-q8_0.gguf'),
-  modelfilePath: path.join(projectRoot, 'server', 'Modelfile'),
+  modelfilePath: path.join(projectRoot, 'server', 'Modelfile.spreadsheet-rl'),
 
   /** Context window — 4096 allows room for system prompt + history + context */
   numCtx: Number(process.env.NUM_CTX ?? 4096),
-  /** Max tokens to generate per response */
+  /** Max tokens to generate per response (768 for 4B models; Groq overrides in its own config) */
   numPredict: Number(process.env.NUM_PREDICT ?? 768),
   corsOrigin: resolveCorsOrigin(),
   /** Max request body for workbook save/update routes (full sheet JSON). */

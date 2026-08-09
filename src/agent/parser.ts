@@ -35,7 +35,35 @@ const NON_ROW_DELETE_TARGETS = [
   'format', 'formatting', 'duplicate', 'duplicates', 'blank', 'empty',
   'column', 'columns', 'sheet', 'tab', 'chart', 'filter', 'filters',
   'note', 'notes', 'comment', 'comments', 'validation', 'everything', 'all',
+  'border', 'borders', 'background', 'color', 'colors', 'style', 'styles',
+  'highlight', 'highlights', 'conditional', 'rule', 'rules',
 ]
+
+/**
+ * Patterns that indicate a question/hypothetical rather than a command.
+ * When detected, mutations should not fire — let the LLM handle the response.
+ */
+const QUESTION_PREFIXES_RE = /^(?:can\s+i|should\s+i|would\s+it|how\s+(?:do|can)\s+i|is\s+(?:it|there)|what\s+(?:if|happens))\b/i
+
+/**
+ * Pronouns and vague references that should never be used as row match targets.
+ * "delete that one" or "remove it" are too ambiguous for immediate mutation.
+ */
+const VAGUE_MATCH_RE = /^(?:that\s+one|this\s+one|it|that|this|them|those|these|one)$/i
+
+/**
+ * Short English words (2-3 letters) that look like column refs but aren't.
+ * Used to prevent "sum vs" from being interpreted as "sum column VS".
+ */
+const COMMON_WORDS_NOT_COLUMNS = new Set([
+  'vs', 'of', 'to', 'in', 'on', 'at', 'by', 'or', 'an', 'do', 'is', 'it',
+  'up', 'if', 'so', 'no', 'my', 'me', 'we', 'he', 'be', 'as', 'go', 'am',
+  'the', 'for', 'and', 'but', 'not', 'you', 'all', 'can', 'had', 'her',
+  'was', 'one', 'our', 'out', 'are', 'has', 'his', 'how', 'its', 'may',
+  'new', 'now', 'old', 'see', 'way', 'who', 'did', 'get', 'let', 'say',
+  'too', 'use', 'row', 'col', 'add', 'set', 'put', 'sum', 'avg', 'min',
+  'max', 'top', 'end', 'per', 'tax', 'net', 'due', 'via',
+])
 
 const NON_ROW_DELETE_RE = NON_ROW_DELETE_TARGETS.map(
   (word) => new RegExp(`\\b${word}\\b`),
@@ -124,6 +152,13 @@ function describeColumnChoices(sheetContext?: SheetContext): string {
 export function parseMessage(message: string, sheetContext?: SheetContext): ParseResult {
   const lower = message.toLowerCase().trim()
   const calls: ParsedToolCall[] = []
+
+  // ─── Question / hypothetical guard ──────────────────────────────────────────
+  // Sentences framed as questions should never produce immediate mutations.
+  // Let the LLM handle clarification and explanation.
+  if (QUESTION_PREFIXES_RE.test(lower)) {
+    return { calls: [], understood: false }
+  }
 
   // ─── Multi-step compound requests ───────────────────────────────────────────
   // "clear and build a budget" → clear_sheet + create_budget_template
@@ -238,7 +273,7 @@ export function parseMessage(message: string, sheetContext?: SheetContext): Pars
   }
 
   const deleteRowMatch = lower.match(/(?:delete|remove)\s+(?:the\s+)?(.+?)\s+(?:row|entry|line)\b/i)
-  if (deleteRowMatch && !isNonRowDeleteTarget(deleteRowMatch[1])) {
+  if (deleteRowMatch && !isNonRowDeleteTarget(deleteRowMatch[1]) && !VAGUE_MATCH_RE.test(deleteRowMatch[1].trim())) {
     const match = deleteRowMatch[1].trim()
     calls.push({ tool: 'delete_row', params: { match }, description: `Delete row containing "${match}"` })
     return { calls, understood: true, explanation: `Removing the row containing "${match}".` }
@@ -248,7 +283,7 @@ export function parseMessage(message: string, sheetContext?: SheetContext): Pars
   // phrases like "remove formatting" or "remove duplicates" fall through to the
   // LLM instead of deleting an unrelated data row.
   const removeSimple = lower.match(/(?:delete|remove)\s+(?:the\s+)?([a-z][\w\s]{2,})/i)
-  if (removeSimple && !isNonRowDeleteTarget(lower)) {
+  if (removeSimple && !isNonRowDeleteTarget(lower) && !VAGUE_MATCH_RE.test(removeSimple[1].trim())) {
     const match = removeSimple[1].trim()
     if (!['all', 'everything', 'data'].includes(match)) {
       calls.push({ tool: 'delete_row', params: { match }, description: `Delete row: ${match}` })
@@ -354,12 +389,25 @@ export function parseMessage(message: string, sheetContext?: SheetContext): Pars
   }
 
   // ─── Formula: "sum/total/average column X" ──────────────────────────────────
-  const formulaCol = lower.match(/\b(?:sum|total|add up)\s+(?:of\s+)?(?:column\s+)?([a-z]{1,3})\b/i)
+  // Guard: skip if the message is educational/comparative (e.g., "explain SUM vs SUMIF")
+  const isEducational = /\b(?:explain|compare|vs|versus|difference\s+between|what\s+is)\b/i.test(lower)
+  const formulaCol = !isEducational && lower.match(/\b(?:sum|total|add up)\s+(?:of\s+)?(?:column\s+)?([a-z]{1,3})\b/i)
   if (formulaCol) {
-    const col = resolveSmartColumn(message, sheetContext, { preferAmount: true })
-      ?? formulaCol[1].toUpperCase()
-    calls.push({ tool: 'apply_formula', params: { cell: col, formula: '=SUM' }, description: `Sum column ${col}` })
-    return { calls, understood: true, explanation: `Adding a SUM formula for column ${col}.` }
+    const rawCol = formulaCol[1].toUpperCase()
+    // First try resolving via header name (e.g., "sum column Tax" → column C)
+    const smartCol = resolveSmartColumn(message, sheetContext, { preferAmount: true })
+    if (smartCol) {
+      calls.push({ tool: 'apply_formula', params: { cell: smartCol, formula: '=SUM' }, description: `Sum column ${smartCol}` })
+      return { calls, understood: true, explanation: `Adding a SUM formula for column ${smartCol}.` }
+    }
+    // Fallback: only fire if the captured text looks like a column letter (A-Z,
+    // at most 2 chars) and isn't a common English word. Otherwise fall through.
+    const isValidColRef = rawCol.length <= 2 && /^[A-Z]{1,2}$/.test(rawCol)
+      && !COMMON_WORDS_NOT_COLUMNS.has(rawCol.toLowerCase())
+    if (isValidColRef) {
+      calls.push({ tool: 'apply_formula', params: { cell: rawCol, formula: '=SUM' }, description: `Sum column ${rawCol}` })
+      return { calls, understood: true, explanation: `Adding a SUM formula for column ${rawCol}.` }
+    }
   }
 
   const avgCol = lower.match(/\b(?:average|avg|mean)\s+(?:of\s+)?(?:column\s+)?([a-z]{1,3})\b/i)

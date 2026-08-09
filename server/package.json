@@ -10,7 +10,6 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "setup-model": "node scripts/setup-model.mjs",
-    "setup-assist": "powershell -ExecutionPolicy Bypass -File ../scripts/setup-assist-model.ps1",
     "migrate": "node scripts/run-migration.mjs"
   },
   "dependencies": {
@@ -30,6 +29,8 @@
     "@types/express": "^5.0.0",
     "@types/node": "^22.19.17",
     "@types/pg": "^8.20.0",
+    "@types/supertest": "^7.2.1",
+    "supertest": "^7.2.2",
     "tsx": "^4.20.5",
     "typescript": "^5.9.3",
     "vitest": "^3.2.4"

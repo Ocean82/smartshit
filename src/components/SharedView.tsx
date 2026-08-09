@@ -121,7 +121,7 @@ export function SharedView({ token }: SharedViewProps) {
         <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-700/60 text-[11px]">
           <Globe size={11} className="text-blue-400" />
           <span className="text-slate-300">
-            Shared by {meta.sharedBy} · {meta.permission === 'edit' ? 'Can edit' : 'View only'}
+            Shared by {meta.sharedBy} · View only
           </span>
         </div>
 

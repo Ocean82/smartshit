@@ -4,7 +4,6 @@ import express from 'express'
 import { clerkMiddleware } from '@clerk/express'
 import { config } from './config.js'
 import { modelIsRegistered, ollamaReachable } from './ollama.js'
-import { assistModelAvailable } from './ollama.js'
 import { groqAvailable } from './groq.js'
 import {
   buildActionPrompt,
@@ -327,7 +326,6 @@ async function runLlmChat(params: {
 app.get('/health', async (req, res) => {
   const ollama = await ollamaReachable()
   const modelReady = ollama ? await modelIsRegistered() : false
-  const assistReady = ollama ? await assistModelAvailable() : false
   const groq = groqAvailable()
   const openrouter = providerIsConfigured('openrouter')
   const huggingface = providerIsConfigured('huggingface')
@@ -357,9 +355,7 @@ app.get('/health', async (req, res) => {
     groqUsage: groq ? getGroqUsageStats() : null,
     ollama,
     modelRegistered: modelReady,
-    assistModelRegistered: assistReady,
     modelName: config.modelName,
-    assistModelName: config.assistModelName,
     cloud: {
       database: db,
       s3: s3,

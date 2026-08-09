@@ -8,7 +8,6 @@ import {
   Loader2,
   Share2,
   Globe,
-  Lock,
   Clock,
 } from 'lucide-react'
 import { getCloudWorkbookId, isCloudConfigured, getAuthHeaders } from '@/lib/cloudSync'
@@ -227,17 +226,13 @@ export function ShareDialog({ open, onClose }: ShareDialogProps) {
                         }`}
                       >
                         <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center shrink-0">
-                          {share.permission === 'edit' ? (
-                            <Lock size={14} className="text-amber-500" />
-                          ) : (
-                            <Globe size={14} className="text-blue-500" />
-                          )}
+                          <Globe size={14} className="text-blue-500" />
                         </div>
 
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1.5">
                             <span className="text-xs font-medium text-gray-700">
-                              {share.permission === 'edit' ? 'Can edit' : 'View only'}
+                              View only
                             </span>
                             {expired && (
                               <span className="text-[10px] px-1.5 py-0.5 bg-red-100 text-red-600 rounded-full">

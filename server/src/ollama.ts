@@ -64,50 +64,7 @@ export async function chatWithOllama(
   return data.message?.content?.trim() ?? ''
 }
 
-/**
- * Check if the excel-assist finetuned model is available.
- * @deprecated — Scheduled for removal. The assist model will be consolidated
- * into the primary model (single 4B instruct). Kept temporarily for backward
- * compatibility during migration.
- */
-export async function assistModelAvailable(): Promise<boolean> {
-  if (!config.assistModelName) return false
-  return modelIsRegistered(config.assistModelName)
-}
 
-/**
- * Chat with the excel-assist finetuned model (structured JSON output).
- * @deprecated — Use chatWithOllama with { jsonMode: true } instead.
- * Kept temporarily for backward compatibility during migration.
- */
-export async function chatWithAssistModel(messages: ChatMessageInput[]): Promise<string> {
-  const model = config.assistModelName
-  const res = await fetch(`${config.ollamaBaseUrl}/api/chat`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model,
-      messages,
-      stream: false,
-      format: 'json',
-      options: {
-        num_ctx: config.numCtx,
-        num_predict: config.numPredict,
-        temperature: 0.1,
-      },
-    }),
-    signal: AbortSignal.timeout(60_000),
-  })
-
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error(`Ollama assist model failed (${res.status}): ${text}`)
-  }
-
-  const data = (await res.json()) as OllamaChatResponse
-  if (data.error) throw new Error(data.error)
-  return data.message?.content?.trim() ?? ''
-}
 
 /**
  * Streaming chat — yields text chunks as they arrive from Ollama.
