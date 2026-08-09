@@ -5,6 +5,7 @@
  */
 
 import type { FileItem } from '@/types'
+import { createEmptyWorkbook } from '@/engine/spreadsheet'
 import { v4 as uuid } from 'uuid'
 
 export interface FileState {
@@ -22,51 +23,48 @@ export interface FileActions {
 
 /**
  * Create file actions. Takes the immer `set` function from Zustand.
+ * Behavior matches the previous inline store implementations (workbookId on create;
+ * delete is filter-only without cascading children).
  */
 export function createFileActions(
   set: (fn: (s: FileState) => void) => void,
 ): FileActions {
   return {
     createFile: (name, parentId = null) => {
-      const newFile: FileItem = {
+      const wb = createEmptyWorkbook(name)
+      const file: FileItem = {
         id: uuid(),
         name,
         type: 'file',
-        parentId,
+        parentId: parentId ?? null,
+        workbookId: wb.id,
         createdAt: Date.now(),
         updatedAt: Date.now(),
       }
-      set((s) => { s.files.push(newFile) })
+      set((s) => { s.files.push(file) })
     },
 
     createFolder: (name, parentId = null) => {
-      const newFolder: FileItem = {
+      const folder: FileItem = {
         id: uuid(),
         name,
         type: 'folder',
-        parentId,
+        parentId: parentId ?? null,
+        children: [],
         createdAt: Date.now(),
         updatedAt: Date.now(),
       }
-      set((s) => { s.files.push(newFolder) })
+      set((s) => { s.files.push(folder) })
     },
 
     deleteFile: (id) => {
-      set((s) => {
-        s.files = s.files.filter((f) => f.id !== id && f.parentId !== id)
-        if (s.activeFileId === id) {
-          s.activeFileId = s.files[0]?.id ?? null
-        }
-      })
+      set((s) => { s.files = s.files.filter((f) => f.id !== id) })
     },
 
     renameFile: (id, name) => {
       set((s) => {
         const file = s.files.find((f) => f.id === id)
-        if (file) {
-          file.name = name
-          file.updatedAt = Date.now()
-        }
+        if (file) file.name = name
       })
     },
 

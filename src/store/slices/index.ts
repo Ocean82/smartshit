@@ -8,3 +8,9 @@
 
 export { createUIState, createUIActions, type UIState, type UIActions } from './uiSlice'
 export { createFileActions, type FileState, type FileActions } from './fileSlice'
+export { createHistoryActions, type HistoryState, type HistoryActions } from './historySlice'
+export {
+  createWorkbookActions,
+  type WorkbookSliceState,
+  type WorkbookActions,
+} from './workbookSlice'

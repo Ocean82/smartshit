@@ -1,255 +1,45 @@
-import { create } from 'zustand';
-import { immer } from 'zustand/middleware/immer';
+import { create } from 'zustand'
+import { immer } from 'zustand/middleware/immer'
 import type {
-  WorkbookData,
-  SheetData,
-  CellData,
-  CellFormat,
-  Selection,
   ChatMessage,
-  AgentAction,
   FileItem,
-  Skill,
-  ChartConfig,
-  FilterConfig,
-  SortConfig,
-  SortRule,
-  DataValidation,
-  Toast,
-  ConfirmDialogState,
-} from '@/types';
+  SheetData,
+} from '@/types'
 import {
   createEmptyWorkbook,
-  createEmptySheet,
   refToCell,
-  cellToRef,
   SpreadsheetEngine,
-} from '@/engine/spreadsheet';
-import { executeTool, executeToolAsync, type ExecutionContext, type ExecutionResult } from '@/agent';
-import { executeTemplateTool, resolveGalleryTemplate } from '@/templates';
-import { MUTATION_TOOL_NAMES } from '@shared/toolRegistry';
-import { executeMacro } from '@/ai/macro/macroExecutor';
-import { createStoreUndoManager } from '@/ai/macro/storeUndoManager';
-import { createToolStepExecutor } from '@/ai/macro/toolStepExecutor';
-import type { ActionStep, MacroPlan } from '@/ai/nlp/types';
-import { loadPersistedState } from '@/lib/persistence';
-import { buildSpreadsheetContext } from '@/ai/buildContext';
-import { toolResultToMessage } from '@/ai/responseBuilder';
-import { buildFilePreview } from '@/ai/filePreview';
-import { recordTelemetry } from '@/ai/telemetry';
-import { classifyMode, isLlmOnlyMode, isBudgetExplainQuery } from '@/ai/mode';
-import { runAudit } from '@/auditor';
-import { analyzeBudget, budgetAnalysisToToolResult, savingsRecommendation } from '@/ai/analysis/budget';
-import { parseUserIntent } from '@shared/intentParser';
-import { AI_ANALYSIS_CONFIG } from '@/ai/config';
-import { resolveActTemplates } from '@shared/actTemplates';
-import { buildActionPreview } from '@/lib/previewBuilders';
-import type { AttachedFilePreview } from '@/ai/types';
-import { computeSortedCellUpdates, computeMultiSortedCellUpdates, type SortPatch } from '@/lib/sheetSort';
-import { conditionToRule, attachConditionalRuleToColumn } from '@/lib/conditionalFormat';
-import { getActionRecorder } from '@/lib/actionRecorder';
-import { v4 as uuid } from 'uuid';
-import { defaultSkills } from '@/data/chatPresets';
-import { validateCell } from '@/lib/validation';
+} from '@/engine/spreadsheet'
+import { executeTemplateTool } from '@/templates'
+import { loadPersistedState } from '@/lib/persistence'
+import { buildFilePreview } from '@/ai/filePreview'
+import { recordTelemetry } from '@/ai/telemetry'
+import { AI_ANALYSIS_CONFIG } from '@/ai/config'
+import type { ExecutionResult } from '@/agent'
+import { v4 as uuid } from 'uuid'
+import { defaultSkills } from '@/data/chatPresets'
 import {
-  diffWorkbooks,
-  applyUndo,
-  applyRedo,
-  type HistoryEntry,
-} from '@/lib/historyDiff';
-import { createUIState, createUIActions } from './slices';
-import { exportSheetToCsv, exportWorkbookToXlsx } from '@/io/xlsx';
-import { exportWorkbookToJson } from '@/io/workbookJson';
+  createUIState,
+  createUIActions,
+  createFileActions,
+  createHistoryActions,
+  createWorkbookActions,
+} from './slices'
+import type { AppState } from './storeTypes'
+import {
+  processAICommand,
+  estimateActionChangeCount,
+  buildExecutionContext,
+  executeAction,
+} from './aiExecution'
 
-// Maximum undo stack depth — higher limit now that patches are lightweight
-const MAX_UNDO_STACK = 150;
-
-interface AppState {
-  // Workbook
-  workbook: WorkbookData;
-  engine: SpreadsheetEngine;
-
-  // UI State
-  activeSheetId: string;
-  selection: Selection | null;
-  editingCell: string | null;
-  editValue: string;
-  showChat: boolean;
-  chatWidth: number;
-  showFileExplorer: boolean;
-  showSkills: boolean;
-  showChartDialog: boolean;
-  showFormatPanel: boolean;
-  showToolbar: boolean;
-  showVersionHistory: boolean;
-  showValidationDialog: boolean;
-  showPivotDialog: boolean;
-  setShowPivotDialog: (show: boolean) => void;
-  contextMenu: { x: number; y: number; cell: string } | null;
-
-  // Grid zoom
-  gridZoom: number;
-  setGridZoom: (zoom: number) => void;
-
-  // Panel system (right-side dock)
-  activePanel: 'chat' | 'insights' | 'auditor' | 'inspector' | null;
-  panelWidths: Record<string, number>;
-  lastAuditResult: import('@/auditor/types').AuditResult | null;
-  setActivePanel: (panel: 'chat' | 'insights' | 'auditor' | 'inspector' | null) => void;
-  setPanelWidth: (panel: string, width: number) => void;
-
-  // History
-  undoStack: HistoryEntry[];
-  redoStack: HistoryEntry[];
-
-  // Files
-  files: FileItem[];
-  activeFileId: string | null;
-
-  // Chat
-  messages: ChatMessage[];
-  chatInput: string;
-  isAiProcessing: boolean;
-  attachedFilePreview: AttachedFilePreview | null;
-
-  // Skills
-  skills: Skill[];
-
-  // Clipboard
-  clipboard: { cells: Record<string, CellData>; selection: Selection } | null;
-  copiedRange: Selection | null;
-
-  // Multi-range selection (Ctrl+click)
-  additionalSelections: Selection[];
-
-  // Sort/Filter
-  activeFilters: FilterConfig[];
-  activeSortConfig: SortConfig | null;
-
-  // Scroll position
-  scrollRow: number;
-  scrollCol: number;
-
-  // Toast notifications
-  toasts: Toast[];
-  showToast: (toast: Omit<Toast, 'id'>) => void;
-  dismissToast: (id: string) => void;
-
-  // Confirmation dialog
-  confirmDialog: ConfirmDialogState | null;
-  showConfirm: (dialog: ConfirmDialogState) => void;
-  dismissConfirm: () => void;
-
-  // Actions
-  initWorkbook: (name?: string) => void;
-  setActiveSheet: (sheetId: string) => void;
-  addSheet: (name?: string) => void;
-  deleteSheet: (sheetId: string) => void;
-  renameSheet: (sheetId: string, name: string) => void;
-  setCellValue: (cellId: string, value: string | number | boolean | null, formula?: string) => void;
-  setCellFormat: (cellId: string, format: Partial<CellFormat>) => void;
-  setRangeFormat: (format: Partial<CellFormat>) => void;
-  setSelection: (sel: Selection | null) => void;
-  addSelection: (sel: Selection) => void;
-  setEditingCell: (cellId: string | null) => void;
-  setEditValue: (val: string) => void;
-  toggleChat: () => void;
-  setShowChat: (v: boolean) => void;
-  setChatWidth: (w: number) => void;
-  toggleFileExplorer: () => void;
-  toggleSkills: () => void;
-  setShowChartDialog: (v: boolean) => void;
-  setShowFormatPanel: (v: boolean) => void;
-  setShowToolbar: (v: boolean) => void;
-  toggleToolbar: () => void;
-  setShowVersionHistory: (v: boolean) => void;
-  setShowValidationDialog: (show: boolean) => void;
-  setContextMenu: (menu: { x: number; y: number; cell: string } | null) => void;
-
-  // Validation
-  setCellValidation: (cellId: string, validation: DataValidation | null) => void;
-  validateCellValue: (cellId: string, value: string | number | null) => { valid: boolean; message?: string };
-
-  // History
-  pushHistory: (desc: string) => void;
-  undo: () => void;
-  redo: () => void;
-
-  // Chat
-  setChatInput: (val: string) => void;
-  addMessage: (msg: ChatMessage) => void;
-  sendMessage: () => void;
-  clearChat: () => void;
-  /** Toggle pin/bookmark on a chat message */
-  togglePinMessage: (messageId: string) => void;
-  /** Get all pinned messages */
-  getPinnedMessages: () => ChatMessage[];
-  /** Build a template directly (gallery), bypassing the parser/LLM round-trip. */
-  runTemplateTool: (tool: string) => void;
-  attachFileForChat: (file: File) => Promise<void>;
-  importAttachedFile: () => Promise<void>;
-  clearAttachedFile: () => void;
-  applyAction: (actionId: string) => void;
-  rejectAction: (actionId: string) => void;
-
-  // File system
-  createFile: (name: string, parentId?: string | null) => void;
-  createFolder: (name: string, parentId?: string | null) => void;
-  deleteFile: (id: string) => void;
-  renameFile: (id: string, name: string) => void;
-  openFile: (id: string) => void;
-
-  // Clipboard
-  copy: () => void;
-  cut: () => void;
-  paste: () => void;
-
-  // Data operations
-  addChart: (chart: ChartConfig) => void;
-  removeChart: (chartId: string) => void;
-  updateChartPosition: (chartId: string, x: number, y: number) => void;
-  setFreeze: (rows: number, cols: number) => void;
-  setSortConfig: (config: SortConfig | null) => void;
-  setFilters: (filters: FilterConfig[]) => void;
-  sortByColumn: (column: number, direction: 'asc' | 'desc') => void;
-  multiSort: (rules: SortRule[]) => void;
-  applySortPatch: (patch: SortPatch) => void;
-  applyOuterBorders: (borderValue: string) => void;
-  applyConditionalFormat: (
-    column: number,
-    condition: string,
-    color: string,
-    threshold?: number,
-  ) => void;
-  showFilterDialog: boolean;
-  setShowFilterDialog: (v: boolean) => void;
-  showConditionalFormatDialog: boolean;
-  setShowConditionalFormatDialog: (v: boolean) => void;
-  deleteSelectedCells: () => void;
-  insertRow: (afterRow: number) => void;
-  insertColumn: (afterCol: number) => void;
-  deleteRow: (row: number) => void;
-  deleteColumn: (col: number) => void;
-
-  // Bulk operations (for AI)
-  bulkSetCells: (cells: Record<string, { value: string | number | boolean | null; formula?: string }>) => void;
-  importWorkbook: (workbook: WorkbookData, meta?: { fileName?: string }) => void;
-  loadWorkbookData: (workbook: WorkbookData) => void;
-
-  // Scroll
-  setScrollPosition: (row: number, col: number) => void;
-
-  // Get helpers
-  getActiveSheet: () => SheetData;
-  getCellData: (cellId: string) => CellData | undefined;
-  getComputedValue: (row: number, col: number) => string;
-}
+export type { AppState } from './storeTypes'
 
 export const useStore = create<AppState>()(
   immer((set, get) => {
-    const engine = new SpreadsheetEngine();
-    const persisted = loadPersistedState();
-    const initialWorkbook = persisted?.workbook ?? createEmptyWorkbook('My Budget');
+    const engine = new SpreadsheetEngine()
+    const persisted = loadPersistedState()
+    const initialWorkbook = persisted?.workbook ?? createEmptyWorkbook('My Budget')
 
     // Wire AI function registry to push async results back into cells
     engine.aiRegistry.setUpdateCallback((cellId, value) => {
@@ -257,18 +47,18 @@ export const useStore = create<AppState>()(
       // The actual value is in the registry cache — this setState simply forces
       // a re-render so getComputedValue picks up the cached result.
       setTimeout(() => {
-        const state = useStore.getState();
-        const sheet = state.workbook.sheets.find((s) => s.id === state.activeSheetId);
+        const state = useStore.getState()
+        const sheet = state.workbook.sheets.find((s) => s.id === state.activeSheetId)
         if (sheet && sheet.cells[cellId]) {
           useStore.setState((s) => {
-            const sh = s.workbook.sheets.find((sh: SheetData) => sh.id === s.activeSheetId);
+            const sh = s.workbook.sheets.find((sh: SheetData) => sh.id === s.activeSheetId)
             if (sh && sh.cells[cellId]) {
-              sh.cells[cellId].displayValue = value === null ? undefined : String(value);
+              sh.cells[cellId].displayValue = value === null ? undefined : String(value)
             }
-          });
+          })
         }
-      }, 0);
-    });
+      }, 0)
+    })
 
     const initialFile: FileItem = persisted?.files?.[0] ?? {
       id: uuid(),
@@ -278,20 +68,31 @@ export const useStore = create<AppState>()(
       workbookId: initialWorkbook.id,
       createdAt: Date.now(),
       updatedAt: Date.now(),
-    };
+    }
 
     const defaultWelcome: ChatMessage = {
       id: uuid(),
       role: 'assistant',
       content: `Welcome to **smartsh!t** — your budgeting copilot.\n\nStart by importing a spreadsheet, then ask:\n- *"Explain this spreadsheet I just loaded"*\n- *"Where am I overspending?"*\n- *"What should I cut first to save more?"*\n\nI only apply changes after you review and approve them.`,
       timestamp: Date.now(),
-    };
+    }
 
-    // ─── UI state from slice ─────────────────────────────────────────────────
+    // ─── Slice composition ───────────────────────────────────────────────────
     const uiState = createUIState()
     const uiActions = createUIActions(
       set as unknown as (fn: (s: typeof uiState) => void) => void,
       () => get() as unknown as typeof uiState,
+    )
+    const fileActions = createFileActions(
+      set as unknown as (fn: (s: { files: FileItem[]; activeFileId: string | null }) => void) => void,
+    )
+    const historyActions = createHistoryActions(
+      set as unknown as Parameters<typeof createHistoryActions>[0],
+      get as unknown as Parameters<typeof createHistoryActions>[1],
+    )
+    const workbookActions = createWorkbookActions(
+      set as unknown as Parameters<typeof createWorkbookActions>[0],
+      get as unknown as Parameters<typeof createWorkbookActions>[1],
     )
 
     return {
@@ -301,9 +102,7 @@ export const useStore = create<AppState>()(
       selection: null,
       editingCell: null,
       editValue: '',
-      // Spread UI state
       ...uiState,
-      // Spread UI actions
       ...uiActions,
 
       lastAuditResult: null,
@@ -323,318 +122,13 @@ export const useStore = create<AppState>()(
       activeFilters: [],
       activeSortConfig: null,
 
-      initWorkbook: (name = 'Untitled Workbook') => {
-        const wb = createEmptyWorkbook(name);
-        const eng = get().engine;
-        eng.loadWorkbook(wb);
-        set((s) => {
-          s.workbook = wb;
-          s.activeSheetId = wb.activeSheetId;
-          s.undoStack = [];
-          s.redoStack = [];
-        });
-      },
+      ...fileActions,
+      ...historyActions,
+      ...workbookActions,
 
-      setActiveSheet: (sheetId) => {
-        set((s) => {
-          s.activeSheetId = sheetId;
-          s.workbook.activeSheetId = sheetId;
-          s.selection = null;
-          s.editingCell = null;
-        });
-        // Execute AI formulas for the newly active sheet
-        const state = get();
-        const activeSheet = state.getActiveSheet();
-        state.engine.executeAIFormulasForSheet(
-          activeSheet.id,
-          activeSheet.cells,
-          (ref) => {
-            const refPos = cellToRef(ref);
-            return state.engine.getComputedValue(state.activeSheetId, refPos.row, refPos.col) || null;
-          }
-        );
-      },
+      setChatInput: (val) => set((s) => { s.chatInput = val }),
 
-      addSheet: (name?: string) => {
-        const sheets = get().workbook.sheets;
-        const sheetName = name || `Sheet ${sheets.length + 1}`;
-        const sheet = createEmptySheet(sheetName);
-        const eng = get().engine;
-        set((s) => {
-          s.workbook.sheets.push(sheet);
-          s.activeSheetId = sheet.id;
-          s.workbook.activeSheetId = sheet.id;
-          s.workbook.updatedAt = Date.now();
-        });
-        eng.loadSheet(sheet);
-      },
-
-      deleteSheet: (sheetId) => {
-        const state = get();
-        if (state.workbook.sheets.length <= 1) return;
-        get().pushHistory('Delete sheet');
-        set((s) => {
-          s.workbook.sheets = s.workbook.sheets.filter((sh) => sh.id !== sheetId);
-          if (s.activeSheetId === sheetId) {
-            s.activeSheetId = s.workbook.sheets[0].id;
-            s.workbook.activeSheetId = s.workbook.sheets[0].id;
-          }
-          s.workbook.updatedAt = Date.now();
-        });
-        get().engine.loadWorkbook(get().workbook);
-      },
-
-      renameSheet: (sheetId, name) => {
-        set((s) => {
-          const sheet = s.workbook.sheets.find((sh) => sh.id === sheetId);
-          if (sheet) sheet.name = name;
-          s.workbook.updatedAt = Date.now();
-        });
-        get().engine.loadWorkbook(get().workbook);
-      },
-
-      setCellValue: (cellId, value, formula) => {
-        const state = get();
-        const ref = cellToRef(cellId);
-        // AI formulas are handled by our registry, not Formualizer
-        const isAI = formula && state.engine.isAIFormula(formula);
-        if (!isAI) {
-          state.engine.setCellValue(state.activeSheetId, ref.row, ref.col, formula || value);
-        }
-        set((s) => {
-          const sheet = s.workbook.sheets.find((sh) => sh.id === s.activeSheetId);
-          if (!sheet) return;
-          if (value === null && !formula) {
-            delete sheet.cells[cellId];
-          } else {
-            if (!sheet.cells[cellId]) {
-              sheet.cells[cellId] = { value: null };
-            }
-            sheet.cells[cellId].value = value;
-            sheet.cells[cellId].formula = formula;
-            // Clear stale displayValue when formula changes
-            if (isAI) {
-              sheet.cells[cellId].displayValue = undefined;
-            }
-          }
-          s.workbook.updatedAt = Date.now();
-        });
-        // Trigger AI formula execution after state update
-        if (isAI) {
-          const newState = get();
-          void newState.engine.executeAIFormula(
-            cellId,
-            formula!,
-            (ref) => {
-              const refPos = cellToRef(ref);
-              return newState.engine.getComputedValue(newState.activeSheetId, refPos.row, refPos.col) || null;
-            }
-          );
-        }
-      },
-
-      setCellFormat: (cellId, format) => {
-        // Callers that batch many format writes (templates/AI) pushHistory once upstream.
-        set((s) => {
-          const sheet = s.workbook.sheets.find((sh) => sh.id === s.activeSheetId);
-          if (!sheet) return;
-          if (!sheet.cells[cellId]) {
-            sheet.cells[cellId] = { value: null };
-          }
-          const existing = sheet.cells[cellId].format;
-          sheet.cells[cellId].format = {
-            ...existing,
-            ...format,
-            borders: format.borders
-              ? { ...existing?.borders, ...format.borders }
-              : existing?.borders,
-          };
-        });
-      },
-
-      setRangeFormat: (format) => {
-        const sel = get().selection;
-        if (!sel) return;
-        get().pushHistory('Format cells');
-        set((s) => {
-          const sheet = s.workbook.sheets.find((sh) => sh.id === s.activeSheetId);
-          if (!sheet) return;
-          // Apply to primary selection + any additional Ctrl+click ranges
-          const allRanges = [sel, ...s.additionalSelections];
-          for (const range of allRanges) {
-            const minR = Math.min(range.startRow, range.endRow);
-            const maxR = Math.max(range.startRow, range.endRow);
-            const minC = Math.min(range.startCol, range.endCol);
-            const maxC = Math.max(range.startCol, range.endCol);
-            for (let r = minR; r <= maxR; r++) {
-              for (let c = minC; c <= maxC; c++) {
-                const cid = refToCell(r, c);
-                if (!sheet.cells[cid]) {
-                  sheet.cells[cid] = { value: null };
-                }
-                const existing = sheet.cells[cid].format;
-                sheet.cells[cid].format = {
-                  ...existing,
-                  ...format,
-                  borders: format.borders
-                    ? { ...existing?.borders, ...format.borders }
-                    : existing?.borders,
-                };
-              }
-            }
-          }
-        });
-      },
-
-      setSelection: (sel) => set((s) => { s.selection = sel; s.additionalSelections = []; }),
-      addSelection: (sel: Selection) => set((s) => {
-        if (s.selection) {
-          s.additionalSelections = [...s.additionalSelections, s.selection];
-        }
-        s.selection = sel;
-      }),
-      setEditingCell: (cellId) => set((s) => { s.editingCell = cellId; }),
-      setEditValue: (val) => set((s) => { s.editValue = val; }),
-
-      setCellValidation: (cellId, validation) => {
-        set((s) => {
-          const sheet = s.workbook.sheets.find((sh) => sh.id === s.activeSheetId);
-          if (!sheet) return;
-          if (!sheet.cells[cellId]) {
-            sheet.cells[cellId] = { value: null };
-          }
-          sheet.cells[cellId].validation = validation || undefined;
-        });
-      },
-
-      validateCellValue: (cellId, value) => {
-        const sheet = get().getActiveSheet();
-        const cell = sheet.cells[cellId];
-        if (!cell?.validation) return { valid: true };
-        return validateCell(value, cell.validation);
-      },
-
-      pushHistory: (desc) => {
-        // ─── Optimized snapshot capture ──────────────────────────────────────
-        // Instead of structuredClone(entireWorkbook) on every edit, we only deep
-        // clone the active sheet's cells (where 99% of mutations land). This is
-        // ~5-10x faster than cloning the entire workbook for large sheets.
-        //
-        // JSON.parse(JSON.stringify(...)) is used because:
-        // 1. It's faster than structuredClone for plain JSON data in V8
-        // 2. Workbook cells are guaranteed JSON-serializable (no Dates, Maps, etc.)
-        // 3. It produces a clean deep copy with no shared references
-        //
-        // For structural changes (add/delete/reorder sheets), the diffWorkbooks
-        // function detects the mismatch and stores a full structural patch.
-        const wb = get().workbook;
-        
-        // Fast path: clone only the active sheet's cells + columnWidths
-        const beforeSnapshot: WorkbookData = {
-          id: wb.id,
-          name: wb.name,
-          activeSheetId: wb.activeSheetId,
-          createdAt: wb.createdAt,
-          updatedAt: wb.updatedAt,
-          sheets: wb.sheets.map((s) => {
-            if (s.id === wb.activeSheetId) {
-              // Deep clone only the active sheet's mutable data
-              return {
-                ...s,
-                cells: structuredClone(s.cells),
-                columnWidths: { ...s.columnWidths },
-                rowHeights: s.rowHeights ? { ...s.rowHeights } : {},
-                charts: s.charts ? [...s.charts] : [],
-              };
-            }
-            // Non-active sheets: shallow copy (structural changes handled by diffWorkbooks)
-            return { ...s, cells: { ...s.cells } };
-          }),
-        };
-        
-        set((s) => {
-          s.undoStack.push({ 
-            patch: {
-              sheets: [],
-              activeSheetIdBefore: beforeSnapshot.activeSheetId,
-              activeSheetIdAfter: beforeSnapshot.activeSheetId,
-              structuralBefore: beforeSnapshot,
-              structuralAfter: undefined,
-            }, 
-            description: desc 
-          });
-          if (s.undoStack.length > MAX_UNDO_STACK) s.undoStack.shift();
-          s.redoStack = [];
-        });
-
-        // After the mutation happens (synchronously by the caller), 
-        // we finalize the patch in a microtask to capture "after" state.
-        queueMicrotask(() => {
-          const afterWb = get().workbook;
-          const stack = get().undoStack;
-          if (stack.length === 0) return;
-          
-          const lastEntry = stack[stack.length - 1];
-          if (lastEntry.description !== desc) return; // Guard against interleaving
-          
-          const patch = diffWorkbooks(beforeSnapshot, afterWb);
-          set((s) => {
-            const entry = s.undoStack[s.undoStack.length - 1];
-            if (entry && entry.description === desc) {
-              entry.patch = patch;
-            }
-          });
-        });
-      },
-
-      undo: () => {
-        const stack = get().undoStack;
-        if (stack.length === 0) return;
-        const entry = stack[stack.length - 1];
-        
-        // If the patch still has structuralBefore but hasn't been finalized
-        // (microtask hasn't run yet), compute the diff now synchronously.
-        let finalEntry = entry;
-        if (entry.patch.structuralBefore && entry.patch.structuralAfter === undefined && entry.patch.sheets.length === 0) {
-          const afterWb = get().workbook;
-          const patch = diffWorkbooks(entry.patch.structuralBefore, afterWb);
-          finalEntry = { patch, description: entry.description };
-        }
-        
-        const currentWb = get().workbook;
-        const restored = applyUndo(currentWb, finalEntry);
-        const eng = get().engine;
-        eng.loadWorkbook(restored);
-        
-        set((s) => {
-          s.redoStack.push(finalEntry);
-          s.undoStack.pop();
-          s.workbook = restored;
-          s.activeSheetId = restored.activeSheetId;
-        });
-      },
-
-      redo: () => {
-        const stack = get().redoStack;
-        if (stack.length === 0) return;
-        const entry = stack[stack.length - 1];
-        const currentWb = get().workbook;
-        
-        const restored = applyRedo(currentWb, entry);
-        const eng = get().engine;
-        eng.loadWorkbook(restored);
-        
-        set((s) => {
-          s.undoStack.push(entry);
-          s.redoStack.pop();
-          s.workbook = restored;
-          s.activeSheetId = restored.activeSheetId;
-        });
-      },
-
-      setChatInput: (val) => set((s) => { s.chatInput = val; }),
-
-      addMessage: (msg) => set((s) => { s.messages.push(msg); }),
+      addMessage: (msg) => set((s) => { s.messages.push(msg) }),
 
       clearChat: () => set((s) => {
         s.messages = [{
@@ -642,45 +136,45 @@ export const useStore = create<AppState>()(
           role: 'assistant',
           content: `Welcome to **smartsh!t** — your budgeting copilot.\n\nStart by importing a spreadsheet, then ask:\n- *"Explain this spreadsheet I just loaded"*\n- *"Where am I overspending?"*\n- *"What should I cut first to save more?"*\n\nI only apply changes after you review and approve them.`,
           timestamp: Date.now(),
-        }];
-        s.chatInput = '';
-        s.isAiProcessing = false;
+        }]
+        s.chatInput = ''
+        s.isAiProcessing = false
       }),
 
       togglePinMessage: (messageId) => set((s) => {
-        const msg = s.messages.find((m) => m.id === messageId);
-        if (msg) msg.pinned = !msg.pinned;
+        const msg = s.messages.find((m) => m.id === messageId)
+        if (msg) msg.pinned = !msg.pinned
       }),
 
       getPinnedMessages: () => {
-        return get().messages.filter((m) => m.pinned);
+        return get().messages.filter((m) => m.pinned)
       },
 
       sendMessage: () => {
-        const input = get().chatInput.trim();
-        if (!input) return;
+        const input = get().chatInput.trim()
+        if (!input) return
 
         const userMsg: ChatMessage = {
           id: uuid(),
           role: 'user',
           content: input,
           timestamp: Date.now(),
-        };
+        }
 
-        const streamingMsgId = uuid();
+        const streamingMsgId = uuid()
         const streamingMsg: ChatMessage = {
           id: streamingMsgId,
           role: 'assistant',
           content: '',
           timestamp: Date.now(),
-        };
+        }
 
         set((s) => {
-          s.messages.push(userMsg);
-          s.messages.push(streamingMsg);
-          s.chatInput = '';
-          s.isAiProcessing = true;
-        });
+          s.messages.push(userMsg)
+          s.messages.push(streamingMsg)
+          s.chatInput = ''
+          s.isAiProcessing = true
+        })
 
         // Delegate to the chat service
         void import('@/services/chatService').then(({ processChatMessage }) => {
@@ -689,45 +183,45 @@ export const useStore = create<AppState>()(
             getActiveSheet: () => get().getActiveSheet(),
             getComputedValue: (row, col) => get().getComputedValue(row, col),
             getSheetComputedValue: (sheetId, row, col) => {
-              const state = get();
-              const targetSheet = state.workbook.sheets.find((candidate) => candidate.id === sheetId);
-              const cell = targetSheet?.cells[refToCell(row, col)];
+              const state = get()
+              const targetSheet = state.workbook.sheets.find((candidate) => candidate.id === sheetId)
+              const cell = targetSheet?.cells[refToCell(row, col)]
               if (cell?.formula && state.engine.isAIFormula(cell.formula)) {
-                return cell.displayValue == null ? String(cell.value ?? '') : String(cell.displayValue);
+                return cell.displayValue == null ? String(cell.value ?? '') : String(cell.displayValue)
               }
-              return state.engine.getComputedValue(sheetId, row, col);
+              return state.engine.getComputedValue(sheetId, row, col)
             },
             getSelection: () => get().selection,
             getActiveSheetId: () => get().activeSheetId,
             getAttachedPreview: () => get().attachedFilePreview,
             getMessages: () => get().messages,
-            setActiveSheet: (sheetId) => set((s) => { s.activeSheetId = sheetId; }),
+            setActiveSheet: (sheetId) => set((s) => { s.activeSheetId = sheetId }),
             pushHistory: (desc) => get().pushHistory(desc),
             buildExecContext: (opts) => buildExecutionContext(get, set, opts),
             appendToken: (msgId, token) => {
               set((s) => {
-                const msg = s.messages.find((m) => m.id === msgId);
-                if (msg) msg.content += token;
-              });
+                const msg = s.messages.find((m) => m.id === msgId)
+                if (msg) msg.content += token
+              })
             },
             finalizeMessage: (msgId, msg) => {
               set((s) => {
-                const idx = s.messages.findIndex((m) => m.id === msgId);
-                if (idx >= 0) s.messages[idx] = msg;
-              });
+                const idx = s.messages.findIndex((m) => m.id === msgId)
+                if (idx >= 0) s.messages[idx] = msg
+              })
             },
-            setProcessing: (v) => set((s) => { s.isAiProcessing = v; }),
-            processLocalFallback: (input) => processAICommand(input, get),
-          });
-        });
+            setProcessing: (v) => set((s) => { s.isAiProcessing = v }),
+            processLocalFallback: (fallbackInput) => processAICommand(fallbackInput, get),
+          })
+        })
       },
 
       runTemplateTool: (tool) => {
-        get().setShowChat(true);
-        const label = tool.replace(/^create_/, '').replace(/_/g, ' ');
-        get().pushHistory(`Template: ${label}`);
-        const ctx = buildExecutionContext(get, set, { suppressHistory: true });
-        const result = executeTemplateTool(tool, {}, ctx);
+        get().setShowChat(true)
+        const label = tool.replace(/^create_/, '').replace(/_/g, ' ')
+        get().pushHistory(`Template: ${label}`)
+        const ctx = buildExecutionContext(get, set, { suppressHistory: true })
+        const result = executeTemplateTool(tool, {}, ctx)
         get().addMessage({
           id: uuid(),
           role: 'assistant',
@@ -735,111 +229,111 @@ export const useStore = create<AppState>()(
             ? `✓ ${result.message}${result.modified > 0 ? ` (${result.modified} cell${result.modified === 1 ? '' : 's'} filled)` : ''}`
             : `⚠️ ${result.message}`,
           timestamp: Date.now(),
-        });
+        })
       },
 
       attachFileForChat: async (file) => {
-        const maxBytes = AI_ANALYSIS_CONFIG.maxFileSizeMb * 1024 * 1024;
+        const maxBytes = AI_ANALYSIS_CONFIG.maxFileSizeMb * 1024 * 1024
         if (file.size > maxBytes) {
           get().addMessage({
             id: uuid(),
             role: 'assistant',
             content: `File is too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Maximum is ${AI_ANALYSIS_CONFIG.maxFileSizeMb} MB.`,
             timestamp: Date.now(),
-          });
-          return;
+          })
+          return
         }
 
         try {
           const preview = await buildFilePreview(file, (workbook, row, col) => {
-            const sheet = workbook.sheets.find((s) => s.id === workbook.activeSheetId) ?? workbook.sheets[0];
-            const cellId = refToCell(row, col);
-            const val = sheet.cells[cellId]?.value;
-            return val === null || val === undefined ? '' : String(val);
-          });
+            const sheet = workbook.sheets.find((s) => s.id === workbook.activeSheetId) ?? workbook.sheets[0]
+            const cellId = refToCell(row, col)
+            const val = sheet.cells[cellId]?.value
+            return val === null || val === undefined ? '' : String(val)
+          })
           if (preview.importWarnings?.length) {
-            recordTelemetry('importTruncationEvents', `Chat attach: ${file.name}`);
+            recordTelemetry('importTruncationEvents', `Chat attach: ${file.name}`)
           }
-          set((s) => { s.attachedFilePreview = preview; });
+          set((s) => { s.attachedFilePreview = preview })
         } catch {
           get().addMessage({
             id: uuid(),
             role: 'assistant',
             content: `Could not read **${file.name}**. Make sure it is a valid .xlsx or .csv file.`,
             timestamp: Date.now(),
-          });
+          })
         }
       },
 
       importAttachedFile: async () => {
-        const preview = get().attachedFilePreview;
-        if (!preview) return;
-        get().importWorkbook(preview.workbook, { fileName: preview.fileName });
-        set((s) => { s.attachedFilePreview = null; });
+        const preview = get().attachedFilePreview
+        if (!preview) return
+        get().importWorkbook(preview.workbook, { fileName: preview.fileName })
+        set((s) => { s.attachedFilePreview = null })
         get().addMessage({
           id: uuid(),
           role: 'assistant',
           content: `Imported **${preview.fileName}** into your workbook. Ask me to explain the data or build a budget from it.`,
           timestamp: Date.now(),
-        });
+        })
       },
 
-      clearAttachedFile: () => set((s) => { s.attachedFilePreview = null; }),
+      clearAttachedFile: () => set((s) => { s.attachedFilePreview = null }),
 
       applyAction: (actionId) => {
-        const state = get();
+        const state = get()
         const highImpactTools = new Set([
           'clear_sheet',
           'clean_sheet_data',
           'delete_row',
           'modify_column',
-        ]);
+        ])
         // Find the action
         for (const msg of state.messages) {
           if (msg.actions) {
-            const action = msg.actions.find((a) => a.id === actionId);
+            const action = msg.actions.find((a) => a.id === actionId)
             if (action && action.status === 'pending') {
-              const estimatedChanges = estimateActionChangeCount(action);
-              const requiresPreview = highImpactTools.has(action.tool) && !action.preview;
+              const estimatedChanges = estimateActionChangeCount(action)
+              const requiresPreview = highImpactTools.has(action.tool) && !action.preview
               if (requiresPreview) {
-                recordTelemetry('previewDeniedActions', action.tool);
+                recordTelemetry('previewDeniedActions', action.tool)
                 get().addMessage({
                   id: uuid(),
                   role: 'assistant',
                   content: `I need to show a preview before applying **${action.tool}** because it can affect many cells. Ask me to regenerate this action with a preview.`,
                   timestamp: Date.now(),
-                });
-                return;
+                })
+                return
               }
 
               const historyLabel = estimatedChanges > 0
                 ? `AI Action: ${action.description} (~${estimatedChanges} changes)`
-                : `AI Action: ${action.description}`;
+                : `AI Action: ${action.description}`
               // Macro undo manager owns the transaction — do not pushHistory before
               if (action.tool !== 'execute_macro') {
-                get().pushHistory(historyLabel);
+                get().pushHistory(historyLabel)
               }
 
               const finishAction = (result: ExecutionResult) => {
                 set((s) => {
                   for (const m of s.messages) {
                     if (m.actions) {
-                      const a = m.actions.find((act) => act.id === actionId);
-                      if (a) a.status = result.success ? 'applied' : 'rejected';
+                      const a = m.actions.find((act) => act.id === actionId)
+                      if (a) a.status = result.success ? 'applied' : 'rejected'
                     }
                   }
-                });
+                })
                 if (!result.success) {
                   get().addMessage({
                     id: uuid(),
                     role: 'assistant',
                     content: `⚠️ ${result.message}`,
                     timestamp: Date.now(),
-                  });
+                  })
                 }
-              };
+              }
 
-              const execution = executeAction(action, get, set);
+              const execution = executeAction(action, get, set)
               if (execution instanceof Promise) {
                 void execution
                   .then(finishAction)
@@ -847,11 +341,11 @@ export const useStore = create<AppState>()(
                     success: false,
                     message: err instanceof Error ? err.message : 'The action failed unexpectedly.',
                     modified: 0,
-                  }));
+                  }))
               } else {
-                finishAction(execution);
+                finishAction(execution)
               }
-              break;
+              break
             }
           }
         }
@@ -861,851 +355,12 @@ export const useStore = create<AppState>()(
         set((s) => {
           for (const msg of s.messages) {
             if (msg.actions) {
-              const action = msg.actions.find((a) => a.id === actionId);
-              if (action) action.status = 'rejected';
+              const action = msg.actions.find((a) => a.id === actionId)
+              if (action) action.status = 'rejected'
             }
           }
-        });
+        })
       },
-
-      createFile: (name, parentId = null) => {
-        const wb = createEmptyWorkbook(name);
-        const file: FileItem = {
-          id: uuid(),
-          name,
-          type: 'file',
-          parentId: parentId ?? null,
-          workbookId: wb.id,
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-        };
-        set((s) => { s.files.push(file); });
-      },
-
-      createFolder: (name, parentId = null) => {
-        const folder: FileItem = {
-          id: uuid(),
-          name,
-          type: 'folder',
-          parentId: parentId ?? null,
-          children: [],
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-        };
-        set((s) => { s.files.push(folder); });
-      },
-
-      deleteFile: (id) => {
-        set((s) => { s.files = s.files.filter((f) => f.id !== id); });
-      },
-
-      renameFile: (id, name) => {
-        set((s) => {
-          const file = s.files.find((f) => f.id === id);
-          if (file) file.name = name;
-        });
-      },
-
-      openFile: (id) => {
-        set((s) => { s.activeFileId = id; });
-      },
-
-      copy: () => {
-        const sel = get().selection;
-        if (!sel) return;
-        const sheet = get().getActiveSheet();
-        const cells: Record<string, CellData> = {};
-        const minR = Math.min(sel.startRow, sel.endRow);
-        const maxR = Math.max(sel.startRow, sel.endRow);
-        const minC = Math.min(sel.startCol, sel.endCol);
-        const maxC = Math.max(sel.startCol, sel.endCol);
-        for (let r = minR; r <= maxR; r++) {
-          for (let c = minC; c <= maxC; c++) {
-            const cid = refToCell(r, c);
-            if (sheet.cells[cid]) {
-              cells[cid] = { ...sheet.cells[cid] };
-            }
-          }
-        }
-        set((s) => { s.clipboard = { cells, selection: sel }; s.copiedRange = sel; });
-      },
-
-      cut: () => {
-        get().copy();
-        get().deleteSelectedCells();
-      },
-
-      paste: () => {
-        const { clipboard, selection } = get();
-        if (!clipboard || !selection) return;
-        get().pushHistory('Paste');
-        const srcMinR = Math.min(clipboard.selection.startRow, clipboard.selection.endRow);
-        const srcMinC = Math.min(clipboard.selection.startCol, clipboard.selection.endCol);
-        const dstR = Math.min(selection.startRow, selection.endRow);
-        const dstC = Math.min(selection.startCol, selection.endCol);
-
-        for (const [cellId, cellData] of Object.entries(clipboard.cells)) {
-          const ref = cellToRef(cellId);
-          const newR = ref.row - srcMinR + dstR;
-          const newC = ref.col - srcMinC + dstC;
-          const newCellId = refToCell(newR, newC);
-          get().setCellValue(newCellId, cellData.value, cellData.formula);
-          if (cellData.format) {
-            get().setCellFormat(newCellId, cellData.format);
-          }
-        }
-        set((s) => { s.copiedRange = null; });
-      },
-
-      addChart: (chart) => {
-        set((s) => {
-          const sheet = s.workbook.sheets.find((sh) => sh.id === s.activeSheetId);
-          if (sheet) {
-            if (!sheet.charts) sheet.charts = [];
-            sheet.charts.push(chart);
-          }
-        });
-      },
-
-      removeChart: (chartId) => {
-        set((s) => {
-          const sheet = s.workbook.sheets.find((sh) => sh.id === s.activeSheetId);
-          if (sheet && sheet.charts) {
-            sheet.charts = sheet.charts.filter((c) => c.id !== chartId);
-          }
-        });
-      },
-
-      updateChartPosition: (chartId, x, y) => {
-        set((s) => {
-          const sheet = s.workbook.sheets.find((sh) => sh.id === s.activeSheetId);
-          if (sheet && sheet.charts) {
-            const chart = sheet.charts.find((c) => c.id === chartId);
-            if (chart) {
-              chart.position.x = x;
-              chart.position.y = y;
-            }
-          }
-        });
-      },
-
-      setFreeze: (rows, cols) => {
-        set((s) => {
-          const sheet = s.workbook.sheets.find((sh) => sh.id === s.activeSheetId);
-          if (sheet) {
-            sheet.frozenRows = rows;
-            sheet.frozenCols = cols;
-          }
-        });
-      },
-
-      setSortConfig: (config) => {
-        set((s) => { s.activeSortConfig = config; });
-      },
-
-      setFilters: (filters) => {
-        set((s) => { s.activeFilters = filters; });
-        getActionRecorder().recordAction('filter', { filters }, `Set ${filters.length} filter(s)`);
-      },
-
-      sortByColumn: (column, direction) => {
-        const sheet = get().getActiveSheet();
-        get().pushHistory(`Sort by column ${column}`);
-        const patch = computeSortedCellUpdates(
-          sheet,
-          column,
-          direction,
-          (row, col) => get().getComputedValue(row, col),
-        );
-        get().applySortPatch(patch);
-        set((s) => { s.activeSortConfig = { column, direction }; });
-        getActionRecorder().recordAction('sort_sheet', { column, direction }, `Sort by column ${column} (${direction})`);
-      },
-
-      multiSort: (rules) => {
-        if (!rules.length) return;
-        const sheet = get().getActiveSheet();
-        get().pushHistory(`Multi-sort by ${rules.length} column(s)`);
-        const patch = computeMultiSortedCellUpdates(
-          sheet,
-          rules,
-          (row, col) => get().getComputedValue(row, col),
-        );
-        get().applySortPatch(patch);
-        set((s) => { s.activeSortConfig = { column: rules[0].column, direction: rules[0].direction }; });
-        getActionRecorder().recordAction('multi_sort', { rules }, `Multi-sort by ${rules.length} column(s)`);
-      },
-
-      applySortPatch: (patch) => {
-        const state = get();
-        set((s) => {
-          const sheet = s.workbook.sheets.find((sh) => sh.id === s.activeSheetId);
-          if (!sheet) return;
-          for (const cellId of patch.deletes) {
-            const ref = cellToRef(cellId);
-            state.engine.setCellValue(s.activeSheetId, ref.row, ref.col, null);
-            delete sheet.cells[cellId];
-          }
-          for (const [cellId, cell] of Object.entries(patch.writes)) {
-            const ref = cellToRef(cellId);
-            state.engine.setCellValue(s.activeSheetId, ref.row, ref.col, cell.formula || cell.value);
-            sheet.cells[cellId] = {
-              value: cell.value,
-              formula: cell.formula,
-              format: cell.format,
-              validation: cell.validation,
-              validationError: cell.validationError,
-              displayValue: cell.displayValue,
-            };
-          }
-          s.workbook.updatedAt = Date.now();
-        });
-      },
-
-      applyOuterBorders: (borderValue) => {
-        const sel = get().selection;
-        if (!sel) return;
-        get().pushHistory('Outer borders');
-        const minR = Math.min(sel.startRow, sel.endRow);
-        const maxR = Math.max(sel.startRow, sel.endRow);
-        const minC = Math.min(sel.startCol, sel.endCol);
-        const maxC = Math.max(sel.startCol, sel.endCol);
-        for (let r = minR; r <= maxR; r++) {
-          for (let c = minC; c <= maxC; c++) {
-            const borders: NonNullable<CellFormat['borders']> = {};
-            if (r === minR) borders.top = borderValue;
-            if (r === maxR) borders.bottom = borderValue;
-            if (c === minC) borders.left = borderValue;
-            if (c === maxC) borders.right = borderValue;
-            if (Object.keys(borders).length === 0) continue;
-            get().setCellFormat(refToCell(r, c), { borders });
-          }
-        }
-      },
-
-      applyConditionalFormat: (column, condition, color, threshold = 0) => {
-        const sheet = get().getActiveSheet();
-        get().pushHistory(`Conditional format column ${column}`);
-        const rule = conditionToRule(condition, color, threshold);
-        attachConditionalRuleToColumn(sheet, column, rule, (cellId, format) => {
-          get().setCellFormat(cellId, format);
-        });
-        getActionRecorder().recordAction('conditional_format', { column, condition, color, threshold }, `Conditional format column ${column}`);
-      },
-
-      deleteSelectedCells: () => {
-        const sel = get().selection;
-        if (!sel) return;
-        set((s) => {
-          const sheet = s.workbook.sheets.find((sh) => sh.id === s.activeSheetId);
-          if (!sheet) return;
-          const minR = Math.min(sel.startRow, sel.endRow);
-          const maxR = Math.max(sel.startRow, sel.endRow);
-          const minC = Math.min(sel.startCol, sel.endCol);
-          const maxC = Math.max(sel.startCol, sel.endCol);
-          for (let r = minR; r <= maxR; r++) {
-            for (let c = minC; c <= maxC; c++) {
-              const cid = refToCell(r, c);
-              delete sheet.cells[cid];
-            }
-          }
-        });
-        get().engine.loadWorkbook(get().workbook);
-      },
-
-      insertRow: (afterRow) => {
-        set((s) => {
-          const sheet = s.workbook.sheets.find((sh) => sh.id === s.activeSheetId);
-          if (!sheet) return;
-          // Shift all cells down
-          const newCells: Record<string, CellData> = {};
-          for (const [cellId, data] of Object.entries(sheet.cells)) {
-            const ref = cellToRef(cellId);
-            if (ref.row > afterRow) {
-              newCells[refToCell(ref.row + 1, ref.col)] = data;
-            } else {
-              newCells[cellId] = data;
-            }
-          }
-          sheet.cells = newCells;
-        });
-        get().engine.loadWorkbook(get().workbook);
-      },
-
-      insertColumn: (afterCol) => {
-        set((s) => {
-          const sheet = s.workbook.sheets.find((sh) => sh.id === s.activeSheetId);
-          if (!sheet) return;
-          const newCells: Record<string, CellData> = {};
-          for (const [cellId, data] of Object.entries(sheet.cells)) {
-            const ref = cellToRef(cellId);
-            if (ref.col > afterCol) {
-              newCells[refToCell(ref.row, ref.col + 1)] = data;
-            } else {
-              newCells[cellId] = data;
-            }
-          }
-          sheet.cells = newCells;
-        });
-        get().engine.loadWorkbook(get().workbook);
-      },
-
-      deleteRow: (row) => {
-        set((s) => {
-          const sheet = s.workbook.sheets.find((sh) => sh.id === s.activeSheetId);
-          if (!sheet) return;
-          const newCells: Record<string, CellData> = {};
-          for (const [cellId, data] of Object.entries(sheet.cells)) {
-            const ref = cellToRef(cellId);
-            if (ref.row === row) continue;
-            if (ref.row > row) {
-              newCells[refToCell(ref.row - 1, ref.col)] = data;
-            } else {
-              newCells[cellId] = data;
-            }
-          }
-          sheet.cells = newCells;
-        });
-        get().engine.loadWorkbook(get().workbook);
-      },
-
-      deleteColumn: (col) => {
-        set((s) => {
-          const sheet = s.workbook.sheets.find((sh) => sh.id === s.activeSheetId);
-          if (!sheet) return;
-          const newCells: Record<string, CellData> = {};
-          for (const [cellId, data] of Object.entries(sheet.cells)) {
-            const ref = cellToRef(cellId);
-            if (ref.col === col) continue;
-            if (ref.col > col) {
-              newCells[refToCell(ref.row, ref.col - 1)] = data;
-            } else {
-              newCells[cellId] = data;
-            }
-          }
-          sheet.cells = newCells;
-        });
-        get().engine.loadWorkbook(get().workbook);
-      },
-
-      bulkSetCells: (cells) => {
-        const state = get();
-        for (const [cellId, data] of Object.entries(cells)) {
-          // Skip AI formulas — they're handled by the AI registry, not Formualizer
-          if (data.formula && state.engine.isAIFormula(data.formula)) continue;
-          const ref = cellToRef(cellId);
-          state.engine.setCellValue(state.activeSheetId, ref.row, ref.col, data.formula || data.value);
-        }
-        set((s) => {
-          const sheet = s.workbook.sheets.find((sh) => sh.id === s.activeSheetId);
-          if (!sheet) return;
-          for (const [cellId, data] of Object.entries(cells)) {
-            if (!sheet.cells[cellId]) {
-              sheet.cells[cellId] = { value: null };
-            }
-            sheet.cells[cellId].value = data.value;
-            sheet.cells[cellId].formula = data.formula;
-          }
-          s.workbook.updatedAt = Date.now();
-        });
-      },
-
-      importWorkbook: (workbook, meta) => {
-        const eng = get().engine;
-        eng.loadWorkbook(workbook);
-        const sheet = workbook.sheets.find((s) => s.id === workbook.activeSheetId) ?? workbook.sheets[0];
-
-        const sheetLines = workbook.sheets.map((s) => {
-          const keys = Object.keys(s.cells);
-          const rows = keys.length === 0
-            ? 0
-            : Math.max(...keys.map((id) => cellToRef(id).row)) + 1;
-          return { name: s.name, rows };
-        });
-        const activeRows = sheetLines.find((s) => s.name === sheet?.name)?.rows ?? 0;
-        const fileLabel = meta?.fileName ?? 'your file';
-        const multi = workbook.sheets.length > 1;
-        const sheetList = sheetLines
-          .map((s) => `**${s.name}** (${s.rows} row${s.rows === 1 ? '' : 's'})`)
-          .join(', ');
-        const importMessage = multi
-          ? `Imported **${fileLabel}** with **${workbook.sheets.length} sheets**: ${sheetList}.\n\nYou're on **${sheet?.name ?? 'Sheet1'}**. Use the sheet tabs at the bottom to switch — I analyze the active sheet.`
-          : `Imported **${fileLabel}** — ${activeRows} rows on **${sheet?.name ?? 'Sheet 1'}**. Ready to analyze.\n\nAsk me anything about this data — try *"Explain this spreadsheet"* or *"Where am I overspending?"*`;
-
-        set((s) => {
-          s.workbook = workbook;
-          s.activeSheetId = workbook.activeSheetId;
-          s.undoStack = [];
-          s.redoStack = [];
-          s.workbook.updatedAt = Date.now();
-          s.messages.push({
-            id: uuid(),
-            role: 'assistant',
-            content: importMessage,
-            timestamp: Date.now(),
-            suggestions: multi
-              ? sheetLines.slice(0, 4).map((s) => `Explain the "${s.name}" sheet`)
-              : undefined,
-          });
-        });
-
-        // Execute AI formulas for the active sheet after state is updated
-        const state = get();
-        const activeSheet = state.getActiveSheet();
-        eng.executeAIFormulasForSheet(
-          activeSheet.id,
-          activeSheet.cells,
-          (ref) => {
-            const refPos = cellToRef(ref);
-            return state.engine.getComputedValue(state.activeSheetId, refPos.row, refPos.col) || null;
-          }
-        );
-
-        // Auto-open Insights panel on import (replaces old auto-chat-explain)
-        if (activeRows > 5) {
-          set((s) => { s.activePanel = 'insights' });
-
-          // Auto-run audit in background (non-blocking)
-          setTimeout(() => {
-            try {
-              const activeSheet = get().getActiveSheet();
-              if (Object.keys(activeSheet.cells).length > 4) {
-                const auditResult = runAudit(activeSheet, get().getComputedValue);
-                set((s) => { s.lastAuditResult = auditResult });
-              }
-            } catch {
-              // Audit failure is non-fatal
-            }
-          }, 500);
-        }
-      },
-
-      loadWorkbookData: (workbook) => {
-        const eng = get().engine;
-        eng.loadWorkbook(workbook);
-
-        set((s) => {
-          s.workbook = workbook;
-          s.activeSheetId = workbook.activeSheetId;
-          s.undoStack = [];
-          s.redoStack = [];
-        });
-
-        // Execute AI formulas for the active sheet after state is updated
-        const state = get();
-        const activeSheet = state.getActiveSheet();
-        eng.executeAIFormulasForSheet(
-          activeSheet.id,
-          activeSheet.cells,
-          (ref) => {
-            const refPos = cellToRef(ref);
-            return state.engine.getComputedValue(state.activeSheetId, refPos.row, refPos.col) || null;
-          }
-        );
-      },
-
-      getActiveSheet: () => {
-        const state = get();
-        return state.workbook.sheets.find((s) => s.id === state.activeSheetId) || state.workbook.sheets[0];
-      },
-
-      getCellData: (cellId) => {
-        const sheet = get().getActiveSheet();
-        return sheet.cells[cellId];
-      },
-
-      getComputedValue: (row, col) => {
-        const state = get();
-        const sheet = state.getActiveSheet();
-        const cellId = refToCell(row, col);
-        const cell = sheet.cells[cellId];
-
-        // Route AI formulas - only return cached displayValue or placeholder
-        if (cell?.formula && state.engine.isAIFormula(cell.formula)) {
-          // If we already have a resolved displayValue, use it
-          if (cell.displayValue !== undefined) {
-            return cell.displayValue;
-          }
-          // Return loading placeholder - actual execution happens via explicit triggers
-          return '⏳ Loading...';
-        }
-
-        return state.engine.getComputedValue(state.activeSheetId, row, col);
-      },
-    };
-  })
-);
-
-// AI Command Processing (local fallback when server is unavailable)
-function processAICommand(
-  input: string,
-  get: () => AppState
-): ChatMessage {
-  const mode = classifyMode(input);
-  const lower = input.toLowerCase();
-
-  if (mode === 'help') {
-    return {
-      id: uuid(),
-      role: 'assistant',
-      content: `Here's what I can do:\n\n**Understand your data**\n- "Explain this spreadsheet in plain English"\n- "Where am I overspending?"\n\n**Build spreadsheets**\n- "Create a monthly budget"\n- "Make a sales tracker"\n\nImport a file, then ask me about it.`,
-      timestamp: Date.now(),
-    };
-  }
-
-  if (isLlmOnlyMode(mode)) {
-    const state = get();
-    const sheet = state.getActiveSheet();
-    const context = buildSpreadsheetContext(
-      state.workbook,
-      sheet,
-      state.selection,
-      state.getComputedValue,
-    );
-    const intent = parseUserIntent(input);
-    const insights = context.insights;
-    const monthlyIncome = typeof intent.parameters.monthlyIncome === 'number'
-      ? intent.parameters.monthlyIncome
-      : insights.totalIncome;
-
-    if (mode === 'advise' && monthlyIncome && monthlyIncome > 0) {
-      const result = savingsRecommendation(monthlyIncome, insights);
-      return {
-        id: uuid(),
-        role: 'assistant',
-        content: toolResultToMessage(result),
-        timestamp: Date.now(),
-        suggestions: result.suggestions,
-      };
     }
-
-    if (mode === 'advise' || (mode === 'explain' && isBudgetExplainQuery(input))) {
-      const result = budgetAnalysisToToolResult(analyzeBudget(context.profile!, insights));
-      return {
-        id: uuid(),
-        role: 'assistant',
-        content: toolResultToMessage(result),
-        timestamp: Date.now(),
-        suggestions: result.suggestions,
-        insightsSnapshot: insights as unknown as Record<string, unknown>,
-      };
-    }
-
-    const parts: string[] = [`I would analyze your sheet **${context.activeSheet}** here, but the AI server is offline.`];
-
-    if (insights.topExpenses?.length) {
-      parts.push(`\nTop expenses I can see:\n${insights.topExpenses.slice(0, 5).map((e) => `- ${e.label}: $${e.amount}`).join('\n')}`);
-    }
-    if (insights.negativeVariances?.length) {
-      parts.push(`\nOver budget:\n${insights.negativeVariances.slice(0, 5).map((v) => `- ${v.label}: ${v.difference}`).join('\n')}`);
-    }
-    if (insights.netCashflow !== undefined) {
-      parts.push(`\nNet cashflow: $${insights.netCashflow}`);
-    }
-
-    parts.push('\nStart the server with `npm run dev:server` for a full AI answer.');
-    return {
-      id: uuid(),
-      role: 'assistant',
-      content: parts.join(''),
-      timestamp: Date.now(),
-    };
-  }
-
-  // Act mode — gallery templates first (all 55 specs), then shared actTemplates
-  if (mode === 'act') {
-    const galleryMatch = resolveGalleryTemplate(input);
-    if (galleryMatch) {
-      return {
-        id: uuid(),
-        role: 'assistant',
-        content: `I will build **${galleryMatch.name}** for you. Click Apply to confirm.`,
-        timestamp: Date.now(),
-        actions: [{
-          id: uuid(),
-          tool: galleryMatch.tool,
-          params: {},
-          description: `Create ${galleryMatch.name}`,
-          status: 'pending' as const,
-        }],
-      };
-    }
-
-    const template = resolveActTemplates(input);
-    if (template.actions.length > 0 || template.message) {
-      const sheet = get().getActiveSheet();
-      return {
-        id: uuid(),
-        role: 'assistant',
-        content: template.message,
-        timestamp: Date.now(),
-        actions: template.actions.map((action) => {
-          const preview = buildActionPreview(
-            action.tool,
-            action.params,
-            sheet,
-            get().getComputedValue,
-          );
-          return {
-            id: uuid(),
-            tool: action.tool,
-            params: action.params,
-            description: action.description,
-            status: 'pending' as const,
-            preview,
-          };
-        }),
-      };
-    }
-  }
-
-  if (lower.includes('hello') || lower.includes('hi') || lower.includes('hey')) {
-    return {
-      id: uuid(),
-      role: 'assistant',
-      content: `Hello! I'm your **smartsh!t** assistant.\n\nI can help you build and manage budgets and spreadsheets using plain English. Try:\n\n- *"Create a monthly budget"*\n- *"Make a sales tracker"*\n- *"Create an invoice"*\n- *"Explain what this sheet means"*\n\nJust describe what you need!`,
-      timestamp: Date.now(),
-    };
-  }
-
-  if (lower.includes('help') || lower.includes('what can you do')) {
-    return {
-      id: uuid(),
-      role: 'assistant',
-      content: `Here's everything I can do:\n\n**Templates** — budget, sales tracker, invoice, KPI dashboard\n**Understand data** — explain budgets, find overspending, suggest savings\n**Build** — formulas, charts, formatting\n\nImport a file via the chat paperclip, then ask about it.`,
-      timestamp: Date.now(),
-    };
-  }
-
-  // Default helpful response
-  return {
-    id: uuid(),
-    role: 'assistant',
-    content: `I understand you want: *"${input}"*\n\nHere are some things I can do:\n\n📊 **Create templates**: "Create a monthly budget" / "Make a sales tracker"\n🔢 **Formulas**: "Calculate totals for column B" / "Add a SUM formula"\n📈 **Charts**: "Create a bar chart" / "Make a pie chart"\n🎨 **Format**: "Bold the header row" / "Color the cells"\n✏️ **Modify data**: "Add 10% to column B" / "Clear the sheet"\n👥 **Templates**: "Create employee roster" / "Project tracker"\n\nTry one of these commands!`,
-    timestamp: Date.now(),
-  };
-}
-
-function estimateActionChangeCount(action: AgentAction): number {
-  const previewChanges = action.preview?.changes?.length ?? 0;
-  if (previewChanges > 0) return previewChanges;
-
-  if (action.tool === 'clean_sheet_data') {
-    const preview = action.params.preview as { changes?: unknown[]; duplicateRows?: unknown[] } | undefined;
-    const changeCount = preview?.changes?.length ?? 0;
-    const duplicateCount = preview?.duplicateRows?.length ?? 0;
-    return changeCount + duplicateCount;
-  }
-
-  if (action.tool === 'modify_column') return 50;
-  if (action.tool === 'clear_sheet') return 200;
-  if (action.tool.startsWith('create_')) return 100;
-
-  return 0;
-}
-
-/** Cell ids covered by the current selection rectangle. */
-function selectionCellIds(sel: Selection | null): string[] {
-  if (!sel) return [];
-  const ids: string[] = [];
-  for (let r = Math.min(sel.startRow, sel.endRow); r <= Math.max(sel.startRow, sel.endRow); r++) {
-    for (let c = Math.min(sel.startCol, sel.endCol); c <= Math.max(sel.startCol, sel.endCol); c++) {
-      ids.push(refToCell(r, c));
-    }
-  }
-  return ids;
-}
-
-/**
- * Build the ExecutionContext used by both the fast path (parser) and the
- * LLM Apply path — so all mutation tools run through the same executor logic.
- */
-function buildExecutionContext(
-  get: () => AppState,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  set: any,
-  opts?: { suppressHistory?: boolean },
-): ExecutionContext {
-  const ctx: ExecutionContext = {
-    getActiveSheet: () => get().getActiveSheet(),
-    getSheets: () => get().workbook.sheets,
-    getComputedValue: (row, col, sheetId) => {
-      if (sheetId) {
-        const state = get();
-        const targetSheet = state.workbook.sheets.find((candidate) => candidate.id === sheetId);
-        const cell = targetSheet?.cells[refToCell(row, col)];
-        if (cell?.formula && state.engine.isAIFormula(cell.formula)) {
-          return cell.displayValue == null ? String(cell.value ?? '') : String(cell.displayValue);
-        }
-        return state.engine.getComputedValue(sheetId, row, col);
-      }
-      return get().getComputedValue(row, col);
-    },
-    setCellValue: (cellId, value, formula) => get().setCellValue(cellId, value, formula),
-    setCellFormat: (cellId, format) => get().setCellFormat(cellId, format),
-    setCellValidation: (cellId, validation) => {
-      set((s: AppState) => {
-        const sheet = s.workbook.sheets.find((sh: { id: string }) => sh.id === s.activeSheetId);
-        if (!sheet) return;
-        if (!sheet.cells[cellId]) {
-          sheet.cells[cellId] = { value: null };
-        }
-        if (validation) {
-          sheet.cells[cellId].validation = validation;
-        } else {
-          delete sheet.cells[cellId].validation;
-        }
-      });
-    },
-    bulkSetCells: (cells) => get().bulkSetCells(cells),
-    applySortPatch: (patch) => get().applySortPatch(patch),
-    setFilters: (filters) => get().setFilters(filters),
-    deleteRow: (row) => get().deleteRow(row),
-    insertRow: (afterRow) => get().insertRow(afterRow),
-    addSheet: (name) => get().addSheet(name),
-    renameSheet: (sheetId, name) => get().renameSheet(sheetId, name),
-    pushHistory: opts?.suppressHistory ? () => {} : (desc) => get().pushHistory(desc),
-    getSelection: () => {
-      const state = get();
-      const primary = selectionCellIds(state.selection);
-      const additional = state.additionalSelections.flatMap((s) => selectionCellIds(s));
-      if (additional.length === 0) return primary;
-      return [...new Set([...primary, ...additional])];
-    },
-    addChart: (chart) => get().addChart(chart),
-    exportData: (format) => {
-      const state = get();
-      if (format === 'csv') {
-        exportSheetToCsv(state.getActiveSheet(), state.workbook.name.replace(/\s+/g, '_'));
-      } else if (format === 'xlsx') {
-        exportWorkbookToXlsx(state.workbook);
-      } else {
-        exportWorkbookToJson(state.workbook);
-      }
-    },
-  };
-  ctx.executeTemplate = (tool, params) => executeTemplateTool(tool, params, ctx);
-  return ctx;
-}
-
-// Execute AI actions — operational (mutation) tools run through the unified
-// agent executor; create_* templates run through the template module (src/templates).
-function executeAction(
-  action: AgentAction,
-  get: () => AppState,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  set: any
-): ExecutionResult | Promise<ExecutionResult> {
-  const ctx = buildExecutionContext(get, set, { suppressHistory: true });
-  if (action.tool === 'execute_macro') {
-    return executeMacroAction(action, get, set);
-  }
-  if (action.tool === 'execute_script') {
-    // Validate that code is a non-empty string before passing to the sandbox.
-    // params.code originates from LLM output and must not be run unsanitized.
-    const rawCode = action.params.code;
-    if (typeof rawCode !== 'string' || !rawCode.trim()) {
-      return { success: false, message: 'execute_script requires a non-empty string code parameter', modified: 0 };
-    }
-    return executeToolAsync(
-      { tool: action.tool, params: { ...action.params, code: rawCode }, description: action.description },
-      ctx,
-    );
-  }
-  if (MUTATION_TOOL_NAMES.includes(action.tool)) {
-    // applyAction already pushed a single undo point for this action
-    return executeTool({ tool: action.tool, params: action.params, description: action.description }, ctx);
-  }
-  return executeTemplateTool(action.tool, action.params, ctx);
-}
-
-/**
- * Run a multi-step macro as one undoable group.
- * On success, push a single HistoryEntry with structural before/after snapshots.
- */
-async function executeMacroAction(
-  action: AgentAction,
-  get: () => AppState,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  set: any,
-): Promise<ExecutionResult> {
-  const rawSteps = action.params.steps;
-  const steps: ActionStep[] = Array.isArray(rawSteps)
-    ? rawSteps.map((s) => ({
-        tool: String((s as ActionStep).tool ?? ''),
-        params: ((s as ActionStep).params ?? {}) as Record<string, unknown>,
-        description: String((s as ActionStep).description ?? (s as ActionStep).tool ?? 'step'),
-      }))
-    : [];
-
-  if (steps.length === 0) {
-    return { success: false, message: 'execute_macro requires a non-empty steps array', modified: 0 };
-  }
-
-  const label = action.description || `Macro: ${steps.length} steps`;
-  const before = structuredClone(get().workbook);
-
-  const undoManager = createStoreUndoManager({
-    getWorkbook: () => get().workbook,
-    restoreWorkbook: (wb) => {
-      get().engine.loadWorkbook(wb);
-      set((s: AppState) => {
-        s.workbook = wb;
-        s.activeSheetId = wb.activeSheetId;
-      });
-    },
-  });
-
-  const stepExecutor = createToolStepExecutor(
-    () => buildExecutionContext(get, set, { suppressHistory: true }),
-  );
-
-  const plan: MacroPlan = {
-    steps,
-    originalText: label,
-    truncated: false,
-  };
-
-  const result = await executeMacro(
-    plan,
-    {
-      onProgress() {},
-      onStepComplete() {},
-      shouldCancel: () => false,
-    },
-    undoManager,
-    stepExecutor,
-  );
-
-  if (result.success) {
-    const after = structuredClone(get().workbook);
-    set((s: AppState) => {
-      s.undoStack.push({
-        patch: {
-          sheets: [],
-          activeSheetIdBefore: before.activeSheetId,
-          activeSheetIdAfter: after.activeSheetId,
-          structuralBefore: before,
-          structuralAfter: after,
-        },
-        description: label.startsWith('Macro:') ? label : `Macro: ${label}`,
-      });
-      if (s.undoStack.length > MAX_UNDO_STACK) s.undoStack.shift();
-      s.redoStack = [];
-    });
-
-    const modified = result.completedSteps.reduce((sum, step) => {
-      const data = step.result.data as { modified?: number } | undefined;
-      return sum + (typeof data?.modified === 'number' ? data.modified : 0);
-    }, 0);
-
-    return {
-      success: true,
-      message: `Macro completed (${result.completedSteps.length} steps)`,
-      modified,
-    };
-  }
-
-  const reason = result.failedStep?.reason ?? 'Macro failed';
-  return { success: false, message: reason, modified: 0 };
-}
+  }),
+)
