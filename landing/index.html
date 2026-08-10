@@ -20,60 +20,154 @@
   <meta name="twitter:title" content="smartsh!t — Talk to Your Spreadsheet" />
   <meta name="twitter:description" content="AI spreadsheet for everyday people. Build budgets in plain English. No formulas required." />
   <meta name="twitter:image" content="https://smartsht.com/og-image.png" />
-  <link rel="canonical" href="https://smartsht.com" />
+  <link rel="canonical" href="https://smartsht.com/" />
 
-  <!-- Structured Data for Search Engines -->
+  <!-- Structured Data (@graph) for Google + AI search -->
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
-    "@type": "SoftwareApplication",
-    "name": "smartsht",
-    "alternateName": "smartsh!t",
-    "url": "https://smartsht.com",
-    "applicationCategory": "BusinessApplication",
-    "applicationSubCategory": "Spreadsheet",
-    "operatingSystem": "Web",
-    "description": "AI-powered spreadsheet that understands plain English. Build budgets, track expenses, generate invoices, and catch formula errors automatically. Free AI budget planner and expense tracker — an Excel and Google Sheets alternative for people who hate formulas.",
-    "featureList": "AI spreadsheet assistant, natural language commands, formula error auditor, budget templates, expense tracking, invoice generator, Excel import/export, privacy-first local storage, BYOK API key support, visual action previews",
-    "screenshot": "https://smartsht.com/og-image.png",
-    "offers": [
+    "@graph": [
       {
-        "@type": "Offer",
-        "price": "0",
-        "priceCurrency": "USD",
-        "name": "Free",
-        "description": "10 AI questions per day, full spreadsheet, all templates, Excel import/export, auditor error detection, 3 auto-fixes"
+        "@type": "Organization",
+        "@id": "https://smartsht.com/#organization",
+        "name": "smartsht",
+        "alternateName": "smartsh!t",
+        "url": "https://smartsht.com/",
+        "logo": {
+          "@type": "ImageObject",
+          "url": "https://smartsht.com/smart-favicon.png",
+          "width": 512,
+          "height": 512
+        },
+        "email": "support@smartsht.com",
+        "contactPoint": {
+          "@type": "ContactPoint",
+          "email": "support@smartsht.com",
+          "contactType": "customer support",
+          "availableLanguage": "English"
+        },
+        "sameAs": [
+          "https://github.com/Ocean82/smartshit",
+          "https://github.com/sponsors/Ocean82"
+        ]
       },
       {
-        "@type": "Offer",
-        "price": "7",
-        "priceCurrency": "USD",
-        "name": "Pro",
-        "description": "Unlimited AI, unlimited auto-fix, cloud backup and sync, version history, edit-sharing",
-        "billingIncrement": "P1M"
+        "@type": "WebSite",
+        "@id": "https://smartsht.com/#website",
+        "name": "smartsht",
+        "alternateName": "smartsh!t",
+        "url": "https://smartsht.com/",
+        "description": "AI-powered spreadsheet that understands plain English. Build budgets, track expenses, and catch formula errors — no formulas required.",
+        "publisher": { "@id": "https://smartsht.com/#organization" },
+        "inLanguage": "en-US"
+      },
+      {
+        "@type": "SoftwareApplication",
+        "@id": "https://smartsht.com/#app",
+        "name": "smartsht",
+        "alternateName": "smartsh!t",
+        "url": "https://smartsht.com/",
+        "applicationCategory": "BusinessApplication",
+        "applicationSubCategory": "Spreadsheet",
+        "operatingSystem": "Web Browser",
+        "browserRequirements": "Requires JavaScript. Modern evergreen browser.",
+        "description": "AI-powered spreadsheet that understands plain English. Build budgets, track expenses, generate invoices, and catch formula errors automatically. Free AI budget planner and expense tracker — an Excel and Google Sheets alternative for people who hate formulas.",
+        "featureList": [
+          "Natural language spreadsheet commands",
+          "Formula error auditor",
+          "Budget and expense templates",
+          "Invoice generator",
+          "Excel and CSV import/export",
+          "Privacy-first local storage",
+          "Bring Your Own Key (BYOK)",
+          "Visual action previews before changes"
+        ],
+        "screenshot": "https://smartsht.com/og-image.png",
+        "image": "https://smartsht.com/og-image.png",
+        "publisher": { "@id": "https://smartsht.com/#organization" },
+        "creator": { "@id": "https://smartsht.com/#organization" },
+        "offers": [
+          {
+            "@type": "Offer",
+            "@id": "https://smartsht.com/#offer-free",
+            "name": "Free",
+            "url": "https://smartsht.com/#pricing",
+            "price": "0",
+            "priceCurrency": "USD",
+            "availability": "https://schema.org/InStock",
+            "category": "FreeTrial",
+            "description": "3 AI questions per day, full spreadsheet, all templates, Excel import/export, auditor error detection, 3 auto-fixes, 1 cloud workbook, view-only share links, BYOK for unlimited AI on your own key"
+          },
+          {
+            "@type": "Offer",
+            "@id": "https://smartsht.com/#offer-pro",
+            "name": "Pro",
+            "url": "https://smartsht.com/#pricing",
+            "price": "7.00",
+            "priceCurrency": "USD",
+            "availability": "https://schema.org/InStock",
+            "priceSpecification": {
+              "@type": "UnitPriceSpecification",
+              "price": "7.00",
+              "priceCurrency": "USD",
+              "billingDuration": "P1M",
+              "referenceQuantity": {
+                "@type": "QuantitativeValue",
+                "value": 1,
+                "unitCode": "MON"
+              }
+            },
+            "description": "Unlimited AI questions, unlimited auto-fix, unlimited cloud backup and sync, version history, priority AI models. Early adopter rate."
+          }
+        ]
+      },
+      {
+        "@type": "FAQPage",
+        "@id": "https://smartsht.com/#faq",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "Is smartsht free?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Yes. The Free plan includes the full spreadsheet, templates, Excel/CSV import and export, the formula auditor, and 3 AI questions per day. You can also bring your own API key (BYOK) for unlimited AI on your own provider account at no subscription cost."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "How much is Pro?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Pro is $7 per month at the early adopter rate (listed vs $12/mo). It unlocks unlimited AI questions, unlimited auto-fix, unlimited cloud backup and sync, version history, and priority AI models."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Does my spreadsheet data stay private?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "By default your spreadsheet data stays in your browser. Nothing syncs to smartsht servers unless you explicitly enable cloud backup. Self-hosted and BYOK setups are supported for users who want full control."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Can I import Excel files?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Yes. You can import existing .xlsx and CSV files and export back anytime. smartsht is designed to work alongside Excel and Google Sheets without vendor lock-in."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "What does the formula auditor catch?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "The auditor checks for issues like skipped cells in SUM ranges, inconsistent formula patterns, statistical outliers, and hardcoded constants — then can propose fixes with a preview before anything changes."
+            }
+          }
+        ]
       }
-    ],
-    "creator": {
-      "@type": "Organization",
-      "name": "smartsht",
-      "url": "https://smartsht.com"
-    }
-  }
-  </script>
-
-  <!-- Organization markup -->
-  <script type="application/ld+json">
-  {
-    "@context": "https://schema.org",
-    "@type": "Organization",
-    "name": "smartsht",
-    "url": "https://smartsht.com",
-    "logo": "https://smartsht.com/smart-logo.png",
-    "contactPoint": {
-      "@type": "ContactPoint",
-      "email": "support@smartsht.com",
-      "contactType": "customer support"
-    }
+    ]
   }
   </script>
 
@@ -504,6 +598,50 @@
       margin-bottom: 10px;
     }
     .pricing-header p { color: var(--ink-secondary); font-size: 1rem; }
+
+    /* ─── FAQ ─── */
+    .faq {
+      padding: 80px 0;
+      background: var(--surface-tint);
+    }
+    .faq-header {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+    .faq-header h2 {
+      font-family: var(--font-display);
+      font-size: clamp(1.6rem, 3vw, 2.2rem);
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      margin-bottom: 10px;
+    }
+    .faq-header p { color: var(--ink-secondary); font-size: 1rem; }
+    .faq-list {
+      max-width: 720px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .faq-item {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px 24px;
+    }
+    .faq-item h3 {
+      font-family: var(--font-display);
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: var(--ink);
+      margin-bottom: 8px;
+    }
+    .faq-item p {
+      font-size: 0.92rem;
+      color: var(--ink-secondary);
+      line-height: 1.65;
+    }
+
     .pricing-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -753,6 +891,7 @@
       <div class="nav-links">
         <a href="#features">Features</a>
         <a href="#pricing">Pricing</a>
+        <a href="#faq">FAQ</a>
         <a href="/app" class="btn btn-primary" style="padding: 8px 18px; font-size: 0.82rem;">Launch App</a>
       </div>
       <button class="nav-hamburger" aria-label="Open menu" onclick="document.getElementById('mobile-nav').classList.add('open')">
@@ -766,6 +905,7 @@
     <div class="mobile-nav-content" onclick="event.stopPropagation()">
       <a href="#features" onclick="document.getElementById('mobile-nav').classList.remove('open')">Features</a>
       <a href="#pricing" onclick="document.getElementById('mobile-nav').classList.remove('open')">Pricing</a>
+      <a href="#faq" onclick="document.getElementById('mobile-nav').classList.remove('open')">FAQ</a>
       <a href="/app" class="btn btn-primary" style="text-align:center; color:white; margin-top:8px;">Launch App</a>
     </div>
   </div>
@@ -961,7 +1101,7 @@
           <div class="price-amount">$0 forever</div>
           <ul>
             <li class="included">Full spreadsheet with formulas</li>
-            <li class="limit">10 AI questions per day</li>
+            <li class="limit">3 AI questions per day</li>
             <li class="included">All templates (budgets, invoices, trackers)</li>
             <li class="included">Excel and CSV import/export</li>
             <li class="limit">Auditor scans + 3 auto-fixes</li>
@@ -981,7 +1121,6 @@
             <li class="included"><strong>Unlimited auto-fix</strong></li>
             <li class="included">Unlimited cloud backup and sync</li>
             <li class="included">Version history (restore any save)</li>
-            <li class="included">Edit-sharing with collaborators</li>
             <li class="included">Priority AI (faster models)</li>
           </ul>
           <a href="/app" class="btn btn-primary">Start Free, Upgrade Later</a>
@@ -1018,6 +1157,38 @@
             <tr><td style="padding:12px;color:oklch(0.9 0.01 250);">No install needed</td><td style="text-align:center;padding:12px;color:white;">✅ Browser-based</td><td style="text-align:center;padding:12px;color:oklch(0.5 0.01 250);">Desktop app</td><td style="text-align:center;padding:12px;color:white;">✅</td></tr>
           </tbody>
         </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- FAQ (visible content required for FAQPage schema) -->
+  <section class="faq" id="faq" aria-labelledby="faq-heading">
+    <div class="container">
+      <div class="faq-header">
+        <h2 id="faq-heading">Frequently asked questions</h2>
+        <p>Straight answers about pricing, privacy, and what the app can do.</p>
+      </div>
+      <div class="faq-list">
+        <div class="faq-item">
+          <h3>Is smartsht free?</h3>
+          <p>Yes. The Free plan includes the full spreadsheet, templates, Excel/CSV import and export, the formula auditor, and 3 AI questions per day. You can also bring your own API key (BYOK) for unlimited AI on your own provider account at no subscription cost.</p>
+        </div>
+        <div class="faq-item">
+          <h3>How much is Pro?</h3>
+          <p>Pro is $7 per month at the early adopter rate (listed vs $12/mo). It unlocks unlimited AI questions, unlimited auto-fix, unlimited cloud backup and sync, version history, and priority AI models.</p>
+        </div>
+        <div class="faq-item">
+          <h3>Does my spreadsheet data stay private?</h3>
+          <p>By default your spreadsheet data stays in your browser. Nothing syncs to smartsht servers unless you explicitly enable cloud backup. Self-hosted and BYOK setups are supported for users who want full control.</p>
+        </div>
+        <div class="faq-item">
+          <h3>Can I import Excel files?</h3>
+          <p>Yes. You can import existing .xlsx and CSV files and export back anytime. smartsht is designed to work alongside Excel and Google Sheets without vendor lock-in.</p>
+        </div>
+        <div class="faq-item">
+          <h3>What does the formula auditor catch?</h3>
+          <p>The auditor checks for issues like skipped cells in SUM ranges, inconsistent formula patterns, statistical outliers, and hardcoded constants — then can propose fixes with a preview before anything changes.</p>
+        </div>
       </div>
     </div>
   </section>

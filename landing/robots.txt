@@ -1,0 +1,8 @@
+# robots.txt for smartsht.com
+User-agent: *
+Allow: /
+Disallow: /app
+Disallow: /api/
+
+# Sitemap
+Sitemap: https://smartsht.com/sitemap.xml

@@ -122,9 +122,12 @@ The nginx config handles:
 - `/app/` serves the SPA with fallback to `index.html`
 - `/terms` and `/privacy` serve legal pages
 - `/shared/` routes to the SPA for shared workbook views
+- Exact-match `/llms.txt`, `/robots.txt`, and `/sitemap.xml` (plain text / XML — do not fall through to SPA)
 - Security headers (HSTS, CSP, X-Frame-Options, etc.)
 - Gzip compression
 - Static asset caching (30 days)
+
+After copying `landing/*`, confirm `https://smartsht.com/llms.txt` returns `text/plain` (not the HTML homepage).
 
 ---
 
