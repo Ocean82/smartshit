@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState, useMemo } from 'react';
+import React, { useCallback, useEffect, useState, useMemo, useRef } from 'react';
 import { Check, XCircle } from 'lucide-react';
 import { useStore } from '@/store/useStore';
 import { colToLetter, refToCell, cellToRef } from '@/engine/spreadsheet';
@@ -120,9 +120,7 @@ export function SpreadsheetGrid() {
   // ─── Viewport (virtualization) ─────────────────────────────────────────────
   // Column width & resize state (must be declared before useGridViewport)
   const [columnWidths, setColumnWidths] = useState<Record<number, number>>({});
-  const [resizingCol, setResizingCol] = useState<number | null>(null);
-  const [resizeStartX, setResizeStartX] = useState(0);
-  const [resizeStartWidth, setResizeStartWidth] = useState(0);
+  const resizeStartRef = useRef<{ col: number; startX: number; startWidth: number } | null>(null);
   const [showFindReplace, setShowFindReplace] = useState(false);
 
   const getColWidth = useCallback((col: number) => {
@@ -192,14 +190,37 @@ export function SpreadsheetGrid() {
 
   // ─── Column resize handlers ─────────────────────────────────────────────────
 
-  // Column resize
-  const handleResizeStart = useCallback((col: number, e: React.MouseEvent) => {
+  const handleResizeEnd = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    resizeStartRef.current = null;
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+  }, []);
+
+  const handleResizeStart = useCallback((col: number, e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
-    setResizingCol(col);
-    setResizeStartX(e.clientX);
-    setResizeStartWidth(getColWidth(col));
+    e.currentTarget.setPointerCapture(e.pointerId);
+    resizeStartRef.current = { col, startX: e.clientX, startWidth: getColWidth(col) };
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
   }, [getColWidth]);
+
+  const handleResizeMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    const start = resizeStartRef.current;
+    if (!start) return;
+    // Recover if the primary button was released without a pointerup.
+    if ((e.buttons & 1) === 0) {
+      handleResizeEnd(e);
+      return;
+    }
+    setColumnWidths((prev) => ({
+      ...prev,
+      [start.col]: Math.max(40, start.startWidth + (e.clientX - start.startX)),
+    }));
+  }, [handleResizeEnd]);
 
   // Auto-fit column width based on content
   const handleAutoFitColumn = useCallback((col: number) => {
@@ -231,20 +252,12 @@ export function SpreadsheetGrid() {
     setColumnWidths((prev) => ({ ...prev, [col]: Math.ceil(maxWidth) }));
   }, [getComputedValue, getActiveSheet]);
 
-  useEffect(() => {
-    if (resizingCol === null) return;
-    const handleMove = (e: MouseEvent) => {
-      const diff = e.clientX - resizeStartX;
-      setColumnWidths((prev) => ({ ...prev, [resizingCol]: Math.max(40, resizeStartWidth + diff) }));
-    };
-    const handleUp = () => setResizingCol(null);
-    document.addEventListener('mousemove', handleMove);
-    document.addEventListener('mouseup', handleUp);
-    return () => {
-      document.removeEventListener('mousemove', handleMove);
-      document.removeEventListener('mouseup', handleUp);
-    };
-  }, [resizingCol, resizeStartX, resizeStartWidth]);
+  // Release body styles if the grid unmounts mid-resize.
+  useEffect(() => () => {
+    resizeStartRef.current = null;
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+  }, []);
 
   // ─── Touch support ──────────────────────────────────────────────────────────
   const getScrollOffset = useCallback(() => {
@@ -253,11 +266,11 @@ export function SpreadsheetGrid() {
   }, [viewport.gridRef]);
 
   // Touch hook - wrap handlers to match useTouch signatures
-  const { handleTouchStart, handleTouchMove, handleTouchEnd } = useTouch({
+  const { handleTouchStart, handleTouchMove, handleTouchEnd, handleTouchCancel } = useTouch({
     onTap: (row, col) => selectionManager.handleCellClick(row, col, { preventDefault: () => {}, nativeEvent: new MouseEvent('click') } as React.MouseEvent),
     onDoubleTap: selectionManager.handleCellDoubleClick,
     onLongPress: (row, col, x, y) => selectionManager.handleContextMenu({ preventDefault: () => {}, clientX: x, clientY: y } as React.MouseEvent, row, col),
-    onDragSelect: (row, col) => selectionManager.handleMouseMove(row, col),
+    onDragSelect: (row, col) => selectionManager.handleMouseMove(row, col, { buttons: 1 } as React.MouseEvent),
     onDragEnd: selectionManager.handleMouseUp,
     cellHeight: CELL_HEIGHT,
     rowHeaderWidth: ROW_HEADER_WIDTH,
@@ -286,6 +299,10 @@ export function SpreadsheetGrid() {
     handleTouchEnd(e, rect);
   }, [handleTouchEnd, viewport.gridRef]);
 
+  const onGridTouchCancel = useCallback(() => {
+    handleTouchCancel();
+  }, [handleTouchCancel]);
+
   // ─── Render ─────────────────────────────────────────────────────────────────
   return (
     <div
@@ -302,6 +319,7 @@ export function SpreadsheetGrid() {
       onTouchStart={onGridTouchStart}
       onTouchMove={onGridTouchMove}
       onTouchEnd={onGridTouchEnd}
+      onTouchCancel={onGridTouchCancel}
       style={{ outline: 'none', userSelect: 'none', WebkitOverflowScrolling: 'touch' }}
     >
       {/*
@@ -364,8 +382,11 @@ export function SpreadsheetGrid() {
                   <span className="ml-0.5 text-amber-500 text-[9px]">⏷</span>
                 )}
                 <div
-                  className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-400 opacity-0 group-hover:opacity-100 z-10"
-                  onMouseDown={(e) => handleResizeStart(col, e)}
+                  className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-400 opacity-0 group-hover:opacity-100 z-10 touch-none"
+                  onPointerDown={(e) => handleResizeStart(col, e)}
+                  onPointerMove={handleResizeMove}
+                  onPointerUp={handleResizeEnd}
+                  onPointerCancel={handleResizeEnd}
                   onDoubleClick={(e) => { e.stopPropagation(); handleAutoFitColumn(col); }}
                 />
               </div>

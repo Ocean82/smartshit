@@ -4,7 +4,7 @@
  */
 
 import { useMemo } from 'react';
-import type { MouseEvent } from 'react';
+import type { PointerEvent } from 'react';
 import { useStore } from '@/store/useStore';
 import { colToLetter } from '@/engine/spreadsheet';
 import type { Selection, SortConfig, FilterConfig } from '@/types';
@@ -23,7 +23,9 @@ interface GridHeadersProps {
   activeFilters: FilterConfig[];
   handleColSelect: (col: number) => void;
   handleRowSelect: (row: number) => void;
-  handleResizeStart: (col: number, e: MouseEvent) => void;
+  handleResizeStart: (col: number, e: PointerEvent<HTMLDivElement>) => void;
+  handleResizeMove: (e: PointerEvent<HTMLDivElement>) => void;
+  handleResizeEnd: (e: PointerEvent<HTMLDivElement>) => void;
   handleAutoFitColumn: (col: number) => void;
   rowOffset: number;
 }
@@ -43,6 +45,8 @@ export function GridHeaders({
   handleColSelect,
   handleRowSelect,
   handleResizeStart,
+  handleResizeMove,
+  handleResizeEnd,
   handleAutoFitColumn,
   rowOffset,
 }: GridHeadersProps) {
@@ -89,8 +93,11 @@ export function GridHeaders({
                 <span className="ml-0.5 text-amber-500 text-[9px]">⏷</span>
               )}
               <div
-                className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-400 opacity-0 group-hover:opacity-100 z-10"
-                onMouseDown={(e) => handleResizeStart(col, e)}
+                className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-400 opacity-0 group-hover:opacity-100 z-10 touch-none"
+                onPointerDown={(e) => handleResizeStart(col, e)}
+                onPointerMove={handleResizeMove}
+                onPointerUp={handleResizeEnd}
+                onPointerCancel={handleResizeEnd}
                 onDoubleClick={(e) => { e.stopPropagation(); handleAutoFitColumn(col); }}
               />
             </div>
@@ -98,7 +105,7 @@ export function GridHeaders({
         })}
       </div>
     </div>
-  ), [visibleRange, visibleColOffsets, selection, activeSortConfig, activeFilters, getColWidth, totalWidth, COL_HEADER_HEIGHT, handleColSelect, handleResizeStart, handleAutoFitColumn]);
+  ), [visibleRange, visibleColOffsets, selection, activeSortConfig, activeFilters, getColWidth, totalWidth, COL_HEADER_HEIGHT, handleColSelect, handleResizeStart, handleResizeMove, handleResizeEnd, handleAutoFitColumn]);
 
   // Row headers
   const rowHeaders = useMemo(() => (

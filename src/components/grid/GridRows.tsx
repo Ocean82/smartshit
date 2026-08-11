@@ -38,7 +38,7 @@ interface GridRowsProps {
   editContainerRef: RefObject<HTMLDivElement>;
   inputRef: RefObject<HTMLInputElement>;
   onMouseDown: (row: number, col: number, e: MouseEvent) => void;
-  onMouseMove: (row: number, col: number) => void;
+  onMouseMove: (row: number, col: number, e: MouseEvent) => void;
   onDoubleClick: (row: number, col: number) => void;
   onContextMenu: (e: MouseEvent, row: number, col: number) => void;
   onEditChange: (val: string) => void;

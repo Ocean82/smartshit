@@ -1,7 +1,7 @@
 import { useStore } from '@/store/useStore';
 import { cellToRef, refToCell } from '@/engine/spreadsheet';
 import { X, Move } from 'lucide-react';
-import React, { useState, useCallback, useRef, useMemo } from 'react';
+import React, { useState, useCallback, useRef, useMemo, useEffect } from 'react';
 import type { ChartConfig, TrendLineConfig, AxisConfig } from '@/types';
 import {
   computeTrendValues,
@@ -120,8 +120,8 @@ function ChartCard({ chart, onRemove }: { chart: ChartConfig; onRemove: () => vo
   const { getActiveSheet, getComputedValue, updateChartPosition } = useStore();
   const sheet = getActiveSheet();
   const [pos, setPos] = useState({ x: chart.position.x, y: chart.position.y });
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const isDraggingRef = useRef(false);
+  const dragOffsetRef = useRef({ x: 0, y: 0 });
   const posRef = useRef(pos);
   posRef.current = pos;
 
@@ -135,44 +135,43 @@ function ChartCard({ chart, onRemove }: { chart: ChartConfig; onRemove: () => vo
     [data],
   );
 
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    setIsDragging(true);
-    setDragOffset({ x: e.clientX - pos.x, y: e.clientY - pos.y });
+  const endDrag = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDraggingRef.current) return;
+    isDraggingRef.current = false;
+    updateChartPosition(chart.id, posRef.current.x, posRef.current.y);
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
+  }, [chart.id, updateChartPosition]);
+
+  const handlePointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    // Don't start a drag from the remove button.
+    if ((e.target as HTMLElement).closest('button')) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    isDraggingRef.current = true;
+    dragOffsetRef.current = { x: e.clientX - pos.x, y: e.clientY - pos.y };
   }, [pos]);
 
-  const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (!isDragging) return;
-    const newPos = { x: e.clientX - dragOffset.x, y: e.clientY - dragOffset.y };
+  const handlePointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDraggingRef.current) return;
+    // Mouse-only buttons guard: some touch stacks report buttons=0 while contact is active.
+    if (e.pointerType === 'mouse' && (e.buttons & 1) === 0) {
+      endDrag(e);
+      return;
+    }
+    const newPos = {
+      x: e.clientX - dragOffsetRef.current.x,
+      y: e.clientY - dragOffsetRef.current.y,
+    };
     setPos(newPos);
     posRef.current = newPos;
-  }, [isDragging, dragOffset]);
+  }, [endDrag]);
 
-  const handleMouseUp = useCallback(() => {
-    if (isDragging) updateChartPosition(chart.id, posRef.current.x, posRef.current.y);
-    setIsDragging(false);
-  }, [isDragging, chart.id, updateChartPosition]);
-
-  // Touch drag handlers for mobile chart repositioning
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    if (e.touches.length !== 1) return;
-    const touch = e.touches[0];
-    setIsDragging(true);
-    setDragOffset({ x: touch.clientX - pos.x, y: touch.clientY - pos.y });
-  }, [pos]);
-
-  const handleTouchMove = useCallback((e: React.TouchEvent) => {
-    if (!isDragging || e.touches.length !== 1) return;
-    e.preventDefault();
-    const touch = e.touches[0];
-    const newPos = { x: touch.clientX - dragOffset.x, y: touch.clientY - dragOffset.y };
-    setPos(newPos);
-    posRef.current = newPos;
-  }, [isDragging, dragOffset]);
-
-  const handleTouchEnd = useCallback(() => {
-    if (isDragging) updateChartPosition(chart.id, posRef.current.x, posRef.current.y);
-    setIsDragging(false);
-  }, [isDragging, chart.id, updateChartPosition]);
+  // Release mid-drag state if the card unmounts.
+  useEffect(() => () => {
+    isDraggingRef.current = false;
+  }, []);
 
   return (
     <div
@@ -180,15 +179,12 @@ function ChartCard({ chart, onRemove }: { chart: ChartConfig; onRemove: () => vo
       style={{ left: pos.x, top: pos.y, width: chart.position.width, height: chart.position.height, pointerEvents: 'none' }}
     >
       <div
-        className="flex items-center justify-between px-3 py-2 bg-gray-50 border-b border-gray-200 cursor-move"
+        className="flex items-center justify-between px-3 py-2 bg-gray-50 border-b border-gray-200 cursor-move touch-none"
         style={{ pointerEvents: 'auto' }}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={endDrag}
+        onPointerCancel={endDrag}
       >
         <div className="flex items-center gap-1.5">
           <Move size={12} className="text-gray-400" />

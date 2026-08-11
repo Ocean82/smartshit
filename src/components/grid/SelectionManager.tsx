@@ -3,7 +3,7 @@
  * Extracted from SpreadsheetGrid to isolate selection logic.
  */
 
-import { useCallback, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import type { KeyboardEvent, MouseEvent } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useStore } from '@/store/useStore';
@@ -48,6 +48,18 @@ export function useSelectionManager(config: SelectionManagerConfig) {
     setEditValue: s.setEditValue,
   })));
   const isDragging = useRef(false);
+  /** Removes document/window listeners registered for the active drag. */
+  const stopDragCleanupRef = useRef<(() => void) | null>(null);
+
+  const endDrag = useCallback(() => {
+    isDragging.current = false;
+    const cleanup = stopDragCleanupRef.current;
+    if (!cleanup) return;
+    stopDragCleanupRef.current = null;
+    cleanup();
+  }, []);
+
+  useEffect(() => () => { endDrag(); }, [endDrag]);
 
   const isSelected = useCallback((row: number, col: number) => {
     if (!selection) return false;
@@ -194,30 +206,54 @@ export function useSelectionManager(config: SelectionManagerConfig) {
 
   const handleMouseDown = useCallback((row: number, col: number, e: MouseEvent) => {
     if (e.button !== 0) return;
+
+    // Drop any leftover listeners from a previous incomplete drag before starting a new one.
+    endDrag();
     isDragging.current = true;
     handleCellClick(row, col, e);
 
-    // Listen for mouseup on document to stop dragging even if mouse leaves grid
-    const stopDrag = () => {
-      isDragging.current = false;
-      document.removeEventListener('mouseup', stopDrag);
+    // Stop drag when the button is released outside the grid, or when focus/visibility
+    // is lost (alt-tab, window blur) so mouseup may never arrive.
+    const onMouseUp = () => endDrag();
+    const onBlur = () => endDrag();
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') endDrag();
     };
-    document.addEventListener('mouseup', stopDrag);
-  }, [handleCellClick]);
+    const onPointerCancel = () => endDrag();
 
-  const handleMouseMove = useCallback((row: number, col: number) => {
+    document.addEventListener('mouseup', onMouseUp);
+    window.addEventListener('blur', onBlur);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    document.addEventListener('pointercancel', onPointerCancel);
+
+    stopDragCleanupRef.current = () => {
+      document.removeEventListener('mouseup', onMouseUp);
+      window.removeEventListener('blur', onBlur);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      document.removeEventListener('pointercancel', onPointerCancel);
+    };
+  }, [handleCellClick, endDrag]);
+
+  const handleMouseMove = useCallback((row: number, col: number, e: MouseEvent) => {
+    // Guard: only extend selection while the primary (left) button bit is set.
+    // buttons is a bitmask (1=left, 2=right, 4=middle); use & 1 so left+other still counts
+    // as an active drag. This recovers when mouseup was missed (focus loss, context menu, etc.).
     if (!isDragging.current || !selection) return;
+    if ((e.buttons & 1) === 0) {
+      endDrag();
+      return;
+    }
     setSelection({
       startRow: selection.startRow,
       startCol: selection.startCol,
       endRow: row,
       endCol: col,
     });
-  }, [selection, setSelection]);
+  }, [selection, setSelection, endDrag]);
 
   const handleMouseUp = useCallback(() => {
-    isDragging.current = false;
-  }, []);
+    endDrag();
+  }, [endDrag]);
 
   const handleContextMenu = useCallback((e: MouseEvent, row: number, col: number) => {
     e.preventDefault();

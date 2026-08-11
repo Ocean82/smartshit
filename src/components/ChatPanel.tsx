@@ -74,7 +74,14 @@ export function ChatPanel({ isMobileOpen, onCloseMobile, embedded }: { isMobileO
   const { canAsk, remaining, dailyLimit, recordUsage, isPro } = useUsage()
 
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const resizingRef = useRef(false)
+  const resizeStartRef = useRef<{ x: number; width: number } | null>(null)
+
+  // Unmount cleanup: release body styles if panel closes mid-resize.
+  useEffect(() => () => {
+    resizeStartRef.current = null
+    document.body.style.cursor = ''
+    document.body.style.userSelect = ''
+  }, [])
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -152,28 +159,33 @@ export function ChatPanel({ isMobileOpen, onCloseMobile, embedded }: { isMobileO
     return () => clearInterval(id)
   }, [isAiProcessing])
 
-  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+  const handleResizeEnd = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    resizeStartRef.current = null
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId)
+    }
+    document.body.style.cursor = ''
+    document.body.style.userSelect = ''
+  }, [])
+
+  const handleResizeStart = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault()
-    resizingRef.current = true
-    const startX = e.clientX
-    const startWidth = chatWidth
+    e.currentTarget.setPointerCapture(e.pointerId)
+    resizeStartRef.current = { x: e.clientX, width: chatWidth }
     document.body.style.cursor = 'col-resize'
     document.body.style.userSelect = 'none'
+  }, [chatWidth])
 
-    const onMove = (ev: MouseEvent) => {
-      if (!resizingRef.current) return
-      setChatWidth(startWidth + (ev.clientX - startX))
+  const handleResizeMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    const start = resizeStartRef.current
+    if (!start) return
+    // Recover if the primary button was released without a pointerup (focus loss, etc.).
+    if ((e.buttons & 1) === 0) {
+      handleResizeEnd(e)
+      return
     }
-    const onUp = () => {
-      resizingRef.current = false
-      document.body.style.cursor = ''
-      document.body.style.userSelect = ''
-      document.removeEventListener('mousemove', onMove)
-      document.removeEventListener('mouseup', onUp)
-    }
-    document.addEventListener('mousemove', onMove)
-    document.addEventListener('mouseup', onUp)
-  }, [chatWidth, setChatWidth])
+    setChatWidth(start.width + (e.clientX - start.x))
+  }, [setChatWidth, handleResizeEnd])
 
   const handleSend = () => {
     if (!canAsk) return
@@ -538,8 +550,11 @@ export function ChatPanel({ isMobileOpen, onCloseMobile, embedded }: { isMobileO
         aria-orientation="vertical"
         aria-label="Resize assistant panel"
         title="Drag to resize"
-        onMouseDown={handleResizeStart}
-        className="hidden md:block absolute top-0 right-0 w-1.5 h-full cursor-col-resize z-10 group hover:bg-blue-400/40 active:bg-blue-500/50"
+        onPointerDown={handleResizeStart}
+        onPointerMove={handleResizeMove}
+        onPointerUp={handleResizeEnd}
+        onPointerCancel={handleResizeEnd}
+        className="hidden md:block absolute top-0 right-0 w-1.5 h-full cursor-col-resize z-10 group hover:bg-blue-400/40 active:bg-blue-500/50 touch-none"
       >
         <div className="absolute top-1/2 right-0 -translate-y-1/2 w-1 h-8 rounded-full bg-gray-300 group-hover:bg-blue-500 transition-colors" />
       </div>

@@ -53,7 +53,7 @@ export interface GridCellProps {
   inputRef?: Ref<HTMLInputElement>
   // Event handlers
   onMouseDown: (row: number, col: number, e: MouseEvent) => void
-  onMouseMove: (row: number, col: number) => void
+  onMouseMove: (row: number, col: number, e: MouseEvent) => void
   onDoubleClick: (row: number, col: number) => void
   onContextMenu: (e: MouseEvent, row: number, col: number) => void
   onEditChange: (val: string) => void
@@ -160,7 +160,7 @@ export const GridCell = memo(function GridCell({
         ...(pendingChange ? { backgroundColor: undefined } : {}),
       }}
       onMouseDown={(e) => onMouseDown(row, col, e)}
-      onMouseMove={() => onMouseMove(row, col)}
+      onMouseMove={(e) => onMouseMove(row, col, e)}
       onDoubleClick={() => onDoubleClick(row, col)}
       onContextMenu={(e) => onContextMenu(e, row, col)}
     >

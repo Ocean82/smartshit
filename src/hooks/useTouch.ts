@@ -193,5 +193,20 @@ export function useTouch({
     touchStart.current = null;
   }, [getCellFromTouch, onTap, onDoubleTap, onDragEnd]);
 
-  return { handleTouchStart, handleTouchMove, handleTouchEnd };
+  const handleTouchCancel = useCallback(() => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+    if (isDragging.current) {
+      isDragging.current = false;
+      onDragEnd();
+    }
+    isPinching.current = false;
+    pinchStartDistance.current = null;
+    touchStart.current = null;
+    didLongPress.current = false;
+  }, [onDragEnd]);
+
+  return { handleTouchStart, handleTouchMove, handleTouchEnd, handleTouchCancel };
 }
