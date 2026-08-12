@@ -5,6 +5,7 @@ import { AIFunctionRegistry, type EvalValue } from './aiFunctions';
 import { registerBuiltinAIFunctions, getAIFunctionList } from './aiFunctionDefinitions';
 import { computePivotTable } from './pivot';
 import { initializeOnnxFunction, type OnnxInitOptions } from '@/onnx/onnxInit';
+import { CORE_FUNCTIONS, EXTENDED_FUNCTIONS, mergeFunctionSources, type FunctionInfo } from './functionCatalog';
 
 import { colToLetter, letterToCol, tryCellToRef, cellToRef, refToCell } from '@/lib/cellRef';
 export { colToLetter, letterToCol, tryCellToRef, cellToRef, refToCell };
@@ -159,67 +160,120 @@ export class SpreadsheetEngine {
     formulaText: string,
     resolveArg: (ref: string) => string | number | boolean | null,
   ): Promise<string | number | boolean | null> {
-    const useFormualizer = typeof FormulaDialect !== 'undefined' && typeof parse === 'function';
+    const parsed = this.canUseFormualizer()
+      ? await this.parseFormulaWithFormualizer(formulaText, resolveArg)
+      : this.parseFormulaWithRegex(formulaText, resolveArg);
 
-    let funcName!: string;
-    const resolvedArgs: EvalValue[] = [];
+    if (!parsed) return '#NAME?';
+    return this._aiRegistry.execute(parsed.funcName, cellId, parsed.args);
+  }
 
-    if (useFormualizer) {
-      let ast: ASTNodeData | null;
-      try {
-        ast = await parse(formulaText, FormulaDialect.Excel);
-      } catch (e) {
-        console.error('[AI Formula] Parse error:', e);
-        return '#NAME?';
-      }
+  /**
+   * Determine whether the Formualizer parser is available at runtime.
+   */
+  private canUseFormualizer(): boolean {
+    return typeof FormulaDialect !== 'undefined' && typeof parse === 'function';
+  }
 
-      if (!ast || ast.type !== 'function' || !ast.name) return '#NAME?';
-      funcName = ast.name.toUpperCase();
-      if (!this._aiRegistry.has(funcName)) return '#NAME?';
+  /**
+   * Parse an AI formula using the Formualizer AST parser.
+   * Returns null if parsing fails or the function is unrecognized.
+   */
+  private async parseFormulaWithFormualizer(
+    formulaText: string,
+    resolveArg: (ref: string) => string | number | boolean | null,
+  ): Promise<{ funcName: string; args: EvalValue[] } | null> {
+    let ast: ASTNodeData | null;
+    try {
+      ast = await parse(formulaText, FormulaDialect.Excel);
+    } catch (e) {
+      console.error('[AI Formula] Parse error:', e);
+      return null;
+    }
 
-      if (ast.args && ast.args.length > 0) {
-        for (const argNode of ast.args) {
-          if (!argNode) continue;
-          const resolved = await this._resolveAIArgument(argNode as ASTNodeData, resolveArg);
-          resolvedArgs.push(resolved);
-        }
-      }
-    } else {
-      const match = formulaText.match(/^=((?:AI|ONNX)\.[A-Z0-9_-]+)\((.*)\)$/i);
-      if (!match) return '#NAME?';
-      funcName = match[1].toUpperCase();
-      if (!this._aiRegistry.has(funcName)) return '#NAME?';
+    if (!ast || ast.type !== 'function' || !ast.name) return null;
 
-      const rawArgs = match[2];
-      if (rawArgs.trim()) {
-        const args = this._splitArgs(rawArgs);
-        for (const arg of args) {
-          const trimmed = arg.trim();
-          if (
-            (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
-            (trimmed.startsWith("'") && trimmed.endsWith("'"))
-          ) {
-            resolvedArgs.push(trimmed.slice(1, -1));
-          } else if (/^-?\d+(\.\d+)?$/.test(trimmed)) {
-            resolvedArgs.push(Number(trimmed));
-          } else if (/^[A-Z]+\d+:[A-Z]+\d+$/i.test(trimmed)) {
-            const rangeResult = this._resolveRange(trimmed, resolveArg);
-            const firstCell = rangeResult[0]?.[0];
-            if (firstCell && typeof firstCell === 'object' && '__refError' in firstCell) {
-              resolvedArgs.push('#REF!');
-            } else {
-              resolvedArgs.push(rangeResult);
-            }
-          } else if (/^[A-Z]+\d+$/i.test(trimmed)) {
-            resolvedArgs.push(resolveArg(trimmed));
-          } else {
-            resolvedArgs.push(trimmed);
-          }
-        }
+    const funcName = ast.name.toUpperCase();
+    if (!this._aiRegistry.has(funcName)) return null;
+
+    const args: EvalValue[] = [];
+    if (ast.args && ast.args.length > 0) {
+      for (const argNode of ast.args) {
+        if (!argNode) continue;
+        const resolved = await this._resolveAIArgument(argNode as ASTNodeData, resolveArg);
+        args.push(resolved);
       }
     }
 
-    return this._aiRegistry.execute(funcName, cellId, resolvedArgs);
+    return { funcName, args };
+  }
+
+  /**
+   * Parse an AI formula using the regex fallback (when Formualizer is unavailable).
+   * Returns null if the formula doesn't match or the function is unrecognized.
+   */
+  private parseFormulaWithRegex(
+    formulaText: string,
+    resolveArg: (ref: string) => string | number | boolean | null,
+  ): { funcName: string; args: EvalValue[] } | null {
+    const match = formulaText.match(/^=((?:AI|ONNX)\.[A-Z0-9_-]+)\((.*)\)$/i);
+    if (!match) return null;
+
+    const funcName = match[1].toUpperCase();
+    if (!this._aiRegistry.has(funcName)) return null;
+
+    const args: EvalValue[] = [];
+    const rawArgs = match[2];
+    if (rawArgs.trim()) {
+      const splitArgs = this._splitArgs(rawArgs);
+      for (const arg of splitArgs) {
+        args.push(this.resolveArgumentValue(arg.trim(), resolveArg));
+      }
+    }
+
+    return { funcName, args };
+  }
+
+  /**
+   * Resolve a raw string argument to its typed EvalValue.
+   * Handles: quoted strings, numeric literals, range references, cell references, and plain text fallback.
+   * This is the single source of truth for argument type detection, used by both
+   * the regex fallback parser and the AST-based argument resolver.
+   */
+  private resolveArgumentValue(
+    trimmed: string,
+    resolveArg: (ref: string) => string | number | boolean | null,
+  ): EvalValue {
+    // Quoted string literal
+    if (
+      (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+      (trimmed.startsWith("'") && trimmed.endsWith("'"))
+    ) {
+      return trimmed.slice(1, -1);
+    }
+
+    // Numeric literal
+    if (/^-?\d+(\.\d+)?$/.test(trimmed)) {
+      return Number(trimmed);
+    }
+
+    // Range reference (e.g. A1:B5)
+    if (/^[A-Z]+\d+:[A-Z]+\d+$/i.test(trimmed)) {
+      const rangeResult = this._resolveRange(trimmed, resolveArg);
+      const firstCell = rangeResult[0]?.[0];
+      if (firstCell && typeof firstCell === 'object' && '__refError' in firstCell) {
+        return '#REF!';
+      }
+      return rangeResult;
+    }
+
+    // Single cell reference (e.g. A1)
+    if (/^[A-Z]+\d+$/i.test(trimmed)) {
+      return resolveArg(trimmed);
+    }
+
+    // Unrecognized — return as-is
+    return trimmed;
   }
 
   isAIFormula(formula: string): boolean {
@@ -284,34 +338,16 @@ export class SpreadsheetEngine {
     argNode: ASTNodeData,
     resolveArg: (ref: string) => string | number | boolean | null,
   ): Promise<EvalValue> {
-    // Convert AST node to string for simple cases
     const argStr = this.astNodeToString(argNode);
     const trimmed = argStr.trim();
 
-    if (
-      (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
-      (trimmed.startsWith("'") && trimmed.endsWith("'"))
-    ) {
-      return trimmed.slice(1, -1);
+    // Try resolving as a simple value (string, number, range, cell ref)
+    const simpleResult = this.resolveArgumentValue(trimmed, resolveArg);
+    if (simpleResult !== trimmed) {
+      return simpleResult;
     }
 
-    if (/^-?\d+(\.\d+)?$/.test(trimmed)) {
-      return Number(trimmed);
-    }
-
-    if (/^[A-Z]+\d+:[A-Z]+\d+$/i.test(trimmed)) {
-      const rangeResult = this._resolveRange(trimmed, resolveArg);
-      const firstCell = rangeResult[0]?.[0];
-      if (firstCell && typeof firstCell === 'object' && '__refError' in firstCell) {
-        return '#REF!';
-      }
-      return rangeResult;
-    }
-
-    if (/^[A-Z]+\d+$/i.test(trimmed)) {
-      return resolveArg(trimmed);
-    }
-
+    // Not a simple literal — attempt full AST evaluation as an expression
     try {
       const ast = await parse(trimmed, FormulaDialect.Excel);
       return this._evaluateAST(ast, resolveArg);
@@ -327,22 +363,8 @@ export class SpreadsheetEngine {
     if (!ast) return null;
 
     switch (ast.type) {
-      case 'reference': {
-        const ref = ast.reference;
-        if (!ref) return null;
-        if (
-          ref.rowStart === ref.rowEnd &&
-          ref.colStart === ref.colEnd &&
-          ref.rowStart !== undefined
-        ) {
-          const cellRef = `${colToLetter(ref.colStart)}${ref.rowStart + 1}`;
-          return resolveArg(cellRef);
-        }
-        return this._resolveRange(
-          `${colToLetter(ref.colStart)}${ref.rowStart + 1}:${colToLetter(ref.colEnd)}${ref.rowEnd + 1}`,
-          resolveArg,
-        );
-      }
+      case 'reference':
+        return this._evaluateReference(ast, resolveArg);
       case 'number':
         return ast.value ?? 0;
       case 'text':
@@ -350,48 +372,15 @@ export class SpreadsheetEngine {
       case 'boolean':
         return ast.value ?? false;
       case 'binaryOp': {
-        const leftNode = ast.left;
-        const rightNode = ast.right;
-        if (!leftNode || !rightNode) return null;
-        const left = await this._evaluateAST(leftNode, resolveArg);
-        const right = await this._evaluateAST(rightNode, resolveArg);
-        if (left === null || right === null) return null;
-        const op = ast.op;
-        if (typeof left === 'number' && typeof right === 'number') {
-          switch (op) {
-            case '+': return left + right;
-            case '-': return left - right;
-            case '*': return left * right;
-            case '/': return right !== 0 ? left / right : '#DIV/0!';
-            case '^': return Math.pow(left, right);
-            case '&': return String(left) + String(right);
-            case '=': return left === right;
-            case '<>': return left !== right;
-            case '<': return left < right;
-            case '<=': return left <= right;
-            case '>': return left > right;
-            case '>=': return left >= right;
-          }
-        }
-        if (op === '&') return String(left) + String(right);
-        if (op === '=') return left === right;
-        if (op === '<>') return left !== right;
-        if (op === '<') return left < right;
-        if (op === '<=') return left <= right;
-        if (op === '>') return left > right;
-        if (op === '>=') return left >= right;
-        return null;
+        const left = await this._evaluateAST(ast.left!, resolveArg);
+        const right = await this._evaluateAST(ast.right!, resolveArg);
+        return this._evaluateBinaryOp(left, right, ast.op!);
       }
       case 'unaryOp': {
-        const operandNode = ast.operand;
-        if (!operandNode) return null;
-        const operand = await this._evaluateAST(operandNode, resolveArg);
-        if (operand === null) return null;
-        if (ast.op === '-' && typeof operand === 'number') return -operand;
-        if (ast.op === '+' && typeof operand === 'number') return +operand;
-        return operand;
+        const operand = await this._evaluateAST(ast.operand!, resolveArg);
+        return this._evaluateUnaryOp(operand, ast.op!);
       }
-case 'function': {
+      case 'function': {
         const funcName = ast.name?.toUpperCase();
         const args = await Promise.all(
           (ast.args ?? []).map((arg: ASTNodeData) => this._evaluateAST(arg, resolveArg)),
@@ -401,6 +390,87 @@ case 'function': {
       default:
         return null;
     }
+  }
+
+  /**
+   * Evaluate a reference AST node — single cell or range.
+   */
+  private _evaluateReference(
+    ast: ASTNodeData,
+    resolveArg: (ref: string) => string | number | boolean | null,
+  ): EvalValue {
+    const ref = ast.reference;
+    if (!ref) return null;
+
+    if (
+      ref.rowStart === ref.rowEnd &&
+      ref.colStart === ref.colEnd &&
+      ref.rowStart !== undefined
+    ) {
+      const cellRef = `${colToLetter(ref.colStart)}${ref.rowStart + 1}`;
+      return resolveArg(cellRef);
+    }
+
+    return this._resolveRange(
+      `${colToLetter(ref.colStart)}${ref.rowStart + 1}:${colToLetter(ref.colEnd)}${ref.rowEnd + 1}`,
+      resolveArg,
+    );
+  }
+
+  /**
+   * Numeric operator lookup for binary operations.
+   */
+  private static readonly NUMERIC_OPS: Record<string, (a: number, b: number) => EvalValue> = {
+    '+': (a, b) => a + b,
+    '-': (a, b) => a - b,
+    '*': (a, b) => a * b,
+    '/': (a, b) => b !== 0 ? a / b : '#DIV/0!',
+    '^': (a, b) => Math.pow(a, b),
+  };
+
+  /**
+   * Evaluate a binary operation between two resolved values.
+   * Handles arithmetic, concatenation, and comparisons.
+   */
+  private _evaluateBinaryOp(left: EvalValue, right: EvalValue, op: string): EvalValue {
+    if (left === null || right === null) return null;
+
+    // Numeric arithmetic
+    if (typeof left === 'number' && typeof right === 'number') {
+      const numericOp = SpreadsheetEngine.NUMERIC_OPS[op];
+      if (numericOp) return numericOp(left, right);
+    }
+
+    // Concatenation
+    if (op === '&') return String(left) + String(right);
+
+    // Comparisons (work for both numeric and non-numeric)
+    return this._evaluateComparison(left, right, op);
+  }
+
+  /**
+   * Evaluate a comparison operator between two values.
+   */
+  private _evaluateComparison(left: EvalValue, right: EvalValue, op: string): EvalValue {
+    switch (op) {
+      case '=': return left === right;
+      case '<>': return left !== right;
+      case '<': return (left as number | string) < (right as number | string);
+      case '<=': return (left as number | string) <= (right as number | string);
+      case '>': return (left as number | string) > (right as number | string);
+      case '>=': return (left as number | string) >= (right as number | string);
+      default: return null;
+    }
+  }
+
+  /**
+   * Evaluate a unary operation on a resolved value.
+   */
+  private _evaluateUnaryOp(operand: EvalValue, op: string): EvalValue {
+    if (operand === null) return null;
+    if (op === '-' && typeof operand === 'number') return -operand;
+    if (op === '+' && typeof operand === 'number') return +operand;
+    return operand;
   }
 
   private _evaluateFunction(funcName: string, _args: EvalValue[]): string | number | boolean | null {
@@ -464,54 +534,37 @@ case 'function': {
     return result;
   }
 
-  getFunctionList(): Array<{ name: string; description: string; category: string; syntax: string }> {
-    let formualizerFunctions: Array<{ name: string; description: string; category: string; syntax: string }> = [];
+  getFunctionList(): FunctionInfo[] {
+    const formualizerFunctions = this.getFormualizerFunctions();
+    const aiFunctions = getAIFunctionList(this._aiRegistry);
+    return mergeFunctionSources(formualizerFunctions, CORE_FUNCTIONS, EXTENDED_FUNCTIONS, aiFunctions);
+  }
+
+  /**
+   * Retrieve functions reported by the Formualizer engine (if available).
+   */
+  private getFormualizerFunctions(): FunctionInfo[] {
     try {
       const registered = this.wb.listFunctions();
-      formualizerFunctions = registered.map(fn => ({
+      return registered.map(fn => ({
         name: fn.name,
         description: `Built-in function (${fn.minArgs}–${fn.maxArgs ?? '∞'} args)${fn.volatile ? ' [volatile]' : ''}`,
         category: 'Formulas',
         syntax: `${fn.name}(${Array.from({ length: fn.minArgs }, (_, i) => `arg${i + 1}`).join(', ')}${fn.maxArgs === null || fn.maxArgs > fn.minArgs ? ', ...' : ''})`,
       }));
-    } catch { /* formualizer unavailable */ }
-
-    const fallback = [...this.getFallbackFunctions(), ...this.getExtendedFunctions()];
-    const aiFunctions = getAIFunctionList(this._aiRegistry);
-
-    const seen = new Set<string>();
-    const merged: Array<{ name: string; description: string; category: string; syntax: string }> = [];
-
-    for (const fn of [...formualizerFunctions, ...fallback, ...aiFunctions]) {
-      const key = fn.name.toUpperCase();
-      if (!seen.has(key)) {
-        seen.add(key);
-        merged.push(fn);
-      }
+    } catch {
+      return [];
     }
-    return merged;
   }
 
   private _functionMap: Map<string, { description: string; category: string; syntax: string }> | null = null;
   private buildFunctionMap() {
     if (this._functionMap) return this._functionMap;
+    const allFunctions = mergeFunctionSources(CORE_FUNCTIONS, EXTENDED_FUNCTIONS, this.getFormualizerFunctions());
     const m = new Map<string, { description: string; category: string; syntax: string }>();
-    for (const fn of [...this.getFallbackFunctions(), ...this.getExtendedFunctions()]) {
-      m.set(fn.name, { description: fn.description, category: fn.category, syntax: fn.syntax });
+    for (const fn of allFunctions) {
+      m.set(fn.name.toUpperCase(), { description: fn.description, category: fn.category, syntax: fn.syntax });
     }
-    try {
-      const formualizerFuncs = this.wb.listFunctions();
-      for (const fn of formualizerFuncs) {
-        const name = fn.name.toUpperCase();
-        if (!m.has(name)) {
-          m.set(name, {
-            description: `Formualizer built-in: ${fn.name}`,
-            category: 'Formualizer',
-            syntax: `${fn.name}(${fn.minArgs === fn.maxArgs ? fn.minArgs : `${fn.minArgs}–${fn.maxArgs ?? '?'}`} args)`,
-          });
-        }
-      }
-    } catch { /* formualizer unavailable */ }
     this._functionMap = m;
     return m;
   }
@@ -535,129 +588,6 @@ case 'function': {
       };
     }
     return null;
-  }
-
-  private getFallbackFunctions(): Array<{ name: string; description: string; category: string; syntax: string }> {
-    return [
-      { name: 'SUM', description: 'Adds its arguments', category: 'Math', syntax: 'SUM(number1, [number2], ...)' },
-      { name: 'AVERAGE', description: 'Returns the average of its arguments', category: 'Statistical', syntax: 'AVERAGE(number1, [number2], ...)' },
-      { name: 'COUNT', description: 'Counts how many numbers are in the list of arguments', category: 'Statistical', syntax: 'COUNT(value1, [value2], ...)' },
-      { name: 'COUNTA', description: 'Counts how many values are in the list of arguments', category: 'Statistical', syntax: 'COUNTA(value1, [value2], ...)' },
-      { name: 'MAX', description: 'Returns the largest value', category: 'Statistical', syntax: 'MAX(number1, [number2], ...)' },
-      { name: 'MIN', description: 'Returns the smallest value', category: 'Statistical', syntax: 'MIN(number1, [number2], ...)' },
-      { name: 'IF', description: 'Specifies a logical test to perform', category: 'Logical', syntax: 'IF(condition, true_value, [false_value])' },
-      { name: 'AND', description: 'Returns TRUE if all arguments are TRUE', category: 'Logical', syntax: 'AND(logical1, [logical2], ...)' },
-      { name: 'OR', description: 'Returns TRUE if any argument is TRUE', category: 'Logical', syntax: 'OR(logical1, [logical2], ...)' },
-      { name: 'NOT', description: 'Reverses the logical value', category: 'Logical', syntax: 'NOT(logical)' },
-      { name: 'CONCATENATE', description: 'Joins several text strings into one', category: 'Text', syntax: 'CONCATENATE(text1, [text2], ...)' },
-      { name: 'LEFT', description: 'Returns the leftmost characters', category: 'Text', syntax: 'LEFT(text, [num_chars])' },
-      { name: 'RIGHT', description: 'Returns the rightmost characters', category: 'Text', syntax: 'RIGHT(text, [num_chars])' },
-      { name: 'MID', description: 'Returns a specific number of characters from a text string', category: 'Text', syntax: 'MID(text, start_num, num_chars)' },
-      { name: 'LEN', description: 'Returns the number of characters', category: 'Text', syntax: 'LEN(text)' },
-      { name: 'TRIM', description: 'Removes spaces from text', category: 'Text', syntax: 'TRIM(text)' },
-      { name: 'UPPER', description: 'Converts text to uppercase', category: 'Text', syntax: 'UPPER(text)' },
-      { name: 'LOWER', description: 'Converts text to lowercase', category: 'Text', syntax: 'LOWER(text)' },
-      { name: 'VLOOKUP', description: 'Looks for a value in the leftmost column', category: 'Lookup', syntax: 'VLOOKUP(lookup_value, table_array, col_index, [range_lookup])' },
-      { name: 'HLOOKUP', description: 'Looks for a value in the top row', category: 'Lookup', syntax: 'HLOOKUP(lookup_value, table_array, row_index, [range_lookup])' },
-      { name: 'INDEX', description: 'Returns a value from a position', category: 'Lookup', syntax: 'INDEX(array, row_num, [column_num])' },
-      { name: 'MATCH', description: 'Returns an item position in a range', category: 'Lookup', syntax: 'MATCH(lookup_value, lookup_array, [match_type])' },
-      { name: 'SUMIF', description: 'Adds cells that meet a condition', category: 'Math', syntax: 'SUMIF(range, criteria, [sum_range])' },
-      { name: 'COUNTIF', description: 'Counts cells that meet a condition', category: 'Statistical', syntax: 'COUNTIF(range, criteria)' },
-      { name: 'ROUND', description: 'Rounds a number to specified digits', category: 'Math', syntax: 'ROUND(number, num_digits)' },
-      { name: 'ABS', description: 'Returns the absolute value', category: 'Math', syntax: 'ABS(number)' },
-      { name: 'CEILING', description: 'Rounds up to nearest multiple', category: 'Math', syntax: 'CEILING(number, significance)' },
-      { name: 'FLOOR', description: 'Rounds down to nearest multiple', category: 'Math', syntax: 'FLOOR(number, significance)' },
-      { name: 'NOW', description: 'Returns current date and time', category: 'Date/Time', syntax: 'NOW()' },
-      { name: 'TODAY', description: 'Returns current date', category: 'Date/Time', syntax: 'TODAY()' },
-      { name: 'DATE', description: 'Creates a date from year, month, day', category: 'Date/Time', syntax: 'DATE(year, month, day)' },
-      { name: 'YEAR', description: 'Returns the year from a date', category: 'Date/Time', syntax: 'YEAR(serial_number)' },
-      { name: 'MONTH', description: 'Returns the month from a date', category: 'Date/Time', syntax: 'MONTH(serial_number)' },
-      { name: 'DAY', description: 'Returns the day from a date', category: 'Date/Time', syntax: 'DAY(serial_number)' },
-      { name: 'ROWS', description: 'Returns the number of rows', category: 'Lookup', syntax: 'ROWS(array)' },
-      { name: 'COLUMNS', description: 'Returns the number of columns', category: 'Lookup', syntax: 'COLUMNS(array)' },
-      { name: 'PI', description: 'Returns the value of pi', category: 'Math', syntax: 'PI()' },
-      { name: 'POWER', description: 'Returns a number raised to a power', category: 'Math', syntax: 'POWER(number, power)' },
-      { name: 'SQRT', description: 'Returns a positive square root', category: 'Math', syntax: 'SQRT(number)' },
-      { name: 'MOD', description: 'Returns the remainder after division', category: 'Math', syntax: 'MOD(number, divisor)' },
-      { name: 'INT', description: 'Rounds down to nearest integer', category: 'Math', syntax: 'INT(number)' },
-      { name: 'AVERAGEIF', description: 'Returns average of cells meeting criteria', category: 'Statistical', syntax: 'AVERAGEIF(range, criteria, [average_range])' },
-      { name: 'SUMPRODUCT', description: 'Returns sum of products', category: 'Math', syntax: 'SUMPRODUCT(array1, [array2], ...)' },
-    ];
-  }
-
-  private getExtendedFunctions(): Array<{ name: string; description: string; category: string; syntax: string }> {
-    return [
-      { name: 'XLOOKUP', description: 'Searches a range or array for a match', category: 'Lookup', syntax: 'XLOOKUP(lookup_value, lookup_array, return_array, [not_found], [match_mode])' },
-      { name: 'FILTER', description: 'Filters a range based on criteria', category: 'Lookup', syntax: 'FILTER(array, include, [if_empty])' },
-      { name: 'SORT', description: 'Sorts the contents of a range', category: 'Lookup', syntax: 'SORT(array, [sort_index], [sort_order], [by_col])' },
-      { name: 'UNIQUE', description: 'Returns unique values from a range', category: 'Lookup', syntax: 'UNIQUE(array, [by_col], [exactly_once])' },
-      { name: 'INDIRECT', description: 'Returns reference specified by a text string', category: 'Lookup', syntax: 'INDIRECT(ref_text, [a1])' },
-      { name: 'OFFSET', description: 'Returns a reference offset from a starting point', category: 'Lookup', syntax: 'OFFSET(reference, rows, cols, [height], [width])' },
-      { name: 'ADDRESS', description: 'Returns a cell address as text', category: 'Lookup', syntax: 'ADDRESS(row_num, column_num, [abs_num], [a1], [sheet_text])' },
-      { name: 'TRANSPOSE', description: 'Returns the transpose of an array', category: 'Lookup', syntax: 'TRANSPOSE(array)' },
-      { name: 'CHOOSE', description: 'Chooses a value from a list', category: 'Lookup', syntax: 'CHOOSE(index_num, value1, [value2], ...)' },
-      { name: 'COUNTBLANK', description: 'Counts empty cells in a range', category: 'Statistical', syntax: 'COUNTBLANK(range)' },
-      { name: 'COUNTIFS', description: 'Counts cells meeting multiple criteria', category: 'Statistical', syntax: 'COUNTIFS(range1, criteria1, [range2], [criteria2], ...)' },
-      { name: 'SUMIFS', description: 'Sums cells meeting multiple criteria', category: 'Math', syntax: 'SUMIFS(sum_range, range1, criteria1, [range2], [criteria2], ...)' },
-      { name: 'AVERAGEIFS', description: 'Average of cells meeting multiple criteria', category: 'Statistical', syntax: 'AVERAGEIFS(avg_range, range1, criteria1, [range2], [criteria2], ...)' },
-      { name: 'MEDIAN', description: 'Returns the median of given numbers', category: 'Statistical', syntax: 'MEDIAN(number1, [number2], ...)' },
-      { name: 'MODE', description: 'Returns the most common value', category: 'Statistical', syntax: 'MODE(number1, [number2], ...)' },
-      { name: 'STDEV', description: 'Estimates standard deviation', category: 'Statistical', syntax: 'STDEV(number1, [number2], ...)' },
-      { name: 'VAR', description: 'Estimates variance', category: 'Statistical', syntax: 'VAR(number1, [number2], ...)' },
-      { name: 'LARGE', description: 'Returns the k-th largest value', category: 'Statistical', syntax: 'LARGE(array, k)' },
-      { name: 'SMALL', description: 'Returns the k-th smallest value', category: 'Statistical', syntax: 'SMALL(array, k)' },
-      { name: 'RANK', description: 'Returns the rank of a number in a list', category: 'Statistical', syntax: 'RANK(number, ref, [order])' },
-      { name: 'PERCENTILE', description: 'Returns the k-th percentile', category: 'Statistical', syntax: 'PERCENTILE(array, k)' },
-      { name: 'PRODUCT', description: 'Multiplies its arguments', category: 'Math', syntax: 'PRODUCT(number1, [number2], ...)' },
-      { name: 'RAND', description: 'Returns a random number between 0 and 1', category: 'Math', syntax: 'RAND()' },
-      { name: 'RANDBETWEEN', description: 'Returns a random integer between two values', category: 'Math', syntax: 'RANDBETWEEN(bottom, top)' },
-      { name: 'LOG', description: 'Returns the logarithm of a number', category: 'Math', syntax: 'LOG(number, [base])' },
-      { name: 'LOG10', description: 'Returns the base-10 logarithm', category: 'Math', syntax: 'LOG10(number)' },
-      { name: 'EXP', description: 'Returns e raised to a power', category: 'Math', syntax: 'EXP(number)' },
-      { name: 'SIGN', description: 'Returns the sign of a number', category: 'Math', syntax: 'SIGN(number)' },
-      { name: 'TRUNC', description: 'Truncates a number to an integer', category: 'Math', syntax: 'TRUNC(number, [num_digits])' },
-      { name: 'EVEN', description: 'Rounds up to nearest even integer', category: 'Math', syntax: 'EVEN(number)' },
-      { name: 'ODD', description: 'Rounds up to nearest odd integer', category: 'Math', syntax: 'ODD(number)' },
-      { name: 'GCD', description: 'Returns the greatest common divisor', category: 'Math', syntax: 'GCD(number1, [number2], ...)' },
-      { name: 'LCM', description: 'Returns the least common multiple', category: 'Math', syntax: 'LCM(number1, [number2], ...)' },
-      { name: 'IFS', description: 'Checks multiple conditions', category: 'Logical', syntax: 'IFS(condition1, value1, [condition2], [value2], ...)' },
-      { name: 'SWITCH', description: 'Evaluates expression against values', category: 'Logical', syntax: 'SWITCH(expression, value1, result1, [value2, result2], ..., [default])' },
-      { name: 'IFERROR', description: 'Returns value if no error, otherwise alternative', category: 'Logical', syntax: 'IFERROR(value, value_if_error)' },
-      { name: 'IFNA', description: 'Returns value if not #N/A, otherwise alternative', category: 'Logical', syntax: 'IFNA(value, value_if_na)' },
-      { name: 'XOR', description: 'Returns TRUE if odd number of args are TRUE', category: 'Logical', syntax: 'XOR(logical1, [logical2], ...)' },
-      { name: 'TEXT', description: 'Formats a number as text', category: 'Text', syntax: 'TEXT(value, format_text)' },
-      { name: 'VALUE', description: 'Converts text to number', category: 'Text', syntax: 'VALUE(text)' },
-      { name: 'SUBSTITUTE', description: 'Replaces text in a string', category: 'Text', syntax: 'SUBSTITUTE(text, old_text, new_text, [instance_num])' },
-      { name: 'FIND', description: 'Finds text within another (case-sensitive)', category: 'Text', syntax: 'FIND(find_text, within_text, [start_num])' },
-      { name: 'SEARCH', description: 'Finds text within another (case-insensitive)', category: 'Text', syntax: 'SEARCH(find_text, within_text, [start_num])' },
-      { name: 'REPLACE', description: 'Replaces characters within text', category: 'Text', syntax: 'REPLACE(old_text, start_num, num_chars, new_text)' },
-      { name: 'REPT', description: 'Repeats text a given number of times', category: 'Text', syntax: 'REPT(text, number_times)' },
-      { name: 'PROPER', description: 'Capitalizes first letter of each word', category: 'Text', syntax: 'PROPER(text)' },
-      { name: 'EXACT', description: 'Checks if two text strings are identical', category: 'Text', syntax: 'EXACT(text1, text2)' },
-      { name: 'TEXTJOIN', description: 'Joins text with a delimiter', category: 'Text', syntax: 'TEXTJOIN(delimiter, ignore_empty, text1, [text2], ...)' },
-      { name: 'DATEDIF', description: 'Calculates difference between two dates', category: 'Date/Time', syntax: 'DATEDIF(start_date, end_date, unit)' },
-      { name: 'EDATE', description: 'Returns date N months away', category: 'Date/Time', syntax: 'EDATE(start_date, months)' },
-      { name: 'EOMONTH', description: 'Returns last day of month N months away', category: 'Date/Time', syntax: 'EOMONTH(start_date, months)' },
-      { name: 'WEEKDAY', description: 'Returns the day of the week', category: 'Date/Time', syntax: 'WEEKDAY(serial_number, [return_type])' },
-      { name: 'WEEKNUM', description: 'Returns the week number', category: 'Date/Time', syntax: 'WEEKNUM(serial_number, [return_type])' },
-      { name: 'NETWORKDAYS', description: 'Returns number of whole working days', category: 'Date/Time', syntax: 'NETWORKDAYS(start_date, end_date, [holidays])' },
-      { name: 'HOUR', description: 'Returns the hour from a time', category: 'Date/Time', syntax: 'HOUR(serial_number)' },
-      { name: 'MINUTE', description: 'Returns the minute from a time', category: 'Date/Time', syntax: 'MINUTE(serial_number)' },
-      { name: 'SECOND', description: 'Returns the second from a time', category: 'Date/Time', syntax: 'SECOND(serial_number)' },
-      { name: 'PMT', description: 'Returns the payment for a loan', category: 'Financial', syntax: 'PMT(rate, nper, pv, [fv], [type])' },
-      { name: 'FV', description: 'Returns the future value of an investment', category: 'Financial', syntax: 'FV(rate, nper, pmt, [pv], [type])' },
-      { name: 'PV', description: 'Returns the present value of an investment', category: 'Financial', syntax: 'PV(rate, nper, pmt, [pv], [type])' },
-      { name: 'NPV', description: 'Returns the net present value', category: 'Financial', syntax: 'NPV(rate, value1, [value2], ...)' },
-      { name: 'IRR', description: 'Returns the internal rate of return', category: 'Financial', syntax: 'IRR(values, [guess])' },
-      { name: 'RATE', description: 'Returns the interest rate per period', category: 'Financial', syntax: 'RATE(nper, pmt, pv, [fv], [type], [guess])' },
-      { name: 'NPER', description: 'Returns the number of periods', category: 'Financial', syntax: 'NPER(rate, pmt, pv, [fv], [type])' },
-      { name: 'ISBLANK', description: 'Returns TRUE if value is empty', category: 'Information', syntax: 'ISBLANK(value)' },
-      { name: 'ISNUMBER', description: 'Returns TRUE if value is a number', category: 'Information', syntax: 'ISNUMBER(value)' },
-      { name: 'ISTEXT', description: 'Returns TRUE if value is text', category: 'Information', syntax: 'ISTEXT(value)' },
-      { name: 'ISERROR', description: 'Returns TRUE if value is an error', category: 'Information', syntax: 'ISERROR(value)' },
-      { name: 'ISNA', description: 'Returns TRUE if value is #N/A', category: 'Information', syntax: 'ISNA(value)' },
-      { name: 'TYPE', description: 'Returns the type of value', category: 'Information', syntax: 'TYPE(value)' },
-    ];
   }
 
   computePivotTable(
