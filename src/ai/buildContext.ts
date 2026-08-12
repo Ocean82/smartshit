@@ -5,7 +5,7 @@ import { computeSheetInsights, type SheetInsights } from '@/ai/sheetInsights'
 import { buildSheetProfile } from '@/ai/sheetProfile'
 import type { SheetProfile } from '@/ai/types'
 import { AI_ANALYSIS_CONFIG } from '@/ai/config'
-import { compressSheet, type CompressedSheet } from '@/ai/sheetCompressor'
+import { compressSheet } from '@/ai/sheetCompressor'
 
 export interface SheetDimensions {
   rows: number

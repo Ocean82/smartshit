@@ -38,13 +38,13 @@ const MAX_INPUT_CELLS = 10_000;
 const INFERENCE_TIMEOUT_MS = 30_000;
 
 /** Loading placeholder shown while inference is pending (Requirement 11.7) */
-const LOADING_PLACEHOLDER = '⏳ Running...';
+const _LOADING_PLACEHOLDER = '⏳ Running...';
 
 // ─── Error values (spreadsheet conventions) ───────────────────────────────────
 
 const ERROR_NAME = '#NAME?';
 const ERROR_VALUE = '#VALUE!';
-const ERROR_SPILL = '#SPILL!';
+const _ERROR_SPILL = '#SPILL!';
 const ERROR_TIMEOUT = '#TIMEOUT!';
 
 // ─── Function Info ────────────────────────────────────────────────────────────

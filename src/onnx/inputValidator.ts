@@ -151,7 +151,7 @@ function validateNumericValue(
 function checkShapeSatisfied(
   validCount: number,
   expectedShape: number[],
-  rangeDims: { rows: number; cols: number },
+  _rangeDims: { rows: number; cols: number },
 ): boolean {
   if (expectedShape.length === 0) {
     // Scalar: exactly 1 value needed

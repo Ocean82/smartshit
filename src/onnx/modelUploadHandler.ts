@@ -13,7 +13,6 @@ import type { ModelAsset } from './types';
 import {
   validateOnnxSecurity,
   MAX_UPLOAD_SIZE_BYTES,
-  MAX_BROWSER_SIZE_BYTES,
   VALIDATION_TIMEOUT_MS,
   type SecurityValidationInput,
   type SecurityRejectionReason,
