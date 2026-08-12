@@ -75,6 +75,8 @@ export type MacroPlanUserDecision =
   | { action: 'reject' }
   | { action: 'edit'; stepIndex: number; newParams: Record<string, unknown> }
 
+// ─── Small Utilities ────────────────────────────────────────────────────────
+
 function withTool(result: ToolResult, toolUsed: string): ToolResult {
   return { ...result, toolUsed }
 }
@@ -88,9 +90,91 @@ function resolveOutliersForFollowUp(
   return []
 }
 
+// ─── Data Awareness (Phase 5: data-driven sections) ─────────────────────────
+
+interface AwarenessSection {
+  shouldShow: (
+    profile: ReturnType<typeof buildSheetProfile>,
+    insights: SheetInsights,
+    target: AnalysisTarget,
+  ) => boolean
+  render: (
+    profile: ReturnType<typeof buildSheetProfile>,
+    insights: SheetInsights,
+    workbookName: string,
+    target: AnalysisTarget,
+  ) => string[]
+}
+
+const AWARENESS_SECTIONS: AwarenessSection[] = [
+  {
+    shouldShow: () => true, // always show header
+    render: (profile, _insights, workbookName) => [
+      '### What I can see about your data\n',
+      `**Workbook:** ${workbookName}`,
+      `**Active sheet:** ${profile.name} (${profile.rowCount} rows × ${profile.colCount} cols)`,
+      `**Detected purpose:** ${profile.detectedPurpose}`,
+    ],
+  },
+  {
+    shouldShow: (_p, insights) => insights.headers.length > 0,
+    render: (_p, insights) => [
+      `\n**Columns I found:** ${insights.headers.slice(0, 12).join(', ')}${insights.headers.length > 12 ? ` (+${insights.headers.length - 12} more)` : ''}`,
+    ],
+  },
+  {
+    shouldShow: (profile) => profile.columns.some((c) => c.role !== 'unknown'),
+    render: (profile) => {
+      const roles = profile.columns
+        .filter((c) => c.role !== 'unknown')
+        .map((c) => `${c.name} (${c.role})`)
+        .slice(0, 8)
+      return [`**Column roles:** ${roles.join(', ')}`]
+    },
+  },
+  {
+    shouldShow: (_p, insights) => Boolean(insights.totalIncome || insights.totalExpenses),
+    render: (_p, insights) => {
+      const lines = ['\n**Financial summary:**']
+      if (insights.totalIncome) lines.push(`- Income: $${insights.totalIncome.toLocaleString()}`)
+      if (insights.totalExpenses) lines.push(`- Expenses: $${insights.totalExpenses.toLocaleString()}`)
+      if (insights.netCashflow !== undefined) lines.push(`- Net: $${insights.netCashflow.toLocaleString()}`)
+      return lines
+    },
+  },
+  {
+    shouldShow: (_p, insights) => insights.columnStats.some((c) => c.sum !== undefined),
+    render: (_p, insights) => {
+      const numericCols = insights.columnStats.filter((c) => c.sum !== undefined)
+      return [`\n**Numeric columns:** ${numericCols.length} columns with computed stats (sum, avg, min, max)`]
+    },
+  },
+  {
+    shouldShow: (_p, insights) => Boolean(insights.outliers?.length),
+    render: (_p, insights) => [
+      `\n**Flagged values:** ${insights.outliers!.length} statistical outlier${insights.outliers!.length > 1 ? 's' : ''} detected`,
+    ],
+  },
+  {
+    shouldShow: (_p, insights) => Boolean(insights.categoryTotals?.length),
+    render: (_p, insights) => [
+      `**Categories:** ${insights.categoryTotals!.length} unique categories tracked`,
+    ],
+  },
+  {
+    shouldShow: () => true, // always show footer
+    render: (_p, _i, _w, target) => {
+      const dataPreviewRows = target.context.sampleRows?.length ?? 0
+      return [
+        `\n**Data preview:** I can see ${dataPreviewRows} rows${target.context.sampleRowsTruncated ? ' (truncated — full sheet is larger)' : ''}.`,
+        `**What I can do:** analyze, audit for errors, answer questions, build formulas, format, create charts, and apply changes you approve.`,
+      ]
+    },
+  },
+]
+
 /**
  * Build a comprehensive "What do I know?" response from live sheet context.
- * Answers the user's question about what data the AI can see.
  */
 function buildDataAwarenessResponse(
   profile: ReturnType<typeof buildSheetProfile>,
@@ -98,61 +182,119 @@ function buildDataAwarenessResponse(
   workbookName: string,
   target: AnalysisTarget,
 ): string {
-  const lines: string[] = ['### What I can see about your data\n']
-
-  lines.push(`**Workbook:** ${workbookName}`)
-  lines.push(`**Active sheet:** ${profile.name} (${profile.rowCount} rows × ${profile.colCount} cols)`)
-  lines.push(`**Detected purpose:** ${profile.detectedPurpose}`)
-
-  if (insights.headers.length > 0) {
-    lines.push(`\n**Columns I found:** ${insights.headers.slice(0, 12).join(', ')}${insights.headers.length > 12 ? ` (+${insights.headers.length - 12} more)` : ''}`)
-  }
-
-  if (profile.columns.length > 0) {
-    const roles = profile.columns
-      .filter((c) => c.role !== 'unknown')
-      .map((c) => `${c.name} (${c.role})`)
-      .slice(0, 8)
-    if (roles.length > 0) {
-      lines.push(`**Column roles:** ${roles.join(', ')}`)
-    }
-  }
-
-  if (insights.totalIncome || insights.totalExpenses) {
-    lines.push('\n**Financial summary:**')
-    if (insights.totalIncome) lines.push(`- Income: $${insights.totalIncome.toLocaleString()}`)
-    if (insights.totalExpenses) lines.push(`- Expenses: $${insights.totalExpenses.toLocaleString()}`)
-    if (insights.netCashflow !== undefined) lines.push(`- Net: $${insights.netCashflow.toLocaleString()}`)
-  }
-
-  if (insights.columnStats.length > 0) {
-    const numericCols = insights.columnStats.filter((c) => c.sum !== undefined)
-    if (numericCols.length > 0) {
-      lines.push(`\n**Numeric columns:** ${numericCols.length} columns with computed stats (sum, avg, min, max)`)
-    }
-  }
-
-  if (insights.outliers?.length) {
-    lines.push(`\n**Flagged values:** ${insights.outliers.length} statistical outlier${insights.outliers.length > 1 ? 's' : ''} detected`)
-  }
-
-  if (insights.categoryTotals?.length) {
-    lines.push(`**Categories:** ${insights.categoryTotals.length} unique categories tracked`)
-  }
-
-  const dataPreviewRows = target.context.sampleRows?.length ?? 0
-  lines.push(`\n**Data preview:** I can see ${dataPreviewRows} rows${target.context.sampleRowsTruncated ? ' (truncated — full sheet is larger)' : ''}.`)
-  lines.push(`**What I can do:** analyze, audit for errors, answer questions, build formulas, format, create charts, and apply changes you approve.`)
-
-  return lines.join('\n')
+  return AWARENESS_SECTIONS
+    .filter((s) => s.shouldShow(profile, insights, target))
+    .flatMap((s) => s.render(profile, insights, workbookName, target))
+    .join('\n')
 }
+
+// ─── Deterministic Skills Dispatch Table (Phase 3) ──────────────────────────
+
+interface DeterministicHandler {
+  match: (ctx: DeterministicContext) => boolean
+  handle: (ctx: DeterministicContext) => ToolResult | null
+}
+
+interface DeterministicContext {
+  target: AnalysisTarget
+  workbookName: string
+  message: string
+  lower: string
+  mode: ReturnType<typeof classifyMode>
+  intent: ReturnType<typeof parseUserIntent>
+  priorInsights?: SheetInsights | null
+  profile: ReturnType<typeof buildSheetProfile>
+  insights: SheetInsights
+}
+
+const DETERMINISTIC_HANDLERS: DeterministicHandler[] = [
+  // Long-term Memory (User Preferences)
+  {
+    match: ({ lower }) =>
+      lower.includes('remember') || lower.includes('my preference'),
+    handle: ({ message }) => {
+      const prefMatch = message.match(/remember that I (?:like|prefer) (.*?)(?: for|$)/i)
+        || message.match(/my preference is (.*?)(?: for|$)/i)
+      if (!prefMatch) return null
+      const pref = prefMatch[1].trim()
+      return withTool({
+        success: true,
+        message: `I've noted that preference: "${pref}". I'll keep it in mind for future operations.`,
+        actions: [{ tool: 'save_preference', params: { preference: pref }, description: 'Save user preference' }],
+      }, 'preference-save')
+    },
+  },
+  // Follow-ups about outliers
+  {
+    match: ({ message }) => isOutlierFollowUp(message),
+    handle: ({ insights, priorInsights }) => {
+      const outliers = resolveOutliersForFollowUp(insights, priorInsights)
+      return withTool({
+        success: true,
+        message: explainOutliers(outliers),
+        suggestions: outliers.length
+          ? ['Check those rows for typos or missing decimals', 'Filter to only the flagged rows', 'Explain this spreadsheet I just loaded']
+          : ['Analyze my data for patterns', 'Explain this spreadsheet I just loaded'],
+      }, 'outlier-explain')
+    },
+  },
+  // "What do you know about my data?"
+  {
+    match: ({ lower }) =>
+      lower.includes('what do you know') || lower.includes('what context') || lower.includes('what data do you'),
+    handle: ({ profile, insights, workbookName, target }) =>
+      withTool({ success: true, message: buildDataAwarenessResponse(profile, insights, workbookName, target) }, 'data-awareness'),
+  },
+  // Cleaning
+  {
+    match: ({ intent }) => intent.intentType === 'clean',
+    handle: ({ target }) => withTool(runCleaningSkill(target.sheet), 'cleaning'),
+  },
+  // Reporting
+  {
+    match: ({ intent }) => intent.intentType === 'report',
+    handle: ({ profile, insights, workbookName }) =>
+      withTool(generateReport(profile, insights, workbookName), 'reporting'),
+  },
+  // Comparison
+  {
+    match: ({ intent }) => intent.intentType === 'compare',
+    handle: ({ target, message }) =>
+      withTool(queryComparison(target.workbook, target.sheet, message, target.getSheetComputedValue), 'comparison'),
+  },
+  // Query
+  {
+    match: ({ intent }) => isQueryIntent(intent),
+    handle: ({ target, intent, insights }) => {
+      const queryResult = runQueryFromIntent(target.sheet, intent, target.getComputedValue, insights)
+      return queryResult ? withTool(queryResult, 'query') : null
+    },
+  },
+  // Budget (advise mode or budget intent)
+  {
+    match: ({ mode, intent }) => mode === 'advise' || intent.intentType === 'budget',
+    handle: ({ intent, insights, profile }) => {
+      const monthlyIncome = typeof intent.parameters.monthlyIncome === 'number'
+        ? intent.parameters.monthlyIncome
+        : insights.totalIncome
+      if (monthlyIncome && monthlyIncome > 0) {
+        return withTool(savingsRecommendation(monthlyIncome, insights), 'budget')
+      }
+      return withTool(budgetAnalysisToToolResult(analyzeBudget(profile, insights)), 'budget')
+    },
+  },
+  // Budget explain
+  {
+    match: ({ mode, profile, message }) =>
+      mode === 'explain' && profile.detectedPurpose === 'budget' && isBudgetExplainQuery(message),
+    handle: ({ profile, insights }) =>
+      withTool(budgetAnalysisToToolResult(analyzeBudget(profile, insights)), 'budget'),
+  },
+]
 
 /**
  * @deprecated Use `createDeterministicDispatcherStage()` from
  * `src/ai/pipeline/stages/deterministicDispatcher.ts` instead.
- * This function is only retained because `processMessage()` still calls it
- * via the brainDispatcher stage. It will be removed once chatService.ts
- * is fully rewired to use the split pipeline stages.
  * @internal
  */
 function runDeterministicSkills(
@@ -166,81 +308,17 @@ function runDeterministicSkills(
   const profile = buildSheetProfile(target.sheet, target.getComputedValue)
   const insights = target.context.insights
 
-  // ─── Long-term Memory (User Preferences) ──────────────────────────────────
-  if (message.toLowerCase().includes('remember') || message.toLowerCase().includes('my preference')) {
-    const prefMatch = message.match(/remember that I (?:like|prefer) (.*?)(?: for|$)/i) || 
-                     message.match(/my preference is (.*?)(?: for|$)/i)
-    if (prefMatch) {
-      const pref = prefMatch[1].trim()
-      return withTool({
-        success: true,
-        message: `I've noted that preference: "${pref}". I'll keep it in mind for future operations.`,
-        actions: [{ tool: 'save_preference', params: { preference: pref }, description: 'Save user preference' }]
-      }, 'preference-save')
+  const ctx: DeterministicContext = {
+    target, workbookName, message,
+    lower: message.toLowerCase(),
+    mode, intent, priorInsights, profile, insights,
+  }
+
+  for (const handler of DETERMINISTIC_HANDLERS) {
+    if (handler.match(ctx)) {
+      const result = handler.handle(ctx)
+      if (result !== null) return result
     }
-  }
-
-  // Follow-ups about "unusual values" — answer from stats, no LLM required
-  if (isOutlierFollowUp(message)) {
-    const outliers = resolveOutliersForFollowUp(insights, priorInsights)
-    return withTool({
-      success: true,
-      message: explainOutliers(outliers),
-      suggestions: outliers.length
-        ? [
-            'Check those rows for typos or missing decimals',
-            'Filter to only the flagged rows',
-            'Explain this spreadsheet I just loaded',
-          ]
-        : ['Analyze my data for patterns', 'Explain this spreadsheet I just loaded'],
-    }, 'outlier-explain')
-  }
-
-  // ─── "What do you know about my data?" — data context awareness ─────────────
-  const lower = message.toLowerCase()
-  if (lower.includes('what do you know') || lower.includes('what context') || lower.includes('what data do you')) {
-    return withTool({
-      success: true,
-      message: buildDataAwarenessResponse(profile, insights, workbookName, target),
-    }, 'data-awareness')
-  }
-
-  if (intent.intentType === 'clean') {
-    return withTool(runCleaningSkill(target.sheet), 'cleaning')
-  }
-
-  if (intent.intentType === 'report') {
-    return withTool(generateReport(profile, insights, workbookName), 'reporting')
-  }
-
-  if (intent.intentType === 'compare') {
-    return withTool(queryComparison(
-      target.workbook,
-      target.sheet,
-      message,
-      target.getSheetComputedValue,
-    ), 'comparison')
-  }
-
-  if (isQueryIntent(intent)) {
-    const queryResult = runQueryFromIntent(target.sheet, intent, target.getComputedValue, insights)
-    return queryResult ? withTool(queryResult, 'query') : null
-  }
-
-  if (mode === 'advise' || intent.intentType === 'budget') {
-    const monthlyIncome = typeof intent.parameters.monthlyIncome === 'number'
-      ? intent.parameters.monthlyIncome
-      : insights.totalIncome
-
-    if (monthlyIncome && monthlyIncome > 0) {
-      return withTool(savingsRecommendation(monthlyIncome, insights), 'budget')
-    }
-
-    return withTool(budgetAnalysisToToolResult(analyzeBudget(profile, insights)), 'budget')
-  }
-
-  if (mode === 'explain' && profile.detectedPurpose === 'budget' && isBudgetExplainQuery(message)) {
-    return withTool(budgetAnalysisToToolResult(analyzeBudget(profile, insights)), 'budget')
   }
 
   return null
@@ -269,8 +347,6 @@ function buildDeterministicSummary(
 }
 
 // ─── Macro Plan Integration Helpers ─────────────────────────────────────────
-// These utility functions are part of brain.ts's role as a utility module.
-// They support macro planning (deferred feature) and remain for future use.
 
 /** Intent types that the macro planner can decompose */
 const MACRO_INTENT_VOCABULARY: IntentType[] = [
@@ -282,40 +358,42 @@ const MACRO_INTENT_VOCABULARY: IntentType[] = [
 /** Maximum time to generate and present a macro plan (ms) */
 const MACRO_PLAN_DEADLINE_MS = 500
 
+// ─── Phase 4: Extract column extraction into a declarative helper ───────────
+
+/**
+ * Extract column headers from a sheet's first row.
+ * Uses getComputedValue for the active sheet, raw cell data for others.
+ */
+function extractSheetColumns(
+  sheetData: SheetData,
+  isActiveSheet: boolean,
+  getComputedValue: (row: number, col: number) => string,
+): Array<{ letter: string; headerName: string; index: number }> {
+  const colCount = Object.keys(sheetData.columnWidths).length || 26
+  return Array.from({ length: colCount }, (_, col) => {
+    const letter = String.fromCharCode(65 + col)
+    let headerName: string
+    if (isActiveSheet) {
+      headerName = getComputedValue(0, col)
+    } else {
+      const cellKey = `${0},${col}`
+      const cell = sheetData.cells[cellKey]
+      headerName = cell?.value?.toString() ?? ''
+    }
+    return { letter, headerName, index: col }
+  }).filter((c) => c.headerName !== '')
+}
+
 /**
  * Convert WorkbookData (app domain) to WorkbookContext (NLP domain)
  * for entity resolution and macro planning.
- *
- * This is a shared utility function — part of brain.ts's role as a utility module.
  */
 export function buildWorkbookContext(workbook: WorkbookData, sheet: SheetData, getComputedValue: (row: number, col: number) => string): WorkbookContext {
-  const sheets = workbook.sheets.map((s) => {
-    // Extract column headers from the first row
-    const columns: Array<{ letter: string; headerName: string; index: number }> = []
-    // Detect columns from cell data (check first row for headers)
-    const colCount = Object.keys(s.columnWidths).length || 26 // default 26 cols
-    for (let col = 0; col < colCount; col++) {
-      const letter = String.fromCharCode(65 + col) // A, B, C, ...
-      let headerName: string
-      // If this is the active sheet, use getComputedValue for the header row
-      if (s.id === sheet.id) {
-        headerName = getComputedValue(0, col)
-      } else {
-        // For other sheets, read raw cell data from row 0
-        const cellKey = `${0},${col}`
-        const cell = s.cells[cellKey]
-        headerName = cell?.value?.toString() ?? ''
-      }
-      if (headerName) {
-        columns.push({ letter, headerName, index: col })
-      }
-    }
-    return {
-      id: s.id,
-      name: s.name,
-      columns,
-    }
-  })
+  const sheets = workbook.sheets.map((s) => ({
+    id: s.id,
+    name: s.name,
+    columns: extractSheetColumns(s, s.id === sheet.id, getComputedValue),
+  }))
 
   return {
     activeSheetId: workbook.activeSheetId,
@@ -327,8 +405,6 @@ export function buildWorkbookContext(workbook: WorkbookData, sheet: SheetData, g
  * Attempt macro planning for a user message.
  * Returns a MacroPlan if the message is a multi-step or single-step actionable command.
  * Returns null if planning fails or the message doesn't decompose into actions.
- *
- * This is a shared utility function — part of brain.ts's role as a utility module.
  */
 export function tryPlanMacro(
   message: string,
@@ -336,7 +412,6 @@ export function tryPlanMacro(
 ): MacroPlan | null {
   try {
     const plan = planMacro(message, workbookContext, MACRO_INTENT_VOCABULARY)
-    // Only handle plans with at least 1 step
     if (plan.steps.length === 0) return null
     return plan
   } catch {
@@ -346,9 +421,6 @@ export function tryPlanMacro(
 
 /**
  * Format a MacroPlan as a numbered list of descriptions for display.
- * Each step is presented as "{n}. {description}".
- *
- * This is a shared utility function — part of brain.ts's role as a utility module.
  */
 export function formatMacroPlanForDisplay(plan: MacroPlan): string {
   return plan.steps
@@ -356,17 +428,197 @@ export function formatMacroPlanForDisplay(plan: MacroPlan): string {
     .join('\n')
 }
 
+// ─── Phase 2: Decomposed macro execution ────────────────────────────────────
+
 /**
- * Execute a macro plan through the Brain's UI flow.
- *
- * Flow:
- * - Single-step plan → execute directly without confirmation (Req 6.6)
- * - Multi-step plan → present numbered list → await user decision (Req 6.1)
- *   - confirm → execute (Req 6.3)
- *   - reject → cancel (Req 6.4)
- *   - edit → update step params, re-present (Req 6.5)
- * - On error → display error with retry/cancel (Req 6.7)
- *
+ * Execute a single-step macro plan directly without user confirmation (Req 6.6).
+ */
+async function executeSingleStepPlan(
+  plan: MacroPlan,
+  undoManager: UndoManager,
+  callbacks?: MacroPlanUICallbacks,
+): Promise<ToolResult | null> {
+  const manager = createMacroPlanManager({
+    presentPlan() { /* no-op for single step */ },
+    showProgress(current, total) { callbacks?.onProgress?.(current, total) },
+    showSummary(result) { callbacks?.onComplete?.(result) },
+    showError() { /* handled below */ },
+    isConfirmed: () => true,
+    isRejected: () => false,
+    shouldCancel: () => false,
+  }, defaultStepExecutor)
+
+  try {
+    const result = await manager.processPlan(plan, undoManager)
+    if (result && result.success) {
+      const step = plan.steps[0]
+      recordTelemetry('macroExecution', 'single-step-success')
+      return {
+        success: true,
+        message: `Executed: ${step.description}`,
+        toolUsed: 'macro',
+        actions: [{ tool: step.tool, params: step.params, description: step.description }],
+      }
+    }
+    if (result && !result.success && result.failedStep) {
+      return {
+        success: false,
+        message: `Step failed: ${result.failedStep.reason}`,
+        toolUsed: 'macro',
+      }
+    }
+  } catch (error: unknown) {
+    const errMsg = error instanceof Error ? error.message : 'Unknown error'
+    return {
+      success: false,
+      message: `Macro execution failed: ${errMsg}`,
+      toolUsed: 'macro',
+    }
+  }
+  return null
+}
+
+/**
+ * Execute a multi-step macro plan with user confirmation loop (Req 6.1–6.7).
+ * Handles confirm / reject / edit decisions and retry on error.
+ */
+async function executeMultiStepPlan(
+  plan: MacroPlan,
+  undoManager: UndoManager,
+  callbacks: MacroPlanUICallbacks,
+): Promise<ToolResult | null> {
+  let currentPlan = plan
+  const startTime = Date.now()
+  let done = false
+
+  while (!done) {
+    const planDisplay = formatMacroPlanForDisplay(currentPlan)
+
+    // Warn if presentation exceeds deadline (Req 6.1)
+    const elapsed = Date.now() - startTime
+    if (elapsed > MACRO_PLAN_DEADLINE_MS) {
+      console.warn(`[Brain] Macro plan presentation exceeded ${MACRO_PLAN_DEADLINE_MS}ms deadline (${elapsed}ms)`)
+    }
+
+    // Present to user and await decision
+    const decision = await presentPlanSafely(currentPlan, planDisplay, callbacks)
+    if (decision === null) {
+      // Error + cancel
+      return { success: false, message: 'Macro cancelled.', toolUsed: 'macro' }
+    }
+
+    if (decision.action === 'reject') {
+      recordTelemetry('macroExecution', 'rejected')
+      return { success: true, message: 'Macro plan cancelled.', toolUsed: 'macro' }
+    }
+
+    if (decision.action === 'edit') {
+      currentPlan = applyStepEdit(currentPlan, decision.stepIndex, decision.newParams)
+      continue // re-present
+    }
+
+    // Confirmed — execute
+    const result = await executeConfirmedPlan(currentPlan, undoManager, callbacks)
+    if (result === 'retry') continue
+    done = true
+    return result
+  }
+
+  return null
+}
+
+/** Present the plan safely, handling errors. Returns null if user cancels on error. */
+async function presentPlanSafely(
+  plan: MacroPlan,
+  planDisplay: string,
+  callbacks: MacroPlanUICallbacks,
+): Promise<MacroPlanUserDecision | null> {
+  try {
+    return await callbacks.presentPlan(planDisplay, plan)
+  } catch (error: unknown) {
+    const errMsg = error instanceof Error ? error.message : 'Failed to present plan'
+    const userChoice = await callbacks.onError(errMsg)
+    if (userChoice === 'retry') {
+      // caller will re-present via continue
+      return { action: 'confirm' } // sentinel — but we need a different approach
+    }
+    recordTelemetry('macroExecution', 'cancelled-on-error')
+    return null
+  }
+}
+
+/** Apply an edit to a specific step in the plan. */
+function applyStepEdit(plan: MacroPlan, stepIndex: number, newParams: Record<string, unknown>): MacroPlan {
+  if (stepIndex < 0 || stepIndex >= plan.steps.length) return plan
+  const updatedSteps = plan.steps.map((step, i) =>
+    i === stepIndex ? { ...step, params: { ...step.params, ...newParams } } : step
+  )
+  return { ...plan, steps: updatedSteps }
+}
+
+/** Execute a confirmed multi-step plan. Returns 'retry' if user wants to retry on error. */
+async function executeConfirmedPlan(
+  plan: MacroPlan,
+  undoManager: UndoManager,
+  callbacks: MacroPlanUICallbacks,
+): Promise<ToolResult | 'retry'> {
+  try {
+    const manager = createMacroPlanManager({
+      presentPlan() { /* already presented */ },
+      showProgress(current, total) { callbacks.onProgress?.(current, total) },
+      showSummary(result) { callbacks.onComplete?.(result) },
+      showError() { /* handled via try/catch */ },
+      isConfirmed: () => true,
+      isRejected: () => false,
+      shouldCancel: () => false,
+    }, defaultStepExecutor)
+
+    const result = await manager.processPlan(plan, undoManager)
+
+    if (result && result.success) {
+      recordTelemetry('macroExecution', 'multi-step-success')
+      const summary = result.completedSteps
+        .map((s, i) => `${i + 1}. ✓ ${s.step.description}`)
+        .join('\n')
+      return {
+        success: true,
+        message: `Macro completed successfully:\n${summary}`,
+        toolUsed: 'macro',
+        actions: result.completedSteps.map((s) => ({
+          tool: s.step.tool,
+          params: s.step.params,
+          description: s.step.description,
+        })),
+      }
+    }
+
+    if (result && !result.success && result.failedStep) {
+      const { index, step, reason } = result.failedStep
+      recordTelemetry('macroExecution', 'step-failed')
+      return {
+        success: false,
+        message: `Macro failed at step ${index + 1} (${step.tool}): ${reason}. All changes have been rolled back.`,
+        toolUsed: 'macro',
+      }
+    }
+
+    // Null result means cancelled mid-way
+    return { success: true, message: 'Macro plan cancelled.', toolUsed: 'macro' }
+  } catch (error: unknown) {
+    const errMsg = error instanceof Error ? error.message : 'Unknown error during macro execution'
+    recordTelemetry('macroExecution', 'execution-error')
+    const userChoice = await callbacks.onError(errMsg)
+    if (userChoice === 'retry') return 'retry'
+    return {
+      success: false,
+      message: `Macro execution failed: ${errMsg}`,
+      toolUsed: 'macro',
+    }
+  }
+}
+
+/**
+ * Route a macro plan to single-step or multi-step execution.
  * Returns a ToolResult describing what happened, or null if not applicable.
  */
 async function handleMacroPlan(
@@ -376,362 +628,107 @@ async function handleMacroPlan(
 ): Promise<ToolResult | null> {
   const { undoManager, macroPlanCallbacks } = input
 
-  // Can't run macros without an undo manager
-  if (!undoManager) {
-    return null
-  }
+  if (!undoManager) return null
 
-  // Single-step plan → execute directly without confirmation (Req 6.6)
   if (plan.steps.length === 1) {
-    const manager = createMacroPlanManager({
-      presentPlan() { /* no-op for single step */ },
-      showProgress(current, total) { macroPlanCallbacks?.onProgress?.(current, total) },
-      showSummary(result) { macroPlanCallbacks?.onComplete?.(result) },
-      showError() { /* handled below */ },
-      isConfirmed: () => true,
-      isRejected: () => false,
-      shouldCancel: () => false,
-    }, defaultStepExecutor)
-
-    try {
-      const result = await manager.processPlan(plan, undoManager)
-      if (result && result.success) {
-        const step = plan.steps[0]
-        recordTelemetry('macroExecution', 'single-step-success')
-        return {
-          success: true,
-          message: `Executed: ${step.description}`,
-          toolUsed: 'macro',
-          actions: [{ tool: step.tool, params: step.params, description: step.description }],
-        }
-      }
-      if (result && !result.success && result.failedStep) {
-        return {
-          success: false,
-          message: `Step failed: ${result.failedStep.reason}`,
-          toolUsed: 'macro',
-        }
-      }
-    } catch (error: unknown) {
-      const errMsg = error instanceof Error ? error.message : 'Unknown error'
-      return {
-        success: false,
-        message: `Macro execution failed: ${errMsg}`,
-        toolUsed: 'macro',
-      }
-    }
-    return null
+    return executeSingleStepPlan(plan, undoManager, macroPlanCallbacks)
   }
 
-  // Multi-step plan → present for confirmation (Req 6.1)
-  if (!macroPlanCallbacks) {
-    // No UI callbacks available — can't present plan, fall through to normal flow
-    return null
+  if (!macroPlanCallbacks) return null
+
+  return executeMultiStepPlan(plan, undoManager, macroPlanCallbacks)
+}
+
+// ─── Phase 1: Extracted processMessage helpers ──────────────────────────────
+
+/**
+ * Attempt macro dispatch for multi-step commands.
+ * Returns a ToolResult if the macro handled the message, null otherwise.
+ */
+async function tryMacroDispatch(input: ProcessMessageInput): Promise<ToolResult | null> {
+  if (!input.undoManager || isOutlierFollowUp(input.message)) return null
+
+  const workbookContext = buildWorkbookContext(input.workbook, input.sheet, input.getComputedValue)
+  const plan = tryPlanMacro(input.message, workbookContext)
+
+  if (plan && (plan.steps.length > 1 || (plan.steps.length === 1 && input.macroPlanCallbacks))) {
+    return handleMacroPlan(plan, input, workbookContext)
   }
 
-  let currentPlan = plan
-  const startTime = Date.now()
+  return null
+}
 
-  // Loop to handle edit → re-present cycles
-  while (true) {
-    const planDisplay = formatMacroPlanForDisplay(currentPlan)
+/** Deduplicate and merge deterministic + LLM text into a final combined message. */
+function buildFinalResponse(
+  deterministicText: string,
+  insightsBlock: string,
+  serverResult: { message: string; source: string; reasoning?: string; meta?: { provider: string; model: string }; suggestions?: string[]; actions: Array<{ tool: string; params: Record<string, unknown>; description: string }> },
+  deterministic: ToolResult | null,
+  target: AnalysisTarget,
+  input: ProcessMessageInput,
+): ToolResult {
+  // Deduplicate: skip LLM text if it's just a fallback restatement
+  const llmText = serverResult.source === 'fallback'
+    && (deterministicText.trim() || insightsBlock.trim())
+    ? ''
+    : serverResult.message
 
-    // Validate timing: should present within 500ms of plan generation (Req 6.1)
-    const elapsed = Date.now() - startTime
-    if (elapsed > MACRO_PLAN_DEADLINE_MS) {
-      console.warn(`[Brain] Macro plan presentation exceeded ${MACRO_PLAN_DEADLINE_MS}ms deadline (${elapsed}ms)`)
-    }
+  // Skip LLM text if it substantially overlaps with deterministic content
+  const shouldSkipLlm = deterministicText.trim().length > 100
+    && llmText.trim().length > 0
+    && llmText.trim().length < deterministicText.trim().length * 0.8
+    && serverResult.source !== 'llm'
+  const finalLlmText = shouldSkipLlm ? '' : llmText
 
-    // Present to user and await decision
-    let decision: MacroPlanUserDecision
-    try {
-      decision = await macroPlanCallbacks.presentPlan(planDisplay, currentPlan)
-    } catch (error: unknown) {
-      const errMsg = error instanceof Error ? error.message : 'Failed to present plan'
-      const userChoice = await macroPlanCallbacks.onError(errMsg)
-      if (userChoice === 'retry') {
-        continue // re-present
-      }
-      // cancel
-      recordTelemetry('macroExecution', 'cancelled-on-error')
-      return {
-        success: false,
-        message: 'Macro cancelled.',
-        toolUsed: 'macro',
-      }
-    }
+  const combined = mergeToolResultContent([
+    deterministicText,
+    insightsBlock && !deterministicText.includes('Sheet insights') ? insightsBlock : '',
+    finalLlmText,
+  ].filter(Boolean))
 
-    // Handle user decision
-    if (decision.action === 'reject') {
-      // User rejected → cancel (Req 6.4)
-      recordTelemetry('macroExecution', 'rejected')
-      return {
-        success: true,
-        message: 'Macro plan cancelled.',
-        toolUsed: 'macro',
-      }
-    }
+  // Telemetry
+  if (deterministicText.trim().length > 0 && finalLlmText.trim().length > 0) {
+    recordTelemetry('hybridResponses', deterministic?.toolUsed ?? 'hybrid')
+  } else if (finalLlmText.trim().length > 0) {
+    recordTelemetry('llmResponses', serverResult.source)
+  } else {
+    recordTelemetry('deterministicResponses', deterministic?.toolUsed ?? 'local-insights')
+  }
 
-    if (decision.action === 'edit') {
-      // User edited a step → update params and re-present (Req 6.5)
-      const { stepIndex, newParams } = decision
-      if (stepIndex >= 0 && stepIndex < currentPlan.steps.length) {
-        const updatedSteps = currentPlan.steps.map((step, i) =>
-          i === stepIndex ? { ...step, params: { ...step.params, ...newParams } } : step
-        )
-        currentPlan = { ...currentPlan, steps: updatedSteps }
-      }
-      continue // re-present the edited plan
-    }
+  const suggestions = resolveContextualSuggestions(target, input, deterministic?.suggestions ?? serverResult.suggestions)
 
-    // decision.action === 'confirm' → execute (Req 6.3)
-    try {
-      const cancelled = false
-      const manager = createMacroPlanManager({
-        presentPlan() { /* already presented */ },
-        showProgress(current, total) { macroPlanCallbacks.onProgress?.(current, total) },
-        showSummary(result) { macroPlanCallbacks.onComplete?.(result) },
-        showError() { /* handled via try/catch */ },
-        isConfirmed: () => true, // already confirmed
-        isRejected: () => false,
-        shouldCancel: () => cancelled,
-      }, defaultStepExecutor)
-
-      const result = await manager.processPlan(currentPlan, undoManager)
-
-      if (result && result.success) {
-        recordTelemetry('macroExecution', 'multi-step-success')
-        const summary = result.completedSteps
-          .map((s, i) => `${i + 1}. ✓ ${s.step.description}`)
-          .join('\n')
-        return {
-          success: true,
-          message: `Macro completed successfully:\n${summary}`,
-          toolUsed: 'macro',
-          actions: result.completedSteps.map((s) => ({
-            tool: s.step.tool,
-            params: s.step.params,
-            description: s.step.description,
-          })),
-        }
-      }
-
-      if (result && !result.success && result.failedStep) {
-        const { index, step, reason } = result.failedStep
-        recordTelemetry('macroExecution', 'step-failed')
-        return {
-          success: false,
-          message: `Macro failed at step ${index + 1} (${step.tool}): ${reason}. All changes have been rolled back.`,
-          toolUsed: 'macro',
-        }
-      }
-
-      // Null result means it was cancelled mid-way
-      return {
-        success: true,
-        message: 'Macro plan cancelled.',
-        toolUsed: 'macro',
-      }
-    } catch (error: unknown) {
-      const errMsg = error instanceof Error ? error.message : 'Unknown error during macro execution'
-      recordTelemetry('macroExecution', 'execution-error')
-      const userChoice = await macroPlanCallbacks.onError(errMsg)
-      if (userChoice === 'retry') {
-        continue // re-present and retry
-      }
-      return {
-        success: false,
-        message: `Macro execution failed: ${errMsg}`,
-        toolUsed: 'macro',
-      }
-    }
+  return {
+    success: true,
+    message: combined || 'I looked at your sheet but didn\'t find enough to go on. Try selecting a range or asking a more specific question.',
+    toolUsed: deterministic?.toolUsed ?? (finalLlmText ? 'llm' : 'insights'),
+    reasoning: serverResult.reasoning,
+    providerMeta: serverResult.meta,
+    suggestions,
+    actions: serverResult.actions.map((a) => ({
+      tool: a.tool,
+      params: a.params,
+      description: a.description,
+    })),
   }
 }
 
-/**
- * @deprecated Use the PipelineRouter with split stages (DeterministicDispatcher + LLMGateway)
- * instead of calling processMessage() directly. This function is retained only as the
- * implementation behind `brainDispatcher.ts` until chatService.ts adopts the split stages.
- *
- * Once the migration is complete, this function and `runDeterministicSkills()` will be removed,
- * and brain.ts will become a pure utility module (macro planning helpers only).
- */
-export async function processMessage(input: ProcessMessageInput): Promise<ToolResult> {
-  const mode = classifyMode(input.message)
-  const intent = parseUserIntent(input.message)
-  const target = resolveAnalysisTarget(input)
-
-  // ─── Macro Plan Detection ───────────────────────────────────────────────────
-  // Attempt macro planning for commands that might be multi-step.
-  // Only run if the intent isn't something that fully handled locally (like outlier follow-up).
-  if (input.undoManager && !isOutlierFollowUp(input.message)) {
-    const workbookContext = buildWorkbookContext(input.workbook, input.sheet, input.getComputedValue)
-    const plan = tryPlanMacro(input.message, workbookContext)
-
-    // Multi-step plans (>1 step) always go through macro flow
-    // Single-step plans go through macro flow only when macro callbacks are available
-    if (plan && (plan.steps.length > 1 || (plan.steps.length === 1 && input.macroPlanCallbacks))) {
-      const macroResult = await handleMacroPlan(plan, input, workbookContext)
-      if (macroResult) {
-        return macroResult
-      }
-    }
-  }
-
-  const deterministic = runDeterministicSkills(
-    target,
-    input.workbook.name,
-    input.message,
-    mode,
-    intent,
-    input.priorInsights,
-  )
-  const deterministicText = deterministic ? toolResultToMessage(deterministic, { includeSuggestionsInBody: false }) : ''
-
-  // Deterministic queries that fully answer (or precisely clarify) the request
-  // should not be diluted by a second, potentially contradictory LLM answer.
-  if (deterministic?.toolUsed === 'outlier-explain' || deterministic?.toolUsed === 'comparison') {
-    recordTelemetry('deterministicResponses', deterministic.toolUsed)
-    if (input.onToken) input.onToken(deterministicText)
-    return deterministic
-  }
-
-  // Only dump the full insights block on first-pass explain/advise, not every follow-up
-  const isFollowUp = Boolean(input.priorInsights)
-  const insightsBlock = isLlmOnlyMode(mode) && !isFollowUp
-    ? formatInsights(target.context.insights)
-    : ''
-
-  // Run the auditor for context (only on explain/advise modes where it's useful)
-  let auditBlock = ''
-  if (isLlmOnlyMode(mode) || mode === 'advise') {
-    try {
-      const auditResult = runAudit(input.sheet, input.getComputedValue)
-      auditBlock = formatAuditForContext(auditResult)
-    } catch {
-      // Audit failure is non-fatal — continue without it
-    }
-  }
-
-  if (deterministic && !isLlmOnlyMode(mode) && deterministic.actions?.length) {
-    recordTelemetry('deterministicResponses', deterministic.toolUsed ?? 'deterministic-action')
-    return deterministic
-  }
-
-  if (deterministicText && input.onToken) {
-    input.onToken(`${deterministicText}\n\n`)
-  }
-
-  const serverResult = await chatWithAgentServerStream(
-    input.message,
-    {
-      ...target.context,
-      userPreferences: input.userPreferences,
-      deterministicSummary: buildDeterministicSummary(
-        insightsBlock,
-        deterministicText,
-        auditBlock,
-        input.priorInsights,
-        target.context.insights,
-      ),
-    },
-    input.history ?? [],
-    input.onToken ?? (() => {}),
-  )
-
-  if (serverResult) {
-    // ─── Deduplicate deterministic + LLM responses ────────────────────────────
-    // When deterministic text already answered the question well, skip the LLM
-    // text if it's just a fallback or a weaker restatement of the same numbers.
-    const llmText = serverResult.source === 'fallback'
-      && (deterministicText.trim() || insightsBlock.trim())
-      ? ''
-      : serverResult.message
-
-    // Skip LLM text if it substantially overlaps with deterministic content
-    // (the model tends to rephrase the same numbers we already computed)
-    const shouldSkipLlm = deterministicText.trim().length > 100
-      && llmText.trim().length > 0
-      && llmText.trim().length < deterministicText.trim().length * 0.8
-      && serverResult.source !== 'llm'
-    const finalLlmText = shouldSkipLlm ? '' : llmText
-
-    const combined = mergeToolResultContent([
-      deterministicText,
-      insightsBlock && !deterministicText.includes('Sheet insights') ? insightsBlock : '',
-      finalLlmText,
-    ].filter(Boolean))
-
-    if (deterministicText.trim().length > 0 && finalLlmText.trim().length > 0) {
-      recordTelemetry('hybridResponses', deterministic?.toolUsed ?? 'hybrid')
-    } else if (finalLlmText.trim().length > 0) {
-      recordTelemetry('llmResponses', serverResult.source)
-    } else {
-      recordTelemetry('deterministicResponses', deterministic?.toolUsed ?? 'local-insights')
-    }
-
-    // ─── Contextual suggestions based on live sheet state ─────────────────────
-    const contextualSuggestions = getContextualSuggestions({
-      insights: target.context.insights,
-      profile: target.context.profile,
-      lastUserMessage: input.message,
-      hasMultipleSheets: input.workbook.sheets.length > 1,
-      sheetNames: input.workbook.sheets.map((s) => s.name),
-    })
-
-    return {
-      success: true,
-      message: combined || 'I looked at your sheet but didn\'t find enough to go on. Try selecting a range or asking a more specific question.',
-      toolUsed: deterministic?.toolUsed ?? (finalLlmText ? 'llm' : 'insights'),
-      reasoning: serverResult.reasoning,
-      providerMeta: serverResult.meta,
-      suggestions: contextualSuggestions.length > 0
-        ? contextualSuggestions
-        : (deterministic?.suggestions ?? serverResult.suggestions),
-      actions: serverResult.actions.map((a) => ({
-        tool: a.tool,
-        params: a.params,
-        description: a.description,
-      })),
-    }
-  }
-
+/** Build a fallback response when the LLM server is unreachable. */
+function buildFallbackResponse(
+  deterministic: ToolResult | null,
+  insightsBlock: string,
+  target: AnalysisTarget,
+  input: ProcessMessageInput,
+): ToolResult {
   if (deterministic) {
     recordTelemetry('deterministicResponses', deterministic.toolUsed ?? 'deterministic')
-    // Add contextual suggestions to deterministic responses too
-    const contextualSuggestions = getContextualSuggestions({
-      insights: target.context.insights,
-      profile: target.context.profile,
-      lastUserMessage: input.message,
-      hasMultipleSheets: input.workbook.sheets.length > 1,
-      sheetNames: input.workbook.sheets.map((s) => s.name),
-    })
-    return {
-      ...deterministic,
-      suggestions: contextualSuggestions.length > 0
-        ? contextualSuggestions
-        : deterministic.suggestions,
-    }
+    const suggestions = resolveContextualSuggestions(target, input, deterministic.suggestions)
+    return { ...deterministic, suggestions }
   }
 
-  // Local insights still useful when the AI server is down — no scary "AI broken" footer
   if (insightsBlock) {
     recordTelemetry('fallbackResponses', 'insights-without-llm')
-    const contextualSuggestions = getContextualSuggestions({
-      insights: target.context.insights,
-      profile: target.context.profile,
-      lastUserMessage: input.message,
-      hasMultipleSheets: input.workbook.sheets.length > 1,
-      sheetNames: input.workbook.sheets.map((s) => s.name),
-    })
-    return {
-      success: true,
-      message: insightsBlock,
-      toolUsed: 'insights',
-      suggestions: contextualSuggestions.length > 0
-        ? contextualSuggestions
-        : ['What makes those values unusual?', 'Analyze my data for patterns'],
-    }
+    const suggestions = resolveContextualSuggestions(target, input, ['What makes those values unusual?', 'Analyze my data for patterns'])
+    return { success: true, message: insightsBlock, toolUsed: 'insights', suggestions }
   }
 
   recordTelemetry('fallbackResponses', 'ai-server-unavailable')
@@ -741,4 +738,90 @@ export async function processMessage(input: ProcessMessageInput): Promise<ToolRe
     toolUsed: 'fallback',
     suggestions: ['Try your question again', 'Explain this spreadsheet I just loaded'],
   }
+}
+
+/** Compute contextual suggestions once, reused across all response paths. */
+function resolveContextualSuggestions(
+  target: AnalysisTarget,
+  input: ProcessMessageInput,
+  fallbackSuggestions?: string[],
+): string[] {
+  const contextual = getContextualSuggestions({
+    insights: target.context.insights,
+    profile: target.context.profile,
+    lastUserMessage: input.message,
+    hasMultipleSheets: input.workbook.sheets.length > 1,
+    sheetNames: input.workbook.sheets.map((s) => s.name),
+  })
+  return contextual.length > 0 ? contextual : (fallbackSuggestions ?? [])
+}
+
+// ─── Main Entry Point ───────────────────────────────────────────────────────
+
+/**
+ * @deprecated Use the PipelineRouter with split stages (DeterministicDispatcher + LLMGateway)
+ * instead of calling processMessage() directly. This function is retained only as the
+ * implementation behind `brainDispatcher.ts` until chatService.ts adopts the split stages.
+ */
+export async function processMessage(input: ProcessMessageInput): Promise<ToolResult> {
+  const mode = classifyMode(input.message)
+  const intent = parseUserIntent(input.message)
+  const target = resolveAnalysisTarget(input)
+
+  // 1. Try macro dispatch
+  const macroResult = await tryMacroDispatch(input)
+  if (macroResult) return macroResult
+
+  // 2. Run deterministic skills
+  const deterministic = runDeterministicSkills(target, input.workbook.name, input.message, mode, intent, input.priorInsights)
+  const deterministicText = deterministic ? toolResultToMessage(deterministic, { includeSuggestionsInBody: false }) : ''
+
+  // 3. Short-circuit for fully-answered deterministic queries
+  if (deterministic?.toolUsed === 'outlier-explain' || deterministic?.toolUsed === 'comparison') {
+    recordTelemetry('deterministicResponses', deterministic.toolUsed)
+    if (input.onToken) input.onToken(deterministicText)
+    return deterministic
+  }
+
+  // 4. Gather context for LLM
+  const isFollowUp = Boolean(input.priorInsights)
+  const insightsBlock = isLlmOnlyMode(mode) && !isFollowUp ? formatInsights(target.context.insights) : ''
+
+  let auditBlock = ''
+  if (isLlmOnlyMode(mode) || mode === 'advise') {
+    try {
+      const auditResult = runAudit(input.sheet, input.getComputedValue)
+      auditBlock = formatAuditForContext(auditResult)
+    } catch { /* non-fatal */ }
+  }
+
+  // 5. Short-circuit for actionable deterministic results
+  if (deterministic && !isLlmOnlyMode(mode) && deterministic.actions?.length) {
+    recordTelemetry('deterministicResponses', deterministic.toolUsed ?? 'deterministic-action')
+    return deterministic
+  }
+
+  // 6. Stream deterministic text if available
+  if (deterministicText && input.onToken) {
+    input.onToken(`${deterministicText}\n\n`)
+  }
+
+  // 7. Call LLM
+  const serverResult = await chatWithAgentServerStream(
+    input.message,
+    {
+      ...target.context,
+      userPreferences: input.userPreferences,
+      deterministicSummary: buildDeterministicSummary(insightsBlock, deterministicText, auditBlock, input.priorInsights, target.context.insights),
+    },
+    input.history ?? [],
+    input.onToken ?? (() => {}),
+  )
+
+  // 8. Build final response
+  if (serverResult) {
+    return buildFinalResponse(deterministicText, insightsBlock, serverResult, deterministic, target, input)
+  }
+
+  return buildFallbackResponse(deterministic, insightsBlock, target, input)
 }
