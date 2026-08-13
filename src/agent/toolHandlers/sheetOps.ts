@@ -1,7 +1,6 @@
 /**
  * Sheet-level tool handlers: clear_sheet, rename_sheet, sort_sheet, multi_sort
  */
-import type { SheetData } from '@/types'
 import { computeSortedCellUpdates, computeMultiSortedCellUpdates } from '@/lib/sheetSort'
 import type { ToolHandler, BulkUpdates } from './types'
 import { applyBulk, requireColumn, resolveColumnIndex } from './types'

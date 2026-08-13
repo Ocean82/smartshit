@@ -100,7 +100,7 @@ function findExtreme(
   direction: 'max' | 'min',
 ) {
   const tool = direction === 'max' ? 'find_max' : 'find_min'
-  const col = requireColumn(params.column, sheet, ctx as any, tool)
+  const col = requireColumn(params.column, sheet, ctx, tool)
   if ('error' in col) return col.error
 
   const colIdx = col.index

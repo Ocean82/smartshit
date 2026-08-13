@@ -4,7 +4,7 @@
  */
 
 import type { Selection, SheetData, WorkbookData } from '@/types'
-import type { AttachedFilePreview, ToolResult } from '@/ai/types'
+import type { AttachedFilePreview } from '@/ai/types'
 import type { SheetInsights } from '@/ai/sheetInsights'
 import type { UserIntent } from '@shared/intentTypes'
 import type { AgentMode } from '@shared/mode'

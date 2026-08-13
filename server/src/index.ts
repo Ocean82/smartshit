@@ -31,7 +31,6 @@ import {
   callProviderStream,
   getModelName,
 } from './providers.js'
-import { callProviderStructured, StructuredOutputError } from './structuredOutput.js'
 
 import { checkUsage, recordUsage, getUsageStats } from './usage.js'
 import { decideAiAccess, shouldRecordServerUsage } from './aiAccess.js'

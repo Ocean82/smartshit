@@ -489,9 +489,8 @@ async function executeMultiStepPlan(
 ): Promise<ToolResult | null> {
   let currentPlan = plan
   const startTime = Date.now()
-  let done = false
 
-  while (!done) {
+  while (true) {
     const planDisplay = formatMacroPlanForDisplay(currentPlan)
 
     // Warn if presentation exceeds deadline (Req 6.1)
@@ -520,7 +519,6 @@ async function executeMultiStepPlan(
     // Confirmed — execute
     const result = await executeConfirmedPlan(currentPlan, undoManager, callbacks)
     if (result === 'retry') continue
-    done = true
     return result
   }
 

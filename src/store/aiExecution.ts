@@ -4,7 +4,7 @@
  */
 
 import type { ChatMessage, AgentAction, Selection } from '@/types'
-import { refToCell, cellToRef } from '@/engine/spreadsheet'
+import { refToCell } from '@/engine/spreadsheet'
 import { executeTool, executeToolAsync, type ExecutionContext, type ExecutionResult } from '@/agent'
 import { executeTemplateTool, resolveGalleryTemplate } from '@/templates'
 import { MUTATION_TOOL_NAMES } from '@shared/toolRegistry'

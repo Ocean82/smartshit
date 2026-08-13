@@ -1,13 +1,11 @@
 /**
  * Cell-level tool handlers: set_cell, set_range, add_row, delete_row
  */
-import type { SheetData } from '@/types'
 import { refToCell, cellToRef } from '@/engine/spreadsheet'
 import { findLastDataRow } from '@/lib/sheetSort'
 import { resolveDeleteRow } from '@/lib/deleteRowPreview'
-import type { ToolHandler, ToolParams, BulkUpdates } from './types'
+import type { ToolHandler, BulkUpdates } from './types'
 import { applyBulk, requireCellRef } from './types'
-import type { ExecutionContext, ExecutionResult } from '../executor'
 
 export const handleSetCell: ToolHandler = (params, ctx, _sheet) => {
   const cell = requireCellRef(params.cell, 'set_cell')

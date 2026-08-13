@@ -18,8 +18,6 @@ import type {
   SortConfig,
   SortRule,
   DataValidation,
-  Toast,
-  ConfirmDialogState,
 } from '@/types'
 import type { SpreadsheetEngine } from '@/engine/spreadsheet'
 import type { AttachedFilePreview } from '@/ai/types'

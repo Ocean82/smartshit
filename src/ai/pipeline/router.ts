@@ -55,7 +55,7 @@ export function createPipelineRouter(stages: PipelineStage[]): PipelineRouterIns
           lastTimings = timings
 
           if (process.env.NODE_ENV === 'development') {
-            console.debug(
+            console.info(
               `[pipeline] "${stage.name}" claimed in ${durationMs}ms`,
               timings.map((t) => `${t.stageName}: ${t.durationMs}ms${t.claimed ? ' ✓' : ''}`),
             )

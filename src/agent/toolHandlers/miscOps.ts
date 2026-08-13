@@ -2,7 +2,7 @@
  * Miscellaneous tool handlers: filter, find_and_replace, export_data,
  * add_note, remove_note, set_checkbox
  */
-import type { SheetData, FilterConfig } from '@/types'
+import type { FilterConfig } from '@/types'
 import { refToCell, letterToCol } from '@/engine/spreadsheet'
 import { escapeRegex } from '@/lib'
 import { getCellNotesService } from '@/lib/cellNotes'

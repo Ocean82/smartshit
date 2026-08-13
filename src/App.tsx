@@ -67,7 +67,6 @@ function App() {
     setShowConditionalFormatDialog,
     setActivePanel,
     showToolbar,
-    toggleToolbar,
   } = useStore(useShallow((s) => ({
     workbook: s.workbook,
     engine: s.engine,
@@ -81,7 +80,6 @@ function App() {
     setShowConditionalFormatDialog: s.setShowConditionalFormatDialog,
     setActivePanel: s.setActivePanel,
     showToolbar: s.showToolbar,
-    toggleToolbar: s.toggleToolbar,
   })))
   const [isLoaded, setIsLoaded] = useState(false)
   const [showTemplates, setShowTemplates] = useState(false)

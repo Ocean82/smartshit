@@ -1,11 +1,9 @@
 /**
  * Formatting tool handlers: format_cells, format_as_table
  */
-import type { SheetData } from '@/types'
 import { applyFormatCells } from '@/lib/formatCellsTool'
 import { formatAsTable } from '@/lib/formatAsTable'
 import type { ToolHandler } from './types'
-import type { ExecutionContext } from '../executor'
 
 export const handleFormatCells: ToolHandler = (params, ctx, _sheet) => {
   return applyFormatCells(params, ctx)
