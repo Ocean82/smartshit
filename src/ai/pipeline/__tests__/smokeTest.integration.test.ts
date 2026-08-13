@@ -15,7 +15,6 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import type { PipelineContext } from '../types'
 
 // ─── Mock external dependencies ─────────────────────────────────────────────
 
@@ -178,22 +177,7 @@ import { createLLMGatewayStage } from '../stages/llmGateway'
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-function makeContext(message: string): PipelineContext {
-  return {
-    message,
-    workbook: { sheets: [{ id: 's1', name: 'Sheet1' }], name: 'TestWorkbook' } as unknown as PipelineContext['workbook'],
-    sheet: { cells: {} } as unknown as PipelineContext['sheet'],
-    selection: null,
-    getComputedValue: () => '',
-  }
-}
-
-function makeDeps() {
-  return {
-    buildExecContext: vi.fn().mockReturnValue({}),
-    pushHistory: vi.fn(),
-  }
-}
+import { defaultIntent, makeContext, makeDeps } from './helpers'
 
 function buildPipeline() {
   const deps = makeDeps()
@@ -205,18 +189,6 @@ function buildPipeline() {
     createLLMGatewayStage(),
   ])
   return { router, deps }
-}
-
-function defaultIntent(rawQuery = ''): ReturnType<typeof parseUserIntent> {
-  return {
-    intentType: 'unknown',
-    targetColumns: [],
-    filters: {},
-    parameters: {},
-    rawQuery,
-    confidence: 0.3,
-    routingSource: 'regex',
-  }
 }
 
 // ─── Smoke Tests ────────────────────────────────────────────────────────────

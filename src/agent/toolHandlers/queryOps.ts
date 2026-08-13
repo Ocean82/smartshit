@@ -100,7 +100,8 @@ function findExtreme(
   direction: 'max' | 'min',
 ) {
   const tool = direction === 'max' ? 'find_max' : 'find_min'
-  const col = requireColumn(params.column, sheet, ctx, tool)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- ctx is narrowed here but requireColumn only uses getComputedValue
+  const col = requireColumn(params.column, sheet, ctx as any, tool)
   if ('error' in col) return col.error
 
   const colIdx = col.index

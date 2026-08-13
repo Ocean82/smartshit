@@ -15,7 +15,7 @@
  * without spinning up the full Zustand store.
  */
 
-import type { ChatMessage, SheetData, Selection, WorkbookData } from '@/types'
+import type { ChatMessage, ProviderMeta, SheetData, Selection, WorkbookData } from '@/types'
 import type { ExecutionContext } from '@/agent/executor'
 import { toolResultToChatMessage } from '@/ai/responseBuilder'
 import { buildSpreadsheetContext } from '@/ai/buildContext'
@@ -192,6 +192,19 @@ interface ConversionContext {
 }
 
 /**
+/**
+ * Runtime shape check for providerMeta to avoid rendering malformed values.
+ */
+function isProviderMeta(value: unknown): value is ProviderMeta {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as Record<string, unknown>).provider === 'string' &&
+    typeof (value as Record<string, unknown>).model === 'string'
+  );
+}
+
+/**
  * Convert a pipeline StageResult into a ChatMessage for display.
  *
  * Active stages that emit ToolResult-compatible output
@@ -210,7 +223,9 @@ function stageResultToChatMessage(
       toolUsed: result.metadata?.toolUsed as string | undefined,
       reasoning: result.metadata?.reasoning as string | undefined,
       suggestions: result.suggestions,
-      providerMeta: result.metadata?.providerMeta as { provider: string; model: string } | undefined,
+      providerMeta: isProviderMeta(result.metadata?.providerMeta)
+        ? result.metadata!.providerMeta as ProviderMeta
+        : undefined,
       actions: result.actions?.map((a) => ({
         tool: a.tool,
         params: a.params,

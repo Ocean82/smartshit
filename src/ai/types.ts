@@ -1,4 +1,4 @@
-import type { ChartConfig } from '@/types'
+import type { ChartConfig, ProviderMeta } from '@/types'
 
 export type { IntentType, UserIntent } from '@shared/intentTypes'
 
@@ -49,7 +49,7 @@ export interface ToolResult {
   chartConfig?: ChartConfig
   toolUsed?: string
   reasoning?: string
-  providerMeta?: { provider: string; model: string }
+  providerMeta?: ProviderMeta
   actions?: Array<{
     tool: string
     params: Record<string, unknown>

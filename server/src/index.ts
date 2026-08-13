@@ -262,7 +262,7 @@ async function runLlmChat(params: {
       }
       providerMeta = {
         provider: byok.provider?.trim() || byokHost || 'byok',
-        model: byok.model?.trim() || byokHost,
+        model: byok.model?.trim() || 'unknown-model',
       }
       byokSucceeded = true
     } catch (err) {

@@ -41,16 +41,32 @@ export function parseSseEventPayload(jsonStr: string): SseEventPayload | null {
   }
 }
 
+/** Allowed values for ServerChatResponse.source */
+const VALID_SOURCES: ReadonlySet<ServerChatResponse['source']> = new Set(['llm', 'fallback', 'template'])
+
+/** Runtime check that meta has the expected shape. */
+function isValidProviderMeta(value: unknown): value is ProviderMeta {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as Record<string, unknown>).provider === 'string' &&
+    typeof (value as Record<string, unknown>).model === 'string'
+  )
+}
+
 /** Map a pre-parsed SSE payload into a ServerChatResponse when type=complete. */
 export function parseCompleteSseEvent(event: SseEventPayload): ServerChatResponse | null {
   if (event.type !== 'complete' || typeof event.message !== 'string') return null
+  const source = VALID_SOURCES.has(event.source as ServerChatResponse['source'])
+    ? (event.source as ServerChatResponse['source'])
+    : 'llm'
   return {
     message: event.message,
     actions: Array.isArray(event.actions) ? event.actions : [],
-    source: (event.source as ServerChatResponse['source']) ?? 'llm',
+    source,
     reasoning: event.reasoning,
     suggestions: event.suggestions,
-    meta: event.meta,
+    meta: isValidProviderMeta(event.meta) ? event.meta : undefined,
   }
 }
 

@@ -257,8 +257,7 @@ export class SessionPool {
     this.pendingLoads.set(modelName, loadPromise);
 
     try {
-      const session = await loadPromise;
-      return session;
+      return await loadPromise;
     } finally {
       this.pendingLoads.delete(modelName);
     }
@@ -408,7 +407,7 @@ export class SessionPool {
 
   /**
    * Resolve a model name to a file path.
-   * Default prefers nested models/{name}/model.onnx, then flat models/{name}.onnx.
+   * Default is a flat path: models/{name}.onnx (no fs checks in this layer).
    * Prefer injecting resolveModelPath at mount time (see index.ts + modelPaths.ts).
    */
   private resolveModelPath(modelName: string): string {
