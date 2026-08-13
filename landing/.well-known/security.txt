@@ -1,0 +1,7 @@
+# Security Policy for smartsht
+# https://securitytxt.org/
+
+Contact: mailto:support@smartsht.com
+Preferred-Languages: en
+Canonical: https://smartsht.com/.well-known/security.txt
+Expires: 2027-08-12T00:00:00.000Z

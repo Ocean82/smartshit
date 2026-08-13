@@ -1,10 +1,21 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
   <url>
     <loc>https://smartsht.com/</loc>
-    <lastmod>2026-08-10</lastmod>
+    <lastmod>2026-08-12</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
+    <image:image>
+      <image:loc>https://smartsht.com/og-image.png</image:loc>
+      <image:title>smartsht AI spreadsheet interface</image:title>
+      <image:caption>AI-powered spreadsheet with natural language chat panel showing budget creation</image:caption>
+    </image:image>
+    <image:image>
+      <image:loc>https://smartsht.com/screenshot.png</image:loc>
+      <image:title>smartsht spreadsheet with formulas and conditional formatting</image:title>
+      <image:caption>Full spreadsheet view with AI chat panel open, monthly budget with formulas</image:caption>
+    </image:image>
   </url>
   <url>
     <loc>https://smartsht.com/terms</loc>

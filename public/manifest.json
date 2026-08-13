@@ -1,13 +1,16 @@
 {
+  "id": "/",
   "name": "smartsh!t",
   "short_name": "smartsht",
   "description": "AI-powered spreadsheet for budgets and expenses. Chat instead of formulas.",
+  "lang": "en-US",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "background_color": "#0f172a",
   "theme_color": "#1e40af",
   "orientation": "any",
+  "prefer_related_applications": false,
   "categories": ["finance", "productivity", "utilities"],
   "icons": [
     {
@@ -27,6 +30,15 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "og-image.png",
+      "sizes": "1200x630",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "smartsht AI spreadsheet with chat panel and budget view"
     }
   ]
 }

@@ -3,6 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#1e40af" />
+  <meta name="color-scheme" content="light" />
+  <meta name="author" content="smartsht" />
+  <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+  <meta name="application-name" content="smartsht" />
+  <meta name="format-detection" content="telephone=no" />
   <title>smartsh!t — Talk to Your Spreadsheet</title>
   <meta name="description" content="AI-powered spreadsheet that understands plain English. Build budgets, track expenses, generate invoices, and catch formula errors — no spreadsheet experience needed. Free AI budget planner, expense tracker, and invoice generator." />
   <meta name="keywords" content="AI spreadsheet, AI budget planner, spreadsheet without formulas, talk to spreadsheet, AI expense tracker, natural language spreadsheet, smart spreadsheet assistant, free budget template, monthly budget calculator, personal finance spreadsheet, invoice generator free, expense tracking app, Excel alternative, Google Sheets alternative, spreadsheet for beginners, AI formula helper, spreadsheet auditor, formula error checker, no-code spreadsheet, plain English spreadsheet, budget app, financial planning tool, AI accounting, self-hosted spreadsheet, privacy-first spreadsheet, BYOK AI, local LLM spreadsheet" />
@@ -12,8 +18,10 @@
   <meta property="og:url" content="https://smartsht.com" />
   <meta property="og:image" content="https://smartsht.com/og-image.png" />
   <meta property="og:image:width" content="1200" />
-  <meta property="og:image:height" content="600" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="smartsht AI spreadsheet interface showing natural language budget creation with chat panel" />
   <meta property="og:site_name" content="smartsht" />
+  <meta property="og:locale" content="en_US" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
@@ -23,7 +31,10 @@
   <meta name="twitter:title" content="smartsh!t — Talk to Your Spreadsheet" />
   <meta name="twitter:description" content="AI spreadsheet for everyday people. Build budgets in plain English. No formulas required." />
   <meta name="twitter:image" content="https://smartsht.com/og-image.png" />
+  <meta name="twitter:image:alt" content="smartsht AI spreadsheet interface showing natural language budget creation" />
   <link rel="canonical" href="https://smartsht.com/" />
+  <link rel="alternate" hreflang="en" href="https://smartsht.com/" />
+  <link rel="alternate" hreflang="x-default" href="https://smartsht.com/" />
 
   <!-- Structured Data (@graph) for Google + AI search -->
   <script type="application/ld+json">
@@ -62,7 +73,11 @@
         "url": "https://smartsht.com/",
         "description": "AI-powered spreadsheet that understands plain English. Build budgets, track expenses, and catch formula errors — no formulas required.",
         "publisher": { "@id": "https://smartsht.com/#organization" },
-        "inLanguage": "en-US"
+        "inLanguage": "en-US",
+        "speakable": {
+          "@type": "SpeakableSpecification",
+          "cssSelector": [".hero h1", ".hero-sub", ".demo-header h2"]
+        }
       },
       {
         "@type": "SoftwareApplication",
@@ -168,6 +183,13 @@
               "text": "The auditor checks for issues like skipped cells in SUM ranges, inconsistent formula patterns, statistical outliers, and hardcoded constants — then can propose fixes with a preview before anything changes."
             }
           }
+        ]
+      },
+      {
+        "@type": "BreadcrumbList",
+        "@id": "https://smartsht.com/#breadcrumb",
+        "itemListElement": [
+          { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://smartsht.com/" }
         ]
       }
     ]
@@ -940,10 +962,10 @@
   </section>
 
   <!-- Chat demo -->
-  <section class="demo">
+  <section class="demo" aria-labelledby="demo-heading">
     <div class="container">
       <div class="demo-header">
-        <h2>Like texting a spreadsheet expert</h2>
+        <h2 id="demo-heading">Like texting a spreadsheet expert</h2>
         <p>Type what you want. Get a real spreadsheet back.</p>
       </div>
 
@@ -993,10 +1015,10 @@
   </section>
 
   <!-- Power features grid -->
-  <section style="padding:80px 0;background:var(--surface-tint);">
+  <section style="padding:80px 0;background:var(--surface-tint);" aria-labelledby="power-features-heading">
     <div class="container">
       <div class="demo-header">
-        <h2>A full spreadsheet, not just a chatbot</h2>
+        <h2 id="power-features-heading">A full spreadsheet, not just a chatbot</h2>
         <p>Everything you'd expect from a desktop spreadsheet — plus AI that actually understands your data.</p>
       </div>
 
@@ -1046,10 +1068,10 @@
   </section>
 
   <!-- Value props -->
-  <section class="values" id="features">
+  <section class="values" id="features" aria-labelledby="features-heading">
     <div class="container">
       <div class="values-header">
-        <h2>Built for people who hate spreadsheets</h2>
+        <h2 id="features-heading">Built for people who hate spreadsheets</h2>
         <p>Describe what you want and let the AI handle the rest.</p>
       </div>
 
@@ -1091,10 +1113,10 @@
   </section>
 
   <!-- Pricing -->
-  <section class="pricing" id="pricing">
+  <section class="pricing" id="pricing" aria-labelledby="pricing-heading">
     <div class="container">
       <div class="pricing-header">
-        <h2>Simple pricing</h2>
+        <h2 id="pricing-heading">Simple pricing</h2>
         <p>Free to start, upgrade when you need more AI.</p>
       </div>
 
@@ -1133,31 +1155,31 @@
   </section>
 
   <!-- Comparison -->
-  <section style="padding:100px 0; background: oklch(0.12 0.015 250); color: white;">
+  <section style="padding:100px 0; background: oklch(0.12 0.015 250); color: white;" aria-labelledby="comparison-heading">
     <div class="container">
       <div class="demo-header">
-        <h2 style="color:white;">How smartsh!t compares</h2>
+        <h2 id="comparison-heading" style="color:white;">How smartsh!t compares</h2>
         <p style="color: oklch(0.7 0.01 250);">Same power, less friction, lower cost.</p>
       </div>
 
       <div style="overflow-x:auto;margin:0 auto;max-width:800px; background: oklch(1 0 0 / 0.03); padding: 32px; border-radius: var(--radius-lg); border: 1px solid oklch(1 0 0 / 0.1);">
-        <table style="width:100%;border-collapse:collapse;font-size:0.9rem;">
+        <table style="width:100%;border-collapse:collapse;font-size:0.9rem;" aria-label="Feature comparison: smartsht vs Excel and Google Sheets">
           <thead>
             <tr style="border-bottom:2px solid oklch(1 0 0 / 0.2);">
-              <th style="text-align:left;padding:12px;font-family:var(--font-display);font-weight:700;color:white;">Feature</th>
-              <th style="text-align:center;padding:12px;font-weight:700;color:var(--accent);">smartsh!t</th>
-              <th style="text-align:center;padding:12px;font-weight:600;color:oklch(0.7 0.01 250);">Excel + Copilot</th>
-              <th style="text-align:center;padding:12px;font-weight:600;color:oklch(0.7 0.01 250);">Google Sheets + Gemini</th>
+              <th scope="col" style="text-align:left;padding:12px;font-family:var(--font-display);font-weight:700;color:white;">Feature</th>
+              <th scope="col" style="text-align:center;padding:12px;font-weight:700;color:var(--accent);">smartsh!t</th>
+              <th scope="col" style="text-align:center;padding:12px;font-weight:600;color:oklch(0.7 0.01 250);">Excel + Copilot</th>
+              <th scope="col" style="text-align:center;padding:12px;font-weight:600;color:oklch(0.7 0.01 250);">Google Sheets + Gemini</th>
             </tr>
           </thead>
           <tbody>
-            <tr style="border-bottom:1px solid oklch(1 0 0 / 0.1);"><td style="padding:12px;color:oklch(0.9 0.01 250);">Starting price</td><td style="text-align:center;padding:12px;font-weight:600;color:var(--accent);">$0</td><td style="text-align:center;padding:12px;color:oklch(0.7 0.01 250);">$20–30/mo</td><td style="text-align:center;padding:12px;color:oklch(0.7 0.01 250);">$20–30/mo</td></tr>
-            <tr style="border-bottom:1px solid oklch(1 0 0 / 0.1);"><td style="padding:12px;color:oklch(0.9 0.01 250);">Formula error detection</td><td style="text-align:center;padding:12px;color:white;">✅ Automatic</td><td style="text-align:center;padding:12px;color:oklch(0.5 0.01 250);">Manual only</td><td style="text-align:center;padding:12px;color:oklch(0.5 0.01 250);">❌</td></tr>
-            <tr style="border-bottom:1px solid oklch(1 0 0 / 0.1);"><td style="padding:12px;color:oklch(0.9 0.01 250);">Preview before changes</td><td style="text-align:center;padding:12px;color:white;">✅ Always</td><td style="text-align:center;padding:12px;color:oklch(0.5 0.01 250);">Sometimes</td><td style="text-align:center;padding:12px;color:oklch(0.5 0.01 250);">❌</td></tr>
-            <tr style="border-bottom:1px solid oklch(1 0 0 / 0.1);"><td style="padding:12px;color:oklch(0.9 0.01 250);">Data stays local</td><td style="text-align:center;padding:12px;color:white;">✅ Default</td><td style="text-align:center;padding:12px;color:oklch(0.5 0.01 250);">❌ Cloud required</td><td style="text-align:center;padding:12px;color:oklch(0.5 0.01 250);">❌ Cloud required</td></tr>
-            <tr style="border-bottom:1px solid oklch(1 0 0 / 0.1);"><td style="padding:12px;color:oklch(0.9 0.01 250);">Fast local operations</td><td style="text-align:center;padding:12px;color:white;">✅ Instant sorting, formatting, templates</td><td style="text-align:center;padding:12px;color:oklch(0.5 0.01 250);">❌ Always remote</td><td style="text-align:center;padding:12px;color:oklch(0.5 0.01 250);">❌ Always remote</td></tr>
-            <tr style="border-bottom:1px solid oklch(1 0 0 / 0.1);"><td style="padding:12px;color:oklch(0.9 0.01 250);">Bring Your Own Key</td><td style="text-align:center;padding:12px;color:white;">✅</td><td style="text-align:center;padding:12px;color:oklch(0.5 0.01 250);">❌</td><td style="text-align:center;padding:12px;color:oklch(0.5 0.01 250);">❌</td></tr>
-            <tr><td style="padding:12px;color:oklch(0.9 0.01 250);">No install needed</td><td style="text-align:center;padding:12px;color:white;">✅ Browser-based</td><td style="text-align:center;padding:12px;color:oklch(0.5 0.01 250);">Desktop app</td><td style="text-align:center;padding:12px;color:white;">✅</td></tr>
+            <tr style="border-bottom:1px solid oklch(1 0 0 / 0.1);"><th scope="row" style="padding:12px;color:oklch(0.9 0.01 250);font-weight:400;text-align:left;">Starting price</th><td style="text-align:center;padding:12px;font-weight:600;color:var(--accent);">$0</td><td style="text-align:center;padding:12px;color:oklch(0.7 0.01 250);">$20–30/mo</td><td style="text-align:center;padding:12px;color:oklch(0.7 0.01 250);">$20–30/mo</td></tr>
+            <tr style="border-bottom:1px solid oklch(1 0 0 / 0.1);"><th scope="row" style="padding:12px;color:oklch(0.9 0.01 250);font-weight:400;text-align:left;">Formula error detection</th><td style="text-align:center;padding:12px;color:white;">✅ Automatic</td><td style="text-align:center;padding:12px;color:oklch(0.5 0.01 250);">Manual only</td><td style="text-align:center;padding:12px;color:oklch(0.5 0.01 250);">❌</td></tr>
+            <tr style="border-bottom:1px solid oklch(1 0 0 / 0.1);"><th scope="row" style="padding:12px;color:oklch(0.9 0.01 250);font-weight:400;text-align:left;">Preview before changes</th><td style="text-align:center;padding:12px;color:white;">✅ Always</td><td style="text-align:center;padding:12px;color:oklch(0.5 0.01 250);">Sometimes</td><td style="text-align:center;padding:12px;color:oklch(0.5 0.01 250);">❌</td></tr>
+            <tr style="border-bottom:1px solid oklch(1 0 0 / 0.1);"><th scope="row" style="padding:12px;color:oklch(0.9 0.01 250);font-weight:400;text-align:left;">Data stays local</th><td style="text-align:center;padding:12px;color:white;">✅ Default</td><td style="text-align:center;padding:12px;color:oklch(0.5 0.01 250);">❌ Cloud required</td><td style="text-align:center;padding:12px;color:oklch(0.5 0.01 250);">❌ Cloud required</td></tr>
+            <tr style="border-bottom:1px solid oklch(1 0 0 / 0.1);"><th scope="row" style="padding:12px;color:oklch(0.9 0.01 250);font-weight:400;text-align:left;">Fast local operations</th><td style="text-align:center;padding:12px;color:white;">✅ Instant sorting, formatting, templates</td><td style="text-align:center;padding:12px;color:oklch(0.5 0.01 250);">❌ Always remote</td><td style="text-align:center;padding:12px;color:oklch(0.5 0.01 250);">❌ Always remote</td></tr>
+            <tr style="border-bottom:1px solid oklch(1 0 0 / 0.1);"><th scope="row" style="padding:12px;color:oklch(0.9 0.01 250);font-weight:400;text-align:left;">Bring Your Own Key</th><td style="text-align:center;padding:12px;color:white;">✅</td><td style="text-align:center;padding:12px;color:oklch(0.5 0.01 250);">❌</td><td style="text-align:center;padding:12px;color:oklch(0.5 0.01 250);">❌</td></tr>
+            <tr><th scope="row" style="padding:12px;color:oklch(0.9 0.01 250);font-weight:400;text-align:left;">No install needed</th><td style="text-align:center;padding:12px;color:white;">✅ Browser-based</td><td style="text-align:center;padding:12px;color:oklch(0.5 0.01 250);">Desktop app</td><td style="text-align:center;padding:12px;color:white;">✅</td></tr>
           </tbody>
         </table>
       </div>
