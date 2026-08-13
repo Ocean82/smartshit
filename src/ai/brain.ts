@@ -297,31 +297,33 @@ const DETERMINISTIC_HANDLERS: DeterministicHandler[] = [
  * `src/ai/pipeline/stages/deterministicDispatcher.ts` instead.
  * @internal
  */
-function runDeterministicSkills(
-  target: AnalysisTarget,
-  workbookName: string,
-  message: string,
-  mode: ReturnType<typeof classifyMode>,
-  intent: ReturnType<typeof parseUserIntent>,
-  priorInsights?: SheetInsights | null,
-): ToolResult | null {
-  const profile = buildSheetProfile(target.sheet, target.getComputedValue)
-  const insights = target.context.insights
-
-  const ctx: DeterministicContext = {
-    target, workbookName, message,
-    lower: message.toLowerCase(),
-    mode, intent, priorInsights, profile, insights,
-  }
-
+function runDeterministicSkills(ctx: DeterministicContext): ToolResult | null {
   for (const handler of DETERMINISTIC_HANDLERS) {
     if (handler.match(ctx)) {
       const result = handler.handle(ctx)
       if (result !== null) return result
     }
   }
-
   return null
+}
+
+/** Build the DeterministicContext from resolved analysis state. */
+function buildDeterministicContext(
+  target: AnalysisTarget,
+  workbookName: string,
+  message: string,
+  mode: ReturnType<typeof classifyMode>,
+  intent: ReturnType<typeof parseUserIntent>,
+  priorInsights?: SheetInsights | null,
+): DeterministicContext {
+  const profile = buildSheetProfile(target.sheet, target.getComputedValue)
+  return {
+    target, workbookName, message,
+    lower: message.toLowerCase(),
+    mode, intent, priorInsights,
+    profile,
+    insights: target.context.insights,
+  }
 }
 
 /**
@@ -656,35 +658,47 @@ async function tryMacroDispatch(input: ProcessMessageInput): Promise<ToolResult 
   return null
 }
 
-/** Deduplicate and merge deterministic + LLM text into a final combined message. */
-function buildFinalResponse(
-  deterministicText: string,
-  insightsBlock: string,
-  serverResult: { message: string; source: string; reasoning?: string; meta?: { provider: string; model: string }; suggestions?: string[]; actions: Array<{ tool: string; params: Record<string, unknown>; description: string }> },
-  deterministic: ToolResult | null,
-  target: AnalysisTarget,
-  input: ProcessMessageInput,
-): ToolResult {
-  // Deduplicate: skip LLM text if it's just a fallback restatement
-  const llmText = serverResult.source === 'fallback'
-    && (deterministicText.trim() || insightsBlock.trim())
-    ? ''
-    : serverResult.message
+// ─── LLM Response Deduplication ─────────────────────────────────────────────
 
-  // Skip LLM text if it substantially overlaps with deterministic content
-  const shouldSkipLlm = deterministicText.trim().length > 100
-    && llmText.trim().length > 0
-    && llmText.trim().length < deterministicText.trim().length * 0.8
-    && serverResult.source !== 'llm'
-  const finalLlmText = shouldSkipLlm ? '' : llmText
+interface ServerResult {
+  message: string
+  source: string
+  reasoning?: string
+  meta?: { provider: string; model: string }
+  suggestions?: string[]
+  actions: Array<{ tool: string; params: Record<string, unknown>; description: string }>
+}
 
-  const combined = mergeToolResultContent([
-    deterministicText,
-    insightsBlock && !deterministicText.includes('Sheet insights') ? insightsBlock : '',
-    finalLlmText,
-  ].filter(Boolean))
+interface FinalResponseContext {
+  deterministicText: string
+  insightsBlock: string
+  serverResult: ServerResult
+  deterministic: ToolResult | null
+  target: AnalysisTarget
+  input: ProcessMessageInput
+}
 
-  // Telemetry
+/** Determine whether LLM text should be used or skipped due to overlap with deterministic content. */
+function resolveLlmText(deterministicText: string, insightsBlock: string, serverResult: ServerResult): string {
+  // Skip LLM text if it's just a fallback restatement and we have local content
+  if (serverResult.source === 'fallback' && (deterministicText.trim() || insightsBlock.trim())) {
+    return ''
+  }
+
+  const llmText = serverResult.message
+
+  // Skip LLM text if deterministic content substantially covers the answer
+  const deterministicLen = deterministicText.trim().length
+  const llmLen = llmText.trim().length
+  if (deterministicLen > 100 && llmLen > 0 && llmLen < deterministicLen * 0.8 && serverResult.source !== 'llm') {
+    return ''
+  }
+
+  return llmText
+}
+
+/** Record telemetry based on which content sources contributed to the final response. */
+function recordResponseTelemetry(deterministicText: string, finalLlmText: string, deterministic: ToolResult | null, serverResult: ServerResult): void {
   if (deterministicText.trim().length > 0 && finalLlmText.trim().length > 0) {
     recordTelemetry('hybridResponses', deterministic?.toolUsed ?? 'hybrid')
   } else if (finalLlmText.trim().length > 0) {
@@ -692,6 +706,21 @@ function buildFinalResponse(
   } else {
     recordTelemetry('deterministicResponses', deterministic?.toolUsed ?? 'local-insights')
   }
+}
+
+/** Deduplicate and merge deterministic + LLM text into a final combined message. */
+function buildFinalResponse(ctx: FinalResponseContext): ToolResult {
+  const { deterministicText, insightsBlock, serverResult, deterministic, target, input } = ctx
+
+  const finalLlmText = resolveLlmText(deterministicText, insightsBlock, serverResult)
+
+  const combined = mergeToolResultContent([
+    deterministicText,
+    insightsBlock && !deterministicText.includes('Sheet insights') ? insightsBlock : '',
+    finalLlmText,
+  ].filter(Boolean))
+
+  recordResponseTelemetry(deterministicText, finalLlmText, deterministic, serverResult)
 
   const suggestions = resolveContextualSuggestions(target, input, deterministic?.suggestions ?? serverResult.suggestions)
 
@@ -771,7 +800,8 @@ export async function processMessage(input: ProcessMessageInput): Promise<ToolRe
   if (macroResult) return macroResult
 
   // 2. Run deterministic skills
-  const deterministic = runDeterministicSkills(target, input.workbook.name, input.message, mode, intent, input.priorInsights)
+  const ctx = buildDeterministicContext(target, input.workbook.name, input.message, mode, intent, input.priorInsights)
+  const deterministic = runDeterministicSkills(ctx)
   const deterministicText = deterministic ? toolResultToMessage(deterministic, { includeSuggestionsInBody: false }) : ''
 
   // 3. Short-circuit for fully-answered deterministic queries
@@ -818,7 +848,7 @@ export async function processMessage(input: ProcessMessageInput): Promise<ToolRe
 
   // 8. Build final response
   if (serverResult) {
-    return buildFinalResponse(deterministicText, insightsBlock, serverResult, deterministic, target, input)
+    return buildFinalResponse({ deterministicText, insightsBlock, serverResult, deterministic, target, input })
   }
 
   return buildFallbackResponse(deterministic, insightsBlock, target, input)
