@@ -8,6 +8,149 @@ import {
   formatTrendEquation,
 } from '@/lib/chartMath';
 
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const DEFAULT_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
+const RANGE_PATTERN = /^([A-Z]+)(\d+):([A-Z]+)(\d+)$/;
+
+// ─── Shared Types ─────────────────────────────────────────────────────────────
+
+interface SeriesData {
+  label: string;
+  values: number[];
+  color: string;
+}
+
+interface MultiSeriesChartData {
+  labels: string[];
+  series: SeriesData[];
+}
+
+interface ChartProps {
+  data: MultiSeriesChartData;
+  maxVal: number;
+  trendLine?: TrendLineConfig;
+  axisConfig?: AxisConfig;
+}
+
+// ─── Data Parsing ─────────────────────────────────────────────────────────────
+
+function parseRangeRef(range: string) {
+  const match = range.match(RANGE_PATTERN);
+  if (!match) return null;
+  return {
+    start: cellToRef(`${match[1]}${match[2]}`),
+    end: cellToRef(`${match[3]}${match[4]}`),
+  };
+}
+
+function readColumnValues(
+  startRow: number,
+  endRow: number,
+  col: number,
+  getComputedValue: (row: number, col: number) => string,
+): number[] {
+  const values: number[] = [];
+  for (let r = startRow; r <= endRow; r++) {
+    values.push(parseFloat(getComputedValue(r, col)) || 0);
+  }
+  return values;
+}
+
+function parseExplicitSeries(
+  chart: ChartConfig,
+  getComputedValue: (row: number, col: number) => string,
+): MultiSeriesChartData | null {
+  if (!chart.series?.length) return null;
+
+  const colors = chart.colors || DEFAULT_COLORS;
+  const ref = parseRangeRef(chart.dataRange);
+  const labels: string[] = [];
+
+  if (ref) {
+    for (let r = ref.start.row; r <= ref.end.row; r++) {
+      labels.push(getComputedValue(r, ref.start.col) || `Row ${r + 1}`);
+    }
+  }
+
+  const series: SeriesData[] = chart.series.map((s, idx) => {
+    const sRef = parseRangeRef(s.dataRange);
+    const values = sRef
+      ? readColumnValues(sRef.start.row, sRef.end.row, sRef.end.col, getComputedValue)
+      : [];
+    return { label: s.label, values, color: s.color || colors[idx % colors.length] };
+  });
+
+  return { labels, series };
+}
+
+function parseLegacyRange(
+  chart: ChartConfig,
+  cells: Record<string, { value: string | number | boolean | null; formula?: string }>,
+  getComputedValue: (row: number, col: number) => string,
+): MultiSeriesChartData {
+  const colors = chart.colors || DEFAULT_COLORS;
+  const ref = parseRangeRef(chart.dataRange);
+  if (!ref) return { labels: [], series: [] };
+
+  const { start, end } = ref;
+  const numCols = end.col - start.col;
+
+  // Read labels from first column
+  const labels: string[] = [];
+  for (let r = start.row; r <= end.row; r++) {
+    const cellId = refToCell(r, start.col);
+    const cellData = cells[cellId];
+    labels.push(cellData?.value != null ? String(cellData.value) : getComputedValue(r, start.col) || `Row ${r + 1}`);
+  }
+
+  // Single value column
+  if (numCols <= 1) {
+    const values = readColumnValues(start.row, end.row, end.col, getComputedValue);
+    return { labels, series: [{ label: 'Series 1', values, color: colors[0] }] };
+  }
+
+  // Multiple value columns → multiple series
+  const series: SeriesData[] = [];
+  for (let c = start.col + 1; c <= end.col; c++) {
+    const values = readColumnValues(start.row, end.row, c, getComputedValue);
+    const headerRow = start.row > 0 ? start.row - 1 : -1;
+    const headerVal = headerRow >= 0 ? getComputedValue(headerRow, c) : '';
+    const label = headerVal || `Series ${c - start.col}`;
+    series.push({ label, values, color: colors[(c - start.col - 1) % colors.length] });
+  }
+  return { labels, series };
+}
+
+function parseMultiSeriesData(
+  chart: ChartConfig,
+  cells: Record<string, { value: string | number | boolean | null; formula?: string }>,
+  getComputedValue: (row: number, col: number) => string,
+): MultiSeriesChartData {
+  return parseExplicitSeries(chart, getComputedValue) ?? parseLegacyRange(chart, cells, getComputedValue);
+}
+
+// ─── Chart Type Registry ──────────────────────────────────────────────────────
+
+const CHART_COMPONENTS: Record<string, React.FC<ChartProps & { variant?: string }>> = {
+  bar: (props) => <BarChart {...props} horizontal />,
+  column: (props) => <BarChart {...props} horizontal={false} />,
+  pie: ({ data }) => <PieChart data={data} />,
+  line: (props) => <LineChart {...props} fill={false} scatter={false} />,
+  area: (props) => <LineChart {...props} fill scatter={false} />,
+  scatter: (props) => <LineChart {...props} fill={false} scatter />,
+};
+
+function renderChart(type: string, props: ChartProps): React.ReactNode {
+  const Component = CHART_COMPONENTS[type];
+  if (!Component) {
+    return <div className="flex items-center justify-center h-full text-gray-400 text-sm">Chart type: {type}</div>;
+  }
+  return <Component {...props} />;
+}
+
+// ─── Overlay Entry Point ──────────────────────────────────────────────────────
+
 export function ChartOverlay() {
   const { getActiveSheet, removeChart } = useStore();
   const sheet = getActiveSheet();
@@ -23,98 +166,7 @@ export function ChartOverlay() {
   );
 }
 
-interface SeriesData {
-  label: string;
-  values: number[];
-  color: string;
-}
-
-interface MultiSeriesChartData {
-  labels: string[];
-  series: SeriesData[];
-}
-
-// --- Trend Line Computations ---
-// Using shared utilities from @/lib/chartMath
-
-function parseMultiSeriesData(
-  chart: ChartConfig,
-  cells: Record<string, { value: string | number | boolean | null; formula?: string }>,
-  getComputedValue: (row: number, col: number) => string,
-): MultiSeriesChartData {
-  const defaultColors = chart.colors || ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
-
-  // If explicit series definitions exist, use them
-  if (chart.series && chart.series.length > 0) {
-    // Parse label column from main dataRange first column
-    const mainMatch = chart.dataRange.match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/);
-    const labels: string[] = [];
-    if (mainMatch) {
-      const startRef = cellToRef(`${mainMatch[1]}${mainMatch[2]}`);
-      const endRef = cellToRef(`${mainMatch[3]}${mainMatch[4]}`);
-      for (let r = startRef.row; r <= endRef.row; r++) {
-        const val = getComputedValue(r, startRef.col) || `Row ${r + 1}`;
-        labels.push(val);
-      }
-    }
-
-    const series: SeriesData[] = chart.series.map((s, idx) => {
-      const sMatch = s.dataRange.match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/);
-      const values: number[] = [];
-      if (sMatch) {
-        const sStart = cellToRef(`${sMatch[1]}${sMatch[2]}`);
-        const sEnd = cellToRef(`${sMatch[3]}${sMatch[4]}`);
-        for (let r = sStart.row; r <= sEnd.row; r++) {
-          values.push(parseFloat(getComputedValue(r, sEnd.col)) || 0);
-        }
-      }
-      return { label: s.label, values, color: s.color || defaultColors[idx % defaultColors.length] };
-    });
-
-    return { labels, series };
-  }
-
-  // Legacy single-range parsing: first col = labels, remaining cols = series
-  const match = chart.dataRange.match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/);
-  if (!match) return { labels: [], series: [] };
-
-  const startRef = cellToRef(`${match[1]}${match[2]}`);
-  const endRef = cellToRef(`${match[3]}${match[4]}`);
-  const numCols = endRef.col - startRef.col;
-
-  const labels: string[] = [];
-  for (let r = startRef.row; r <= endRef.row; r++) {
-    const labelCellId = refToCell(r, startRef.col);
-    const labelData = cells[labelCellId];
-    labels.push(labelData?.value != null ? String(labelData.value) : getComputedValue(r, startRef.col) || `Row ${r + 1}`);
-  }
-
-  if (numCols <= 1) {
-    // Single value column
-    const values: number[] = [];
-    for (let r = startRef.row; r <= endRef.row; r++) {
-      values.push(parseFloat(getComputedValue(r, endRef.col)) || 0);
-    }
-    return { labels, series: [{ label: 'Series 1', values, color: defaultColors[0] }] };
-  }
-
-  // Multiple value columns → multiple series
-  const series: SeriesData[] = [];
-  for (let c = startRef.col + 1; c <= endRef.col; c++) {
-    const values: number[] = [];
-    for (let r = startRef.row; r <= endRef.row; r++) {
-      values.push(parseFloat(getComputedValue(r, c)) || 0);
-    }
-    // Try to get header for series name
-    const headerRow = startRef.row > 0 ? startRef.row - 1 : -1;
-    const headerVal = headerRow >= 0 ? getComputedValue(headerRow, c) : '';
-    const label = headerVal || `Series ${c - startRef.col}`;
-    series.push({ label, values, color: defaultColors[(c - startRef.col - 1) % defaultColors.length] });
-  }
-  return { labels, series };
-}
-
-// --- ChartCard Component ---
+// ─── ChartCard Component ──────────────────────────────────────────────────────
 
 function ChartCard({ chart, onRemove }: { chart: ChartConfig; onRemove: () => void }) {
   const { getActiveSheet, getComputedValue, updateChartPosition } = useStore();
@@ -146,7 +198,6 @@ function ChartCard({ chart, onRemove }: { chart: ChartConfig; onRemove: () => vo
 
   const handlePointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;
-    // Don't start a drag from the remove button.
     if ((e.target as HTMLElement).closest('button')) return;
     e.currentTarget.setPointerCapture(e.pointerId);
     isDraggingRef.current = true;
@@ -155,7 +206,6 @@ function ChartCard({ chart, onRemove }: { chart: ChartConfig; onRemove: () => vo
 
   const handlePointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     if (!isDraggingRef.current) return;
-    // Mouse-only buttons guard: some touch stacks report buttons=0 while contact is active.
     if (e.pointerType === 'mouse' && (e.buttons & 1) === 0) {
       endDrag(e);
       return;
@@ -168,10 +218,11 @@ function ChartCard({ chart, onRemove }: { chart: ChartConfig; onRemove: () => vo
     posRef.current = newPos;
   }, [endDrag]);
 
-  // Release mid-drag state if the card unmounts.
   useEffect(() => () => {
     isDraggingRef.current = false;
   }, []);
+
+  const chartProps: ChartProps = { data, maxVal, trendLine: chart.trendLine, axisConfig: chart.axisConfig };
 
   return (
     <div
@@ -195,18 +246,7 @@ function ChartCard({ chart, onRemove }: { chart: ChartConfig; onRemove: () => vo
         </button>
       </div>
       <div className="p-3 flex-1" style={{ height: chart.position.height - 40 }}>
-        {chart.type === 'bar' || chart.type === 'column' ? (
-          <BarChart data={data} maxVal={maxVal} horizontal={chart.type === 'bar'} trendLine={chart.trendLine} axisConfig={chart.axisConfig} />
-        ) : chart.type === 'pie' ? (
-          <PieChart data={data} />
-        ) : chart.type === 'line' || chart.type === 'area' ? (
-          <LineChart data={data} maxVal={maxVal} fill={chart.type === 'area'} trendLine={chart.trendLine} axisConfig={chart.axisConfig} />
-        ) : chart.type === 'scatter' ? (
-          <LineChart data={data} maxVal={maxVal} fill={false} trendLine={chart.trendLine} scatter axisConfig={chart.axisConfig} />
-        ) : (
-          <div className="flex items-center justify-center h-full text-gray-400 text-sm">Chart type: {chart.type}</div>
-        )}
-        {/* Legend for multi-series */}
+        {renderChart(chart.type, chartProps)}
         {data.series.length > 1 && (
           <div className="flex flex-wrap gap-2 mt-1 justify-center">
             {data.series.map((s, i) => (
@@ -222,9 +262,9 @@ function ChartCard({ chart, onRemove }: { chart: ChartConfig; onRemove: () => vo
   );
 }
 
-// --- Bar/Column Chart ---
+// ─── Bar/Column Chart ─────────────────────────────────────────────────────────
 
-function BarChart({ data, maxVal, horizontal, trendLine: _trendLine, axisConfig: _axisConfig }: { data: MultiSeriesChartData; maxVal: number; horizontal: boolean; trendLine?: TrendLineConfig; axisConfig?: AxisConfig }) {
+function BarChart({ data, maxVal, horizontal }: ChartProps & { horizontal: boolean }) {
   const seriesCount = data.series.length;
 
   if (horizontal) {
@@ -283,10 +323,9 @@ function BarChart({ data, maxVal, horizontal, trendLine: _trendLine, axisConfig:
   );
 }
 
-// --- Pie Chart ---
+// ─── Pie Chart ────────────────────────────────────────────────────────────────
 
 function PieChart({ data }: { data: MultiSeriesChartData }) {
-  // Pie uses only the first series
   const series = data.series[0];
   if (!series) return <div className="flex items-center justify-center h-full text-gray-400 text-sm">No data</div>;
   const total = series.values.reduce((a, b) => a + Math.abs(b), 0);
@@ -294,7 +333,7 @@ function PieChart({ data }: { data: MultiSeriesChartData }) {
 
   const colors = data.series.length > 1
     ? data.series.map((s) => s.color)
-    : (Array.from({ length: series.values.length }, (_, i) => ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'][i % 6]));
+    : Array.from({ length: series.values.length }, (_, i) => DEFAULT_COLORS[i % DEFAULT_COLORS.length]);
 
   let cumulativePercent = 0;
   const slices = series.values.map((val, i) => {
@@ -322,20 +361,17 @@ function PieChart({ data }: { data: MultiSeriesChartData }) {
   );
 }
 
-// --- Line/Area/Scatter Chart ---
+// ─── Line/Area/Scatter Chart ──────────────────────────────────────────────────
 
-function LineChart({ data, maxVal, fill, trendLine, scatter, axisConfig }: {
-  data: MultiSeriesChartData; maxVal: number; fill: boolean; trendLine?: TrendLineConfig; scatter?: boolean;
-  axisConfig?: AxisConfig;
-}) {
-  const w = 300;
-  const h = 180;
-  const padding = 30;
-  const plotW = w - padding * 2;
-  const plotH = h - padding * 2;
+const SVG_WIDTH = 300;
+const SVG_HEIGHT = 180;
+const SVG_PADDING = 30;
+
+function LineChart({ data, maxVal, fill, trendLine, scatter, axisConfig }: ChartProps & { fill: boolean; scatter: boolean }) {
+  const plotW = SVG_WIDTH - SVG_PADDING * 2;
+  const plotH = SVG_HEIGHT - SVG_PADDING * 2;
   const numPoints = data.labels.length;
 
-  // Use axis config for Y scale if provided
   const effectiveMin = axisConfig?.yMin ?? 0;
   const effectiveMax = axisConfig?.yMax ?? maxVal;
   const yRange = effectiveMax - effectiveMin || 1;
@@ -343,76 +379,134 @@ function LineChart({ data, maxVal, fill, trendLine, scatter, axisConfig }: {
 
   const getPoints = (values: number[]) =>
     values.map((val, i) => ({
-      x: padding + (i / Math.max(numPoints - 1, 1)) * plotW,
-      y: padding + plotH - ((Math.abs(val) - effectiveMin) / yRange) * plotH,
+      x: SVG_PADDING + (i / Math.max(numPoints - 1, 1)) * plotW,
+      y: SVG_PADDING + plotH - ((Math.abs(val) - effectiveMin) / yRange) * plotH,
     }));
 
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-full">
-      {/* Grid lines */}
-      {gridVisible && [0, 0.25, 0.5, 0.75, 1].map((pct) => (
-        <line key={pct} x1={padding} y1={padding + plotH * (1 - pct)} x2={padding + plotW} y2={padding + plotH * (1 - pct)} stroke="#E5E7EB" strokeWidth={0.5} />
-      ))}
-      {/* Axis labels */}
-      {axisConfig?.yLabel && (
-        <text x={8} y={padding + plotH / 2} textAnchor="middle" fontSize={7} fill="#6B7280" transform={`rotate(-90, 8, ${padding + plotH / 2})`}>
-          {axisConfig.yLabel}
-        </text>
-      )}
-      {axisConfig?.xLabel && (
-        <text x={padding + plotW / 2} y={h - 4} textAnchor="middle" fontSize={7} fill="#6B7280">
-          {axisConfig.xLabel}
-        </text>
-      )}
+    <svg viewBox={`0 0 ${SVG_WIDTH} ${SVG_HEIGHT}`} className="w-full h-full">
+      <GridLines visible={gridVisible} plotH={plotH} plotW={plotW} />
+      <AxisLabels axisConfig={axisConfig} plotW={plotW} plotH={plotH} svgHeight={SVG_HEIGHT} />
 
-      {/* Render each series */}
       {data.series.map((series, sIdx) => {
         const points = getPoints(series.values);
-        const pathD = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
-        const areaD = pathD + ` L ${points[points.length - 1]?.x || 0} ${padding + plotH} L ${padding} ${padding + plotH} Z`;
-
         return (
-          <g key={sIdx}>
-            {fill && points.length > 1 && (
-              <path d={areaD} fill={series.color} fillOpacity={0.1 + sIdx * 0.05} />
-            )}
-            {!scatter && points.length > 1 && (
-              <path d={pathD} fill="none" stroke={series.color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-            )}
-            {points.map((p, i) => (
-              <circle key={i} cx={p.x} cy={p.y} r={scatter ? 4 : 3} fill={series.color} />
-            ))}
-          </g>
+          <SeriesPath
+            key={sIdx}
+            points={points}
+            color={series.color}
+            fill={fill}
+            scatter={scatter}
+            seriesIndex={sIdx}
+            plotH={plotH}
+          />
         );
       })}
 
-      {/* Trend lines */}
-      {trendLine && data.series.map((series, sIdx) => {
-        const trendValues = computeTrendValues(series.values, trendLine);
-        const trendPoints = getPoints(trendValues);
-        const trendPath = trendPoints.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
-        const trendColor = trendLine.color || series.color;
-        return (
-          <g key={`trend-${sIdx}`}>
-            <path d={trendPath} fill="none" stroke={trendColor} strokeWidth={1.5} strokeDasharray="4 3" opacity={0.7} />
-            {trendLine.showEquation && sIdx === 0 && (
-              <text x={padding + 4} y={padding - 4} fontSize={7} fill={trendColor} opacity={0.8}>
-                {formatTrendEquation(series.values, trendLine)}
-              </text>
-            )}
-          </g>
-        );
-      })}
+      {trendLine && data.series.map((series, sIdx) => (
+        <TrendOverlay
+          key={`trend-${sIdx}`}
+          values={series.values}
+          color={series.color}
+          trendLine={trendLine}
+          getPoints={getPoints}
+          showEquation={sIdx === 0}
+          plotH={plotH}
+        />
+      ))}
 
-      {/* X-axis labels (only first 8 to avoid clutter) */}
       {data.labels.slice(0, 8).map((label, i) => {
-        const x = padding + (i / Math.max(numPoints - 1, 1)) * plotW;
+        const x = SVG_PADDING + (i / Math.max(numPoints - 1, 1)) * plotW;
         return (
-          <text key={i} x={x} y={padding + plotH + 14} textAnchor="middle" fontSize={7} fill="#9CA3AF">
+          <text key={i} x={x} y={SVG_PADDING + plotH + 14} textAnchor="middle" fontSize={7} fill="#9CA3AF">
             {label.slice(0, 6)}
           </text>
         );
       })}
     </svg>
+  );
+}
+
+// ─── SVG Sub-components ───────────────────────────────────────────────────────
+
+function GridLines({ visible, plotH, plotW }: { visible: boolean; plotH: number; plotW: number }) {
+  if (!visible) return null;
+  return (
+    <>
+      {[0, 0.25, 0.5, 0.75, 1].map((pct) => (
+        <line key={pct} x1={SVG_PADDING} y1={SVG_PADDING + plotH * (1 - pct)} x2={SVG_PADDING + plotW} y2={SVG_PADDING + plotH * (1 - pct)} stroke="#E5E7EB" strokeWidth={0.5} />
+      ))}
+    </>
+  );
+}
+
+function AxisLabels({ axisConfig, plotW, plotH, svgHeight }: { axisConfig?: AxisConfig; plotW: number; plotH: number; svgHeight: number }) {
+  return (
+    <>
+      {axisConfig?.yLabel && (
+        <text x={8} y={SVG_PADDING + plotH / 2} textAnchor="middle" fontSize={7} fill="#6B7280" transform={`rotate(-90, 8, ${SVG_PADDING + plotH / 2})`}>
+          {axisConfig.yLabel}
+        </text>
+      )}
+      {axisConfig?.xLabel && (
+        <text x={SVG_PADDING + plotW / 2} y={svgHeight - 4} textAnchor="middle" fontSize={7} fill="#6B7280">
+          {axisConfig.xLabel}
+        </text>
+      )}
+    </>
+  );
+}
+
+interface Point { x: number; y: number }
+
+function SeriesPath({ points, color, fill, scatter, seriesIndex, plotH }: {
+  points: Point[];
+  color: string;
+  fill: boolean;
+  scatter: boolean;
+  seriesIndex: number;
+  plotH: number;
+}) {
+  if (points.length === 0) return null;
+  const pathD = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+  const areaD = pathD + ` L ${points[points.length - 1].x} ${SVG_PADDING + plotH} L ${SVG_PADDING} ${SVG_PADDING + plotH} Z`;
+
+  return (
+    <g>
+      {fill && points.length > 1 && (
+        <path d={areaD} fill={color} fillOpacity={0.1 + seriesIndex * 0.05} />
+      )}
+      {!scatter && points.length > 1 && (
+        <path d={pathD} fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      )}
+      {points.map((p, i) => (
+        <circle key={i} cx={p.x} cy={p.y} r={scatter ? 4 : 3} fill={color} />
+      ))}
+    </g>
+  );
+}
+
+function TrendOverlay({ values, color, trendLine, getPoints, showEquation, plotH: _plotH }: {
+  values: number[];
+  color: string;
+  trendLine: TrendLineConfig;
+  getPoints: (v: number[]) => Point[];
+  showEquation: boolean;
+  plotH: number;
+}) {
+  const trendValues = computeTrendValues(values, trendLine);
+  const trendPoints = getPoints(trendValues);
+  const trendPath = trendPoints.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+  const trendColor = trendLine.color || color;
+
+  return (
+    <g>
+      <path d={trendPath} fill="none" stroke={trendColor} strokeWidth={1.5} strokeDasharray="4 3" opacity={0.7} />
+      {trendLine.showEquation && showEquation && (
+        <text x={SVG_PADDING + 4} y={SVG_PADDING - 4} fontSize={7} fill={trendColor} opacity={0.8}>
+          {formatTrendEquation(values, trendLine)}
+        </text>
+      )}
+    </g>
   );
 }
