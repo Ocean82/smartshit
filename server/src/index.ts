@@ -178,6 +178,137 @@ function sendSseComplete(
 
 type LlmChatResult = ChatResponseBody & { usedServerProvider: boolean }
 
+// ─── Decomposed Conditionals (business rule predicates) ──────────────────────
+
+/** Whether the request has valid BYOK (Bring Your Own Key) credentials. */
+function hasByokConfig(byok: ChatRequestBody['byok']): boolean {
+  return Boolean(byok?.apiKey && byok?.baseUrl)
+}
+
+/** Whether a streaming call should be dispatched (requires both callback and signal). */
+function shouldStream(stream: boolean, onChunk?: (chunk: string) => void, signal?: AbortSignal): boolean {
+  return stream && Boolean(onChunk) && Boolean(signal)
+}
+
+/** Whether the LLM response merits a structured-output retry (act mode only, not streaming). */
+function shouldRetryStructuredOutput(
+  stream: boolean,
+  parsedActions: unknown[],
+  fullText: string,
+  usedProvider: ProviderName | null,
+): boolean {
+  return !stream && parsedActions.length === 0 && fullText.trim().length > 0 && usedProvider !== null
+}
+
+/** Whether all AI providers have been exhausted without success. */
+function allProvidersFailed(byokSucceeded: boolean, usedProvider: ProviderName | null): boolean {
+  return !byokSucceeded && usedProvider === null
+}
+
+/**
+ * Whether the request body carries a non-empty deterministic summary
+ * that can serve as a partial fallback when the LLM is unreachable.
+ */
+function hasDeterministicFallback(context: ChatRequestBody['context']): boolean {
+  if (!context || typeof context !== 'object') return false
+  const summary = (context as { deterministicSummary?: string }).deterministicSummary
+  return typeof summary === 'string' && summary.trim().length > 0
+}
+
+// ─── BYOK Call Helpers ───────────────────────────────────────────────────────
+
+interface ByokCallResult {
+  text: string
+  meta: { provider: string; model: string }
+}
+
+async function callByokProvider(
+  byok: NonNullable<ChatRequestBody['byok']>,
+  messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
+  stream: boolean,
+  onChunk?: (chunk: string) => void,
+  signal?: AbortSignal,
+): Promise<ByokCallResult> {
+  const { chatWithOpenAiCompatibleStream, chatWithOpenAiCompatible } = await import('./openaiCompatible.js')
+  const byokParams = { apiKey: byok.apiKey, model: byok.model, baseUrl: byok.baseUrl }
+
+  let text: string
+  if (shouldStream(stream, onChunk, signal)) {
+    text = await chatWithOpenAiCompatibleStream(byokParams, messages, onChunk!, signal!)
+  } else {
+    text = await chatWithOpenAiCompatible(byokParams, messages)
+  }
+
+  let byokHost = 'custom'
+  try { byokHost = new URL(byok.baseUrl).hostname } catch { /* keep 'custom' */ }
+
+  return {
+    text,
+    meta: {
+      provider: byok.provider?.trim() || byokHost || 'byok',
+      model: byok.model?.trim() || 'unknown-model',
+    },
+  }
+}
+
+// ─── Server Provider Loop ────────────────────────────────────────────────────
+
+interface ServerProviderResult {
+  text: string
+  provider: ProviderName
+  meta: { provider: string; model: string }
+}
+
+async function callServerProviders(
+  messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
+  providers: ProviderName[],
+  llmOnly: boolean,
+  stream: boolean,
+  onChunk?: (chunk: string) => void,
+  signal?: AbortSignal,
+): Promise<{ result: ServerProviderResult | null; errors: string[] }> {
+  const providerErrors: string[] = []
+  const providerOpts = { jsonMode: !llmOnly, maxTokens: llmOnly ? undefined : 2048 }
+
+  for (const provider of providers) {
+    if (isCircuitOpen(provider)) {
+      providerErrors.push(`${provider}: circuit open (skipped)`)
+      continue
+    }
+
+    try {
+      let text: string
+      if (shouldStream(stream, onChunk, signal)) {
+        const response = await callProviderStream(provider, messages, onChunk!, signal!, providerOpts)
+        text = response.text
+      } else {
+        const response = await callProvider(provider, messages, providerOpts)
+        text = response.text
+      }
+
+      recordSuccess(provider)
+      return {
+        result: { text, provider, meta: { provider, model: getModelName(provider) } },
+        errors: providerErrors,
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      providerErrors.push(`${provider}: ${msg}`)
+      console.warn(`[llm] provider ${provider} failed:`, msg)
+      recordFailure(provider)
+
+      if (provider === 'groq') {
+        const { recordGroqFallback } = await import('./providers.js')
+        recordGroqFallback()
+      }
+    }
+  }
+
+  return { result: null, errors: providerErrors }
+}
+
+// ─── Main LLM Chat Function ─────────────────────────────────────────────────
+
 async function runLlmChat(params: {
   body: ChatRequestBody
   userMessage: string
@@ -191,7 +322,7 @@ async function runLlmChat(params: {
   signal?: AbortSignal
 }): Promise<LlmChatResult> {
   const { body, userMessage, mode, intent, userIntent, stream, byokOnly = false, onChunk, signal } = params
-  const llmOnly = isLlmOnlyMode(mode) || body.forceLlm
+  const llmOnly = isLlmOnlyMode(mode) || Boolean(body.forceLlm)
 
   const history = (body.history ?? []).filter((m) => m.role === 'user' || m.role === 'assistant')
   const systemPrompt = llmOnly
@@ -199,11 +330,6 @@ async function runLlmChat(params: {
     : buildActionPrompt(body.context)
 
   // Few-shot examples for explain/advise mode — teaches the model the response style.
-  // Full library lives in prompts/fewShot.ts (8 examples covering audit, budget,
-  // formula help, debugging, teaching, vague requests, off-topic, and performance).
-  // Token budget: when context is large (>3k chars), trim to 4 examples to leave
-  // room for actual data. The first 4 cover the most critical patterns (audit,
-  // budget, formula, debugging).
   const contextSize = systemPrompt.length
   const maxExamples = contextSize > 3000 ? 4 : FEW_SHOT_EXAMPLES.length
   const fewShot: Array<{ role: 'user' | 'assistant'; content: string }> = llmOnly
@@ -211,20 +337,16 @@ async function runLlmChat(params: {
     : []
 
   // ─── Conversation history — use larger window for cloud providers ───────────
-  // Cloud providers (Groq, OpenRouter, HuggingFace) have 128K+ context windows.
-  // Local Ollama has a smaller window. Adapt history length accordingly.
   const isCloudAvailable = providerOrder().filter(providerIsConfigured)
     .some((p) => p !== 'ollama')
   const maxHistory = isCloudAvailable ? config.maxHistoryCloud : config.maxHistoryLocal
 
-  // Summarize older messages into a brief context note when history is long
   let conversationSummary: string | null = null
   let trimmedHistory = history
   if (history.length > maxHistory) {
     const older = history.slice(0, -(maxHistory - 2))
     trimmedHistory = history.slice(-(maxHistory - 2))
 
-    // Build a brief summary of older messages
     const userTopics = older
       .filter((m) => m.role === 'user')
       .map((m) => m.content.slice(0, 80).replace(/\n/g, ' ').trim())
@@ -234,51 +356,37 @@ async function runLlmChat(params: {
     }
   }
 
-  const messages = [
-    { role: 'system' as const, content: systemPrompt },
+  const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+    { role: 'system', content: systemPrompt },
     ...fewShot.map((m) => ({ role: m.role, content: m.content })),
     ...(conversationSummary
       ? [{ role: 'system' as const, content: conversationSummary }]
       : []),
     ...trimmedHistory,
-    { role: 'user' as const, content: userMessage },
+    { role: 'user', content: userMessage },
   ]
-  const byok = body.byok
-  const availableProviders = providerOrder().filter(providerIsConfigured)
+
   let fullText = ''
   let usedProvider: ProviderName | null = null
   let providerMeta: { provider: string; model: string } | null = null
   let byokSucceeded = false
   const providerErrors: string[] = []
 
-  if (byok?.apiKey && byok?.baseUrl) {
+  // ─── Phase 1: Try BYOK if configured ───────────────────────────────────────
+  if (hasByokConfig(body.byok)) {
     try {
-      const { chatWithOpenAiCompatibleStream, chatWithOpenAiCompatible } = await import('./openaiCompatible.js')
-      const byokParams = { apiKey: byok.apiKey, model: byok.model, baseUrl: byok.baseUrl }
-      if (stream && onChunk && signal) {
-        fullText = await chatWithOpenAiCompatibleStream(byokParams, messages, onChunk, signal)
-      } else {
-        fullText = await chatWithOpenAiCompatible(byokParams, messages)
-      }
-      let byokHost = 'custom'
-      try {
-        byokHost = new URL(byok.baseUrl).hostname
-      } catch {
-        // keep custom
-      }
-      providerMeta = {
-        provider: byok.provider?.trim() || byokHost || 'byok',
-        model: byok.model?.trim() || 'unknown-model',
-      }
+      const byokResult = await callByokProvider(body.byok!, messages, stream, onChunk, signal)
+      fullText = byokResult.text
+      providerMeta = byokResult.meta
       byokSucceeded = true
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
-      providerErrors.push(`byok(${byok.provider}): ${msg}`)
+      providerErrors.push(`byok(${body.byok!.provider}): ${msg}`)
       console.warn(`[llm] BYOK provider failed:`, msg)
-      // Fall through only when byokOnly is false (free quota still available or Pro)
     }
   }
 
+  // ─── Phase 1b: BYOK-only mode exhausted ────────────────────────────────────
   if (!byokSucceeded && byokOnly) {
     return {
       message:
@@ -290,54 +398,28 @@ async function runLlmChat(params: {
     }
   }
 
+  // ─── Phase 2: Try server-configured providers ──────────────────────────────
   if (!byokSucceeded) {
-    for (const provider of availableProviders) {
-      // Circuit breaker: skip providers that have failed repeatedly
-      if (isCircuitOpen(provider)) {
-        providerErrors.push(`${provider}: circuit open (skipped)`)
-        continue
-      }
+    const availableProviders = providerOrder().filter(providerIsConfigured)
+    const { result, errors } = await callServerProviders(
+      messages, availableProviders, llmOnly, stream, onChunk, signal,
+    )
+    providerErrors.push(...errors)
 
-      try {
-        const providerOpts = { jsonMode: !llmOnly, maxTokens: llmOnly ? undefined : 2048 }
-        if (stream && onChunk && signal) {
-          const response = await callProviderStream(provider, messages, onChunk, signal, providerOpts)
-          fullText = response.text
-        } else {
-          const response = await callProvider(provider, messages, providerOpts)
-          fullText = response.text
-        }
-        usedProvider = provider
-        providerMeta = { provider, model: getModelName(provider) }
-        recordSuccess(provider)
-        break
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err)
-        providerErrors.push(`${provider}: ${msg}`)
-        console.warn(`[llm] provider ${provider} failed:`, msg)
-        recordFailure(provider)
-        // Track Groq failures for rate-limit alerting
-        if (provider === 'groq') {
-          const { recordGroqFallback } = await import('./providers.js')
-          recordGroqFallback()
-        }
-      }
+    if (result) {
+      fullText = result.text
+      usedProvider = result.provider
+      providerMeta = result.meta
     }
   }
 
-  if (!byokSucceeded && !usedProvider) {
+  // ─── Phase 3: All providers failed — return fallback ───────────────────────
+  if (allProvidersFailed(byokSucceeded, usedProvider)) {
     if (providerErrors.length) {
       console.warn('[llm] all providers failed:', providerErrors.join(' | '))
     }
-    // When ALL AI providers failed, be honest about it — don't let local
-    // deterministic analysis pretend to answer questions it can't.
-    const hasDeterministic = Boolean(
-      body.context && typeof body.context === 'object'
-      && 'deterministicSummary' in body.context
-      && String((body.context as { deterministicSummary?: string }).deterministicSummary ?? '').trim(),
-    )
     return {
-      message: intent.message || (hasDeterministic
+      message: intent.message || (hasDeterministicFallback(body.context)
         ? '⚠️ AI is currently unavailable. The analysis above is based on local calculations only — for deeper questions, please try again in a moment.'
         : '⚠️ AI is currently unavailable. Please check your connection or try again in a moment.'),
       actions: llmOnly ? [] : intent.actions,
@@ -346,6 +428,7 @@ async function runLlmChat(params: {
     }
   }
 
+  // ─── Phase 4: Explain/advise mode — return LLM text directly ───────────────
   if (llmOnly) {
     const text = fullText.trim()
     return {
@@ -357,21 +440,19 @@ async function runLlmChat(params: {
     }
   }
 
+  // ─── Phase 5: Act mode — parse structured output ───────────────────────────
   let parsed = parseAgentResponse(fullText)
 
-  // ─── Structured output retry (act mode, non-streaming only) ────────────────
-  // If the LLM returned text that doesn't parse to valid actions, retry once
-  // with a correction hint. This catches the common case where the model
-  // returns prose instead of JSON, or malformed JSON.
-  // Only retry against server providers (not BYOK) to avoid wrong credentials.
-  if (!stream && parsed.actions.length === 0 && fullText.trim().length > 0 && usedProvider) {
+  // Structured output retry: if response doesn't parse to actions, try once more
+  // with a correction hint (non-streaming only, server providers only).
+  if (shouldRetryStructuredOutput(stream, parsed.actions, fullText, usedProvider)) {
     const retryHint: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
       ...messages,
       { role: 'assistant', content: fullText },
       { role: 'user', content: 'Your response was not valid JSON. Please respond with ONLY a JSON object containing "message" (string) and "actions" (array of {tool, params, description}). No markdown, no explanation, just the JSON object.' },
     ]
     try {
-      const retryResponse = await callProvider(usedProvider, retryHint, { jsonMode: true, maxTokens: 2048 })
+      const retryResponse = await callProvider(usedProvider!, retryHint, { jsonMode: true, maxTokens: 2048 })
       const retryParsed = parseAgentResponse(retryResponse.text)
       if (retryParsed.actions.length > 0) {
         parsed = retryParsed
