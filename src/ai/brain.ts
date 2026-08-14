@@ -31,7 +31,9 @@ import type { AttachedFilePreview, ToolResult } from '@/ai/types'
 import type { Selection, SheetData, WorkbookData } from '@/types'
 import { planMacro } from '@/ai/nlp/macroPlanner'
 import { createMacroPlanManager } from '@/ai/macro/macroPlanManager'
-import { defaultStepExecutor } from '@/ai/macro/macroExecutor'
+import { createToolStepExecutor } from '@/ai/macro/toolStepExecutor'
+import type { StepExecutor } from '@/ai/macro/macroExecutor'
+import type { ExecutionContext } from '@/agent/executor'
 import type { MacroPlan, MacroExecutionResult, WorkbookContext, UndoManager } from '@/ai/nlp/types'
 import type { IntentType } from '@shared/intentTypes'
 
@@ -51,6 +53,9 @@ export interface ProcessMessageInput {
   undoManager?: UndoManager
   /** Macro plan UI callbacks — required for multi-step plan presentation */
   macroPlanCallbacks?: MacroPlanUICallbacks
+  /** Execution context factory — required for macro step execution.
+   *  Without this, macros will be skipped rather than silently succeeding. */
+  getExecutionContext?: () => ExecutionContext
 }
 
 // ─── Macro Plan UI Callbacks ────────────────────────────────────────────────
@@ -438,6 +443,7 @@ export function formatMacroPlanForDisplay(plan: MacroPlan): string {
 async function executeSingleStepPlan(
   plan: MacroPlan,
   undoManager: UndoManager,
+  stepExecutor: StepExecutor,
   callbacks?: MacroPlanUICallbacks,
 ): Promise<ToolResult | null> {
   const manager = createMacroPlanManager({
@@ -448,7 +454,7 @@ async function executeSingleStepPlan(
     isConfirmed: () => true,
     isRejected: () => false,
     shouldCancel: () => false,
-  }, defaultStepExecutor)
+  }, stepExecutor)
 
   try {
     const result = await manager.processPlan(plan, undoManager)
@@ -488,6 +494,7 @@ async function executeMultiStepPlan(
   plan: MacroPlan,
   undoManager: UndoManager,
   callbacks: MacroPlanUICallbacks,
+  stepExecutor: StepExecutor,
 ): Promise<ToolResult | null> {
   let currentPlan = plan
   const startTime = Date.now()
@@ -519,7 +526,7 @@ async function executeMultiStepPlan(
     }
 
     // Confirmed — execute
-    const result = await executeConfirmedPlan(currentPlan, undoManager, callbacks)
+    const result = await executeConfirmedPlan(currentPlan, undoManager, callbacks, stepExecutor)
     if (result === 'retry') continue
     return result
   }
@@ -561,6 +568,7 @@ async function executeConfirmedPlan(
   plan: MacroPlan,
   undoManager: UndoManager,
   callbacks: MacroPlanUICallbacks,
+  stepExecutor: StepExecutor,
 ): Promise<ToolResult | 'retry'> {
   try {
     const manager = createMacroPlanManager({
@@ -571,7 +579,7 @@ async function executeConfirmedPlan(
       isConfirmed: () => true,
       isRejected: () => false,
       shouldCancel: () => false,
-    }, defaultStepExecutor)
+    }, stepExecutor)
 
     const result = await manager.processPlan(plan, undoManager)
 
@@ -626,17 +634,23 @@ async function handleMacroPlan(
   input: ProcessMessageInput,
   _workbookContext: WorkbookContext,
 ): Promise<ToolResult | null> {
-  const { undoManager, macroPlanCallbacks } = input
+  const { undoManager, macroPlanCallbacks, getExecutionContext } = input
 
   if (!undoManager) return null
 
+  // Without an execution context, macros cannot run real tools.
+  // Return null to fall through to LLM rather than silently succeeding.
+  if (!getExecutionContext) return null
+
+  const stepExecutor = createToolStepExecutor(getExecutionContext)
+
   if (plan.steps.length === 1) {
-    return executeSingleStepPlan(plan, undoManager, macroPlanCallbacks)
+    return executeSingleStepPlan(plan, undoManager, stepExecutor, macroPlanCallbacks)
   }
 
   if (!macroPlanCallbacks) return null
 
-  return executeMultiStepPlan(plan, undoManager, macroPlanCallbacks)
+  return executeMultiStepPlan(plan, undoManager, macroPlanCallbacks, stepExecutor)
 }
 
 // ─── Phase 1: Extracted processMessage helpers ──────────────────────────────

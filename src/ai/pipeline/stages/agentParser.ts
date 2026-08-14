@@ -26,6 +26,12 @@ export interface AgentParserDeps {
   pushHistory: (desc: string) => void
 }
 
+/**
+ * Tools that wipe or mass-modify data and should ALWAYS require Apply/Reject
+ * confirmation before execution — even for single-step commands.
+ */
+const DESTRUCTIVE_TOOLS = new Set(['clear_sheet'])
+
 export function createAgentParserStage(deps: AgentParserDeps): PipelineStage {
   return {
     name: 'agent-parser',
@@ -68,6 +74,13 @@ export function createAgentParserStage(deps: AgentParserDeps): PipelineStage {
       // ─── Delete-row preview/confirm flow ────────────────────────────────
       if (parsed.calls.length === 1 && parsed.calls[0].tool === 'delete_row') {
         return handleDeleteRow(parsed.calls[0], context)
+      }
+
+      // ─── Destructive operation preview/confirm flow ─────────────────────
+      // Operations that wipe significant data get the same Apply/Reject
+      // treatment as delete_row to prevent accidental data loss.
+      if (parsed.calls.length >= 1 && parsed.calls.some((c) => DESTRUCTIVE_TOOLS.has(c.tool))) {
+        return handleDestructivePreview(parsed.calls, parsed.explanation)
       }
 
       // ─── Ambiguity clarification (understood but no calls) ──────────────
@@ -132,6 +145,36 @@ function handleDeleteRow(
     }],
     stageName: 'agent-parser',
     metadata: { toolUsed: 'delete-row-preview' },
+  }
+}
+
+// ─── Destructive Operation Preview ──────────────────────────────────────────
+
+/**
+ * Returns a preview/confirm result for destructive tools.
+ * The user sees what will happen and must click Apply to proceed.
+ */
+function handleDestructivePreview(
+  calls: ParsedToolCall[],
+  explanation: string | undefined,
+): StageResult {
+  const actions = calls.map((call) => ({
+    tool: call.tool,
+    params: call.params,
+    description: call.description,
+  }))
+
+  const descriptions = calls.map((c) => c.description).join(', then ')
+  const message = calls.length === 1
+    ? `⚠️ **${calls[0].description}** — this will remove all data on this sheet. Review, then choose Apply or Reject.`
+    : `⚠️ This will: ${descriptions}. Review, then choose Apply or Reject.`
+
+  return {
+    success: true,
+    message: explanation ? `${explanation}\n\n${message}` : message,
+    actions,
+    stageName: 'agent-parser',
+    metadata: { toolUsed: 'destructive-preview' },
   }
 }
 

@@ -359,7 +359,7 @@ export function parseMessage(message: string, sheetContext?: SheetContext): Pars
   const pctAdd = lower.match(/(?:add|increase|raise|markup)\s+(\d+)\s*%\s*(?:to\s+)?(?:column\s+)?([a-z]{1,3})?(?=\s|$)/i)
   if (pctAdd) {
     const pct = parseInt(pctAdd[1])
-    const col = resolveSmartColumn(message, sheetContext, { preferAmount: true })
+    const col = resolveSmartColumn(message, sheetContext, { preferAmount: true, allowNumericFallback: false })
       ?? pctAdd[2]?.toUpperCase()
     if (!col) {
       return {
@@ -375,7 +375,7 @@ export function parseMessage(message: string, sheetContext?: SheetContext): Pars
   const pctReduce = lower.match(/(?:reduce|decrease|discount|subtract)\s+(\d+)\s*%\s*(?:from\s+)?(?:column\s+)?([a-z]{1,3})?(?=\s|$)/i)
   if (pctReduce) {
     const pct = parseInt(pctReduce[1])
-    const col = resolveSmartColumn(message, sheetContext, { preferAmount: true })
+    const col = resolveSmartColumn(message, sheetContext, { preferAmount: true, allowNumericFallback: false })
       ?? pctReduce[2]?.toUpperCase()
     if (!col) {
       return {

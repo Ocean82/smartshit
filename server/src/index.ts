@@ -30,6 +30,9 @@ import {
   callProvider,
   callProviderStream,
   getModelName,
+  isCircuitOpen,
+  recordSuccess,
+  recordFailure,
 } from './providers.js'
 
 import { checkUsage, recordUsage, getUsageStats } from './usage.js'
@@ -289,6 +292,12 @@ async function runLlmChat(params: {
 
   if (!byokSucceeded) {
     for (const provider of availableProviders) {
+      // Circuit breaker: skip providers that have failed repeatedly
+      if (isCircuitOpen(provider)) {
+        providerErrors.push(`${provider}: circuit open (skipped)`)
+        continue
+      }
+
       try {
         const providerOpts = { jsonMode: !llmOnly, maxTokens: llmOnly ? undefined : 2048 }
         if (stream && onChunk && signal) {
@@ -300,11 +309,13 @@ async function runLlmChat(params: {
         }
         usedProvider = provider
         providerMeta = { provider, model: getModelName(provider) }
+        recordSuccess(provider)
         break
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
         providerErrors.push(`${provider}: ${msg}`)
         console.warn(`[llm] provider ${provider} failed:`, msg)
+        recordFailure(provider)
         // Track Groq failures for rate-limit alerting
         if (provider === 'groq') {
           const { recordGroqFallback } = await import('./providers.js')
