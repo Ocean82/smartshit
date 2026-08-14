@@ -83,7 +83,7 @@ log "Changes: $(git log --oneline "${PREV_COMMIT}..${NEW_COMMIT}" | wc -l) commi
 # ─── Install Dependencies ─────────────────────────────────────────────────────
 
 log "Installing root dependencies..."
-npm ci --omit=dev --loglevel=warn 2>&1 | tail -3
+npm ci --loglevel=warn 2>&1 | tail -3
 
 if [ "$DEPLOY_SERVER" = true ]; then
   log "Installing server dependencies (including build tools)..."
