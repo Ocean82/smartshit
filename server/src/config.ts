@@ -192,3 +192,61 @@ export const config = {
 
   intentConfidenceThreshold: Math.max(0, Math.min(1, Number(process.env.INTENT_CONFIDENCE_THRESHOLD ?? 0.6))),
 }
+
+// ─── Startup Validation ──────────────────────────────────────────────────────
+
+interface ConfigWarning {
+  level: 'error' | 'warn'
+  message: string
+}
+
+/**
+ * Validate that critical environment variables are configured.
+ * Called at server startup — logs warnings for missing optional services
+ * and throws if the server cannot function at all.
+ */
+export function validateConfig(): void {
+  const warnings: ConfigWarning[] = []
+
+  // Critical — server cannot serve authenticated requests without Clerk
+  if (!config.clerkSecretKey) {
+    warnings.push({ level: 'error', message: 'CLERK_SECRET_KEY is not set — authentication will fail for all requests' })
+  }
+
+  // Required for payments — warn but don't crash (app works without payments)
+  if (!config.stripeSecretKey) {
+    warnings.push({ level: 'warn', message: 'STRIPE_SECRET_KEY is not set — checkout and subscription management disabled' })
+  }
+  if (!config.stripePriceId) {
+    warnings.push({ level: 'warn', message: 'STRIPE_PRICE_ID is not set — checkout will fail' })
+  }
+  if (!config.stripeWebhookSecret) {
+    warnings.push({ level: 'warn', message: 'STRIPE_WEBHOOK_SECRET is not set — webhook verification disabled' })
+  }
+
+  // Required for cloud features
+  if (!config.databaseUrl) {
+    warnings.push({ level: 'warn', message: 'DATABASE_URL is not set — cloud save, workbook sharing, and usage tracking disabled' })
+  }
+  if (!config.awsAccessKeyId || !config.awsSecretAccessKey) {
+    warnings.push({ level: 'warn', message: 'AWS credentials not set — S3 storage for version history disabled' })
+  }
+
+  // AI providers — warn if none configured
+  const hasAnyProvider = config.groqApiKey || config.openRouterApiKey || config.huggingFaceApiKey
+  if (!hasAnyProvider) {
+    warnings.push({ level: 'warn', message: 'No cloud AI provider keys configured — only local Ollama inference available' })
+  }
+
+  // Output warnings
+  for (const w of warnings) {
+    if (w.level === 'error') console.error(`[config] ❌ ${w.message}`)
+    else console.warn(`[config] ⚠️  ${w.message}`)
+  }
+
+  // Fail fast if critical config is missing
+  const errors = warnings.filter((w) => w.level === 'error')
+  if (errors.length > 0 && process.env.NODE_ENV === 'production') {
+    throw new Error(`Server cannot start: ${errors.map((e) => e.message).join('; ')}`)
+  }
+}

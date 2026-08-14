@@ -4,7 +4,7 @@ import path from 'node:path'
 import cors from 'cors'
 import express from 'express'
 import { clerkMiddleware } from '@clerk/express'
-import { config } from './config.js'
+import { config, validateConfig } from './config.js'
 import { createOnnxRouter } from './api/onnx-infer.js'
 import { SessionPool } from './onnx/sessionPool.js'
 import { getOnnxModelSize, resolveOnnxModelPath } from './onnx/modelPaths.js'
@@ -46,6 +46,9 @@ import { resolveIsPro, invalidateProCache } from './plan.js'
 import { validateBody } from './middleware/validate.js'
 import { chatStreamBodySchema, chatBodySchema } from './schemas/index.js'
 import { chatRateLimiter, checkoutRateLimiter, globalRateLimiter, sharedAccessRateLimiter } from './middleware/rateLimit.js'
+
+// ─── Validate critical configuration at startup ──────────────────────────────
+validateConfig()
 
 const app = express()
 

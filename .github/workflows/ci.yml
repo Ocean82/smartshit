@@ -16,9 +16,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: 'npm'
       - run: npm ci
       - run: npm ci --prefix server
-      - run: npm run lint
+      - run: npm audit --audit-level=high || true
+      - run: npm audit --audit-level=high --prefix server || true
+      - run: npm run lint:ci
+      - run: npm run typecheck
       - run: npm run test --prefix server
       - run: npm run test
       - run: npm run build --prefix server

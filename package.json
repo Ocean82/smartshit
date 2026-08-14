@@ -12,6 +12,9 @@
     "url": "https://github.com/Ocean82/smartshit/issues"
   },
   "homepage": "https://smartsht.com",
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "keywords": [
     "spreadsheet",
     "ai",
@@ -46,7 +49,6 @@
     "@clerk/react": "^6.11.4",
     "@ocean8219/formualizer": "^0.7.2",
     "@sentry/react": "^10.67.0",
-    "@types/uuid": "^10.0.0",
     "clsx": "2.1.1",
     "immer": "^11.1.8",
     "lucide-react": "^1.21.0",
@@ -67,6 +69,7 @@
     "@types/node": "22.19.17",
     "@types/react": "19.2.7",
     "@types/react-dom": "19.2.3",
+    "@types/uuid": "^10.0.0",
     "@vitejs/plugin-react": "5.1.1",
     "eslint": "^10.8.0",
     "eslint-plugin-react-hooks": "^7.1.1",
