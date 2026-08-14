@@ -40,8 +40,10 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
+    "deploy": "powershell -ExecutionPolicy Bypass -File scripts/deploy-remote.ps1",
+    "deploy:server": "powershell -ExecutionPolicy Bypass -File scripts/deploy-remote.ps1 -Server",
+    "deploy:frontend": "powershell -ExecutionPolicy Bypass -File scripts/deploy-remote.ps1 -Frontend",
     "release:check:v1": "node scripts/v1-release-checklist.mjs",
-    "model:copy": "powershell -ExecutionPolicy Bypass -File scripts/copy-model.ps1",
     "model:copy-deploy": "node scripts/copy-deploy-models.mjs",
     "model:setup": "npm run setup-model --prefix server"
   },

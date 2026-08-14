@@ -44,6 +44,9 @@ coverage/
 .vite/
 # Dev debug/test scripts (created during debugging, never ship)
 *.sh
+# Exception: deploy scripts are committed and run on the server
+!scripts/deploy.sh
+!scripts/deploy-remote.sh
 
 # Git worktrees (superpowers isolation)
 .worktrees/

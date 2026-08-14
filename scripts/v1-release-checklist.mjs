@@ -40,7 +40,7 @@ function main() {
     'Import truncation guardrails are present',
   ))
   gates.push(checkFileIncludes(
-    resolve(root, 'src/store/useStore.ts'),
+    resolve(root, 'src/store/slices/chatSlice.ts'),
     'requiresPreview',
     'Preview-denial safety gate is present',
   ))

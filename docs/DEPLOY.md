@@ -78,29 +78,80 @@ The frontend build produces a single `dist/index.html` file (via vite-plugin-sin
 
 ## 3. Deploy to Server
 
+### Automated deployment (recommended)
+
+The project includes deployment scripts that handle the full pipeline with health checks and automatic rollback on failure.
+
+**From your local machine (Windows):**
+```powershell
+# Full deploy (frontend + server)
+npm run deploy
+
+# Server only (faster — skips vite build)
+npm run deploy:server
+
+# Frontend only (no PM2 restart)
+npm run deploy:frontend
+```
+
+**Or using bash (Git Bash / WSL / macOS):**
 ```bash
-# On the production server:
+./scripts/deploy-remote.sh              # full deploy
+./scripts/deploy-remote.sh --server     # server only
+./scripts/deploy-remote.sh --frontend   # frontend only
+```
 
-# Create app directory
-sudo mkdir -p /var/www/smartsht/app
-sudo mkdir -p /var/www/smartsht/server
+### What the deploy script does
 
-# Copy frontend
-scp dist/index.html server:/var/www/smartsht/app/index.html
+1. Pushes your current `main` branch to GitHub
+2. SSHs into the production server (`ubuntu@52.0.207.242`)
+3. Runs `/opt/smartsht/current/scripts/deploy.sh` which:
+   - `git pull` (fast-forward to latest main)
+   - `npm ci --omit=dev` (install deps)
+   - Syncs the shared `.env` into `server/.env` if newer
+   - Builds frontend (`vite build`) → copies to `/var/www/smartsht/app/`
+   - Builds server (`tsc`) → restarts PM2
+   - Runs health check against `http://127.0.0.1:8787/health`
+   - **Rolls back** to the previous commit if health check fails
 
-# Copy landing page
-scp -r landing/* server:/var/www/smartsht/
+### Server directory layout
 
-# Copy server
-scp -r server/dist/* server:/var/www/smartsht/server/
-scp server/package.json server/package-lock.json server:/var/www/smartsht/server/
-scp server/.env server:/var/www/smartsht/server/.env
+```
+/opt/smartsht/
+├── .env                # Shared secrets (never in git)
+├── current/            # Git clone of main branch
+│   ├── dist/           # Frontend build output
+│   ├── server/
+│   │   ├── dist/       # Server build output (PM2 runs from here)
+│   │   ├── .env        # Copied from /opt/smartsht/.env
+│   │   └── ecosystem.config.cjs  # PM2 config (committed)
+│   └── scripts/
+│       └── deploy.sh   # Server-side deploy logic
+├── logs/               # PM2 error.log + out.log + deploy.log
+└── models/             # Ollama GGUF (Spreadsheet-RL-4B, 2.7GB)
 
-# Install server production dependencies
-cd /var/www/smartsht/server && npm ci --production
+/var/www/smartsht/
+├── index.html          # Landing page
+├── app/
+│   └── index.html      # SPA (single-file build, ~14MB)
+├── terms.html
+├── privacy.html
+└── (static assets)
+```
 
-# Copy public assets (favicons, manifest, sw.js) to app directory
-scp -r public/* server:/var/www/smartsht/app/
+### Manual deployment (escape hatch)
+
+```bash
+ssh -i ~/.ssh/server_saver_key ubuntu@52.0.207.242
+cd /opt/smartsht/current
+git pull --ff-only origin main
+npm ci --omit=dev
+npm ci --omit=dev --prefix server
+npx vite build
+sudo cp dist/index.html /var/www/smartsht/app/index.html
+npm run build --prefix server
+pm2 restart smartsht-api
+curl -sf http://127.0.0.1:8787/health
 ```
 
 ---
