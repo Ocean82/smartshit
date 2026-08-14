@@ -86,8 +86,8 @@ log "Installing root dependencies..."
 npm ci --omit=dev --loglevel=warn 2>&1 | tail -3
 
 if [ "$DEPLOY_SERVER" = true ]; then
-  log "Installing server dependencies..."
-  npm ci --omit=dev --prefix server --loglevel=warn 2>&1 | tail -3
+  log "Installing server dependencies (including build tools)..."
+  npm ci --prefix server --loglevel=warn 2>&1 | tail -3
 fi
 
 # ─── Sync Environment ─────────────────────────────────────────────────────────
@@ -156,7 +156,7 @@ if [ "$DEPLOY_SERVER" = true ]; then
   else
     log "HEALTH CHECK FAILED — rolling back..."
     git reset --hard "$PREV_COMMIT" --quiet
-    npm ci --omit=dev --prefix server --loglevel=warn 2>&1 | tail -1
+    npm ci --prefix server --loglevel=warn 2>&1 | tail -1
     npm run build --prefix server 2>&1 | tail -1
     pm2 restart "$PM2_PROCESS" --update-env 2>&1 | tail -1
     die "Deploy rolled back to ${PREV_COMMIT:0:8}. Check $LOGS_DIR/error.log"
