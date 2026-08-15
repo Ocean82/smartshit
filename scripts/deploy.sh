@@ -116,6 +116,14 @@ if [ "$DEPLOY_FRONTEND" = true ]; then
   sudo cp dist/index.html "$FRONTEND_DEST/index.html"
   sudo chown www-data:www-data "$FRONTEND_DEST/index.html"
 
+  # Copy any additional build artifacts (ONNX worker, etc.)
+  for artifact in dist/*.js dist/*.css; do
+    if [ -f "$artifact" ] && [ "$artifact" != "dist/index.html" ]; then
+      sudo cp "$artifact" "$FRONTEND_DEST/$(basename "$artifact")"
+      sudo chown www-data:www-data "$FRONTEND_DEST/$(basename "$artifact")"
+    fi
+  done
+
   # Copy any new static assets (favicon, manifest, sw.js)
   for asset in public/favicon.svg public/manifest.json public/sw.js public/apple-touch-icon.png public/robots.txt public/sitemap.xml; do
     if [ -f "$asset" ]; then
