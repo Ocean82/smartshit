@@ -86,14 +86,15 @@ export function FilterDialog({ isOpen, onClose }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'oklch(0.1 0.02 250 / 0.5)', backdropFilter: 'blur(3px)' }}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose} style={{ background: 'oklch(0.1 0.02 250 / 0.5)', backdropFilter: 'blur(3px)' }}>
       <div
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="filter-dialog-title"
         tabIndex={-1}
-        className="rounded-xl shadow-xl w-[360px] max-w-[calc(100vw-2rem)] p-5 space-y-3 outline-none"
+        onClick={(e) => e.stopPropagation()}
+        className="rounded-xl shadow-xl w-[360px] max-w-[calc(100vw-2rem)] max-h-[min(90dvh,100%)] overflow-y-auto p-5 space-y-3 outline-none"
         style={{ background: 'var(--surface-panel)', boxShadow: '0 24px 48px oklch(0.1 0 0 / 0.18), 0 4px 12px oklch(0.1 0 0 / 0.08)' }}
       >
         <div className="flex items-center justify-between">

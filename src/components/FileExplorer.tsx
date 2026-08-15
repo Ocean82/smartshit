@@ -64,7 +64,7 @@ export function FileExplorer() {
   };
 
   return (
-    <div className="w-56 border-r border-gray-200 flex flex-col bg-white shrink-0">
+    <div className="w-56 border-r border-gray-200 flex flex-col bg-white shrink-0 max-md:fixed max-md:inset-0 max-md:z-40 max-md:w-full">
       {/* Header */}
       <div className="px-3 py-2.5 border-b border-gray-200 flex items-center justify-between" style={{ background: 'var(--accent-50)' }}>
         <h3 className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--accent-700)' }}>Files</h3>
@@ -90,8 +90,9 @@ export function FileExplorer() {
             <FolderPlus size={14} />
           </button>
           <button
-            className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
+            className="p-1 max-md:p-2.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
             onClick={toggleFileExplorer}
+            aria-label="Close files"
           >
             <X size={14} />
           </button>

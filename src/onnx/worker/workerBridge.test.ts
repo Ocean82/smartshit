@@ -451,3 +451,44 @@ describe('OnnxWorkerBridge', () => {
     });
   });
 });
+
+describe('OnnxWorkerBridge lazy construction', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  it('does not construct a Worker until the first load or infer', () => {
+    const WorkerSpy = vi.fn();
+    vi.stubGlobal('Worker', WorkerSpy);
+
+    const lazy = new OnnxWorkerBridge();
+    expect(lazy.hasWorker()).toBe(false);
+    expect(WorkerSpy).not.toHaveBeenCalled();
+    lazy.terminate();
+  });
+
+  it('constructs a Worker on first loadModel', async () => {
+    vi.useFakeTimers();
+    const mockWorker = new MockWorker();
+    const WorkerSpy = vi.fn(() => mockWorker);
+    vi.stubGlobal('Worker', WorkerSpy);
+
+    const lazy = new OnnxWorkerBridge();
+    mockWorker.onPostMessage(() => {
+      mockWorker.simulateResponse({
+        type: 'loaded',
+        sessionHash: 'abc',
+        sizeBytes: 8,
+      });
+    });
+
+    const result = await lazy.loadModel(new ArrayBuffer(8), 'abc');
+    expect(WorkerSpy).toHaveBeenCalledTimes(1);
+    expect(lazy.hasWorker()).toBe(true);
+    expect(result.sizeBytes).toBe(8);
+
+    lazy.terminate();
+    vi.advanceTimersByTime(1_000);
+  });
+});

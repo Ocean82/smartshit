@@ -32,10 +32,14 @@ describe('template execution through the real store', () => {
     expect(messages[messages.length - 1].content).toContain('Built wedding budget')
   })
 
-  it('runTemplateTool opens chat so the confirmation is visible', () => {
-    useStore.setState({ showChat: false })
+  it('runTemplateTool stays on the sheet and toasts instead of opening chat', () => {
+    useStore.setState({ showChat: false, activePanel: null, toasts: [] })
     useStore.getState().runTemplateTool('create_wedding_budget')
-    expect(useStore.getState().showChat).toBe(true)
+    expect(useStore.getState().activePanel).toBeNull()
+    expect(useStore.getState().showChat).toBe(false)
+    const toast = useStore.getState().toasts.at(-1)
+    expect(toast?.type).toBe('success')
+    expect(toast?.action?.label).toMatch(/chat/i)
   })
 
   it('runTemplateTool is undoable as a single history step', () => {

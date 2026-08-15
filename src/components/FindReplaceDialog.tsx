@@ -196,7 +196,18 @@ export function FindReplaceDialog({ isOpen, onClose }: Props) {
   if (!isOpen) return null
 
   return (
-    <div className="absolute top-2 right-4 z-50 bg-white rounded-xl shadow-2xl border border-gray-200 w-[360px] overflow-hidden">
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center md:items-start md:justify-end bg-black/40 md:bg-transparent md:pointer-events-none"
+      onClick={onClose}
+      role="presentation"
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={showReplace ? 'Find and replace' : 'Find'}
+        className="w-full md:w-[360px] max-h-[min(85dvh,100%)] overflow-y-auto rounded-t-2xl md:rounded-xl bg-white shadow-2xl border border-gray-200 md:absolute md:top-2 md:right-4 md:pointer-events-auto md:max-h-[min(90vh,calc(100dvh-1rem))]"
+        onClick={(e) => e.stopPropagation()}
+      >
       <div className="flex items-center justify-between px-3 py-2 bg-gray-50 border-b border-gray-200">
         <div className="flex items-center gap-2">
           <Search size={14} className="text-gray-500" />
@@ -216,7 +227,7 @@ export function FindReplaceDialog({ isOpen, onClose }: Props) {
           <button
             type="button"
             onClick={onClose}
-            className="p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+            className="p-2.5 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100"
           >
             <X size={14} />
           </button>
@@ -324,6 +335,7 @@ export function FindReplaceDialog({ isOpen, onClose }: Props) {
           </span>
         </div>
       </div>
+    </div>
     </div>
   )
 }

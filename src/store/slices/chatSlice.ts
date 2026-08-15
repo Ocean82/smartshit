@@ -49,6 +49,8 @@ export interface ChatStoreAccess extends ChatState {
   getActiveSheet: () => SheetData
   getComputedValue: (row: number, col: number) => string
   setShowChat: (v: boolean) => void
+  setActivePanel: (panel: 'chat' | 'insights' | 'auditor' | 'inspector' | null) => void
+  showToast: (toast: Omit<import('@/types').Toast, 'id'>) => void
   pushHistory: (desc: string) => void
   importWorkbook: (workbook: WorkbookData, meta?: { fileName?: string }) => void
   setCellValue: (cellId: string, value: string | number | boolean | null, formula?: string) => void
@@ -126,6 +128,7 @@ export function createChatActions(
         s.chatInput = ''
         s.isAiProcessing = true
       })
+      get().setActivePanel('chat')
 
       void import('@/services/chatService').then(({ processChatMessage }) => {
         void processChatMessage(input, streamingMsgId, {
@@ -167,7 +170,6 @@ export function createChatActions(
     },
 
     runTemplateTool: (tool) => {
-      get().setShowChat(true)
       const label = tool.replace(/^create_/, '').replace(/_/g, ' ')
       get().pushHistory(`Template: ${label}`)
       const ctx = buildExecutionContext(get as never, set as never, { suppressHistory: true })
@@ -181,6 +183,14 @@ export function createChatActions(
             : `⚠️ ${result.message}`,
           timestamp: Date.now(),
         })
+      })
+      get().showToast({
+        type: result.success ? 'success' : 'error',
+        message: result.success ? `${result.message}` : result.message,
+        action: {
+          label: 'View in chat',
+          onClick: () => get().setActivePanel('chat'),
+        },
       })
     },
 

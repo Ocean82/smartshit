@@ -11,10 +11,18 @@ import {
   Menu, X, FileText, FolderOpen, Download,
   Undo2, Redo2, Scissors, Copy, ClipboardPaste,
   BarChart3, Table, Filter, SortAsc, SortDesc,
-  Maximize,
+  Maximize, LayoutTemplate, Cloud, Share2,
+  MessageSquare, ShieldCheck, Microscope, Search,
 } from 'lucide-react';
 
-export function MobileMenu() {
+interface MobileMenuProps {
+  onOpenTemplates: () => void
+  onOpenCloudPicker: () => void
+  onOpenShare: () => void
+  onOpenCommandPalette: () => void
+}
+
+export function MobileMenu({ onOpenTemplates, onOpenCloudPicker, onOpenShare, onOpenCommandPalette }: MobileMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const {
@@ -33,6 +41,7 @@ export function MobileMenu() {
     setShowChartDialog,
     setShowFilterDialog,
     setShowPivotDialog,
+    setActivePanel,
     sortByColumn,
     initWorkbook,
     addMessage,
@@ -55,6 +64,7 @@ export function MobileMenu() {
     setShowChartDialog: s.setShowChartDialog,
     setShowFilterDialog: s.setShowFilterDialog,
     setShowPivotDialog: s.setShowPivotDialog,
+    setActivePanel: s.setActivePanel,
     sortByColumn: s.sortByColumn,
     initWorkbook: s.initWorkbook,
     addMessage: s.addMessage,
@@ -102,6 +112,9 @@ export function MobileMenu() {
     { section: 'File' },
     { label: 'New Workbook', icon: <FileText size={18} />, action: handleNewWorkbook },
     { label: 'Open File...', icon: <FolderOpen size={18} />, action: () => { fileInputRef.current?.click(); } },
+    { label: 'Templates', icon: <LayoutTemplate size={18} />, action: () => { setIsOpen(false); onOpenTemplates(); } },
+    { label: 'Cloud workbooks', icon: <Cloud size={18} />, action: () => { setIsOpen(false); onOpenCloudPicker(); } },
+    { label: 'Share', icon: <Share2 size={18} />, action: () => { setIsOpen(false); onOpenShare(); } },
     { label: 'Save as Excel', icon: <Download size={18} />, action: () => { exportWorkbookToXlsx(workbook); setIsOpen(false); } },
     { label: 'Save as CSV', icon: <Download size={18} />, action: () => { exportSheetToCsv(sheet, workbook.name); setIsOpen(false); } },
     { label: 'Version History', icon: <FileText size={18} />, action: () => { setShowVersionHistory(!showVersionHistory); setIsOpen(false); } },
@@ -118,7 +131,12 @@ export function MobileMenu() {
     { label: 'Insert Chart', icon: <BarChart3 size={18} />, action: () => { setShowChartDialog(true); setIsOpen(false); } },
     { label: 'Pivot Table', icon: <Table size={18} />, action: () => { setShowPivotDialog(true); setIsOpen(false); }, disabled: !selection },
     { section: 'View' },
-    { label: 'Files Sidebar', icon: <FolderOpen size={18} />, action: () => { toggleFileExplorer(); setIsOpen(false); } },
+    { label: 'Chat', icon: <MessageSquare size={18} />, action: () => { setActivePanel('chat'); setIsOpen(false); } },
+    { label: 'Insights', icon: <BarChart3 size={18} />, action: () => { setActivePanel('insights'); setIsOpen(false); } },
+    { label: 'Auditor', icon: <ShieldCheck size={18} />, action: () => { setActivePanel('auditor'); setIsOpen(false); } },
+    { label: 'Inspector', icon: <Microscope size={18} />, action: () => { setActivePanel('inspector'); setIsOpen(false); } },
+    { label: 'Command palette', icon: <Search size={18} />, action: () => { setIsOpen(false); onOpenCommandPalette(); } },
+    { label: 'Files', icon: <FolderOpen size={18} />, action: () => { toggleFileExplorer(); setIsOpen(false); } },
     { label: 'Full Screen', icon: <Maximize size={18} />, action: () => { document.documentElement.requestFullscreen?.(); setIsOpen(false); } },
   ];
 

@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, lazy, Suspense } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '@/store/useStore'
-import { fetchServerHealth, type ServerHealth } from '@/ai/agentClient'
+import { useServerHealth } from '@/ai/useServerHealth'
 import { Toolbar } from '@/components/Toolbar'
 import { SpreadsheetGrid } from '@/components/SpreadsheetGrid'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
@@ -66,6 +66,7 @@ function App() {
     showConditionalFormatDialog,
     setShowConditionalFormatDialog,
     setActivePanel,
+    activePanel,
     showToolbar,
   } = useStore(useShallow((s) => ({
     workbook: s.workbook,
@@ -79,6 +80,7 @@ function App() {
     showConditionalFormatDialog: s.showConditionalFormatDialog,
     setShowConditionalFormatDialog: s.setShowConditionalFormatDialog,
     setActivePanel: s.setActivePanel,
+    activePanel: s.activePanel,
     showToolbar: s.showToolbar,
   })))
   const [isLoaded, setIsLoaded] = useState(false)
@@ -173,7 +175,7 @@ function App() {
     return (
       <div className="h-screen w-screen flex items-center justify-center" style={{ background: 'var(--surface-body)' }}>
         <div className="flex flex-col items-center gap-4">
-          <img src="/pwa-icon-192.png" alt="smartsh!t" className="w-14 h-14 rounded-2xl shadow-md" />
+          <img src="/app/pwa-icon-192.png" alt="smartsh!t" className="w-14 h-14 rounded-2xl shadow-md" />
           <div className="text-sm animate-pulse font-medium" style={{ color: 'var(--ink-secondary)' }}>Loading smartsh!t...</div>
         </div>
       </div>
@@ -247,16 +249,17 @@ function App() {
       {/* Mobile bottom toolbar */}
       <MobileToolbar />
 
-      {/* Mobile chat toggle FAB */}
-      <button
-        type="button"
-        onClick={() => setActivePanel('chat')}
-        className="md:hidden fixed bottom-16 right-4 z-30 p-3.5 rounded-full text-white shadow-lg transition-colors active:scale-95"
-        style={{ background: 'var(--accent-600)' }}
-        aria-label="Open chat"
-      >
-        <MessageSquare size={22} />
-      </button>
+      {activePanel !== 'chat' && (
+        <button
+          type="button"
+          onClick={() => setActivePanel('chat')}
+          className="md:hidden fixed bottom-16 right-4 z-30 p-3.5 rounded-full text-white shadow-lg transition-colors active:scale-95"
+          style={{ background: 'var(--accent-600)' }}
+          aria-label="Open chat"
+        >
+          <MessageSquare size={22} />
+        </button>
+      )}
 
       <StatusBar />
       <ContextMenu />
@@ -319,21 +322,11 @@ function TitleBar({ onOpenTemplates, onOpenCloudPicker, onOpenShare, onOpenComma
     workbookName: s.workbook.name,
     workbookUpdatedAt: s.workbook.updatedAt,
   })))
-  const [health, setHealth] = useState<ServerHealth | null>(null)
   const [syncStatus, setSyncStatus] = useState<SyncStatus>(getSyncStatus())
-
-  useEffect(() => {
-    void fetchServerHealth().then(setHealth)
-    const id = setInterval(() => { void fetchServerHealth().then(setHealth) }, 15000)
-    return () => clearInterval(id)
-  }, [])
 
   useEffect(() => {
     return onSyncStatusChange(setSyncStatus)
   }, [])
-
-  const aiLabel = health?.ok ? 'AI online' : health?.ollama ? 'Model loading' : 'AI offline'
-  const aiColor = health?.ok ? 'var(--success)' : 'var(--warning)'
 
   // Cloud sync badge
   const syncBadge = (() => {
@@ -402,10 +395,15 @@ function TitleBar({ onOpenTemplates, onOpenCloudPicker, onOpenShare, onOpenComma
   return (
     <div className="h-10 flex items-center px-2 md:px-4 gap-2 md:gap-3 shrink-0" style={{ background: 'var(--surface-chrome)' }}>
       {/* Mobile hamburger menu */}
-      <MobileMenu />
+      <MobileMenu
+        onOpenTemplates={onOpenTemplates}
+        onOpenCloudPicker={onOpenCloudPicker}
+        onOpenShare={onOpenShare}
+        onOpenCommandPalette={onOpenCommandPalette}
+      />
 
       <div className="flex items-center gap-2">
-        <img src="/pwa-icon-192.png" alt="smartsh!t" className="w-6 h-6 rounded-lg" />
+        <img src="/app/pwa-icon-192.png" alt="smartsh!t" className="w-6 h-6 rounded-lg" />
         <span className="text-sm font-semibold tracking-tight hidden sm:inline" style={{ color: 'var(--ink-on-dark)' }}>smartsh!t</span>
       </div>
 
@@ -463,17 +461,27 @@ function TitleBar({ onOpenTemplates, onOpenCloudPicker, onOpenShare, onOpenComma
           Share
         </button>
 
-        <div className="flex items-center gap-1.5 px-2 py-1 rounded-md" style={{ background: 'var(--neutral-900)' }}>
-          <Sparkles size={11} style={{ color: 'var(--warning)' }} />
-          <span className="hidden sm:inline" style={{ color: aiColor }}>{aiLabel}</span>
-          <span className="sm:hidden" style={{ color: aiColor }}>{health?.ok ? '●' : '○'}</span>
-        </div>
+        <AiStatusBadge />
         <span className="hidden md:inline">{syncBadge}</span>
         <span className="hidden sm:inline text-[10px]" style={{ color: 'var(--neutral-500)' }}>
           {new Date(workbookUpdatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
         </span>
         <UserNav />
       </div>
+    </div>
+  )
+}
+
+function AiStatusBadge() {
+  const health = useServerHealth()
+  const aiLabel = health?.ok ? 'AI online' : health?.ollama ? 'Model loading' : 'AI offline'
+  const aiColor = health?.ok ? 'var(--success)' : 'var(--warning)'
+
+  return (
+    <div className="flex items-center gap-1.5 px-2 py-1 rounded-md" style={{ background: 'var(--neutral-900)' }}>
+      <Sparkles size={11} style={{ color: 'var(--warning)' }} />
+      <span className="hidden sm:inline" style={{ color: aiColor }}>{aiLabel}</span>
+      <span className="sm:hidden" style={{ color: aiColor }}>{health?.ok ? '●' : '○'}</span>
     </div>
   )
 }

@@ -59,6 +59,18 @@ function ToastItem({ toast }: { toast: ToastType }) {
         {icons[toast.type]}
       </div>
       <p className="toast-message">{toast.message}</p>
+      {toast.action && (
+        <button
+          type="button"
+          className="toast-undo"
+          onClick={() => {
+            toast.action!.onClick()
+            handleDismiss()
+          }}
+        >
+          <span>{toast.action.label}</span>
+        </button>
+      )}
       {toast.undoAction && (
         <button
           type="button"

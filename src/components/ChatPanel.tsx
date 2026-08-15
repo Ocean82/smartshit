@@ -1,5 +1,7 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react'
-import { fetchServerHealth, type ServerHealth } from '@/ai/agentClient'
+import { shouldStickChatToBottom } from '@/lib/chatScroll'
+import type { ServerHealth } from '@/ai/agentClient'
+import { useServerHealth } from '@/ai/useServerHealth'
 import {
   Send, Check, XCircle, Sparkles, Bot, User, Loader2, Paperclip, X, ThumbsUp, ThumbsDown, Copy, Download,
   PanelLeftClose, SquarePen, Pin, PinOff, ChevronDown, ChevronUp,
@@ -101,10 +103,11 @@ export function ChatPanel({ isMobileOpen, onCloseMobile, embedded }: ChatPanelPr
   const fileInputRef = useRef<HTMLInputElement>(null)
   const resizeStartRef = useRef<{ x: number; width: number } | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const messagesListRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
   const [waitSeconds, setWaitSeconds] = useState(0)
-  const [health, setHealth] = useState<ServerHealth | null>(null)
+  const health = useServerHealth()
   const [feedbackById, setFeedbackById] = useState<Record<string, ChatFeedbackRating>>({})
   const [confirmClear, setConfirmClear] = useState(false)
 
@@ -127,20 +130,15 @@ export function ChatPanel({ isMobileOpen, onCloseMobile, embedded }: ChatPanelPr
   }, [messages])
 
   useEffect(() => {
-    let interval = 15000
-    let timeoutId: ReturnType<typeof setTimeout>
-    const poll = async () => {
-      const result = await fetchServerHealth()
-      setHealth(result)
-      interval = result?.ok ? 15000 : Math.min(interval * 2, 60000)
-      timeoutId = setTimeout(poll, interval)
-    }
-    void poll()
-    return () => clearTimeout(timeoutId)
-  }, [])
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    const list = messagesListRef.current
+    const end = messagesEndRef.current
+    if (!list || !end) return
+    const lastRole = messages[messages.length - 1]?.role
+    if (!shouldStickChatToBottom(list, lastRole)) return
+    const frame = requestAnimationFrame(() => {
+      end.scrollIntoView({ behavior: 'smooth', block: 'end' })
+    })
+    return () => cancelAnimationFrame(frame)
   }, [messages])
 
   useEffect(() => {
@@ -238,7 +236,7 @@ export function ChatPanel({ isMobileOpen, onCloseMobile, embedded }: ChatPanelPr
 
       <SkillBar skills={skills} onSkillClick={handleSkillClick} />
 
-      <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
+      <div ref={messagesListRef} className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
         {pinnedMessages.length > 0 && (
           <PinnedMessagesSection messages={pinnedMessages} onUnpin={togglePinMessage} onJumpTo={(id) => {
             document.getElementById(`msg-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })

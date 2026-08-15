@@ -6,6 +6,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useStore } from '@/store/useStore'
 import { getPanelDef, type PanelId } from './panelTypes'
+import { resolveDockPanelFrame } from './dockPanelLayout'
 import { X } from 'lucide-react'
 
 /** Per-panel header accent: subtle tinted background for visual identity */
@@ -52,18 +53,16 @@ export function DockPanel({ panelId, children, title, headerActions }: DockPanel
     return () => window.removeEventListener('resize', handleViewportResize)
   }, [])
 
-  const viewportMaxWidth = Math.max(0, viewportWidth - 360)
-  // Keep the existing minimum width as the lower bound. On mobile the panel
-  // becomes full-screen, so this constraint only applies to the desktop dock.
-  const effectiveMaxWidth = Math.max(def.minWidth, Math.min(def.maxWidth, viewportMaxWidth))
   const raw = panelWidths[panelId]
   const storedWidth = Number.isFinite(raw) ? (raw as number) : def.defaultWidth
-  const width = Math.min(effectiveMaxWidth, Math.max(def.minWidth, storedWidth))
+  const frame = resolveDockPanelFrame(viewportWidth, def, storedWidth)
+  const { width, minWidth, maxWidth: effectiveMaxWidth, isMobile } = frame
   const isOpen = activePanel === panelId
 
   useEffect(() => {
+    if (isMobile) return
     if (storedWidth !== width) setPanelWidth(panelId, width)
-  }, [panelId, setPanelWidth, storedWidth, width])
+  }, [isMobile, panelId, setPanelWidth, storedWidth, width])
 
   // Unmount cleanup: if the panel is closed mid-drag, release body styles and drag state.
   useEffect(() => {
@@ -121,12 +120,24 @@ export function DockPanel({ panelId, children, title, headerActions }: DockPanel
     }
   }
 
+  useEffect(() => {
+    if (!isOpen) return
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        setActivePanel(null)
+      }
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [isOpen, setActivePanel])
+
   if (!isOpen) return null
 
   return (
     <div
-      className="dock-panel relative flex flex-col bg-white border-l border-gray-200 shrink-0 h-full max-md:fixed max-md:inset-0 max-md:z-40"
-      style={{ width, minWidth: def.minWidth, maxWidth: effectiveMaxWidth }}
+      className="dock-panel relative flex flex-col bg-white border-l border-gray-200 shrink-0 h-full max-md:fixed max-md:inset-0 max-md:z-40 max-md:border-l-0"
+      style={{ width, minWidth, maxWidth: effectiveMaxWidth }}
     >
       {/* Resize handle (left edge) */}
       <div
@@ -149,7 +160,7 @@ export function DockPanel({ panelId, children, title, headerActions }: DockPanel
 
       {/* Header */}
       <div
-        className="px-3 py-2.5 border-b flex items-center justify-between shrink-0"
+        className="px-3 py-2.5 border-b flex items-center justify-between shrink-0 max-md:pt-[max(0.625rem,env(safe-area-inset-top))]"
         style={{
           borderColor: 'var(--neutral-200)',
           background: PANEL_HEADER_STYLES[panelId]?.bg ?? 'transparent',
@@ -166,7 +177,7 @@ export function DockPanel({ panelId, children, title, headerActions }: DockPanel
           <button
             type="button"
             onClick={handleClose}
-            className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
+            className="p-1 max-md:p-2.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
             title={`Close ${def.label}`}
             aria-label={`Close ${def.label} panel`}
           >

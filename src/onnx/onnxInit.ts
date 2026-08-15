@@ -149,7 +149,8 @@ export function initializeOnnxFunction(
   // Create or reuse shared instances
   sessionCache = options.sessionCache ?? new SessionCache();
 
-  // WorkerBridge creation is deferred/guarded since Worker may not be available
+  // WorkerBridge is constructed at init, but the Web Worker itself is created
+  // lazily on first load/infer (see OnnxWorkerBridge). Worker may be missing
   // in Node.js test environments.
   if (options.workerBridge) {
     workerBridge = options.workerBridge;

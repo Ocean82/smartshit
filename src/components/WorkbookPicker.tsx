@@ -94,8 +94,8 @@ export function WorkbookPicker({ open, onClose }: WorkbookPickerProps) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div ref={containerRef} className="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden" role="dialog" aria-modal="true" aria-labelledby="workbook-picker-title">
+    <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={onClose}>
+      <div ref={containerRef} className="bg-white rounded-t-2xl md:rounded-xl shadow-2xl w-full max-w-lg max-h-[min(90dvh,100%)] overflow-hidden flex flex-col" role="dialog" aria-modal="true" aria-labelledby="workbook-picker-title" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
           <div className="flex items-center gap-2">
@@ -105,7 +105,7 @@ export function WorkbookPicker({ open, onClose }: WorkbookPickerProps) {
           <button
             type="button"
             onClick={onClose}
-            className="p-1 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+            className="p-2.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
             aria-label="Close"
           >
             <X size={18} />
@@ -113,7 +113,7 @@ export function WorkbookPicker({ open, onClose }: WorkbookPickerProps) {
         </div>
 
         {/* Content */}
-        <div className="p-4 max-h-[400px] overflow-y-auto">
+        <div className="p-4 flex-1 overflow-y-auto min-h-0">
           {!isCloudConfigured() ? (
             <div className="text-center py-8 text-gray-500">
               <Cloud size={32} className="mx-auto mb-2 text-gray-300" />

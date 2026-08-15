@@ -92,13 +92,13 @@ export function FormatPanel() {
     : 'border-gray-100 text-gray-300 cursor-not-allowed';
 
   return (
-    <div className="w-[280px] border-l border-gray-200 bg-white h-full overflow-y-auto shrink-0">
+    <div className="w-[280px] border-l border-gray-200 bg-white h-full overflow-y-auto shrink-0 max-md:fixed max-md:inset-0 max-md:z-40 max-md:w-full">
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
         <h3 className="text-sm font-semibold text-gray-900">Format</h3>
         <button
           type="button"
           onClick={() => setShowFormatPanel(false)}
-          className="text-gray-400 hover:text-gray-600"
+          className="p-1 max-md:p-2.5 text-gray-400 hover:text-gray-600"
           aria-label="Close format panel"
         >
           ✕

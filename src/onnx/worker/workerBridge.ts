@@ -33,7 +33,7 @@ interface QueuedInference {
 }
 
 export class OnnxWorkerBridge {
-  private worker: Worker;
+  private worker: Worker | null;
   private requestQueue: QueuedInference[];
   private isProcessing: boolean;
   private healthcheckTimer: ReturnType<typeof setInterval> | null;
@@ -42,10 +42,9 @@ export class OnnxWorkerBridge {
   private terminated: boolean;
 
   constructor(worker?: Worker) {
-    this.worker = worker ?? new Worker(
-      new URL('./onnx.worker.ts', import.meta.url),
-      { type: 'module' }
-    );
+    // Injected workers (tests) start immediately. Production constructs the
+    // Worker lazily on first load/infer so app startup does not fetch onnxruntime.
+    this.worker = worker ?? null;
     this.requestQueue = [];
     this.isProcessing = false;
     this.healthcheckTimer = null;
@@ -53,10 +52,15 @@ export class OnnxWorkerBridge {
     this.pendingResponse = null;
     this.terminated = false;
 
-    this.worker.onmessage = this.handleWorkerMessage.bind(this);
-    this.worker.onerror = this.handleWorkerError.bind(this);
+    if (this.worker) {
+      this.attachWorker(this.worker);
+      this.startHealthcheck();
+    }
+  }
 
-    this.startHealthcheck();
+  /** True when the underlying Worker has been created. */
+  hasWorker(): boolean {
+    return this.worker !== null;
   }
 
   /**
@@ -67,6 +71,8 @@ export class OnnxWorkerBridge {
     if (this.terminated) {
       throw new Error('Worker has been terminated');
     }
+
+    const worker = this.ensureWorker();
 
     return new Promise<{ sizeBytes: number }>((resolve, reject) => {
       this.pendingResponse = {
@@ -88,7 +94,7 @@ export class OnnxWorkerBridge {
         modelHash: hash,
       };
 
-      this.worker.postMessage(message, [binary]);
+      worker.postMessage(message, [binary]);
     });
   }
 
@@ -104,6 +110,8 @@ export class OnnxWorkerBridge {
     if (this.requestQueue.length >= MAX_QUEUE_DEPTH) {
       throw new Error('Inference request queue is full (max 10)');
     }
+
+    this.ensureWorker();
 
     return new Promise<TensorData>((resolve, reject) => {
       const queuedRequest: QueuedInference = {
@@ -143,10 +151,15 @@ export class OnnxWorkerBridge {
       this.pendingResponse = null;
     }
 
+    const worker = this.worker;
+    if (!worker) {
+      return;
+    }
+
     // Send terminate message and force-terminate after timeout
     const terminateMessage: WorkerMessage = { type: 'terminate' };
     try {
-      this.worker.postMessage(terminateMessage);
+      worker.postMessage(terminateMessage);
     } catch {
       // Worker may already be terminated
     }
@@ -154,7 +167,7 @@ export class OnnxWorkerBridge {
     // Force terminate the worker within 1 second
     setTimeout(() => {
       try {
-        this.worker.terminate();
+        worker.terminate();
       } catch {
         // Already terminated
       }
@@ -169,6 +182,27 @@ export class OnnxWorkerBridge {
   }
 
   // --- Private Methods ---
+
+  private attachWorker(worker: Worker): void {
+    worker.onmessage = this.handleWorkerMessage.bind(this);
+    worker.onerror = this.handleWorkerError.bind(this);
+  }
+
+  private ensureWorker(): Worker {
+    if (this.worker) {
+      return this.worker;
+    }
+    if (typeof Worker === 'undefined') {
+      throw new Error('Web Worker is not available in this environment');
+    }
+    this.worker = new Worker(
+      new URL('./onnx.worker.ts', import.meta.url),
+      { type: 'module' }
+    );
+    this.attachWorker(this.worker);
+    this.startHealthcheck();
+    return this.worker;
+  }
 
   private handleWorkerMessage(event: MessageEvent<WorkerResponse>): void {
     const response = event.data;
@@ -251,7 +285,7 @@ export class OnnxWorkerBridge {
       inputDims: request.input.dims,
     };
 
-    this.worker.postMessage(message, [inputBuffer]);
+    this.ensureWorker().postMessage(message, [inputBuffer]);
   }
 
   private startHealthcheck(): void {
@@ -264,6 +298,10 @@ export class OnnxWorkerBridge {
       if (this.healthcheckPending) {
         // Previous healthcheck wasn't acknowledged — worker is unresponsive
         this.handleUnresponsiveWorker();
+        return;
+      }
+
+      if (!this.worker) {
         return;
       }
 

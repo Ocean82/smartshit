@@ -48,6 +48,19 @@ export function TemplateGallery({ open, onClose }: TemplateGalleryProps) {
     }
   }, [activeCategory, cloudSort, open]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    if (!open) return
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        if (showPublish) setShowPublish(false)
+        else onClose()
+      }
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [open, onClose, showPublish])
+
   async function fetchCloudTemplates() {
     setCloudLoading(true)
     setCloudError(null)
@@ -91,15 +104,13 @@ export function TemplateGallery({ open, onClose }: TemplateGalleryProps) {
   if (!open) return null
 
   function runTemplate(prompt: string, tools?: string[]) {
-    // Templates with a registered spec build instantly — no parser/LLM round-trip
+    onClose()
     const directTool = tools?.find((t) => hasTemplateSpec(t))
     if (directTool) {
-      onClose()
       runTemplateTool(directTool)
       return
     }
     setChatInput(prompt)
-    onClose()
     setTimeout(() => sendMessage(), 50)
   }
 
@@ -137,15 +148,30 @@ export function TemplateGallery({ open, onClose }: TemplateGalleryProps) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-      <div className="w-full max-w-4xl max-h-[90vh] rounded-2xl bg-white shadow-2xl overflow-hidden flex flex-col">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
-          <div className="flex items-center gap-2">
-            <LayoutTemplate size={18} className="text-blue-600" />
-            <h2 className="text-lg font-bold text-gray-900">Start with a template</h2>
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center md:items-center bg-black/40 backdrop-blur-sm md:p-4"
+      onClick={onClose}
+      role="presentation"
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="template-gallery-title"
+        className="w-full max-w-4xl h-[min(92dvh,100%)] md:h-auto md:max-h-[90vh] rounded-t-2xl md:rounded-2xl bg-white shadow-2xl overflow-hidden flex flex-col min-h-0"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-4 md:px-6 py-3 md:py-4 border-b border-gray-100 shrink-0 pt-[max(0.75rem,env(safe-area-inset-top))]">
+          <div className="flex items-center gap-2 min-w-0">
+            <LayoutTemplate size={18} className="text-blue-600 shrink-0" />
+            <h2 id="template-gallery-title" className="text-lg font-bold text-gray-900 truncate">Start with a template</h2>
           </div>
-          <button type="button" onClick={onClose} className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600">
-            <X size={18} />
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-2.5 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 shrink-0"
+            aria-label="Close templates"
+          >
+            <X size={20} />
           </button>
         </div>
 
@@ -184,7 +210,7 @@ export function TemplateGallery({ open, onClose }: TemplateGalleryProps) {
         </div>
 
         {/* Templates grid */}
-        <div className="flex-1 overflow-y-auto px-6 py-4">
+        <div className="flex-1 overflow-y-auto min-h-0 px-4 md:px-6 py-4">
           {activeCategory === 'Marketplace' ? (
             <MarketplaceGrid
               templates={cloudTemplates}
@@ -221,7 +247,7 @@ export function TemplateGallery({ open, onClose }: TemplateGalleryProps) {
         </div>
 
         {/* Footer */}
-        <div className="px-6 pb-4 pt-2 border-t border-gray-100 shrink-0 flex items-center justify-between">
+        <div className="px-4 md:px-6 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2 border-t border-gray-100 shrink-0 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <button type="button" onClick={() => importInputRef.current?.click()}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-violet-600 bg-violet-50 rounded-lg hover:bg-violet-100 transition-colors">
@@ -233,7 +259,7 @@ export function TemplateGallery({ open, onClose }: TemplateGalleryProps) {
             </button>
             <input ref={importInputRef} type="file" accept=".json,.sht.json" className="hidden" onChange={handleImportTemplate} />
           </div>
-          <button type="button" onClick={onClose} className="py-2 px-4 text-sm text-gray-500 hover:text-gray-700">
+          <button type="button" onClick={onClose} className="py-2.5 px-4 text-sm text-gray-500 hover:text-gray-700 shrink-0">
             Start blank instead
           </button>
         </div>

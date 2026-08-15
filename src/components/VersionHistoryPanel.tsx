@@ -38,7 +38,7 @@ export function VersionHistoryPanel() {
   // Version history is Pro-only — render gate after all hooks
   if (showVersionHistory && !isPro) {
     return (
-      <div className="w-[300px] border-l border-gray-200 bg-white h-full flex flex-col shrink-0 p-4">
+      <div className="w-[300px] border-l border-gray-200 bg-white h-full flex flex-col shrink-0 p-4 max-md:fixed max-md:inset-0 max-md:z-40 max-md:w-full">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-sm font-semibold" style={{ color: 'var(--ink-primary)' }}>Version History</h3>
           <button type="button" onClick={() => setShowVersionHistory(false)} className="p-1 rounded-lg transition-colors" style={{ color: 'var(--neutral-400)' }} aria-label="Close">
@@ -108,7 +108,7 @@ export function VersionHistoryPanel() {
   }
 
   return (
-    <div className="w-[300px] border-l border-gray-200 bg-white h-full overflow-hidden flex flex-col shrink-0">
+    <div className="w-[300px] border-l border-gray-200 bg-white h-full overflow-hidden flex flex-col shrink-0 max-md:fixed max-md:inset-0 max-md:z-40 max-md:w-full">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
         <div className="flex items-center gap-2">
@@ -118,7 +118,7 @@ export function VersionHistoryPanel() {
         <button
           type="button"
           onClick={() => setShowVersionHistory(false)}
-          className="p-1 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+          className="p-1 max-md:p-2.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
           aria-label="Close version history"
         >
           <X size={16} />
