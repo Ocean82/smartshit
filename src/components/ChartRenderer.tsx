@@ -1,7 +1,8 @@
 import { useStore } from '@/store/useStore';
 import { cellToRef, refToCell } from '@/engine/spreadsheet';
 import { X, Move } from 'lucide-react';
-import React, { useState, useCallback, useRef, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useMemo, useEffect, useLayoutEffect } from 'react';
+import { clampChartBox, getChartOverlayBounds, type ChartBounds } from '@/lib/chartLayout';
 import type { ChartConfig, TrendLineConfig, AxisConfig } from '@/types';
 import {
   computeTrendValues,
@@ -154,28 +155,65 @@ function renderChart(type: string, props: ChartProps): React.ReactNode {
 export function ChartOverlay() {
   const { getActiveSheet, removeChart } = useStore();
   const sheet = getActiveSheet();
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [bounds, setBounds] = useState<ChartBounds>(() => getChartOverlayBounds());
+
+  useLayoutEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const measure = () => setBounds({ width: el.clientWidth, height: el.clientHeight });
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [sheet.charts?.length]);
 
   if (!sheet.charts || sheet.charts.length === 0) return null;
 
   return (
-    <>
+    <div ref={wrapRef} className="absolute inset-0 z-20 overflow-hidden pointer-events-none">
       {sheet.charts.map((chart) => (
-        <ChartCard key={chart.id} chart={chart} onRemove={() => removeChart(chart.id)} />
+        <ChartCard key={chart.id} chart={chart} bounds={bounds} onRemove={() => removeChart(chart.id)} />
       ))}
-    </>
+    </div>
   );
 }
 
 // ─── ChartCard Component ──────────────────────────────────────────────────────
 
-function ChartCard({ chart, onRemove }: { chart: ChartConfig; onRemove: () => void }) {
+function ChartCard({ chart, onRemove, bounds }: { chart: ChartConfig; onRemove: () => void; bounds: ChartBounds }) {
   const { getActiveSheet, getComputedValue, updateChartPosition } = useStore();
   const sheet = getActiveSheet();
-  const [pos, setPos] = useState({ x: chart.position.x, y: chart.position.y });
+  const box = clampChartBox(
+    { x: chart.position.x, y: chart.position.y, width: chart.position.width, height: chart.position.height },
+    bounds,
+  );
+  const [pos, setPos] = useState({ x: box.x, y: box.y });
   const isDraggingRef = useRef(false);
   const dragOffsetRef = useRef({ x: 0, y: 0 });
   const posRef = useRef(pos);
   posRef.current = pos;
+  const sizeRef = useRef({ width: box.width, height: box.height });
+  sizeRef.current = { width: box.width, height: box.height };
+
+  useEffect(() => {
+    if (isDraggingRef.current) return;
+    const next = clampChartBox(
+      { x: posRef.current.x, y: posRef.current.y, width: chart.position.width, height: chart.position.height },
+      bounds,
+    );
+    setPos({ x: next.x, y: next.y });
+    posRef.current = { x: next.x, y: next.y };
+    const stored = chart.position;
+    if (
+      stored.x !== next.x
+      || stored.y !== next.y
+      || stored.width !== next.width
+      || stored.height !== next.height
+    ) {
+      updateChartPosition(chart.id, next.x, next.y, { width: next.width, height: next.height });
+    }
+  }, [bounds.width, bounds.height, chart.id, chart.position.height, chart.position.width, chart.position.x, chart.position.y, updateChartPosition]);
 
   const data = useMemo(
     () => parseMultiSeriesData(chart, sheet.cells, getComputedValue),
@@ -190,7 +228,7 @@ function ChartCard({ chart, onRemove }: { chart: ChartConfig; onRemove: () => vo
   const endDrag = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     if (!isDraggingRef.current) return;
     isDraggingRef.current = false;
-    updateChartPosition(chart.id, posRef.current.x, posRef.current.y);
+    updateChartPosition(chart.id, posRef.current.x, posRef.current.y, sizeRef.current);
     if (e.currentTarget.hasPointerCapture(e.pointerId)) {
       e.currentTarget.releasePointerCapture(e.pointerId);
     }
@@ -210,13 +248,18 @@ function ChartCard({ chart, onRemove }: { chart: ChartConfig; onRemove: () => vo
       endDrag(e);
       return;
     }
-    const newPos = {
+    const raw = {
       x: e.clientX - dragOffsetRef.current.x,
       y: e.clientY - dragOffsetRef.current.y,
     };
+    const clamped = clampChartBox(
+      { ...raw, width: sizeRef.current.width, height: sizeRef.current.height },
+      bounds,
+    );
+    const newPos = { x: clamped.x, y: clamped.y };
     setPos(newPos);
     posRef.current = newPos;
-  }, [endDrag]);
+  }, [endDrag, bounds]);
 
   useEffect(() => () => {
     isDraggingRef.current = false;
@@ -226,8 +269,8 @@ function ChartCard({ chart, onRemove }: { chart: ChartConfig; onRemove: () => vo
 
   return (
     <div
-      className="absolute bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden z-30"
-      style={{ left: pos.x, top: pos.y, width: chart.position.width, height: chart.position.height, pointerEvents: 'none' }}
+      className="absolute bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden z-20"
+      style={{ left: pos.x, top: pos.y, width: box.width, height: box.height, pointerEvents: 'none' }}
     >
       <div
         className="flex items-center justify-between px-3 py-2 bg-gray-50 border-b border-gray-200 cursor-move touch-none"
@@ -245,7 +288,7 @@ function ChartCard({ chart, onRemove }: { chart: ChartConfig; onRemove: () => vo
           <X size={16} />
         </button>
       </div>
-      <div className="p-3 flex-1" style={{ height: chart.position.height - 40 }}>
+      <div className="p-3 flex-1" style={{ height: box.height - 40 }}>
         {renderChart(chart.type, chartProps)}
         {data.series.length > 1 && (
           <div className="flex flex-wrap gap-2 mt-1 justify-center">

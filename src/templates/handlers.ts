@@ -6,6 +6,7 @@ import { v4 as uuid } from 'uuid';
 import type { ChartConfig } from '@/types';
 import type { ExecutionContext, ExecutionResult } from '@/agent/executor';
 import { applyCleaningChanges, previewCleaning, type CleaningPreview } from '@/ai/analysis/cleaning';
+import { defaultChartPosition, getChartOverlayBounds } from '@/lib/chartLayout';
 
 export function createChart(params: Record<string, unknown>, ctx: ExecutionContext): ExecutionResult {
   if (!ctx.addChart) {
@@ -17,7 +18,7 @@ export function createChart(params: Record<string, unknown>, ctx: ExecutionConte
     type: chartType as ChartConfig['type'],
     title: 'Data Chart',
     dataRange: 'A1:B10',
-    position: { x: 50, y: 50, width: 400, height: 300 },
+    position: defaultChartPosition(getChartOverlayBounds()),
     colors: ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'],
   });
   return { success: true, message: `Created ${chartType} chart`, modified: 0 };

@@ -27,6 +27,7 @@ import { conditionToRule, attachConditionalRuleToColumn } from '@/lib/conditiona
 import { getActionRecorder } from '@/lib/actionRecorder'
 import { validateCell } from '@/lib/validation'
 import type { HistoryEntry } from '@/lib/historyDiff'
+import { mergeChartLayout } from '@/lib/chartLayout'
 
 export interface WorkbookSliceState {
   workbook: WorkbookData
@@ -80,7 +81,7 @@ export interface WorkbookActions {
   paste: () => void
   addChart: (chart: ChartConfig) => void
   removeChart: (chartId: string) => void
-  updateChartPosition: (chartId: string, x: number, y: number) => void
+  updateChartPosition: (chartId: string, x: number, y: number, size?: { width: number; height: number }) => void
   setFreeze: (rows: number, cols: number) => void
   setSortConfig: (config: SortConfig | null) => void
   setFilters: (filters: FilterConfig[]) => void
@@ -381,14 +382,13 @@ export function createWorkbookActions(
         });
       },
 
-      updateChartPosition: (chartId, x, y) => {
+      updateChartPosition: (chartId, x, y, size) => {
         set((s) => {
           const sheet = s.workbook.sheets.find((sh) => sh.id === s.activeSheetId);
           if (sheet && sheet.charts) {
             const chart = sheet.charts.find((c) => c.id === chartId);
             if (chart) {
-              chart.position.x = x;
-              chart.position.y = y;
+              chart.position = mergeChartLayout(chart.position, { x, y, ...size });
             }
           }
         });

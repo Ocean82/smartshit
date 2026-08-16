@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import type { ReactNode } from 'react';
 import { useStore } from '@/store/useStore';
+import { clampFixedPopup, resolveViewportBounds } from '@/lib/chartLayout';
 
 interface Props {
   visible: boolean;
@@ -46,6 +47,9 @@ function scoreMatch(name: string, token: string): number {
 export function FormulaAutocomplete({ visible, editValue, onSelect, position }: Props) {
   const engine = useStore((s) => s.engine);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [viewport, setViewport] = useState(() =>
+    resolveViewportBounds(window.visualViewport, { width: window.innerWidth, height: window.innerHeight }),
+  );
   const listRef = useRef<HTMLDivElement>(null);
 
   const allFunctions = useMemo<FunctionEntry[]>(
@@ -69,6 +73,25 @@ export function FormulaAutocomplete({ visible, editValue, onSelect, position }: 
 
   // Reset selection when the list changes
   useEffect(() => { setSelectedIndex(0); }, [filtered.length]);
+
+  useEffect(() => {
+    if (!visible) return;
+    const sync = () => {
+      setViewport(resolveViewportBounds(
+        window.visualViewport,
+        { width: window.innerWidth, height: window.innerHeight },
+      ));
+    };
+    sync();
+    window.visualViewport?.addEventListener('resize', sync);
+    window.visualViewport?.addEventListener('scroll', sync);
+    window.addEventListener('resize', sync);
+    return () => {
+      window.visualViewport?.removeEventListener('resize', sync);
+      window.visualViewport?.removeEventListener('scroll', sync);
+      window.removeEventListener('resize', sync);
+    };
+  }, [visible]);
 
   // Keyboard navigation — capture phase so we intercept before the grid
   useEffect(() => {
@@ -112,11 +135,16 @@ export function FormulaAutocomplete({ visible, editValue, onSelect, position }: 
   if (!visible || filtered.length === 0) return null;
 
   const selectedFn = filtered[selectedIndex];
+  const frame = clampFixedPopup(
+    position,
+    { width: 360, height: 320 },
+    viewport,
+  );
 
   return (
     <div
       className="fixed bg-white border border-gray-200 rounded-xl shadow-2xl z-50 overflow-hidden"
-      style={{ top: position.top, left: position.left, width: 360, maxHeight: 320 }}
+      style={{ top: frame.top, left: frame.left, width: frame.width, maxHeight: frame.height }}
     >
       {/* Header */}
       <div className="text-[10px] text-gray-400 px-3 py-1.5 border-b border-gray-100 bg-gray-50 uppercase tracking-wide font-medium flex items-center justify-between">

@@ -217,9 +217,15 @@ export function CommandPalette({
   }
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-start justify-center pt-[12vh] px-4" style={{ background: 'oklch(0.1 0.02 250 / 0.5)', backdropFilter: 'blur(3px)' }}>
+    <div
+      className="fixed inset-0 z-[70] flex items-start justify-center pt-[12vh] px-4"
+      style={{ background: 'oklch(0.1 0.02 250 / 0.5)', backdropFilter: 'blur(3px)' }}
+      onClick={onClose}
+      role="presentation"
+    >
       <div
-        className="w-full max-w-xl rounded-2xl shadow-2xl border overflow-hidden"
+        className="w-full max-w-xl rounded-2xl shadow-2xl border overflow-hidden max-h-[min(80dvh,100%)]"
+        onClick={(e) => e.stopPropagation()}
         style={{ background: 'var(--surface-panel)', borderColor: 'var(--neutral-200)', boxShadow: '0 24px 48px oklch(0.1 0 0 / 0.18), 0 4px 12px oklch(0.1 0 0 / 0.08)' }}
         role="dialog"
         aria-label="Command palette"

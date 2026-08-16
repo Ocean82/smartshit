@@ -4,7 +4,6 @@ export { useEditingController } from './EditingController';
 export { useSelectionManager } from './SelectionManager';
 export { GridHeaders } from './GridHeaders';
 export { GridRows } from './GridRows';
-export { GridOverlay } from './GridOverlay';
 export { SelectionOverlay } from '../SelectionOverlay';
 export { FormulaAutocomplete } from '../FormulaAutocomplete';
 export { FindReplaceDialog } from '../FindReplaceDialog';

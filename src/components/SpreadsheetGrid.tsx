@@ -321,11 +321,12 @@ export function SpreadsheetGrid() {
     messages,
     applyAction,
     rejectAction,
+    showFindReplace,
+    setShowFindReplace,
   } = useStore();
 
   const sheet = getActiveSheet();
   const notesService = getCellNotesService();
-  const [showFindReplace, setShowFindReplace] = useState(false);
 
   const pendingPreview = useMemo(() => findActivePendingPreview(messages), [messages]);
 

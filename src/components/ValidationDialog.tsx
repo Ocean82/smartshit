@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
+import { X } from 'lucide-react';
 import { useStore } from '@/store/useStore';
 import type { DataValidation } from '@/types';
 import { refToCell } from '@/engine/spreadsheet';
+import { useEscapeToClose } from '@/hooks/useEscapeToClose';
 
 interface Props {
   isOpen: boolean;
@@ -41,6 +43,8 @@ export function ValidationDialog({ isOpen, onClose }: Props) {
       setContainsText('');
     }
   }, [existing, isOpen]);
+
+  useEscapeToClose(isOpen, onClose);
 
   if (!isOpen || !selection) return null;
 
@@ -95,16 +99,21 @@ export function ValidationDialog({ isOpen, onClose }: Props) {
   };
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center z-50" onClick={onClose} style={{ background: 'oklch(0.1 0.02 250 / 0.5)', backdropFilter: 'blur(3px)' }}>
+    <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center p-4" onClick={onClose} style={{ background: 'oklch(0.1 0.02 250 / 0.5)', backdropFilter: 'blur(3px)' }}>
       <div
-        className="rounded-xl shadow-2xl w-96 max-w-[calc(100vw-2rem)] p-6"
+        className="rounded-t-2xl md:rounded-xl shadow-2xl w-96 max-w-[calc(100vw-2rem)] max-h-[min(90dvh,100%)] overflow-y-auto p-6"
         style={{ background: 'var(--surface-panel)', boxShadow: '0 24px 48px oklch(0.1 0 0 / 0.18), 0 4px 12px oklch(0.1 0 0 / 0.08)' }}
         onClick={e => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-labelledby="validation-dialog-title"
       >
-        <h3 id="validation-dialog-title" className="text-lg font-semibold mb-4" style={{ color: 'var(--ink-primary)' }}>Data Validation</h3>
+        <div className="flex items-start justify-between gap-3 mb-4">
+          <h3 id="validation-dialog-title" className="text-lg font-semibold" style={{ color: 'var(--ink-primary)' }}>Data Validation</h3>
+          <button type="button" onClick={onClose} className="p-2.5 -mt-1 -mr-1 rounded-lg" style={{ color: 'var(--neutral-400)' }} aria-label="Close">
+            <X size={18} />
+          </button>
+        </div>
 
         <label className="block text-sm font-medium mb-1" style={{ color: 'var(--ink-primary)' }}>Allow:</label>
         <select

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { useStore } from '@/store/useStore'
 import { colToLetter } from '@/engine/spreadsheet'
 import type { FilterConditionType } from '@/lib/rowFilter'
+import { useEscapeToClose } from '@/hooks/useEscapeToClose'
 
 interface Props {
   isOpen: boolean
@@ -36,15 +37,7 @@ export function FilterDialog({ isOpen, onClose }: Props) {
   const [value2, setValue2] = useState('')
   const dialogRef = useRef<HTMLDivElement>(null)
 
-  // Close on Escape key
-  useEffect(() => {
-    if (!isOpen) return
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { e.preventDefault(); onClose() }
-    }
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [isOpen, onClose])
+  useEscapeToClose(isOpen, onClose)
 
   // Focus the dialog on open
   useEffect(() => {
@@ -86,7 +79,7 @@ export function FilterDialog({ isOpen, onClose }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose} style={{ background: 'oklch(0.1 0.02 250 / 0.5)', backdropFilter: 'blur(3px)' }}>
+    <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center p-4" onClick={onClose} style={{ background: 'oklch(0.1 0.02 250 / 0.5)', backdropFilter: 'blur(3px)' }}>
       <div
         ref={dialogRef}
         role="dialog"
@@ -94,12 +87,12 @@ export function FilterDialog({ isOpen, onClose }: Props) {
         aria-labelledby="filter-dialog-title"
         tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
-        className="rounded-xl shadow-xl w-[360px] max-w-[calc(100vw-2rem)] max-h-[min(90dvh,100%)] overflow-y-auto p-5 space-y-3 outline-none"
+        className="rounded-t-2xl md:rounded-xl shadow-xl w-[360px] max-w-[calc(100vw-2rem)] max-h-[min(90dvh,100%)] overflow-y-auto p-5 space-y-3 outline-none"
         style={{ background: 'var(--surface-panel)', boxShadow: '0 24px 48px oklch(0.1 0 0 / 0.18), 0 4px 12px oklch(0.1 0 0 / 0.08)' }}
       >
         <div className="flex items-center justify-between">
           <h3 id="filter-dialog-title" className="text-sm font-semibold" style={{ color: 'var(--ink-primary)' }}>Filter</h3>
-          <button type="button" onClick={onClose} className="p-1 rounded-md transition-colors" style={{ color: 'var(--neutral-400)' }} aria-label="Close">✕</button>
+          <button type="button" onClick={onClose} className="p-2.5 rounded-md transition-colors" style={{ color: 'var(--neutral-400)' }} aria-label="Close">✕</button>
         </div>
 
         {activeFilters.length > 0 && (

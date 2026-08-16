@@ -440,14 +440,14 @@ function PublishDialog({ templates, onClose, onPublished }: {
   }
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+    <div className="fixed inset-0 z-[60] flex items-end md:items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={onClose}>
+      <div className="bg-white rounded-t-2xl md:rounded-xl shadow-2xl w-full max-w-md max-h-[min(90dvh,100%)] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
           <div className="flex items-center gap-2">
             <Send size={16} className="text-emerald-600" />
             <h3 className="text-sm font-semibold text-gray-900">Publish to Marketplace</h3>
           </div>
-          <button type="button" onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400"><X size={16} /></button>
+          <button type="button" onClick={onClose} className="p-2.5 rounded-lg hover:bg-gray-100 text-gray-400" aria-label="Close"><X size={16} /></button>
         </div>
 
         <div className="p-5 space-y-4">

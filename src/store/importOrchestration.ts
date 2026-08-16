@@ -3,7 +3,7 @@
  * Kept out of workbookSlice so data load stays free of chat/panel side effects.
  */
 
-import type { WorkbookData, ChatMessage } from '@/types'
+import type { WorkbookData, ChatMessage, Toast } from '@/types'
 import { cellToRef } from '@/engine/spreadsheet'
 import { runAudit } from '@/auditor'
 import { v4 as uuid } from 'uuid'
@@ -16,6 +16,8 @@ export interface ImportEffectAccess {
   lastAuditResult: import('@/auditor/types').AuditResult | null
   getActiveSheet: () => WorkbookData['sheets'][number]
   getComputedValue: (row: number, col: number) => string
+  showToast: (toast: Omit<Toast, 'id'>) => void
+  setActivePanel: (panel: 'chat' | 'insights' | 'auditor' | 'inspector' | null) => void
 }
 
 export interface ImportSheetSummary {
@@ -34,8 +36,10 @@ export function summarizeImportedSheets(workbook: WorkbookData): ImportSheetSumm
   })
 }
 
+let importAuditGeneration = 0
+
 /**
- * Chat welcome, insights panel open, and background audit after a workbook import.
+ * Chat welcome, optional insights toast, and background audit after a workbook import.
  * Call after the workbook data has already been loaded into the store.
  */
 export function applyWorkbookImportEffects(
@@ -69,9 +73,18 @@ export function applyWorkbookImportEffects(
   })
 
   if (activeRows > 5) {
-    set((s) => { s.activePanel = 'insights' })
+    get().showToast({
+      type: 'info',
+      message: 'Insights are ready for this import',
+      action: {
+        label: 'View Insights',
+        onClick: () => get().setActivePanel('insights'),
+      },
+    })
 
+    const auditGeneration = ++importAuditGeneration
     setTimeout(() => {
+      if (auditGeneration !== importAuditGeneration) return
       try {
         const activeSheet = get().getActiveSheet()
         if (Object.keys(activeSheet.cells).length > 4) {

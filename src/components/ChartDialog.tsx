@@ -4,6 +4,7 @@ import { X, BarChart3, LineChart, PieChart, TrendingUp } from 'lucide-react';
 import { v4 as uuid } from 'uuid';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import type { ChartConfig, TrendLineConfig, AxisConfig } from '@/types';
+import { defaultChartPosition, getChartOverlayBounds } from '@/lib/chartLayout';
 
 const chartTypes: { type: ChartConfig['type']; icon: React.ReactNode; label: string }[] = [
   { type: 'bar', icon: <BarChart3 size={24} />, label: 'Bar Chart' },
@@ -57,7 +58,7 @@ export function ChartDialog() {
       dataRange: selection
         ? `${String.fromCharCode(65 + Math.min(selection.startCol, selection.endCol))}${Math.min(selection.startRow, selection.endRow) + 1}:${String.fromCharCode(65 + Math.max(selection.startCol, selection.endCol))}${Math.max(selection.startRow, selection.endRow) + 1}`
         : 'A1:B10',
-      position: { x: 100, y: 100, width: 400, height: 300 },
+      position: defaultChartPosition(getChartOverlayBounds()),
       colors: ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'],
       trendLine: enableTrend && supportsTrend ? { type: trendType, showEquation } : undefined,
       axisConfig,

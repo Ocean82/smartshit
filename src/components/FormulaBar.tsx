@@ -136,7 +136,7 @@ export function FormulaBar() {
   }, [handleNameBoxSubmit]);
 
   return (
-    <div className="hidden md:flex h-7 border-b items-center gap-0 shrink-0" style={{ background: 'var(--surface-panel)', borderColor: 'var(--neutral-200)' }}>
+    <div className="flex h-9 md:h-7 border-b items-center gap-0 shrink-0" style={{ background: 'var(--surface-panel)', borderColor: 'var(--neutral-200)' }}>
       {/* Cell name box (Go to Cell) */}
       <div className="w-[80px] h-full border-r flex items-center" style={{ borderColor: 'var(--neutral-200)' }}>
         {nameBoxEditing ? (

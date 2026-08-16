@@ -26,6 +26,7 @@ export interface UIState {
   showPivotDialog: boolean
   showFilterDialog: boolean
   showConditionalFormatDialog: boolean
+  showFindReplace: boolean
   contextMenu: { x: number; y: number; cell: string } | null
 
   // Panel system (right-side dock)
@@ -48,6 +49,7 @@ export interface UIActions {
   setShowPivotDialog: (show: boolean) => void
   setShowFilterDialog: (v: boolean) => void
   setShowConditionalFormatDialog: (v: boolean) => void
+  setShowFindReplace: (v: boolean) => void
   setActivePanel: (panel: 'chat' | 'insights' | 'auditor' | 'inspector' | null) => void
   setPanelWidth: (panel: string, width: number) => void
   toggleChat: () => void
@@ -98,6 +100,7 @@ export function createUIState(): UIState {
     showPivotDialog: false,
     showFilterDialog: false,
     showConditionalFormatDialog: false,
+    showFindReplace: false,
     contextMenu: null,
     activePanel: null,
     panelWidths: JSON.parse(storage?.getItem('smartsht-panel-widths') || '{}'),
@@ -126,6 +129,7 @@ export function createUIActions(
     setShowPivotDialog: (show) => set((s) => { s.showPivotDialog = show }),
     setShowFilterDialog: (v) => set((s) => { s.showFilterDialog = v }),
     setShowConditionalFormatDialog: (v) => set((s) => { s.showConditionalFormatDialog = v }),
+    setShowFindReplace: (v) => set((s) => { s.showFindReplace = v }),
     setActivePanel: (panel) => set((s) => { s.activePanel = panel }),
     setPanelWidth: (panel, width) => {
       set((s) => { s.panelWidths[panel] = width })

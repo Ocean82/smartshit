@@ -34,7 +34,7 @@ export function WelcomeOverlay({ onOpenTemplates }: WelcomeOverlayProps) {
       icon: <Shield size={40} className="text-emerald-600" />,
       title: 'The Auditor catches your mistakes',
       description:
-        'Import any spreadsheet and the Auditor instantly flags formula errors, skipped cells in SUMs, and outliers — before they compound. Find it in the right panel.',
+        'Open Auditor from the menu on a phone, or from the right-hand rail on desktop. It flags formula errors, skipped cells in SUMs, and outliers — before they compound.',
     },
     {
       icon: <LayoutTemplate size={40} className="text-violet-600" />,

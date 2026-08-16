@@ -68,12 +68,12 @@ export function GoToCellDialog({ open, onClose }: GoToCellDialogProps) {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-[20vh]">
+    <div className="fixed inset-0 z-50 flex items-end md:items-start justify-center p-4 md:pt-[20vh]">
       {/* Backdrop */}
       <div className="absolute inset-0" onClick={onClose} style={{ background: 'oklch(0.1 0.02 250 / 0.4)', backdropFilter: 'blur(2px)' }} />
       {/* Dialog */}
       <div
-        className="relative rounded-xl shadow-2xl border w-80 p-4 animate-slide-up"
+        className="relative rounded-t-2xl md:rounded-xl shadow-2xl border w-80 max-w-[calc(100vw-2rem)] p-4 animate-slide-up"
         style={{ background: 'var(--surface-panel)', borderColor: 'var(--neutral-200)', boxShadow: '0 24px 48px oklch(0.1 0 0 / 0.18), 0 4px 12px oklch(0.1 0 0 / 0.08)' }}
         role="dialog"
         aria-modal="true"
@@ -84,7 +84,7 @@ export function GoToCellDialog({ open, onClose }: GoToCellDialogProps) {
           <button
             type="button"
             onClick={onClose}
-            className="p-1 rounded transition-colors"
+            className="p-2.5 rounded-lg transition-colors"
             style={{ color: 'var(--neutral-400)' }}
             aria-label="Close"
           >
