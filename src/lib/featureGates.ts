@@ -9,7 +9,7 @@
 // ─── Limits ──────────────────────────────────────────────────────────────────
 
 /** AI chat questions per day for free users */
-export const FREE_DAILY_CHAT_LIMIT = 3
+export const FREE_DAILY_CHAT_LIMIT = 7
 
 /** Lifetime auto-fix uses before gate (free users get a taste) */
 export const FREE_AUTOFIX_LIFETIME_LIMIT = 3
@@ -37,14 +37,14 @@ export interface FeatureGateConfig {
 export const FEATURE_GATE_COPY: Record<GatedFeature, FeatureGateConfig> = {
   'ai-chat': {
     feature: 'ai-chat',
-    headline: "You've used today's free AI questions",
-    description: 'Upgrade to Pro for unlimited AI chat — ask anything, anytime. Your limit resets tomorrow, or upgrade now for uninterrupted access.',
+    headline: "You're getting great use out of the AI",
+    description: "You've asked 7 questions today — that's the free daily limit. Upgrade to Pro for unlimited AI chat so you never hit a wall mid-workflow.",
     ctaLabel: 'Upgrade to Pro — $7/month',
   },
   'auto-fix': {
     feature: 'auto-fix',
-    headline: 'Unlock unlimited auto-fix',
-    description: "You've used your 3 free auto-fixes. The auditor found more issues — upgrade to fix them all instantly with one click.",
+    headline: 'The Auditor found more to fix',
+    description: "You've used your free auto-fixes and there are still issues to resolve. Upgrade to fix everything instantly with one click — no manual editing needed.",
     ctaLabel: 'Upgrade to fix everything',
   },
   'cloud-save': {

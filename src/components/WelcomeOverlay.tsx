@@ -25,16 +25,16 @@ export function WelcomeOverlay({ onOpenTemplates }: WelcomeOverlayProps) {
         'A spreadsheet that listens. Tell the assistant what you want to track — budgets, expenses, inventory — and it builds it for you.',
     },
     {
+      icon: <Shield size={40} className="text-emerald-600" />,
+      title: 'The Auditor catches mistakes others miss',
+      description:
+        'Import any spreadsheet and the Auditor instantly flags formula errors, skipped cells in SUMs, inconsistent columns, and outliers — before they cost you money.',
+    },
+    {
       icon: <MessageSquare size={40} className="text-blue-600" />,
       title: 'Chat first, formulas never',
       description:
         'Say things like "Build a monthly budget" or "Why am I overspending on food?" The assistant explains everything in plain English.',
-    },
-    {
-      icon: <Shield size={40} className="text-emerald-600" />,
-      title: 'The Auditor catches your mistakes',
-      description:
-        'Open Auditor from the menu on a phone, or from the right-hand rail on desktop. It flags formula errors, skipped cells in SUMs, and outliers — before they compound.',
     },
     {
       icon: <LayoutTemplate size={40} className="text-violet-600" />,

@@ -28,6 +28,7 @@ const PANEL_COLORS: Record<PanelId, { bg: string; text: string; ring: string }> 
 export function PanelRail() {
   const activePanel = useStore((s) => s.activePanel)
   const setActivePanel = useStore((s) => s.setActivePanel)
+  const auditFindings = useStore((s) => s.lastAuditResult?.findings?.length ?? 0)
   const [showLabels, setShowLabels] = useState(() => {
     try {
       return !localStorage.getItem('smartsht-rail-labels-dismissed')
@@ -79,6 +80,15 @@ export function PanelRail() {
             {showLabels && (
               <span className="text-[10px] font-medium leading-none truncate">
                 {panel.label}
+              </span>
+            )}
+            {/* Audit findings badge */}
+            {panel.id === 'auditor' && auditFindings > 0 && !isActive && (
+              <span
+                className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 flex items-center justify-center rounded-full text-[9px] font-bold text-white px-1"
+                style={{ background: 'var(--error, #ef4444)' }}
+              >
+                {auditFindings > 99 ? '99+' : auditFindings}
               </span>
             )}
             {/* Tooltip — only when labels are hidden */}

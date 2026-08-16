@@ -68,7 +68,11 @@ export function applyWorkbookImportEffects(
       timestamp: Date.now(),
       suggestions: multi
         ? sheetLines.slice(0, 4).map((line) => `Explain the "${line.name}" sheet`)
-        : undefined,
+        : [
+            'Run the auditor on this data',
+            'Explain this spreadsheet',
+            'What looks unusual here?',
+          ],
     })
   })
 
@@ -90,6 +94,18 @@ export function applyWorkbookImportEffects(
         if (Object.keys(activeSheet.cells).length > 4) {
           const auditResult = runAudit(activeSheet, get().getComputedValue)
           set((s) => { s.lastAuditResult = auditResult })
+
+          // Auto-open auditor panel when critical or high severity issues are found
+          const hasSeriousIssues = auditResult.findings.some(
+            (f) => f.severity === 'critical' || f.severity === 'high'
+          )
+          if (hasSeriousIssues) {
+            get().setActivePanel('auditor')
+            get().showToast({
+              type: 'warning',
+              message: `Auditor found ${auditResult.findings.length} issue${auditResult.findings.length === 1 ? '' : 's'} in this spreadsheet`,
+            })
+          }
         }
       } catch {
         // Audit failure is non-fatal

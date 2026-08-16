@@ -14,10 +14,10 @@
 import { describe, it, expect } from 'vitest'
 import { FREE_DAILY_CHAT_LIMIT } from './featureGates'
 
-// The server uses `Number(process.env.FREE_DAILY_LIMIT ?? 3)` as the default.
-// The client `useUsage.ts` defines `FREE_DAILY_LIMIT = 3` at the module level.
+// The server uses `Number(process.env.FREE_DAILY_LIMIT ?? 7)` as the default.
+// The client `useUsage.ts` defines `FREE_DAILY_LIMIT = 7` at the module level.
 // All three must stay aligned with server/.env.production and .env.example.
-const EXPECTED_FREE_DAILY_LIMIT = 3
+const EXPECTED_FREE_DAILY_LIMIT = 7
 
 describe('Free-tier limits alignment', () => {
   it('client FREE_DAILY_CHAT_LIMIT matches the expected canonical value', () => {

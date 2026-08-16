@@ -8,7 +8,7 @@ describe('decideAiAccess', () => {
         isPro: true,
         usageAllowed: false,
         hasByokCredentials: false,
-        dailyLimit: 3,
+        dailyLimit: 7,
       }),
     ).toEqual({ allowed: true, byokOnly: false })
   })
@@ -19,7 +19,7 @@ describe('decideAiAccess', () => {
         isPro: false,
         usageAllowed: true,
         hasByokCredentials: false,
-        dailyLimit: 3,
+        dailyLimit: 7,
       }),
     ).toEqual({ allowed: true, byokOnly: false })
   })
@@ -29,11 +29,11 @@ describe('decideAiAccess', () => {
       isPro: false,
       usageAllowed: false,
       hasByokCredentials: false,
-      dailyLimit: 3,
+      dailyLimit: 7,
     })
     expect(decision.allowed).toBe(false)
     expect(decision.byokOnly).toBe(false)
-    expect(decision.denialMessage).toContain('3 free AI questions')
+    expect(decision.denialMessage).toContain('7 free AI questions')
   })
 
   it('allows over-quota free users with BYOK credentials, but BYOK-only', () => {
@@ -43,7 +43,7 @@ describe('decideAiAccess', () => {
         isPro: false,
         usageAllowed: false,
         hasByokCredentials: true,
-        dailyLimit: 3,
+        dailyLimit: 7,
       }),
     ).toEqual({ allowed: true, byokOnly: true })
   })
@@ -54,7 +54,7 @@ describe('decideAiAccess', () => {
         isPro: false,
         usageAllowed: true,
         hasByokCredentials: true,
-        dailyLimit: 3,
+        dailyLimit: 7,
       }),
     ).toEqual({ allowed: true, byokOnly: false })
   })
