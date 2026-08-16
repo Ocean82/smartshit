@@ -154,9 +154,6 @@
 
 /* ─── Dropdown menu ─── */
 .toolbar-dropdown {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
   min-width: 180px;
   background: var(--surface-panel);
   border: 1px solid var(--neutral-200);
@@ -165,13 +162,11 @@
   box-shadow:
     0 4px 12px oklch(0.2 0 0 / 0.08),
     0 1px 3px oklch(0.2 0 0 / 0.04);
-  z-index: 50;
   animation: toolbar-dropdown-in 0.12s ease-out;
 }
 
 .toolbar-dropdown-right {
-  left: auto;
-  right: 0;
+  /* kept for legacy callers; alignment is handled by AnchoredPanel */
 }
 
 @keyframes toolbar-dropdown-in {

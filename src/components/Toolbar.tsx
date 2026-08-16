@@ -11,9 +11,10 @@ import {
   Filter, SortAsc,
 } from 'lucide-react';
 import { BG_COLORS, FULL_COLORS } from '@/data/colors';
-import { useRef, useState, useEffect, useCallback } from 'react';
+import { useRef, useState, useCallback } from 'react';
 import type { ChangeEvent, ReactNode } from 'react';
 import { v4 as uuid } from 'uuid';
+import { AnchoredPanel } from '@/components/AnchoredPanel';
 import './Toolbar.css';
 
 export function Toolbar() {
@@ -56,49 +57,15 @@ export function Toolbar() {
   })));
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const fontColorRef = useRef<HTMLDivElement>(null);
-  const exportMenuRef = useRef<HTMLDivElement>(null);
-  const moreMenuRef = useRef<HTMLDivElement>(null);
+  const cellColorRef = useRef<HTMLButtonElement>(null);
+  const fontColorRef = useRef<HTMLButtonElement>(null);
+  const exportBtnRef = useRef<HTMLButtonElement>(null);
+  const moreBtnRef = useRef<HTMLButtonElement>(null);
+  const [showCellColor, setShowCellColor] = useState(false);
   const [showFontColor, setShowFontColor] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const sheet = getActiveSheet();
-
-  // Close font color picker on outside click
-  useEffect(() => {
-    if (!showFontColor) return;
-    function handleClickOutside(e: MouseEvent) {
-      if (fontColorRef.current && !fontColorRef.current.contains(e.target as Node)) {
-        setShowFontColor(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showFontColor]);
-
-  // Close export menu on outside click
-  useEffect(() => {
-    if (!showExportMenu) return;
-    function handleClickOutside(e: MouseEvent) {
-      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) {
-        setShowExportMenu(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showExportMenu]);
-
-  // Close more menu on outside click
-  useEffect(() => {
-    if (!showMoreMenu) return;
-    function handleClickOutside(e: MouseEvent) {
-      if (moreMenuRef.current && !moreMenuRef.current.contains(e.target as Node)) {
-        setShowMoreMenu(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showMoreMenu]);
 
   const selectedCellId = selection ? refToCell(selection.startRow, selection.startCol) : '';
   const selectedCellData = selectedCellId ? sheet.cells[selectedCellId] : undefined;
@@ -329,55 +296,90 @@ export function Toolbar() {
 
         {/* ─── Color tools ─── */}
         <div className="toolbar-group">
-          {/* Cell color */}
-          <div className="relative group">
-            <ToolButton icon={<Paintbrush size={15} />} title="Cell background color" onClick={() => {}} />
-            <div className="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-xl border border-gray-200 p-2 hidden group-hover:grid grid-cols-7 gap-1 z-50">
-              {colorOptions.map((color, index) => (
-                <button
-                  key={color}
-                  className={`w-5 h-5 rounded border border-gray-200 hover:scale-110 transition-transform toolbar-color-${index}`}
-                  onClick={() => setRangeFormat({ bgColor: color })}
-                  aria-label={`Set cell color ${color}`}
-                  title={`Set cell color ${color}`}
-                />
-              ))}
-            </div>
-          </div>
-
-          {/* Font color */}
-          <div className="relative" ref={fontColorRef}>
-            <button
-              type="button"
-              onClick={() => setShowFontColor(!showFontColor)}
-              className="toolbar-btn-color"
-              title="Text color"
-            >
-              <span className="font-bold text-xs leading-none" style={{ color: selectedCellData?.format?.fontColor || 'var(--neutral-800)' }}>A</span>
-              <div
-                className="w-3.5 h-0.5 rounded-sm"
-                style={{ backgroundColor: selectedCellData?.format?.fontColor || 'var(--neutral-800)' }}
+          <button
+            ref={cellColorRef}
+            type="button"
+            className={`toolbar-btn ${showCellColor ? 'toolbar-btn-active' : ''}`}
+            title="Cell background color"
+            aria-label="Cell background color"
+            aria-expanded={showCellColor}
+            onClick={() => {
+              setShowFontColor(false);
+              setShowExportMenu(false);
+              setShowMoreMenu(false);
+              setShowCellColor((v) => !v);
+            }}
+          >
+            <Paintbrush size={15} />
+          </button>
+          <AnchoredPanel
+            open={showCellColor}
+            onClose={() => setShowCellColor(false)}
+            anchorRef={cellColorRef}
+            width={168}
+            maxHeight={120}
+            aria-label="Cell background colors"
+            className="bg-white rounded-lg shadow-xl border border-gray-200 p-2 grid grid-cols-7 gap-1"
+          >
+            {colorOptions.map((color, index) => (
+              <button
+                key={color}
+                type="button"
+                className={`w-5 h-5 rounded border border-gray-200 hover:scale-110 transition-transform toolbar-color-${index}`}
+                onClick={() => {
+                  setRangeFormat({ bgColor: color });
+                  setShowCellColor(false);
+                }}
+                aria-label={`Set cell color ${color}`}
+                title={`Set cell color ${color}`}
               />
-            </button>
-            {showFontColor && (
-              <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg p-2 z-50 grid grid-cols-7 gap-1">
-                {fontColorOptions.map((c) => (
-                  <button
-                    key={c}
-                    type="button"
-                    className="w-5 h-5 rounded border border-gray-200 hover:scale-110 transition-transform"
-                    style={{ backgroundColor: c }}
-                    onClick={() => {
-                      setRangeFormat({ fontColor: c });
-                      setShowFontColor(false);
-                    }}
-                    aria-label={`Set text color ${c}`}
-                    title={`Set text color ${c}`}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
+            ))}
+          </AnchoredPanel>
+
+          <button
+            ref={fontColorRef}
+            type="button"
+            onClick={() => {
+              setShowCellColor(false);
+              setShowExportMenu(false);
+              setShowMoreMenu(false);
+              setShowFontColor((v) => !v);
+            }}
+            className="toolbar-btn-color"
+            title="Text color"
+            aria-label="Text color"
+            aria-expanded={showFontColor}
+          >
+            <span className="font-bold text-xs leading-none" style={{ color: selectedCellData?.format?.fontColor || 'var(--neutral-800)' }}>A</span>
+            <div
+              className="w-3.5 h-0.5 rounded-sm"
+              style={{ backgroundColor: selectedCellData?.format?.fontColor || 'var(--neutral-800)' }}
+            />
+          </button>
+          <AnchoredPanel
+            open={showFontColor}
+            onClose={() => setShowFontColor(false)}
+            anchorRef={fontColorRef}
+            width={168}
+            maxHeight={120}
+            aria-label="Text colors"
+            className="bg-white border border-gray-200 rounded-lg shadow-lg p-2 grid grid-cols-7 gap-1"
+          >
+            {fontColorOptions.map((c) => (
+              <button
+                key={c}
+                type="button"
+                className="w-5 h-5 rounded border border-gray-200 hover:scale-110 transition-transform"
+                style={{ backgroundColor: c }}
+                onClick={() => {
+                  setRangeFormat({ fontColor: c });
+                  setShowFontColor(false);
+                }}
+                aria-label={`Set text color ${c}`}
+                title={`Set text color ${c}`}
+              />
+            ))}
+          </AnchoredPanel>
         </div>
 
         <Divider />
@@ -405,11 +407,17 @@ export function Toolbar() {
         <Divider />
 
         {/* ─── Insert: Chart + more ─── */}
-        <div className="toolbar-group" ref={moreMenuRef}>
+        <div className="toolbar-group">
           <ToolButton icon={<BarChart3 size={15} />} title="Insert Chart" onClick={() => setShowChartDialog(true)} />
           <button
+            ref={moreBtnRef}
             type="button"
-            onClick={() => setShowMoreMenu(!showMoreMenu)}
+            onClick={() => {
+              setShowCellColor(false);
+              setShowFontColor(false);
+              setShowExportMenu(false);
+              setShowMoreMenu((v) => !v);
+            }}
             className={`toolbar-btn-more ${showMoreMenu ? 'active' : ''}`}
             title="More tools"
             aria-label="More tools"
@@ -417,37 +425,42 @@ export function Toolbar() {
           >
             <ChevronDown size={13} />
           </button>
-
-          {showMoreMenu && (
-            <div className="toolbar-dropdown" role="menu">
-              <button
-                role="menuitem"
-                className="toolbar-dropdown-item"
-                onClick={() => { setShowConditionalFormatDialog(true); setShowMoreMenu(false); }}
-              >
-                <Grid3x3 size={14} />
-                <span>Conditional Format</span>
-              </button>
-              <button
-                role="menuitem"
-                className="toolbar-dropdown-item"
-                onClick={() => { setShowPivotDialog(true); setShowMoreMenu(false); }}
-                disabled={!selection}
-              >
-                <BarChart3 size={14} />
-                <span>Pivot Table</span>
-              </button>
-              <div className="toolbar-dropdown-divider" />
-              <button
-                role="menuitem"
-                className="toolbar-dropdown-item"
-                onClick={() => { setShowFormatPanel(!showFormatPanel); setShowMoreMenu(false); }}
-              >
-                <Paintbrush size={14} />
-                <span>Format Panel</span>
-              </button>
-            </div>
-          )}
+          <AnchoredPanel
+            open={showMoreMenu}
+            onClose={() => setShowMoreMenu(false)}
+            anchorRef={moreBtnRef}
+            width={200}
+            maxHeight={220}
+            aria-label="More tools"
+            className="toolbar-dropdown"
+          >
+            <button
+              type="button"
+              className="toolbar-dropdown-item"
+              onClick={() => { setShowConditionalFormatDialog(true); setShowMoreMenu(false); }}
+            >
+              <Grid3x3 size={14} />
+              <span>Conditional Format</span>
+            </button>
+            <button
+              type="button"
+              className="toolbar-dropdown-item"
+              onClick={() => { setShowPivotDialog(true); setShowMoreMenu(false); }}
+              disabled={!selection}
+            >
+              <BarChart3 size={14} />
+              <span>Pivot Table</span>
+            </button>
+            <div className="toolbar-dropdown-divider" />
+            <button
+              type="button"
+              className="toolbar-dropdown-item"
+              onClick={() => { setShowFormatPanel(!showFormatPanel); setShowMoreMenu(false); }}
+            >
+              <Paintbrush size={14} />
+              <span>Format Panel</span>
+            </button>
+          </AnchoredPanel>
         </div>
 
         {/* ─── Spacer ─── */}
@@ -461,29 +474,40 @@ export function Toolbar() {
             onClick={() => fileInputRef.current?.click()}
           />
 
-          <div className="relative" ref={exportMenuRef}>
-            <button
-              type="button"
-              onClick={() => setShowExportMenu(!showExportMenu)}
-              className={`toolbar-btn-export ${showExportMenu ? 'active' : ''}`}
-              title="Export"
-              aria-label="Export options"
-              aria-expanded={showExportMenu}
-            >
-              <Download size={15} />
-              <ChevronDown size={10} />
+          <button
+            ref={exportBtnRef}
+            type="button"
+            onClick={() => {
+              setShowCellColor(false);
+              setShowFontColor(false);
+              setShowMoreMenu(false);
+              setShowExportMenu((v) => !v);
+            }}
+            className={`toolbar-btn-export ${showExportMenu ? 'active' : ''}`}
+            title="Export"
+            aria-label="Export options"
+            aria-expanded={showExportMenu}
+          >
+            <Download size={15} />
+            <ChevronDown size={10} />
+          </button>
+          <AnchoredPanel
+            open={showExportMenu}
+            onClose={() => setShowExportMenu(false)}
+            anchorRef={exportBtnRef}
+            width={180}
+            maxHeight={140}
+            align="end"
+            aria-label="Export options"
+            className="toolbar-dropdown"
+          >
+            <button type="button" className="toolbar-dropdown-item" onClick={handleExportCSV}>
+              <span>Export as CSV</span>
             </button>
-            {showExportMenu && (
-              <div className="toolbar-dropdown toolbar-dropdown-right" role="menu">
-                <button role="menuitem" className="toolbar-dropdown-item" onClick={handleExportCSV}>
-                  <span>Export as CSV</span>
-                </button>
-                <button role="menuitem" className="toolbar-dropdown-item" onClick={handleExportXlsx}>
-                  <span>Export as Excel</span>
-                </button>
-              </div>
-            )}
-          </div>
+            <button type="button" className="toolbar-dropdown-item" onClick={handleExportXlsx}>
+              <span>Export as Excel</span>
+            </button>
+          </AnchoredPanel>
         </div>
 
         <input

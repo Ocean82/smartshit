@@ -474,12 +474,21 @@ function TitleBar({ onOpenTemplates, onOpenCloudPicker, onOpenShare, onOpenComma
 
 function AiStatusBadge() {
   const health = useServerHealth()
-  const aiLabel = health?.ok ? 'AI online' : health?.ollama ? 'Model loading' : 'AI offline'
+  const aiLabel = health?.ok ? 'AI online' : health?.ollama ? 'Model loading' : 'Local mode'
   const aiColor = health?.ok ? 'var(--success)' : 'var(--warning)'
+  const title = health?.ok
+    ? 'AI server is reachable'
+    : health?.ollama
+      ? 'Local model is loading'
+      : 'AI server unavailable — sheet tools still work offline'
 
   return (
-    <div className="flex items-center gap-1.5 px-2 py-1 rounded-md" style={{ background: 'var(--neutral-900)' }}>
-      <Sparkles size={11} style={{ color: 'var(--warning)' }} />
+    <div
+      className="flex items-center gap-1.5 px-2 py-1 rounded-md"
+      style={{ background: 'var(--neutral-900)' }}
+      title={title}
+    >
+      <Sparkles size={11} style={{ color: aiColor }} />
       <span className="hidden sm:inline" style={{ color: aiColor }}>{aiLabel}</span>
       <span className="sm:hidden" style={{ color: aiColor }}>{health?.ok ? '●' : '○'}</span>
     </div>

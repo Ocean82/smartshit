@@ -5,11 +5,14 @@
  */
 import { useStore } from '@/store/useStore'
 import { Upload, MessageSquare, LayoutTemplate } from 'lucide-react'
+import { useServerHealth } from '@/ai/useServerHealth'
 
 export function EmptyGridGuide({ onOpenTemplates }: { onOpenTemplates: () => void }) {
   const sheet = useStore((s) => s.getActiveSheet())
   const messages = useStore((s) => s.messages)
   const setActivePanel = useStore((s) => s.setActivePanel)
+  const health = useServerHealth()
+  const aiReady = Boolean(health?.ok)
 
   // Only show when grid is truly empty and user hasn't started working
   const hasData = Object.keys(sheet.cells).length > 0
@@ -40,7 +43,9 @@ export function EmptyGridGuide({ onOpenTemplates }: { onOpenTemplates: () => voi
             </div>
             <div>
               <span className="text-sm font-medium block" style={{ color: 'var(--ink-primary)' }}>Import a file</span>
-              <span className="text-xs" style={{ color: 'var(--ink-secondary)' }}>CSV or Excel — the AI reads it instantly</span>
+              <span className="text-xs" style={{ color: 'var(--ink-secondary)' }}>
+                {aiReady ? 'CSV or Excel — the AI reads it instantly' : 'CSV or Excel — works offline'}
+              </span>
             </div>
           </button>
 
@@ -54,8 +59,14 @@ export function EmptyGridGuide({ onOpenTemplates }: { onOpenTemplates: () => voi
               <MessageSquare size={16} />
             </div>
             <div>
-              <span className="text-sm font-medium block" style={{ color: 'var(--ink-primary)' }}>Ask the assistant</span>
-              <span className="text-xs" style={{ color: 'var(--ink-secondary)' }}>"Build a monthly budget" or "Track my expenses"</span>
+              <span className="text-sm font-medium block" style={{ color: 'var(--ink-primary)' }}>
+                {aiReady ? 'Ask the assistant' : 'Open chat'}
+              </span>
+              <span className="text-xs" style={{ color: 'var(--ink-secondary)' }}>
+                {aiReady
+                  ? '"Build a monthly budget" or "Track my expenses"'
+                  : 'Local tools still work — reconnect AI when available'}
+              </span>
             </div>
           </button>
 

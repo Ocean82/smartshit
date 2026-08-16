@@ -3,14 +3,15 @@
  * File, Edit, View, Insert, Format, Data menus.
  */
 
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useCallback } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '@/store/useStore'
 import { exportWorkbookToXlsx, exportSheetToCsv, importWorkbookFromFileWithMeta } from '@/io/xlsx'
 import { exportWorkbookToJson, importWorkbookFromJsonFile, normalizeImportedWorkbook } from '@/io/workbookJson'
 import { v4 as uuid } from 'uuid'
+import { AnchoredPanel } from '@/components/AnchoredPanel'
 
-type MenuId = 'file' | 'edit' | 'view' | 'insert' | 'format' | 'data' | null
+type MenuId = 'file' | 'edit' | 'view' | 'insert' | 'format' | 'data'
 
 interface MenuItem {
   label: string
@@ -21,8 +22,9 @@ interface MenuItem {
 }
 
 export function MenuBar() {
-  const [openMenu, setOpenMenu] = useState<MenuId>(null)
-  const menuRef = useRef<HTMLDivElement>(null)
+  const [openMenu, setOpenMenu] = useState<MenuId | null>(null)
+  const triggerRefs = useRef<Partial<Record<MenuId, HTMLButtonElement | null>>>({})
+  const activeTriggerRef = useRef<HTMLButtonElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const jsonInputRef = useRef<HTMLInputElement>(null)
 
@@ -49,6 +51,7 @@ export function MenuBar() {
     setShowConditionalFormatDialog,
     setShowValidationDialog,
     setShowPivotDialog,
+    setShowFindReplace,
     activePanel,
     setActivePanel,
     sortByColumn,
@@ -81,6 +84,7 @@ export function MenuBar() {
     setShowConditionalFormatDialog: s.setShowConditionalFormatDialog,
     setShowValidationDialog: s.setShowValidationDialog,
     setShowPivotDialog: s.setShowPivotDialog,
+    setShowFindReplace: s.setShowFindReplace,
     activePanel: s.activePanel,
     setActivePanel: s.setActivePanel,
     sortByColumn: s.sortByColumn,
@@ -92,27 +96,20 @@ export function MenuBar() {
     toggleToolbar: s.toggleToolbar,
   })))
 
-  // Close menu on outside click
-  useEffect(() => {
-    if (!openMenu) return
-    const handler = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setOpenMenu(null)
-      }
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [openMenu])
+  const closeMenu = useCallback(() => setOpenMenu(null), [])
 
-  // Close on Escape
-  useEffect(() => {
-    if (!openMenu) return
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpenMenu(null)
+  const openMenuId = useCallback((id: MenuId) => {
+    activeTriggerRef.current = triggerRefs.current[id] ?? null
+    setOpenMenu(id)
+  }, [])
+
+  const toggleMenu = useCallback((id: MenuId) => {
+    if (openMenu === id) {
+      setOpenMenu(null)
+      return
     }
-    document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
-  }, [openMenu])
+    openMenuId(id)
+  }, [openMenu, openMenuId])
 
   const handleNewWorkbook = () => {
     const doCreate = () => {
@@ -212,7 +209,7 @@ export function MenuBar() {
 
   const col = selection ? Math.min(selection.startCol, selection.endCol) : 0
 
-  const menus: Record<string, { label: string; items: MenuItem[] }> = {
+  const menus: Record<MenuId, { label: string; items: MenuItem[] }> = {
     file: {
       label: 'File',
       items: [
@@ -224,7 +221,6 @@ export function MenuBar() {
         { label: 'Backup as JSON…', action: handleBackupJson },
         { label: 'Restore from JSON…', action: handleRestoreJson, dividerAfter: true },
         { label: 'Version History', action: () => { setShowVersionHistory(!showVersionHistory); setOpenMenu(null) } },
-        { label: 'Share...', action: () => { document.dispatchEvent(new CustomEvent('smartsht:open-share')); setOpenMenu(null) }, dividerAfter: true },
         { label: 'Print', shortcut: 'Ctrl+P', action: () => { window.print(); setOpenMenu(null) } },
       ],
     },
@@ -237,7 +233,7 @@ export function MenuBar() {
         { label: 'Copy', shortcut: 'Ctrl+C', action: () => { copy(); setOpenMenu(null) } },
         { label: 'Paste', shortcut: 'Ctrl+V', action: () => { paste(); setOpenMenu(null) }, dividerAfter: true },
         { label: 'Delete', shortcut: 'Del', action: () => { deleteSelectedCells(); setOpenMenu(null) }, disabled: !selection },
-        { label: 'Find & Replace', shortcut: 'Ctrl+F', action: () => { setOpenMenu(null) } },
+        { label: 'Find & Replace', shortcut: 'Ctrl+F', action: () => { setShowFindReplace(true); setOpenMenu(null) } },
       ],
     },
     view: {
@@ -268,7 +264,6 @@ export function MenuBar() {
         { label: 'Italic', shortcut: 'Ctrl+I', action: () => { useStore.getState().setRangeFormat({ italic: true }); setOpenMenu(null) } },
         { label: 'Underline', shortcut: 'Ctrl+U', action: () => { useStore.getState().setRangeFormat({ underline: true }); setOpenMenu(null) }, dividerAfter: true },
         { label: 'Conditional Formatting...', action: () => { setShowConditionalFormatDialog(true); setOpenMenu(null) } },
-        { label: 'Data Validation...', action: () => { setShowValidationDialog(true); setOpenMenu(null) }, dividerAfter: true },
         { label: 'Number Format Panel', action: () => { setShowFormatPanel(true); setOpenMenu(null) } },
       ],
     },
@@ -284,49 +279,65 @@ export function MenuBar() {
     },
   }
 
-  return (
-    <div ref={menuRef} className="flex items-center gap-0.5 text-[11px] relative z-50" role="menubar">
-      {Object.entries(menus).map(([id, menu]) => (
-        <div key={id} className="relative">
-          <button
-            type="button"
-            role="menuitem"
-            aria-haspopup="true"
-            aria-expanded={openMenu === id}
-            onMouseDown={() => setOpenMenu(openMenu === id ? null : id as MenuId)}
-            onMouseEnter={() => { if (openMenu) setOpenMenu(id as MenuId) }}
-            className={`px-2 py-1 rounded transition-colors ${
-              openMenu === id ? 'bg-white/15 text-white' : 'text-white/70 hover:text-white hover:bg-white/10'
-            }`}
-          >
-            {menu.label}
-          </button>
+  const openItems = openMenu ? menus[openMenu].items : []
 
-          {openMenu === id && (
-            <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-xl py-1 min-w-[200px] z-50" role="menu">
-              {menu.items.map((item, i) => (
-                <div key={i}>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={item.action}
-                    disabled={item.disabled}
-                    className={`w-full text-left px-3 py-1.5 text-xs flex items-center justify-between gap-4 ${
-                      item.disabled
-                        ? 'text-gray-300 cursor-not-allowed'
-                        : 'text-gray-700 hover:bg-blue-50 hover:text-blue-700'
-                    }`}
-                  >
-                    <span>{item.label}</span>
-                    {item.shortcut && <span className="text-[10px] text-gray-400">{item.shortcut}</span>}
-                  </button>
-                  {item.dividerAfter && <div className="border-t border-gray-100 my-0.5" />}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      ))}
+  return (
+    <nav className="flex items-center gap-0.5 text-[11px] relative z-50" aria-label="Application">
+      {(Object.entries(menus) as Array<[MenuId, { label: string; items: MenuItem[] }]>).map(([id, menu]) => {
+        const panelId = `menubar-panel-${id}`
+        return (
+          <div key={id} className="relative">
+            <button
+              type="button"
+              ref={(el) => { triggerRefs.current[id] = el }}
+              aria-expanded={openMenu === id}
+              aria-controls={openMenu === id ? panelId : undefined}
+              onMouseDown={(e) => {
+                e.preventDefault()
+                toggleMenu(id)
+              }}
+              onMouseEnter={() => {
+                if (openMenu && openMenu !== id) openMenuId(id)
+              }}
+              className={`px-2 py-1 rounded transition-colors ${
+                openMenu === id ? 'bg-white/15 text-white' : 'text-white/70 hover:text-white hover:bg-white/10'
+              }`}
+            >
+              {menu.label}
+            </button>
+          </div>
+        )
+      })}
+
+      <AnchoredPanel
+        open={openMenu !== null}
+        onClose={closeMenu}
+        anchorRef={activeTriggerRef}
+        width={220}
+        maxHeight={360}
+        id={openMenu ? `menubar-panel-${openMenu}` : undefined}
+        aria-label={openMenu ? `${menus[openMenu].label} actions` : undefined}
+        className="bg-white border border-gray-200 rounded-lg shadow-xl py-1"
+      >
+        {openItems.map((item, i) => (
+          <div key={`${item.label}-${i}`}>
+            <button
+              type="button"
+              onClick={item.action}
+              disabled={item.disabled}
+              className={`w-full text-left px-3 py-1.5 text-xs flex items-center justify-between gap-4 ${
+                item.disabled
+                  ? 'text-gray-300 cursor-not-allowed'
+                  : 'text-gray-700 hover:bg-blue-50 hover:text-blue-700'
+              }`}
+            >
+              <span>{item.label}</span>
+              {item.shortcut && <span className="text-[10px] text-gray-400">{item.shortcut}</span>}
+            </button>
+            {item.dividerAfter && <div className="border-t border-gray-100 my-0.5" />}
+          </div>
+        ))}
+      </AnchoredPanel>
 
       <input
         ref={fileInputRef}
@@ -342,6 +353,6 @@ export function MenuBar() {
         className="hidden"
         onChange={handleImportJsonFile}
       />
-    </div>
+    </nav>
   )
 }
