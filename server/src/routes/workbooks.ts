@@ -58,6 +58,12 @@ function requireUserId(req: Request, res: Response): string | null {
   return userId
 }
 
+/** Express types `params` as `string | string[]`; `/:id` is always a single segment. */
+function workbookIdParam(req: Request): string {
+  const id = req.params.id
+  return Array.isArray(id) ? id[0] ?? '' : id ?? ''
+}
+
 /**
  * Auth + error boundary for workbook routes.
  * Keeps HTTP handlers free of repeated 401 / 500 branching.
@@ -427,7 +433,7 @@ async function handleCreateWorkbook(req: Request, res: Response, userId: string)
 }
 
 async function handleDownloadWorkbook(req: Request, res: Response, userId: string): Promise<void> {
-  const data = await downloadOwnedWorkbook(req.params.id, userId, res)
+  const data = await downloadOwnedWorkbook(workbookIdParam(req), userId, res)
   if (!data) return
   res.setHeader('Content-Type', 'application/json')
   res.send(data)
@@ -437,23 +443,25 @@ async function handleSaveWorkbook(req: Request, res: Response, userId: string): 
   const payload = readSaveWorkbookBody(req, res)
   if (!payload) return
 
+  const id = workbookIdParam(req)
   const existing = await requireWorkbookOwnership<{ owner_id: string; s3_key: string }>(
-    req.params.id, userId, res, 'owner_id, s3_key',
+    id, userId, res, 'owner_id, s3_key',
   )
   if (!existing) return
 
-  const saved = await persistWorkbookUpdate(userId, req.params.id, payload)
+  const saved = await persistWorkbookUpdate(userId, id, payload)
   res.json(saved)
-  syncCellsAsync(req.params.id, payload.data, 'save')
+  syncCellsAsync(id, payload.data, 'save')
 }
 
 async function handleDeleteWorkbook(req: Request, res: Response, userId: string): Promise<void> {
+  const id = workbookIdParam(req)
   const workbook = await requireWorkbookOwnership<{ owner_id: string }>(
-    req.params.id, userId, res, 'owner_id',
+    id, userId, res, 'owner_id',
   )
   if (!workbook) return
 
-  await query(`UPDATE smartsht.workbooks SET is_deleted = TRUE WHERE id = $1`, [req.params.id])
+  await query(`UPDATE smartsht.workbooks SET is_deleted = TRUE WHERE id = $1`, [id])
   res.json({ deleted: true })
 }
 
