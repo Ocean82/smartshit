@@ -125,10 +125,11 @@ describe('LLMGateway stage', () => {
     await stage.process(makeContext({ message: 'what are my top expenses?' }))
 
     expect(chatWithAgentServerStream).toHaveBeenCalledWith(
-      'what are my top expenses?',
-      expect.any(Object),
-      expect.any(Array),
-      expect.any(Function),
+      expect.objectContaining({
+        message: 'what are my top expenses?',
+        history: expect.any(Array),
+        onToken: expect.any(Function),
+      }),
     )
   })
 
@@ -149,10 +150,10 @@ describe('LLMGateway stage', () => {
     await stage.process(makeContext({ history }))
 
     expect(chatWithAgentServerStream).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.any(Object),
-      history,
-      expect.any(Function),
+      expect.objectContaining({
+        history,
+        onToken: expect.any(Function),
+      }),
     )
   })
 
@@ -169,10 +170,10 @@ describe('LLMGateway stage', () => {
 
     expect(buildSpreadsheetContext).toHaveBeenCalled()
     expect(chatWithAgentServerStream).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.objectContaining({ workbookName: 'test' }),
-      expect.any(Array),
-      expect.any(Function),
+      expect.objectContaining({
+        context: expect.objectContaining({ workbookName: 'test' }),
+        onToken: expect.any(Function),
+      }),
     )
   })
 
@@ -313,10 +314,10 @@ describe('LLMGateway stage', () => {
     await stage.process(makeContext({ history: undefined }))
 
     expect(chatWithAgentServerStream).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.any(Object),
-      [],
-      expect.any(Function),
+      expect.objectContaining({
+        history: [],
+        onToken: expect.any(Function),
+      }),
     )
   })
 

@@ -60,15 +60,15 @@ export function createLLMGatewayStage(): PipelineStage {
       const deterministicSummary = buildSummary(insightsBlock, auditBlock, context.priorInsights)
 
       // REQ-7.1, REQ-7.4: Send message + history + context to server LLM
-      const serverResult = await chatWithAgentServerStream(
-        context.message,
-        {
+      const serverResult = await chatWithAgentServerStream({
+        message: context.message,
+        context: {
           ...sheetContext,
           deterministicSummary,
         },
-        context.history ?? [],
+        history: context.history ?? [],
         onToken,
-      )
+      })
 
       if (serverResult) {
         // Successful LLM response

@@ -3,8 +3,16 @@ import type { AgentAction, ChatMessage, ProviderMeta } from '@/types'
 import type { SpreadsheetContextPayload } from '@/ai/buildContext'
 import { getAuthHeaders } from '@/lib/cloudSync'
 import { getByokPayload } from '@/lib/userApiKey'
+import { readAgentSseStream } from '@/ai/agentSse'
+
+export {
+  parseCompleteSseEvent,
+  parseSseEventPayload,
+} from '@/ai/agentSse'
+export type { SseEventPayload } from '@/ai/agentSse'
 
 const API_BASE = import.meta.env.VITE_AI_API_URL ?? ''
+const CHAT_TIMEOUT_MS = 120_000
 
 export interface ServerAgentAction {
   tool: string
@@ -21,53 +29,18 @@ export interface ServerChatResponse {
   meta?: ProviderMeta
 }
 
-export interface SseEventPayload {
-  type?: string
-  content?: string
-  message?: string
-  actions?: ServerAgentAction[]
-  source?: string
-  reasoning?: string
-  suggestions?: string[]
-  meta?: ProviderMeta
+export type AgentChatTurn = { role: 'user' | 'assistant'; content: string }
+
+/** Shared payload for non-streaming and streaming chat. */
+export interface AgentChatRequest {
+  message: string
+  context: SpreadsheetContextPayload
+  history: AgentChatTurn[]
 }
 
-/** Parse a raw SSE `data:` JSON string once. Returns null on malformed JSON. */
-export function parseSseEventPayload(jsonStr: string): SseEventPayload | null {
-  try {
-    return JSON.parse(jsonStr) as SseEventPayload
-  } catch {
-    return null
-  }
-}
-
-/** Allowed values for ServerChatResponse.source */
-const VALID_SOURCES: ReadonlySet<ServerChatResponse['source']> = new Set(['llm', 'fallback', 'template'])
-
-/** Runtime check that meta has the expected shape. */
-function isValidProviderMeta(value: unknown): value is ProviderMeta {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    typeof (value as Record<string, unknown>).provider === 'string' &&
-    typeof (value as Record<string, unknown>).model === 'string'
-  )
-}
-
-/** Map a pre-parsed SSE payload into a ServerChatResponse when type=complete. */
-export function parseCompleteSseEvent(event: SseEventPayload): ServerChatResponse | null {
-  if (event.type !== 'complete' || typeof event.message !== 'string') return null
-  const source = VALID_SOURCES.has(event.source as ServerChatResponse['source'])
-    ? (event.source as ServerChatResponse['source'])
-    : 'llm'
-  return {
-    message: event.message,
-    actions: Array.isArray(event.actions) ? event.actions : [],
-    source,
-    reasoning: event.reasoning,
-    suggestions: event.suggestions,
-    meta: isValidProviderMeta(event.meta) ? event.meta : undefined,
-  }
+export interface AgentStreamChatRequest extends AgentChatRequest {
+  onToken: (token: string) => void
+  signal?: AbortSignal
 }
 
 export interface ServerHealth {
@@ -92,21 +65,32 @@ export async function fetchServerHealth(): Promise<ServerHealth | null> {
   }
 }
 
+async function postAgentChat(
+  path: string,
+  request: AgentChatRequest,
+  signal: AbortSignal,
+): Promise<Response> {
+  const headers = await getAuthHeaders()
+  const byok = getByokPayload()
+  return fetch(`${API_BASE}${path}`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      message: request.message,
+      context: request.context,
+      history: request.history,
+      byok,
+    }),
+    signal,
+  })
+}
+
 /** Non-streaming chat — fallback if SSE fails */
 export async function chatWithAgentServer(
-  message: string,
-  context: SpreadsheetContextPayload,
-  history: Array<{ role: 'user' | 'assistant'; content: string }>,
+  request: AgentChatRequest,
 ): Promise<ServerChatResponse | null> {
   try {
-    const headers = await getAuthHeaders()
-    const byok = getByokPayload()
-    const res = await fetch(`${API_BASE}/api/chat`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ message, context, history, byok }),
-      signal: AbortSignal.timeout(120_000),
-    })
+    const res = await postAgentChat('/api/chat', request, AbortSignal.timeout(CHAT_TIMEOUT_MS))
     if (!res.ok) return null
     return (await res.json()) as ServerChatResponse
   } catch {
@@ -120,57 +104,18 @@ export async function chatWithAgentServer(
  * Returns the final structured response when complete.
  */
 export async function chatWithAgentServerStream(
-  message: string,
-  context: SpreadsheetContextPayload,
-  history: Array<{ role: 'user' | 'assistant'; content: string }>,
-  onToken: (token: string) => void,
-  signal?: AbortSignal,
+  request: AgentStreamChatRequest,
 ): Promise<ServerChatResponse | null> {
   try {
-    const headers = await getAuthHeaders()
-    const byok = getByokPayload()
-    const res = await fetch(`${API_BASE}/api/chat/stream`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ message, context, history, byok }),
-      signal: signal ?? AbortSignal.timeout(120_000),
-    })
-
-    if (!res.ok) return null
-    const reader = res.body?.getReader()
+    const res = await postAgentChat(
+      '/api/chat/stream',
+      request,
+      request.signal ?? AbortSignal.timeout(CHAT_TIMEOUT_MS),
+    )
+    const reader = res.ok ? res.body?.getReader() : undefined
     if (!reader) return null
-
-    const decoder = new TextDecoder()
-    let finalResponse: ServerChatResponse | null = null
-
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-
-      const text = decoder.decode(value, { stream: true })
-      const lines = text.split('\n')
-
-      for (const line of lines) {
-        if (!line.startsWith('data: ')) continue
-        const jsonStr = line.slice(6).trim()
-        if (!jsonStr) continue
-
-        const event = parseSseEventPayload(jsonStr)
-        if (!event) continue
-
-        if (event.type === 'token' && typeof event.content === 'string') {
-          onToken(event.content)
-          continue
-        }
-
-        const complete = parseCompleteSseEvent(event)
-        if (complete) finalResponse = complete
-      }
-    }
-
-    return finalResponse
-  } catch (err) {
-    if ((err as Error).name === 'AbortError') return null
+    return readAgentSseStream(reader, request.onToken)
+  } catch {
     return null
   }
 }

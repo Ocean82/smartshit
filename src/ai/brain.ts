@@ -849,16 +849,16 @@ export async function processMessage(input: ProcessMessageInput): Promise<ToolRe
   }
 
   // 7. Call LLM
-  const serverResult = await chatWithAgentServerStream(
-    input.message,
-    {
+  const serverResult = await chatWithAgentServerStream({
+    message: input.message,
+    context: {
       ...target.context,
       userPreferences: input.userPreferences,
       deterministicSummary: buildDeterministicSummary(insightsBlock, deterministicText, auditBlock, input.priorInsights, target.context.insights),
     },
-    input.history ?? [],
-    input.onToken ?? (() => {}),
-  )
+    history: input.history ?? [],
+    onToken: input.onToken ?? (() => {}),
+  })
 
   // 8. Build final response
   if (serverResult) {

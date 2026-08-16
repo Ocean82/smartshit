@@ -4,6 +4,11 @@ import {
   parseSseEventPayload,
   serverResponseToChatMessage,
 } from './agentClient'
+import {
+  applySseEvent,
+  readAgentSseStream,
+  sseJsonPayloadsFromChunk,
+} from './agentSse'
 
 describe('parseSseEventPayload', () => {
   it('parses valid JSON once', () => {
@@ -54,6 +59,65 @@ describe('serverResponseToChatMessage', () => {
     expect(msg.providerMeta).toEqual({
       provider: 'groq',
       model: 'llama-3.3-70b-versatile',
+    })
+  })
+})
+
+describe('sseJsonPayloadsFromChunk', () => {
+  it('extracts JSON from data lines and skips noise', () => {
+    const payloads = sseJsonPayloadsFromChunk(
+      'event: ping\ndata: {"type":"token","content":"Hi"}\n\ndata: \nignored\n',
+    )
+    expect(payloads).toEqual(['{"type":"token","content":"Hi"}'])
+  })
+})
+
+describe('applySseEvent', () => {
+  it('emits token content without replacing the complete response', () => {
+    const tokens: string[] = []
+    const current = {
+      message: 'done',
+      actions: [],
+      source: 'llm' as const,
+    }
+    const next = applySseEvent({ type: 'token', content: 'Hi' }, (token) => tokens.push(token), current)
+    expect(tokens).toEqual(['Hi'])
+    expect(next).toBe(current)
+  })
+
+  it('replaces the accumulator on a complete event', () => {
+    const next = applySseEvent(
+      { type: 'complete', message: 'Sorted', actions: [], source: 'llm' },
+      () => {},
+      null,
+    )
+    expect(next?.message).toBe('Sorted')
+  })
+})
+
+describe('readAgentSseStream', () => {
+  it('replays tokens then returns the complete payload', async () => {
+    const encoder = new TextEncoder()
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode('data: {"type":"token","content":"Hel"}\n'))
+        controller.enqueue(encoder.encode('data: {"type":"token","content":"lo"}\n'))
+        controller.enqueue(encoder.encode('data: {"type":"complete","message":"Hello","actions":[],"source":"llm"}\n'))
+        controller.close()
+      },
+    })
+
+    const tokens: string[] = []
+    const result = await readAgentSseStream(stream.getReader(), (token) => tokens.push(token))
+
+    expect(tokens).toEqual(['Hel', 'lo'])
+    expect(result).toEqual({
+      message: 'Hello',
+      actions: [],
+      source: 'llm',
+      reasoning: undefined,
+      suggestions: undefined,
+      meta: undefined,
     })
   })
 })
