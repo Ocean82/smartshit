@@ -9,6 +9,36 @@ import { sendServerError } from '../httpError.js'
 
 export const workbooksRouter = Router()
 
+interface CreateWorkbookPayload {
+  name: string
+  data: string
+  sheetCount: number
+}
+
+interface SaveWorkbookPayload {
+  name?: string
+  data: string
+  sheetCount?: number
+}
+
+interface CreatedWorkbook {
+  id: string
+  s3Key: string
+  sizeBytes: number
+  version: number
+}
+
+interface SavedWorkbook {
+  saved: true
+  version: number
+  sizeBytes: number
+}
+
+type AuthenticatedHandler = (req: Request, res: Response, userId: string) => Promise<void>
+
+/** How many historical versions to keep per workbook. */
+const MAX_VERSIONS_PER_WORKBOOK = Number(process.env.MAX_WORKBOOK_VERSIONS ?? 50)
+
 // ─── Shared Helpers ──────────────────────────────────────────────────────────
 
 function getUserId(req: Request): string | null {
@@ -26,6 +56,22 @@ function requireUserId(req: Request, res: Response): string | null {
     return null
   }
   return userId
+}
+
+/**
+ * Auth + error boundary for workbook routes.
+ * Keeps HTTP handlers free of repeated 401 / 500 branching.
+ */
+function workbookRoute(handler: AuthenticatedHandler) {
+  return async (req: Request, res: Response) => {
+    const userId = requireUserId(req, res)
+    if (!userId) return
+    try {
+      await handler(req, res, userId)
+    } catch (err) {
+      sendServerError(res, 'workbooks', err)
+    }
+  }
 }
 
 /**
@@ -88,6 +134,44 @@ async function exceedsFreeTierWorkbookLimit(userId: string, res: Response): Prom
   return false
 }
 
+function isMissingCreateFields(name: unknown, data: unknown): boolean {
+  return !name || !data
+}
+
+function readCreateWorkbookBody(req: Request, res: Response): CreateWorkbookPayload | null {
+  const { name, data, sheetCount } = req.body as {
+    name?: unknown
+    data?: unknown
+    sheetCount?: number
+  }
+
+  if (isMissingCreateFields(name, data)) {
+    res.status(400).json({ error: 'name and data are required' })
+    return null
+  }
+
+  return {
+    name: name as string,
+    data: data as string,
+    sheetCount: sheetCount ?? 1,
+  }
+}
+
+function readSaveWorkbookBody(req: Request, res: Response): SaveWorkbookPayload | null {
+  const { name, data, sheetCount } = req.body as {
+    name?: string
+    data?: string
+    sheetCount?: number
+  }
+
+  if (!data) {
+    res.status(400).json({ error: 'data is required' })
+    return null
+  }
+
+  return { name, data, sheetCount }
+}
+
 /**
  * Fire-and-forget cell sync after workbook save.
  * Never throws or blocks the caller.
@@ -106,6 +190,79 @@ function syncCellsAsync(workbookId: string, rawData: string, label: string): voi
       )
     }
   } catch { /* non-critical parse failure */ }
+}
+
+function workbookVersionFilename(versionNumber: number): string {
+  return `v${String(versionNumber).padStart(3, '0')}.json`
+}
+
+async function upsertUserLastSeen(userId: string): Promise<void> {
+  await query(
+    `INSERT INTO smartsht.users (id, last_seen_at)
+     VALUES ($1, NOW())
+     ON CONFLICT (id) DO UPDATE SET last_seen_at = NOW()`,
+    [userId],
+  )
+}
+
+async function touchUserLastSeen(userId: string): Promise<void> {
+  await query(`UPDATE smartsht.users SET last_seen_at = NOW() WHERE id = $1`, [userId])
+}
+
+async function insertWorkbookRow(
+  userId: string,
+  name: string,
+  sheetCount: number,
+): Promise<string> {
+  const insertResult = await query<{ id: string }>(
+    `INSERT INTO smartsht.workbooks (owner_id, name, s3_key, size_bytes, sheet_count)
+     VALUES ($1, $2, '', 0, $3)
+     RETURNING id`,
+    [userId, name, sheetCount],
+  )
+  return insertResult.rows[0].id
+}
+
+async function nextWorkbookVersionNumber(workbookId: string): Promise<number> {
+  const versionResult = await query<{ max_version: number | null }>(
+    `SELECT MAX(version_number) as max_version FROM smartsht.workbook_versions WHERE workbook_id = $1`,
+    [workbookId],
+  )
+  return (versionResult.rows[0].max_version ?? 0) + 1
+}
+
+/**
+ * Upload a versioned copy and insert the matching workbook_versions row.
+ * Shared by create (v001) and save (vNNN).
+ */
+async function writeWorkbookVersion(
+  userId: string,
+  workbookId: string,
+  data: string,
+  versionNumber: number,
+  sizeBytes: number,
+  description: string,
+): Promise<void> {
+  const versionUpload = await uploadWorkbook(
+    userId,
+    workbookId,
+    workbookVersionFilename(versionNumber),
+    data,
+  )
+
+  await query(
+    `INSERT INTO smartsht.workbook_versions (workbook_id, version_number, s3_key, size_bytes, description)
+     VALUES ($1, $2, $3, $4, $5)`,
+    [workbookId, versionNumber, versionUpload.key, sizeBytes, description],
+  )
+}
+
+async function uploadLatestWorkbook(
+  userId: string,
+  workbookId: string,
+  data: string,
+): Promise<{ key: string; sizeBytes: number }> {
+  return uploadWorkbook(userId, workbookId, 'latest.json', data)
 }
 
 /**
@@ -141,213 +298,54 @@ function buildWorkbookUpdateQuery(
   }
 }
 
-// ─── GET /api/workbooks — List user's workbooks ──────────────────────────────
+async function persistNewWorkbook(
+  userId: string,
+  payload: CreateWorkbookPayload,
+): Promise<CreatedWorkbook> {
+  await upsertUserLastSeen(userId)
 
-workbooksRouter.get('/', async (req, res) => {
-  const userId = requireUserId(req, res)
-  if (!userId) return
+  const workbookId = await insertWorkbookRow(userId, payload.name, payload.sheetCount)
+  const { key, sizeBytes } = await uploadLatestWorkbook(userId, workbookId, payload.data)
 
-  try {
-    const result = await query(
-      `SELECT id, name, size_bytes, sheet_count, last_saved_at, created_at
-       FROM smartsht.workbooks
-       WHERE owner_id = $1 AND NOT is_deleted
-       ORDER BY last_saved_at DESC`,
-      [userId],
-    )
+  await query(
+    `UPDATE smartsht.workbooks SET s3_key = $1, size_bytes = $2 WHERE id = $3`,
+    [key, sizeBytes, workbookId],
+  )
 
-    res.json({ workbooks: result.rows })
-  } catch (err) {
-    sendServerError(res, 'workbooks', err)
+  await writeWorkbookVersion(userId, workbookId, payload.data, 1, sizeBytes, 'Initial save')
+
+  return {
+    id: workbookId,
+    s3Key: key,
+    sizeBytes,
+    version: 1,
   }
-})
+}
 
-// ─── POST /api/workbooks — Create/save a new workbook ────────────────────────
+async function persistWorkbookUpdate(
+  userId: string,
+  workbookId: string,
+  payload: SaveWorkbookPayload,
+): Promise<SavedWorkbook> {
+  const { key, sizeBytes } = await uploadLatestWorkbook(userId, workbookId, payload.data)
+  const nextVersion = await nextWorkbookVersionNumber(workbookId)
 
-workbooksRouter.post('/', async (req, res) => {
-  const userId = requireUserId(req, res)
-  if (!userId) return
+  await writeWorkbookVersion(userId, workbookId, payload.data, nextVersion, sizeBytes, 'Auto-save')
+  void pruneOldVersions(workbookId)
 
-  const { name, data, sheetCount } = req.body as {
-    name: string
-    data: string
-    sheetCount?: number
+  const update = buildWorkbookUpdateQuery(key, sizeBytes, workbookId, {
+    name: payload.name,
+    sheetCount: payload.sheetCount,
+  })
+  await query(update.sql, update.params)
+  await touchUserLastSeen(userId)
+
+  return {
+    saved: true,
+    version: nextVersion,
+    sizeBytes,
   }
-
-  if (!name || !data) {
-    res.status(400).json({ error: 'name and data are required' })
-    return
-  }
-
-  try {
-    // Free-tier cloud workbook cap
-    if (await exceedsFreeTierWorkbookLimit(userId, res)) return
-
-    // Ensure user exists (upsert on first save)
-    await query(
-      `INSERT INTO smartsht.users (id, last_seen_at)
-       VALUES ($1, NOW())
-       ON CONFLICT (id) DO UPDATE SET last_seen_at = NOW()`,
-      [userId],
-    )
-
-    // Create workbook record
-    const insertResult = await query<{ id: string }>(
-      `INSERT INTO smartsht.workbooks (owner_id, name, s3_key, size_bytes, sheet_count)
-       VALUES ($1, $2, '', 0, $3)
-       RETURNING id`,
-      [userId, name, sheetCount ?? 1],
-    )
-
-    const workbookId = insertResult.rows[0].id
-
-    // Upload to S3
-    const { key, sizeBytes } = await uploadWorkbook(userId, workbookId, 'latest.json', data)
-
-    // Update the record with the S3 key and size
-    await query(
-      `UPDATE smartsht.workbooks SET s3_key = $1, size_bytes = $2 WHERE id = $3`,
-      [key, sizeBytes, workbookId],
-    )
-
-    // Create initial version (v001)
-    const versionKey = `${config.s3Prefix}/workbooks/${userId}/${workbookId}/v001.json`
-    await uploadWorkbook(userId, workbookId, 'v001.json', data)
-
-    await query(
-      `INSERT INTO smartsht.workbook_versions (workbook_id, version_number, s3_key, size_bytes, description)
-       VALUES ($1, 1, $2, $3, $4)`,
-      [workbookId, versionKey, sizeBytes, 'Initial save'],
-    )
-
-    res.status(201).json({
-      id: workbookId,
-      s3Key: key,
-      sizeBytes,
-      version: 1,
-    })
-
-    syncCellsAsync(workbookId, data, 'create')
-  } catch (err) {
-    sendServerError(res, 'workbooks', err)
-  }
-})
-
-// ─── GET /api/workbooks/:id — Download a workbook ────────────────────────────
-
-workbooksRouter.get('/:id', async (req, res) => {
-  const userId = requireUserId(req, res)
-  if (!userId) return
-
-  const { id } = req.params
-
-  try {
-    const workbook = await requireWorkbookOwnership<{ owner_id: string; s3_key: string }>(
-      id, userId, res, 'owner_id, s3_key',
-    )
-    if (!workbook) return
-
-    const data = await downloadObject(workbook.s3_key)
-    res.setHeader('Content-Type', 'application/json')
-    res.send(data)
-  } catch (err) {
-    sendServerError(res, 'workbooks', err)
-  }
-})
-
-// ─── PUT /api/workbooks/:id — Update (save) a workbook ──────────────────────
-
-workbooksRouter.put('/:id', async (req, res) => {
-  const userId = requireUserId(req, res)
-  if (!userId) return
-
-  const { id } = req.params
-  const { name, data, sheetCount } = req.body as {
-    name?: string
-    data: string
-    sheetCount?: number
-  }
-
-  if (!data) {
-    res.status(400).json({ error: 'data is required' })
-    return
-  }
-
-  try {
-    // Verify ownership
-    const existing = await requireWorkbookOwnership<{ owner_id: string; s3_key: string }>(
-      id, userId, res, 'owner_id, s3_key',
-    )
-    if (!existing) return
-
-    // Upload new version to S3 (latest)
-    const { key, sizeBytes } = await uploadWorkbook(userId, id, 'latest.json', data)
-
-    // Get next version number
-    const versionResult = await query<{ max_version: number | null }>(
-      `SELECT MAX(version_number) as max_version FROM smartsht.workbook_versions WHERE workbook_id = $1`,
-      [id],
-    )
-    const nextVersion = (versionResult.rows[0].max_version ?? 0) + 1
-
-    // Upload versioned copy
-    const versionFilename = `v${String(nextVersion).padStart(3, '0')}.json`
-    const versionUpload = await uploadWorkbook(userId, id, versionFilename, data)
-
-    // Insert version record
-    await query(
-      `INSERT INTO smartsht.workbook_versions (workbook_id, version_number, s3_key, size_bytes, description)
-       VALUES ($1, $2, $3, $4, $5)`,
-      [id, nextVersion, versionUpload.key, sizeBytes, 'Auto-save'],
-    )
-
-    // Prune old versions beyond retention window (fire-and-forget)
-    void pruneOldVersions(id)
-
-    // Update workbook metadata
-    const update = buildWorkbookUpdateQuery(key, sizeBytes, id, { name, sheetCount })
-    await query(update.sql, update.params)
-
-    // Update user last_seen
-    await query(`UPDATE smartsht.users SET last_seen_at = NOW() WHERE id = $1`, [userId])
-
-    res.json({
-      saved: true,
-      version: nextVersion,
-      sizeBytes,
-    })
-
-    syncCellsAsync(id, data, 'save')
-  } catch (err) {
-    sendServerError(res, 'workbooks', err)
-  }
-})
-
-// ─── DELETE /api/workbooks/:id — Soft-delete a workbook ──────────────────────
-
-workbooksRouter.delete('/:id', async (req, res) => {
-  const userId = requireUserId(req, res)
-  if (!userId) return
-
-  const { id } = req.params
-
-  try {
-    const workbook = await requireWorkbookOwnership<{ owner_id: string }>(
-      id, userId, res, 'owner_id',
-    )
-    if (!workbook) return
-
-    await query(`UPDATE smartsht.workbooks SET is_deleted = TRUE WHERE id = $1`, [id])
-    res.json({ deleted: true })
-  } catch (err) {
-    sendServerError(res, 'workbooks', err)
-  }
-})
-
-// ─── Version retention ───────────────────────────────────────────────────────
-
-/** How many historical versions to keep per workbook. */
-const MAX_VERSIONS_PER_WORKBOOK = Number(process.env.MAX_WORKBOOK_VERSIONS ?? 50)
+}
 
 /**
  * Drop the oldest versions beyond the retention window, removing both the DB
@@ -390,3 +388,77 @@ async function pruneOldVersions(workbookId: string): Promise<void> {
     )
   }
 }
+
+async function listOwnedWorkbooks(userId: string) {
+  return query(
+    `SELECT id, name, size_bytes, sheet_count, last_saved_at, created_at
+     FROM smartsht.workbooks
+     WHERE owner_id = $1 AND NOT is_deleted
+     ORDER BY last_saved_at DESC`,
+    [userId],
+  )
+}
+
+async function downloadOwnedWorkbook(
+  id: string,
+  userId: string,
+  res: Response,
+): Promise<string | null> {
+  const workbook = await requireWorkbookOwnership<{ owner_id: string; s3_key: string }>(
+    id, userId, res, 'owner_id, s3_key',
+  )
+  if (!workbook) return null
+  return downloadObject(workbook.s3_key)
+}
+
+async function handleListWorkbooks(_req: Request, res: Response, userId: string): Promise<void> {
+  const result = await listOwnedWorkbooks(userId)
+  res.json({ workbooks: result.rows })
+}
+
+async function handleCreateWorkbook(req: Request, res: Response, userId: string): Promise<void> {
+  const payload = readCreateWorkbookBody(req, res)
+  if (!payload) return
+  if (await exceedsFreeTierWorkbookLimit(userId, res)) return
+
+  const created = await persistNewWorkbook(userId, payload)
+  res.status(201).json(created)
+  syncCellsAsync(created.id, payload.data, 'create')
+}
+
+async function handleDownloadWorkbook(req: Request, res: Response, userId: string): Promise<void> {
+  const data = await downloadOwnedWorkbook(req.params.id, userId, res)
+  if (!data) return
+  res.setHeader('Content-Type', 'application/json')
+  res.send(data)
+}
+
+async function handleSaveWorkbook(req: Request, res: Response, userId: string): Promise<void> {
+  const payload = readSaveWorkbookBody(req, res)
+  if (!payload) return
+
+  const existing = await requireWorkbookOwnership<{ owner_id: string; s3_key: string }>(
+    req.params.id, userId, res, 'owner_id, s3_key',
+  )
+  if (!existing) return
+
+  const saved = await persistWorkbookUpdate(userId, req.params.id, payload)
+  res.json(saved)
+  syncCellsAsync(req.params.id, payload.data, 'save')
+}
+
+async function handleDeleteWorkbook(req: Request, res: Response, userId: string): Promise<void> {
+  const workbook = await requireWorkbookOwnership<{ owner_id: string }>(
+    req.params.id, userId, res, 'owner_id',
+  )
+  if (!workbook) return
+
+  await query(`UPDATE smartsht.workbooks SET is_deleted = TRUE WHERE id = $1`, [req.params.id])
+  res.json({ deleted: true })
+}
+
+workbooksRouter.get('/', workbookRoute(handleListWorkbooks))
+workbooksRouter.post('/', workbookRoute(handleCreateWorkbook))
+workbooksRouter.get('/:id', workbookRoute(handleDownloadWorkbook))
+workbooksRouter.put('/:id', workbookRoute(handleSaveWorkbook))
+workbooksRouter.delete('/:id', workbookRoute(handleDeleteWorkbook))
