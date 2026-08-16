@@ -26,7 +26,6 @@ export function Toolbar() {
     undoStack,
     redoStack,
     setShowChartDialog,
-    setShowPivotDialog,
     showFormatPanel,
     setShowFormatPanel,
     activeFilters,
@@ -44,7 +43,6 @@ export function Toolbar() {
     undoStack: s.undoStack,
     redoStack: s.redoStack,
     setShowChartDialog: s.setShowChartDialog,
-    setShowPivotDialog: s.setShowPivotDialog,
     showFormatPanel: s.showFormatPanel,
     setShowFormatPanel: s.setShowFormatPanel,
     activeFilters: s.activeFilters,
@@ -441,15 +439,6 @@ export function Toolbar() {
             >
               <Grid3x3 size={14} />
               <span>Conditional Format</span>
-            </button>
-            <button
-              type="button"
-              className="toolbar-dropdown-item"
-              onClick={() => { setShowPivotDialog(true); setShowMoreMenu(false); }}
-              disabled={!selection}
-            >
-              <BarChart3 size={14} />
-              <span>Pivot Table</span>
             </button>
             <div className="toolbar-dropdown-divider" />
             <button

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { computeAnchoredPanelFrame } from './AnchoredPanel'
+import { computeAnchoredPanelFrame, computePointPanelFrame } from './AnchoredPanel'
 
 describe('computeAnchoredPanelFrame', () => {
   it('places the panel below the anchor when there is room', () => {
@@ -35,5 +35,20 @@ describe('computeAnchoredPanelFrame', () => {
       align: 'end',
     })
     expect(frame.left).toBe(380)
+  })
+})
+
+describe('computePointPanelFrame', () => {
+  it('clamps a context-menu point into the viewport', () => {
+    const frame = computePointPanelFrame({
+      point: { x: 350, y: 200 },
+      viewport: { width: 400, height: 260 },
+      width: 220,
+      height: 200,
+    })
+    expect(frame.left + frame.width).toBeLessThanOrEqual(400)
+    expect(frame.top + frame.height).toBeLessThanOrEqual(260)
+    expect(frame.left).toBeGreaterThanOrEqual(8)
+    expect(frame.top).toBeGreaterThanOrEqual(8)
   })
 })

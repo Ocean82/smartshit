@@ -274,7 +274,6 @@ export function MenuBar() {
         { label: 'Sort Descending', action: () => { if (selection) { sortByColumn(col, 'desc'); } setOpenMenu(null) }, disabled: !selection },
         { label: 'Filter...', action: () => { setShowFilterDialog(true); setOpenMenu(null) }, dividerAfter: true },
         { label: 'Data Validation...', action: () => { setShowValidationDialog(true); setOpenMenu(null) } },
-        { label: 'Pivot Table...', action: () => { setShowPivotDialog(true); setOpenMenu(null) }, disabled: !selection },
       ],
     },
   }
