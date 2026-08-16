@@ -84,6 +84,36 @@ function parseTrustProxy(raw: string | undefined): boolean | number | string {
   return value
 }
 
+// ─── Clerk authorized parties ────────────────────────────────────────────────
+
+/**
+ * Parse Clerk `authorizedParties` from env, or derive from APP_URL.
+ * JWT `azp` must match one of these or API requests 401 after a successful UI sign-in.
+ */
+export function parseClerkAuthorizedParties(
+  raw: string | undefined,
+  appUrl: string,
+): string[] {
+  const fromEnv = raw
+    ?.split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean)
+  if (fromEnv && fromEnv.length > 0) return [...new Set(fromEnv)]
+
+  const parties = [appUrl, 'http://localhost:5173', 'http://127.0.0.1:5173']
+  try {
+    const url = new URL(appUrl)
+    if (url.hostname.startsWith('www.')) {
+      parties.push(`${url.protocol}//${url.hostname.slice(4)}`)
+    } else {
+      parties.push(`${url.protocol}//www.${url.hostname}`)
+    }
+  } catch {
+    // APP_URL isn't a valid URL — keep the literal value plus local dev origins
+  }
+  return [...new Set(parties)]
+}
+
 // ─── CORS ────────────────────────────────────────────────────────────────────
 
 /**
@@ -151,6 +181,14 @@ export const config = {
   /** Max tokens to generate per response (768 for 4B models; Groq overrides in its own config) */
   numPredict: Number(process.env.NUM_PREDICT ?? 768),
   corsOrigin: resolveCorsOrigin(),
+  /**
+   * Origins allowed in Clerk JWT `azp`. Defaults to APP_URL + www + local Vite.
+   * Override with comma-separated CLERK_AUTHORIZED_PARTIES.
+   */
+  clerkAuthorizedParties: parseClerkAuthorizedParties(
+    process.env.CLERK_AUTHORIZED_PARTIES,
+    process.env.APP_URL ?? 'https://smartsht.com',
+  ),
   /** Max request body for workbook save/update routes (full sheet JSON). */
   workbookBodyLimit: process.env.WORKBOOK_BODY_LIMIT ?? '25mb',
 

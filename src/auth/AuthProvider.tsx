@@ -1,7 +1,17 @@
-import { ClerkProvider, Show, SignInButton, UserButton } from '@clerk/react'
+import { ClerkProvider, Show, SignIn, UserButton, useAuth } from '@clerk/react'
 import type { ReactNode } from 'react'
 
 const CLERK_PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ?? ''
+
+/** SPA lives at /app; landing at / has no ClerkProvider. */
+const APP_PATH = '/app'
+
+const clerkAppearance = {
+  variables: {
+    colorPrimary: '#2563eb',
+    borderRadius: '0.75rem',
+  },
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   if (!CLERK_PUBLISHABLE_KEY) {
@@ -10,7 +20,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <ClerkProvider publishableKey={CLERK_PUBLISHABLE_KEY} afterSignOutUrl="/">
+    <ClerkProvider
+      publishableKey={CLERK_PUBLISHABLE_KEY}
+      afterSignOutUrl="/"
+      signInFallbackRedirectUrl={APP_PATH}
+      signUpFallbackRedirectUrl={APP_PATH}
+    >
       {children}
     </ClerkProvider>
   )
@@ -21,13 +36,20 @@ export function AuthGate({ children }: { children: ReactNode }) {
     return <>{children}</>
   }
 
+  return <AuthGateInner>{children}</AuthGateInner>
+}
+
+function AuthGateInner({ children }: { children: ReactNode }) {
+  const { isLoaded } = useAuth()
+
+  if (!isLoaded) return <AuthLoading />
+
+  // Pending sessions (email OTP, MFA) are treated as signed-out so <SignIn>
+  // stays mounted and can finish verification. Do not use a dismissible modal.
   return (
-    <>
-      <Show when="signed-in">{children}</Show>
-      <Show when="signed-out">
-        <SignInPrompt />
-      </Show>
-    </>
+    <Show when="signed-in" fallback={<SignInPrompt />}>
+      {children}
+    </Show>
   )
 }
 
@@ -47,37 +69,35 @@ export function UserNav() {
   )
 }
 
-function SignInPrompt() {
+function AuthLoading() {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-gradient-to-br from-slate-900 to-blue-900">
-      <div className="max-w-md w-full mx-4 text-center">
-        <div className="bg-white rounded-2xl shadow-2xl p-8">
-          <div className="text-3xl mb-2">📊</div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">smartsht</h1>
-          <p className="text-gray-600 mb-6">
-            Talk to your spreadsheet. No formulas required.
-          </p>
-          <SignInButton mode="modal">
-            <button className="w-full py-3 px-6 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors shadow-lg shadow-blue-600/25">
-              Sign in to get started
-            </button>
-          </SignInButton>
-          <p className="mt-4 text-xs text-gray-500">
-            Free tier includes 3 AI questions per day
-          </p>
-        </div>
-      </div>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-gradient-to-br from-slate-900 to-blue-900"
+      role="status"
+      aria-live="polite"
+      aria-label="Loading sign in"
+    >
+      <p className="text-sm font-medium text-white/80">Loading…</p>
     </div>
   )
 }
 
-/*
- * `useIsSignedIn` was removed here: it called `useAuth()` behind an early
- * return (a rules-of-hooks violation) and wrapped it in try/catch because
- * `useAuth` throws when no ClerkProvider is mounted — which is the dev-mode
- * path. It had no callers.
- *
- * If a component needs this, read `isSignedIn` from Clerk's own `useAuth`
- * inside the authenticated tree, or use the `<Show when="signed-in">` guard
- * above, both of which keep hook order stable.
- */
+function SignInPrompt() {
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-gradient-to-br from-slate-900 to-blue-900 px-4">
+      <h1 className="mb-2 text-2xl font-bold text-white">smartsh!t</h1>
+      <p className="mb-6 text-sm text-white/70">
+        Talk to your spreadsheet. No formulas required.
+      </p>
+      <SignIn
+        routing="hash"
+        fallbackRedirectUrl={APP_PATH}
+        signUpFallbackRedirectUrl={APP_PATH}
+        appearance={clerkAppearance}
+      />
+      <p className="mt-4 text-xs text-white/60">
+        Free tier includes 3 AI questions per day
+      </p>
+    </div>
+  )
+}

@@ -20,10 +20,35 @@ export function getClerkClient() {
   return createClerkClient({ secretKey: config.clerkSecretKey })
 }
 
+/**
+ * Options for `@clerk/express` `clerkMiddleware`.
+ * Pass keys from config so VITE_CLERK_PUBLISHABLE_KEY fallback is honored,
+ * and set authorizedParties so www/apex JWT `azp` values are accepted.
+ */
+export function getClerkMiddlewareOptions() {
+  const options: {
+    secretKey?: string
+    publishableKey?: string
+    authorizedParties: string[]
+  } = {
+    authorizedParties: config.clerkAuthorizedParties,
+  }
+  if (config.clerkSecretKey) options.secretKey = config.clerkSecretKey
+  if (config.clerkPublishableKey) options.publishableKey = config.clerkPublishableKey
+  return options
+}
+
+/** True when Clerk attached a session user id to this request. */
+export function hasClerkUserId(auth: { userId?: string | null }): boolean {
+  return Boolean(auth.userId)
+}
+
 /** Express middleware: 401 unless Clerk session JWT is valid. */
 export function requireAuth(req: Request, res: Response, next: NextFunction): void {
   const auth = getAuth(req)
-  if (!auth.isAuthenticated || !auth.userId) {
+  // Gate on userId only. `isAuthenticated` is undefined on some Clerk Express
+  // auth objects, and `!undefined` would 401 every authenticated request.
+  if (!hasClerkUserId(auth)) {
     res.status(401).json({ error: 'Authentication required' })
     return
   }

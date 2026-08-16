@@ -229,12 +229,18 @@ In the Stripe dashboard:
 
 ---
 
-## 8. Clerk Webhook Setup (Optional — for real-time plan sync)
+## 8. Clerk Dashboard (required for sign-in / sign-up)
 
-If you want Clerk to know about Stripe plan changes immediately:
-1. In Clerk dashboard → Webhooks → Add endpoint
-2. URL: `https://smartsht.com/api/clerk/webhook` (if implemented)
-3. Or: the Stripe webhook handler already calls Clerk Backend API to update user publicMetadata with `plan: 'pro'`
+Sign-in does **not** use a Clerk webhook. Stripe already updates Clerk `publicMetadata.plan`.
+
+In the Clerk dashboard for the SmartSht instance (`clerk.smartsht.com`):
+
+1. Paths → after sign-in / after sign-up / home URL: `https://smartsht.com/app`
+2. Allowed origins: `https://smartsht.com`, `https://www.smartsht.com`
+3. Production keys: `CLERK_SECRET_KEY` and `CLERK_PUBLISHABLE_KEY` on the server; rebuild the SPA with `VITE_CLERK_PUBLISHABLE_KEY`
+4. After deploying nginx, reload it so CSP includes `challenges.cloudflare.com` and `*.protect.clerk.com` (see `landing/smartsht.nginx.conf`)
+
+Optional: `user.created` webhooks are not implemented; `smartsht.users` is upserted on first cloud save.
 
 ---
 

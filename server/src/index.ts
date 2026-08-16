@@ -44,7 +44,7 @@ import { versionsRouter } from './routes/versions.js'
 import { sharesRouter } from './routes/shares.js'
 import { templatesRouter } from './routes/templates.js'
 import { aiFunctionRouter } from './routes/aiFunction.js'
-import { requireAuth, getRequestUserId, getClerkClient } from './auth/clerk.js'
+import { requireAuth, getRequestUserId, getClerkClient, getClerkMiddlewareOptions } from './auth/clerk.js'
 import { resolveIsPro, invalidateProCache } from './plan.js'
 import { validateBody } from './middleware/validate.js'
 import { chatStreamBodySchema, chatBodySchema } from './schemas/index.js'
@@ -104,7 +104,7 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
   }
 })
 
-app.use(clerkMiddleware())
+app.use(clerkMiddleware(getClerkMiddlewareOptions()))
 // Workbook payloads carry the whole sheet as JSON and routinely exceed the
 // default 1mb budget (imports allow 5,000 rows x 200 cols), so those routes get
 // a larger cap. Everything else stays tight.

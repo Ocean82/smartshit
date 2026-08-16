@@ -11,18 +11,20 @@ export function ClerkUserSync() {
 }
 
 function ClerkUserSyncInner() {
-  const { isSignedIn, userId, getToken } = useAuth()
+  const { isLoaded, isSignedIn, userId, getToken } = useAuth()
 
   useEffect(() => {
+    if (!isLoaded) return
     setAuthTokenProvider(async () => {
       if (!isSignedIn) return null
       return (await getToken()) ?? null
     })
-  }, [isSignedIn, getToken])
+  }, [isLoaded, isSignedIn, getToken])
 
   useEffect(() => {
+    if (!isLoaded) return
     setUserId(isSignedIn && userId ? userId : null)
-  }, [isSignedIn, userId])
+  }, [isLoaded, isSignedIn, userId])
 
   return null as ReactNode
 }

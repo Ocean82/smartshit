@@ -21,6 +21,7 @@ beforeEach(() => {
   delete process.env.TRUST_PROXY
   delete process.env.CORS_ORIGIN
   delete process.env.APP_URL
+  delete process.env.CLERK_AUTHORIZED_PARTIES
 })
 
 afterEach(() => {
@@ -75,6 +76,33 @@ describe('corsOrigin', () => {
   it('parses a comma-separated allowlist', async () => {
     process.env.CORS_ORIGIN = 'https://a.example, https://b.example'
     expect((await loadConfig()).corsOrigin).toEqual(['https://a.example', 'https://b.example'])
+  })
+})
+
+describe('clerkAuthorizedParties', () => {
+  it('defaults to APP_URL, www variant, and local Vite origins', async () => {
+    process.env.APP_URL = 'https://smartsht.com'
+    const parties = (await loadConfig()).clerkAuthorizedParties
+    expect(parties).toContain('https://smartsht.com')
+    expect(parties).toContain('https://www.smartsht.com')
+    expect(parties).toContain('http://localhost:5173')
+    expect(parties).toContain('http://127.0.0.1:5173')
+  })
+
+  it('honours CLERK_AUTHORIZED_PARTIES over derived defaults', async () => {
+    process.env.APP_URL = 'https://smartsht.com'
+    process.env.CLERK_AUTHORIZED_PARTIES = 'https://smartsht.com, https://app.smartsht.com'
+    expect((await loadConfig()).clerkAuthorizedParties).toEqual([
+      'https://smartsht.com',
+      'https://app.smartsht.com',
+    ])
+  })
+
+  it('includes the apex host when APP_URL is the www variant', async () => {
+    process.env.APP_URL = 'https://www.smartsht.com'
+    const parties = (await loadConfig()).clerkAuthorizedParties
+    expect(parties).toContain('https://www.smartsht.com')
+    expect(parties).toContain('https://smartsht.com')
   })
 })
 
