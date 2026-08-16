@@ -204,16 +204,7 @@ function ChartCard({ chart, onRemove, bounds }: { chart: ChartConfig; onRemove: 
     );
     setPos({ x: next.x, y: next.y });
     posRef.current = { x: next.x, y: next.y };
-    const stored = chart.position;
-    if (
-      stored.x !== next.x
-      || stored.y !== next.y
-      || stored.width !== next.width
-      || stored.height !== next.height
-    ) {
-      updateChartPosition(chart.id, next.x, next.y, { width: next.width, height: next.height });
-    }
-  }, [bounds.width, bounds.height, chart.id, chart.position.height, chart.position.width, chart.position.x, chart.position.y, updateChartPosition]);
+  }, [bounds.width, bounds.height, chart.position.width, chart.position.height]);
 
   const data = useMemo(
     () => parseMultiSeriesData(chart, sheet.cells, getComputedValue),

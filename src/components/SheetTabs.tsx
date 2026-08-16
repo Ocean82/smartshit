@@ -61,7 +61,7 @@ export function SheetTabs() {
 
   return (
     <div
-      className="border-t flex items-center px-2 h-8 overflow-x-auto shrink-0"
+      className="border-t flex items-center px-2 h-11 md:h-8 overflow-x-auto shrink-0"
       ref={tabsRef}
       role="tablist"
       aria-label="Sheet tabs"

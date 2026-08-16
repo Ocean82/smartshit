@@ -39,7 +39,6 @@ export function CommandPalette({
   const [selectedIndex, setSelectedIndex] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
   const {
-    setShowChat,
     setShowChartDialog,
     setShowPivotDialog,
     setShowConditionalFormatDialog,
@@ -63,7 +62,6 @@ export function CommandPalette({
         category: 'Chat',
         icon: <MessageSquare size={16} className="text-blue-600" />,
         run: () => {
-          setShowChat(true)
           onFocusChat()
         },
       },
@@ -174,7 +172,6 @@ export function CommandPalette({
     onExportJson,
     onImportJson,
     runTemplateTool,
-    setShowChat,
     setShowChartDialog,
     setShowPivotDialog,
     setShowConditionalFormatDialog,

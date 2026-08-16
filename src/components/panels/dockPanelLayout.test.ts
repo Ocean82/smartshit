@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { resolveDockPanelFrame } from './dockPanelLayout'
+import { resolveDockPanelFrame, spreadsheetChromeBottomPadding } from './dockPanelLayout'
 
 const chatDef = { minWidth: 280, maxWidth: 500, defaultWidth: 360 }
 
@@ -17,5 +17,12 @@ describe('resolveDockPanelFrame', () => {
     expect(frame.isMobile).toBe(false)
     expect(frame.width).toBe(400)
     expect(frame.minWidth).toBe(280)
+  })
+})
+
+describe('spreadsheetChromeBottomPadding', () => {
+  it('reserves the mobile toolbar so sheet tabs are not covered', () => {
+    expect(spreadsheetChromeBottomPadding(390)).toBe(52)
+    expect(spreadsheetChromeBottomPadding(1280)).toBe(0)
   })
 })

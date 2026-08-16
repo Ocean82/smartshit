@@ -210,8 +210,8 @@ function App() {
         <FileExplorer />
 
         {/* Spreadsheet — always takes remaining space */}
-        <div id="spreadsheet-main" className="flex-1 flex flex-col overflow-hidden min-w-0 relative">
-          <div className="flex-1 flex flex-col overflow-hidden relative pb-[52px] md:pb-0">
+        <div id="spreadsheet-main" className="flex-1 flex flex-col overflow-hidden min-w-0 relative max-md:pb-[52px]">
+          <div className="flex-1 flex flex-col overflow-hidden relative">
             <ErrorBoundary scope="Spreadsheet Grid">
               <SpreadsheetGrid />
             </ErrorBoundary>

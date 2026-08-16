@@ -1,4 +1,10 @@
 export const MOBILE_VIEWPORT_MAX_PX = 768
+/** Matches MobileToolbar + FAB clearance (`pb-[52px]`, `bottom-16`). */
+export const MOBILE_BOTTOM_TOOLBAR_PX = 52
+
+export function spreadsheetChromeBottomPadding(viewportWidth: number): number {
+  return viewportWidth < MOBILE_VIEWPORT_MAX_PX ? MOBILE_BOTTOM_TOOLBAR_PX : 0
+}
 
 export interface DockSizeDef {
   minWidth: number
