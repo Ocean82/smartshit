@@ -8,13 +8,9 @@
  * - Clerk / Stripe / CAPTCHA origins → never intercept
  */
 
-const CACHE_NAME = 'smartsht-v2-clerk'
-const APP_SHELL = ['/app/', '/app/index.html']
+const CACHE_NAME = 'smartsht-v3-csp'
 
-self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)),
-  )
+self.addEventListener('install', () => {
   self.skipWaiting()
 })
 

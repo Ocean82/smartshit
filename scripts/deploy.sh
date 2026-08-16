@@ -135,6 +135,22 @@ if [ "$DEPLOY_FRONTEND" = true ]; then
   log "Frontend deployed ✓"
 fi
 
+# ─── Nginx (CSP, sw.js cache) ────────────────────────────────────────────────
+# Always apply the repo site config. Skipping this leaves browsers on a stale
+# CSP (WASM / Cloudflare Insights / Clerk CAPTCHA blocked).
+if [ -f "$APP_DIR/landing/smartsht.nginx.conf" ]; then
+  log "Installing nginx site config..."
+  sudo cp "$APP_DIR/landing/smartsht.nginx.conf" /var/www/smartsht/smartsht.nginx.conf
+  sudo cp "$APP_DIR/landing/smartsht.nginx.conf" /etc/nginx/sites-available/smartsht.com
+  sudo ln -sfn /etc/nginx/sites-available/smartsht.com /etc/nginx/sites-enabled/smartsht.com
+  if sudo nginx -t; then
+    sudo systemctl reload nginx
+    log "nginx reloaded ✓"
+  else
+    die "nginx -t failed — site config not reloaded"
+  fi
+fi
+
 # ─── Build & Restart Server ───────────────────────────────────────────────────
 
 if [ "$DEPLOY_SERVER" = true ]; then
