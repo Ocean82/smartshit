@@ -7,17 +7,28 @@ interface CheckoutSession {
 
 /**
  * Create a Stripe Checkout session for subscription.
- * Only accepts userId and email — price is server-controlled to prevent spoofing.
+ * Only accepts userId, email, and billing interval — price is server-controlled to prevent spoofing.
  */
-export async function createCheckoutSession(userId: string, email: string): Promise<CheckoutSession> {
+export async function createCheckoutSession(
+  userId: string,
+  email: string,
+  interval: 'monthly' | 'annual' = 'monthly',
+): Promise<CheckoutSession> {
   if (!config.stripeSecretKey) {
     throw new Error('STRIPE_SECRET_KEY not configured')
   }
-  if (!config.stripePriceId) {
-    throw new Error('STRIPE_PRICE_ID not configured — set the live Pro price ID')
+
+  const priceId = interval === 'annual' ? config.stripePriceIdAnnual : config.stripePriceId
+
+  if (!priceId) {
+    throw new Error(
+      interval === 'annual'
+        ? 'STRIPE_PRICE_ID_ANNUAL not configured — set the annual Pro price ID'
+        : 'STRIPE_PRICE_ID not configured — set the live Pro price ID',
+    )
   }
-  if (config.stripePriceId.startsWith('price_') === false) {
-    throw new Error('STRIPE_PRICE_ID must be a Stripe price id (price_…)')
+  if (!priceId.startsWith('price_')) {
+    throw new Error(`STRIPE_PRICE_ID${interval === 'annual' ? '_ANNUAL' : ''} must be a Stripe price id (price_…)`)
   }
 
   const params = new URLSearchParams()
@@ -27,9 +38,10 @@ export async function createCheckoutSession(userId: string, email: string): Prom
   params.set('customer_email', email)
   params.set('client_reference_id', userId)
   // Always use the server-configured price — never trust client input
-  params.set('line_items[0][price]', config.stripePriceId)
+  params.set('line_items[0][price]', priceId)
   params.set('line_items[0][quantity]', '1')
   params.set('metadata[userId]', userId)
+  params.set('metadata[interval]', interval)
   // CRITICAL: Set userId on the subscription itself so webhooks
   // (customer.subscription.deleted/updated) can identify the user.
   params.set('subscription_data[metadata][userId]', userId)

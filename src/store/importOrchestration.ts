@@ -86,6 +86,11 @@ export function applyWorkbookImportEffects(
       },
     })
 
+    // Signal the ImportInsightsOverlay to display
+    if (typeof document !== 'undefined') {
+      document.dispatchEvent(new CustomEvent('smartsht:import-complete', { detail: { rows: activeRows } }))
+    }
+
     const auditGeneration = ++importAuditGeneration
     setTimeout(() => {
       if (auditGeneration !== importAuditGeneration) return

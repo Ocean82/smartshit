@@ -859,7 +859,8 @@ app.post('/api/checkout', requireAuth, checkoutRateLimiter, async (req, res) => 
 
   try {
     const { createCheckoutSession } = await import('./stripe.js')
-    const session = await createCheckoutSession(userId, email)
+    const interval = (req.body as { interval?: string }).interval === 'annual' ? 'annual' : 'monthly'
+    const session = await createCheckoutSession(userId, email, interval)
     res.json({ url: session.url })
   } catch (err) {
     // Stripe errors can embed account/price details — log, don't echo

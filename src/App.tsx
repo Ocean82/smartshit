@@ -21,6 +21,7 @@ import { FormulaBar } from '@/components/FormulaBar'
 import { ToastContainer } from '@/components/Toast'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { EmptyGridGuide } from '@/components/EmptyGridGuide'
+import { ImportInsightsOverlay } from '@/components/ImportInsightsOverlay'
 import { Sparkles, Zap, Cloud, CloudOff, Loader2, Share2, MessageSquare, SquarePen, Search } from 'lucide-react'
 import { UserNav } from '@/auth'
 import {
@@ -313,6 +314,7 @@ function App() {
       {import.meta.env.DEV ? <Suspense fallback={null}><TelemetryDebugPanel /></Suspense> : null}
       <ToastContainer />
       <ConfirmDialog />
+      <ImportInsightsOverlay />
     </div>
   )
 }

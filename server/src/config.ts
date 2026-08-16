@@ -209,6 +209,7 @@ export const config = {
   // createCheckoutSession throws if STRIPE_PRICE_ID is unset.
   stripeSecretKey: process.env.STRIPE_SECRET_KEY ?? '',
   stripePriceId: process.env.STRIPE_PRICE_ID ?? '',
+  stripePriceIdAnnual: process.env.STRIPE_PRICE_ID_ANNUAL ?? '',
   stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET ?? '',
 
   // App URL for redirects

@@ -116,7 +116,10 @@ function UpgradeInline({
               {contextDetail}
             </p>
           )}
-          <UpgradeButton label={ctaLabel} loading={loading} setLoading={setLoading} />
+          <div className="flex gap-2 flex-wrap">
+            <UpgradeButton label={ctaLabel} loading={loading} setLoading={setLoading} interval="monthly" />
+            <UpgradeButton label="$59/year (save 30%)" loading={loading} setLoading={setLoading} interval="annual" />
+          </div>
         </div>
       </div>
     </div>
@@ -180,7 +183,10 @@ function UpgradeModal({
             </p>
           )}
 
-          <UpgradeButton label={ctaLabel} loading={loading} setLoading={setLoading} fullWidth />
+          <div className="flex flex-col gap-2 w-full">
+            <UpgradeButton label={ctaLabel} loading={loading} setLoading={setLoading} fullWidth interval="monthly" />
+            <UpgradeButton label="$59/year — save 30%" loading={loading} setLoading={setLoading} fullWidth interval="annual" />
+          </div>
 
           {onDismiss && (
             <button
@@ -205,11 +211,13 @@ function UpgradeButton({
   loading,
   setLoading,
   fullWidth = false,
+  interval = 'monthly',
 }: {
   label: string
   loading: boolean
   setLoading: (v: boolean) => void
   fullWidth?: boolean
+  interval?: 'monthly' | 'annual'
 }) {
   const { isSignedIn } = useAuth()
 
@@ -222,7 +230,7 @@ function UpgradeButton({
       const res = await fetch(`${API_BASE}/api/checkout`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ email: '' }),
+        body: JSON.stringify({ email: '', interval }),
       })
 
       if (res.ok) {
