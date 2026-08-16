@@ -1,134 +1,25 @@
 import { useStore } from '@/store/useStore';
-import { cellToRef, refToCell } from '@/engine/spreadsheet';
 import { X, Move } from 'lucide-react';
-import React, { useState, useCallback, useRef, useMemo, useEffect, useLayoutEffect } from 'react';
-import { clampChartBox, getChartOverlayBounds, type ChartBounds } from '@/lib/chartLayout';
+import React, { useMemo, useRef, useState, useLayoutEffect } from 'react';
+import { getChartOverlayBounds, type ChartBounds } from '@/lib/chartLayout';
 import type { ChartConfig, TrendLineConfig, AxisConfig } from '@/types';
 import {
   computeTrendValues,
   formatTrendEquation,
 } from '@/lib/chartMath';
-
-// ─── Constants ────────────────────────────────────────────────────────────────
-
-const DEFAULT_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
-const RANGE_PATTERN = /^([A-Z]+)(\d+):([A-Z]+)(\d+)$/;
-
-// ─── Shared Types ─────────────────────────────────────────────────────────────
-
-interface SeriesData {
-  label: string;
-  values: number[];
-  color: string;
-}
-
-interface MultiSeriesChartData {
-  labels: string[];
-  series: SeriesData[];
-}
+import {
+  DEFAULT_CHART_COLORS,
+  parseMultiSeriesData,
+  type MultiSeriesChartData,
+  type SeriesData,
+} from '@/lib/chartData';
+import { useChartCardDrag } from '@/components/useChartCardDrag';
 
 interface ChartProps {
   data: MultiSeriesChartData;
   maxVal: number;
   trendLine?: TrendLineConfig;
   axisConfig?: AxisConfig;
-}
-
-// ─── Data Parsing ─────────────────────────────────────────────────────────────
-
-function parseRangeRef(range: string) {
-  const match = range.match(RANGE_PATTERN);
-  if (!match) return null;
-  return {
-    start: cellToRef(`${match[1]}${match[2]}`),
-    end: cellToRef(`${match[3]}${match[4]}`),
-  };
-}
-
-function readColumnValues(
-  startRow: number,
-  endRow: number,
-  col: number,
-  getComputedValue: (row: number, col: number) => string,
-): number[] {
-  const values: number[] = [];
-  for (let r = startRow; r <= endRow; r++) {
-    values.push(parseFloat(getComputedValue(r, col)) || 0);
-  }
-  return values;
-}
-
-function parseExplicitSeries(
-  chart: ChartConfig,
-  getComputedValue: (row: number, col: number) => string,
-): MultiSeriesChartData | null {
-  if (!chart.series?.length) return null;
-
-  const colors = chart.colors || DEFAULT_COLORS;
-  const ref = parseRangeRef(chart.dataRange);
-  const labels: string[] = [];
-
-  if (ref) {
-    for (let r = ref.start.row; r <= ref.end.row; r++) {
-      labels.push(getComputedValue(r, ref.start.col) || `Row ${r + 1}`);
-    }
-  }
-
-  const series: SeriesData[] = chart.series.map((s, idx) => {
-    const sRef = parseRangeRef(s.dataRange);
-    const values = sRef
-      ? readColumnValues(sRef.start.row, sRef.end.row, sRef.end.col, getComputedValue)
-      : [];
-    return { label: s.label, values, color: s.color || colors[idx % colors.length] };
-  });
-
-  return { labels, series };
-}
-
-function parseLegacyRange(
-  chart: ChartConfig,
-  cells: Record<string, { value: string | number | boolean | null; formula?: string }>,
-  getComputedValue: (row: number, col: number) => string,
-): MultiSeriesChartData {
-  const colors = chart.colors || DEFAULT_COLORS;
-  const ref = parseRangeRef(chart.dataRange);
-  if (!ref) return { labels: [], series: [] };
-
-  const { start, end } = ref;
-  const numCols = end.col - start.col;
-
-  // Read labels from first column
-  const labels: string[] = [];
-  for (let r = start.row; r <= end.row; r++) {
-    const cellId = refToCell(r, start.col);
-    const cellData = cells[cellId];
-    labels.push(cellData?.value != null ? String(cellData.value) : getComputedValue(r, start.col) || `Row ${r + 1}`);
-  }
-
-  // Single value column
-  if (numCols <= 1) {
-    const values = readColumnValues(start.row, end.row, end.col, getComputedValue);
-    return { labels, series: [{ label: 'Series 1', values, color: colors[0] }] };
-  }
-
-  // Multiple value columns → multiple series
-  const series: SeriesData[] = [];
-  for (let c = start.col + 1; c <= end.col; c++) {
-    const values = readColumnValues(start.row, end.row, c, getComputedValue);
-    const headerRow = start.row > 0 ? start.row - 1 : -1;
-    const headerVal = headerRow >= 0 ? getComputedValue(headerRow, c) : '';
-    const label = headerVal || `Series ${c - start.col}`;
-    series.push({ label, values, color: colors[(c - start.col - 1) % colors.length] });
-  }
-  return { labels, series };
-}
-
-function parseMultiSeriesData(
-  chart: ChartConfig,
-  cells: Record<string, { value: string | number | boolean | null; formula?: string }>,
-  getComputedValue: (row: number, col: number) => string,
-): MultiSeriesChartData {
-  return parseExplicitSeries(chart, getComputedValue) ?? parseLegacyRange(chart, cells, getComputedValue);
 }
 
 // ─── Chart Type Registry ──────────────────────────────────────────────────────
@@ -181,30 +72,61 @@ export function ChartOverlay() {
 
 // ─── ChartCard Component ──────────────────────────────────────────────────────
 
-function ChartCard({ chart, onRemove, bounds }: { chart: ChartConfig; onRemove: () => void; bounds: ChartBounds }) {
-  const { getActiveSheet, getComputedValue, updateChartPosition } = useStore();
-  const sheet = getActiveSheet();
-  const box = clampChartBox(
-    { x: chart.position.x, y: chart.position.y, width: chart.position.width, height: chart.position.height },
-    bounds,
-  );
-  const [pos, setPos] = useState({ x: box.x, y: box.y });
-  const isDraggingRef = useRef(false);
-  const dragOffsetRef = useRef({ x: 0, y: 0 });
-  const posRef = useRef(pos);
-  posRef.current = pos;
-  const sizeRef = useRef({ width: box.width, height: box.height });
-  sizeRef.current = { width: box.width, height: box.height };
+function ChartCardToolbar({
+  title,
+  onRemove,
+  onPointerDown,
+  onPointerMove,
+  onPointerUp,
+}: {
+  title: string
+  onRemove: () => void
+  onPointerDown: (e: React.PointerEvent<HTMLDivElement>) => void
+  onPointerMove: (e: React.PointerEvent<HTMLDivElement>) => void
+  onPointerUp: (e: React.PointerEvent<HTMLDivElement>) => void
+}) {
+  return (
+    <div
+      className="flex items-center justify-between px-3 py-2 bg-gray-50 border-b border-gray-200 cursor-move touch-none"
+      style={{ pointerEvents: 'auto' }}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerUp}
+    >
+      <div className="flex items-center gap-1.5">
+        <Move size={12} className="text-gray-400" />
+        <span className="text-xs font-medium text-gray-700">{title}</span>
+      </div>
+      <button className="p-1.5 text-gray-400 hover:text-red-500 rounded-lg min-w-[36px] min-h-[36px] flex items-center justify-center" onClick={onRemove} aria-label="Remove chart">
+        <X size={16} />
+      </button>
+    </div>
+  )
+}
 
-  useEffect(() => {
-    if (isDraggingRef.current) return;
-    const next = clampChartBox(
-      { x: posRef.current.x, y: posRef.current.y, width: chart.position.width, height: chart.position.height },
-      bounds,
-    );
-    setPos({ x: next.x, y: next.y });
-    posRef.current = { x: next.x, y: next.y };
-  }, [bounds.width, bounds.height, chart.position.width, chart.position.height]);
+function ChartSeriesLegend({ series }: { series: SeriesData[] }) {
+  if (series.length <= 1) return null
+  return (
+    <div className="flex flex-wrap gap-2 mt-1 justify-center">
+      {series.map((s, i) => (
+        <div key={i} className="flex items-center gap-1">
+          <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: s.color }} />
+          <span className="text-[9px] text-gray-500">{s.label}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function ChartCard({ chart, onRemove, bounds }: { chart: ChartConfig; onRemove: () => void; bounds: ChartBounds }) {
+  const { getActiveSheet, getComputedValue } = useStore();
+  const sheet = getActiveSheet();
+  const { box, pos, handlePointerDown, handlePointerMove, endDrag } = useChartCardDrag({
+    chartId: chart.id,
+    position: chart.position,
+    bounds,
+  });
 
   const data = useMemo(
     () => parseMultiSeriesData(chart, sheet.cells, getComputedValue),
@@ -216,46 +138,6 @@ function ChartCard({ chart, onRemove, bounds }: { chart: ChartConfig; onRemove: 
     [data],
   );
 
-  const endDrag = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-    if (!isDraggingRef.current) return;
-    isDraggingRef.current = false;
-    updateChartPosition(chart.id, posRef.current.x, posRef.current.y, sizeRef.current);
-    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
-      e.currentTarget.releasePointerCapture(e.pointerId);
-    }
-  }, [chart.id, updateChartPosition]);
-
-  const handlePointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-    if (e.button !== 0) return;
-    if ((e.target as HTMLElement).closest('button')) return;
-    e.currentTarget.setPointerCapture(e.pointerId);
-    isDraggingRef.current = true;
-    dragOffsetRef.current = { x: e.clientX - pos.x, y: e.clientY - pos.y };
-  }, [pos]);
-
-  const handlePointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-    if (!isDraggingRef.current) return;
-    if (e.pointerType === 'mouse' && (e.buttons & 1) === 0) {
-      endDrag(e);
-      return;
-    }
-    const raw = {
-      x: e.clientX - dragOffsetRef.current.x,
-      y: e.clientY - dragOffsetRef.current.y,
-    };
-    const clamped = clampChartBox(
-      { ...raw, width: sizeRef.current.width, height: sizeRef.current.height },
-      bounds,
-    );
-    const newPos = { x: clamped.x, y: clamped.y };
-    setPos(newPos);
-    posRef.current = newPos;
-  }, [endDrag, bounds]);
-
-  useEffect(() => () => {
-    isDraggingRef.current = false;
-  }, []);
-
   const chartProps: ChartProps = { data, maxVal, trendLine: chart.trendLine, axisConfig: chart.axisConfig };
 
   return (
@@ -263,34 +145,16 @@ function ChartCard({ chart, onRemove, bounds }: { chart: ChartConfig; onRemove: 
       className="absolute bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden z-20"
       style={{ left: pos.x, top: pos.y, width: box.width, height: box.height, pointerEvents: 'none' }}
     >
-      <div
-        className="flex items-center justify-between px-3 py-2 bg-gray-50 border-b border-gray-200 cursor-move touch-none"
-        style={{ pointerEvents: 'auto' }}
+      <ChartCardToolbar
+        title={chart.title}
+        onRemove={onRemove}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={endDrag}
-        onPointerCancel={endDrag}
-      >
-        <div className="flex items-center gap-1.5">
-          <Move size={12} className="text-gray-400" />
-          <span className="text-xs font-medium text-gray-700">{chart.title}</span>
-        </div>
-        <button className="p-1.5 text-gray-400 hover:text-red-500 rounded-lg min-w-[36px] min-h-[36px] flex items-center justify-center" onClick={onRemove} aria-label="Remove chart">
-          <X size={16} />
-        </button>
-      </div>
+      />
       <div className="p-3 flex-1" style={{ height: box.height - 40 }}>
         {renderChart(chart.type, chartProps)}
-        {data.series.length > 1 && (
-          <div className="flex flex-wrap gap-2 mt-1 justify-center">
-            {data.series.map((s, i) => (
-              <div key={i} className="flex items-center gap-1">
-                <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: s.color }} />
-                <span className="text-[9px] text-gray-500">{s.label}</span>
-              </div>
-            ))}
-          </div>
-        )}
+        <ChartSeriesLegend series={data.series} />
       </div>
     </div>
   );
@@ -298,35 +162,33 @@ function ChartCard({ chart, onRemove, bounds }: { chart: ChartConfig; onRemove: 
 
 // ─── Bar/Column Chart ─────────────────────────────────────────────────────────
 
-function BarChart({ data, maxVal, horizontal }: ChartProps & { horizontal: boolean }) {
-  const seriesCount = data.series.length;
-
-  if (horizontal) {
-    return (
-      <div className="flex flex-col gap-1 h-full justify-center overflow-y-auto">
-        {data.labels.map((label, rowIdx) => (
-          <div key={rowIdx} className="flex items-center gap-2">
-            <span className="text-[10px] text-gray-500 w-16 truncate text-right">{label}</span>
-            <div className="flex-1 flex flex-col gap-0.5">
-              {data.series.map((s, sIdx) => (
-                <div key={sIdx} className="bg-gray-100 rounded-full h-3 overflow-hidden">
-                  <div
-                    className="h-full rounded-full transition-all duration-500"
-                    style={{ width: `${(Math.abs(s.values[rowIdx] || 0) / maxVal) * 100}%`, backgroundColor: s.color }}
-                  />
-                </div>
-              ))}
-            </div>
-            <span className="text-[10px] text-gray-600 w-10">
-              {data.series.map((s) => s.values[rowIdx]?.toLocaleString() || '0').join('/')}
-            </span>
+function HorizontalBarChart({ data, maxVal }: ChartProps) {
+  return (
+    <div className="flex flex-col gap-1 h-full justify-center overflow-y-auto">
+      {data.labels.map((label, rowIdx) => (
+        <div key={rowIdx} className="flex items-center gap-2">
+          <span className="text-[10px] text-gray-500 w-16 truncate text-right">{label}</span>
+          <div className="flex-1 flex flex-col gap-0.5">
+            {data.series.map((s, sIdx) => (
+              <div key={sIdx} className="bg-gray-100 rounded-full h-3 overflow-hidden">
+                <div
+                  className="h-full rounded-full transition-all duration-500"
+                  style={{ width: `${(Math.abs(s.values[rowIdx] || 0) / maxVal) * 100}%`, backgroundColor: s.color }}
+                />
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
-    );
-  }
+          <span className="text-[10px] text-gray-600 w-10">
+            {data.series.map((s) => s.values[rowIdx]?.toLocaleString() || '0').join('/')}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
 
-  // Vertical column chart with grouped bars
+function VerticalColumnChart({ data, maxVal }: ChartProps) {
+  const seriesCount = data.series.length;
   const groupWidth = 100 / data.labels.length;
   const barWidth = groupWidth / (seriesCount + 0.5);
 
@@ -357,17 +219,26 @@ function BarChart({ data, maxVal, horizontal }: ChartProps & { horizontal: boole
   );
 }
 
+function BarChart({ data, maxVal, horizontal }: ChartProps & { horizontal: boolean }) {
+  if (horizontal) return <HorizontalBarChart data={data} maxVal={maxVal} />;
+  return <VerticalColumnChart data={data} maxVal={maxVal} />;
+}
+
 // ─── Pie Chart ────────────────────────────────────────────────────────────────
+
+function PieEmptyState() {
+  return <div className="flex items-center justify-center h-full text-gray-400 text-sm">No data</div>;
+}
 
 function PieChart({ data }: { data: MultiSeriesChartData }) {
   const series = data.series[0];
-  if (!series) return <div className="flex items-center justify-center h-full text-gray-400 text-sm">No data</div>;
+  if (!series) return <PieEmptyState />;
   const total = series.values.reduce((a, b) => a + Math.abs(b), 0);
-  if (total === 0) return <div className="flex items-center justify-center h-full text-gray-400 text-sm">No data</div>;
+  if (total === 0) return <PieEmptyState />;
 
   const colors = data.series.length > 1
     ? data.series.map((s) => s.color)
-    : Array.from({ length: series.values.length }, (_, i) => DEFAULT_COLORS[i % DEFAULT_COLORS.length]);
+    : Array.from({ length: series.values.length }, (_, i) => DEFAULT_CHART_COLORS[i % DEFAULT_CHART_COLORS.length]);
 
   let cumulativePercent = 0;
   const slices = series.values.map((val, i) => {
