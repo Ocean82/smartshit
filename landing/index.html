@@ -9,34 +9,41 @@
   <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
   <meta name="application-name" content="smartsht" />
   <meta name="format-detection" content="telephone=no" />
-  <title>smartsh!t — Talk to Your Spreadsheet</title>
-  <meta name="description" content="AI-powered spreadsheet that understands plain English. Build budgets, track expenses, generate invoices, and catch formula errors — no spreadsheet experience needed. Free AI budget planner, expense tracker, and invoice generator." />
-  <meta name="keywords" content="AI spreadsheet, AI budget planner, spreadsheet without formulas, talk to spreadsheet, AI expense tracker, natural language spreadsheet, smart spreadsheet assistant, free budget template, monthly budget calculator, personal finance spreadsheet, invoice generator free, expense tracking app, Excel alternative, Google Sheets alternative, spreadsheet for beginners, AI formula helper, spreadsheet auditor, formula error checker, no-code spreadsheet, plain English spreadsheet, budget app, financial planning tool, AI accounting, self-hosted spreadsheet, privacy-first spreadsheet, BYOK AI, local LLM spreadsheet" />
-  <meta property="og:title" content="smartsh!t — Talk to Your Spreadsheet" />
-  <meta property="og:description" content="AI spreadsheet for budgets, expenses, and invoices. Describe what you need in plain English — no formulas, no tutorials. Free to start." />
+  <title>AI Spreadsheet &amp; Excel Alternative | smartsht</title>
+  <meta name="description" content="Free AI spreadsheet for budgets, expenses, and invoices. Type in plain English. Import Excel. Catch formula errors. Private in your browser." />
+  <meta property="og:title" content="AI Spreadsheet &amp; Excel Alternative | smartsht" />
+  <meta property="og:description" content="Free AI spreadsheet for budgets, expenses, and invoices. Type in plain English. Import Excel. Private in your browser." />
   <meta property="og:type" content="website" />
-  <meta property="og:url" content="https://smartsht.com" />
+  <meta property="og:url" content="https://smartsht.com/" />
   <meta property="og:image" content="https://smartsht.com/og-image.png" />
+  <meta property="og:image:type" content="image/png" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
   <meta property="og:image:alt" content="smartsht AI spreadsheet interface showing natural language budget creation with chat panel" />
   <meta property="og:site_name" content="smartsht" />
   <meta property="og:locale" content="en_US" />
+  <link rel="preload" as="image" href="/screenshot.png" fetchpriority="high" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
   <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png" />
   <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="smartsh!t — Talk to Your Spreadsheet" />
-  <meta name="twitter:description" content="AI spreadsheet for everyday people. Build budgets in plain English. No formulas required." />
+  <meta name="twitter:title" content="AI Spreadsheet &amp; Excel Alternative | smartsht" />
+  <meta name="twitter:description" content="Free AI spreadsheet for budgets and invoices. Type in plain English. Import Excel. No formulas required." />
   <meta name="twitter:image" content="https://smartsht.com/og-image.png" />
   <meta name="twitter:image:alt" content="smartsht AI spreadsheet interface showing natural language budget creation" />
   <link rel="canonical" href="https://smartsht.com/" />
   <link rel="alternate" hreflang="en" href="https://smartsht.com/" />
   <link rel="alternate" hreflang="x-default" href="https://smartsht.com/" />
 
-  <!-- Structured Data (@graph) for Google + AI search -->
+  <!--
+    Structured data notes:
+    - Google Software App rich results require name + offers.price + (aggregateRating or review).
+    - Star ratings must match verified, visible first-party reviews on this page.
+    - Do not invent scores. A prior 4.8/12 aggregateRating was removed as a policy violation.
+    - Add reviews to window.__SMARTSHT_REVIEWS__ (footer script). UI + rating JSON-LD are generated from that list.
+  -->
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
@@ -46,19 +53,26 @@
         "@id": "https://smartsht.com/#organization",
         "name": "smartsht",
         "alternateName": "smartsh!t",
+        "legalName": "smartsht",
         "url": "https://smartsht.com/",
+        "description": "Maker of smartsht, a privacy-first AI spreadsheet for budgets, expenses, and invoices.",
         "logo": {
           "@type": "ImageObject",
+          "@id": "https://smartsht.com/#logo",
           "url": "https://smartsht.com/logo.png",
+          "contentUrl": "https://smartsht.com/logo.png",
           "width": 512,
-          "height": 512
+          "height": 512,
+          "caption": "smartsht logo"
         },
+        "image": { "@id": "https://smartsht.com/#logo" },
         "email": "support@smartsht.com",
         "contactPoint": {
           "@type": "ContactPoint",
           "email": "support@smartsht.com",
           "contactType": "customer support",
-          "availableLanguage": "English"
+          "availableLanguage": ["English"],
+          "url": "https://smartsht.com/"
         },
         "sameAs": [
           "https://github.com/Ocean82/smartshit",
@@ -73,22 +87,42 @@
         "url": "https://smartsht.com/",
         "description": "AI-powered spreadsheet that understands plain English. Build budgets, track expenses, and catch formula errors — no formulas required.",
         "publisher": { "@id": "https://smartsht.com/#organization" },
-        "inLanguage": "en-US",
-        "speakable": {
-          "@type": "SpeakableSpecification",
-          "cssSelector": [".hero h1", ".hero-sub", ".demo-header h2"]
-        }
+        "inLanguage": "en-US"
       },
       {
-        "@type": "SoftwareApplication",
+        "@type": "WebPage",
+        "@id": "https://smartsht.com/#webpage",
+        "url": "https://smartsht.com/",
+        "name": "AI Spreadsheet & Excel Alternative | smartsht",
+        "description": "Free AI spreadsheet for budgets, expenses, and invoices. Type in plain English, import Excel, and catch formula errors.",
+        "isPartOf": { "@id": "https://smartsht.com/#website" },
+        "about": { "@id": "https://smartsht.com/#app" },
+        "primaryImageOfPage": { "@id": "https://smartsht.com/#screenshot" },
+        "mainEntity": { "@id": "https://smartsht.com/#app" },
+        "publisher": { "@id": "https://smartsht.com/#organization" },
+        "inLanguage": "en-US",
+        "dateModified": "2026-08-16"
+      },
+      {
+        "@type": "ImageObject",
+        "@id": "https://smartsht.com/#screenshot",
+        "url": "https://smartsht.com/screenshot.png",
+        "contentUrl": "https://smartsht.com/screenshot.png",
+        "width": 900,
+        "height": 506,
+        "caption": "smartsht spreadsheet with AI chat panel open, showing a monthly budget with formulas and conditional formatting"
+      },
+      {
+        "@type": ["SoftwareApplication", "WebApplication"],
         "@id": "https://smartsht.com/#app",
         "name": "smartsht",
         "alternateName": "smartsh!t",
         "url": "https://smartsht.com/",
+        "installUrl": "https://smartsht.com/app",
         "applicationCategory": "BusinessApplication",
-        "applicationSubCategory": "Spreadsheet",
-        "operatingSystem": "Web Browser",
+        "operatingSystem": "Windows, macOS, Linux, ChromeOS, Android, iOS",
         "browserRequirements": "Requires JavaScript. Modern evergreen browser.",
+        "isAccessibleForFree": true,
         "description": "AI-powered spreadsheet that understands plain English. Build budgets, track expenses, generate invoices, and catch formula errors automatically. Free AI budget planner and expense tracker — an Excel and Google Sheets alternative for people who hate formulas.",
         "featureList": [
           "Natural language spreadsheet commands",
@@ -100,52 +134,97 @@
           "Bring Your Own Key (BYOK)",
           "Visual action previews before changes"
         ],
-        "screenshot": "https://smartsht.com/og-image.png",
-        "image": "https://smartsht.com/og-image.png",
+        "screenshot": [
+          { "@id": "https://smartsht.com/#screenshot" },
+          "https://smartsht.com/og-image.png"
+        ],
+        "image": [
+          "https://smartsht.com/og-image.png",
+          { "@id": "https://smartsht.com/#screenshot" }
+        ],
         "publisher": { "@id": "https://smartsht.com/#organization" },
+        "author": { "@id": "https://smartsht.com/#organization" },
         "creator": { "@id": "https://smartsht.com/#organization" },
-        "offers": [
-          {
-            "@type": "Offer",
-            "@id": "https://smartsht.com/#offer-free",
-            "name": "Free",
-            "url": "https://smartsht.com/#pricing",
-            "price": "0",
-            "priceCurrency": "USD",
-            "availability": "https://schema.org/InStock",
-            "category": "FreeTrial",
-            "description": "3 AI questions per day, full spreadsheet, all templates, Excel import/export, auditor error detection, 3 auto-fixes, 1 cloud workbook, view-only share links, BYOK for unlimited AI on your own key"
-          },
-          {
-            "@type": "Offer",
-            "@id": "https://smartsht.com/#offer-pro",
-            "name": "Pro",
-            "url": "https://smartsht.com/#pricing",
-            "price": "7.00",
-            "priceCurrency": "USD",
-            "availability": "https://schema.org/InStock",
-            "priceSpecification": {
-              "@type": "UnitPriceSpecification",
-              "price": "7.00",
-              "priceCurrency": "USD",
-              "billingDuration": "P1M",
-              "referenceQuantity": {
-                "@type": "QuantitativeValue",
-                "value": 1,
-                "unitCode": "MON"
-              }
-            },
-            "description": "Unlimited AI questions, unlimited auto-fix, unlimited cloud backup and sync, version history, priority AI models. Early adopter rate."
+        "softwareHelp": { "@id": "https://smartsht.com/#faq" },
+        "license": "https://github.com/Ocean82/smartshit/blob/main/LICENSE",
+        "sameAs": [
+          "https://github.com/Ocean82/smartshit"
+        ],
+        "potentialAction": {
+          "@type": "UseAction",
+          "target": {
+            "@type": "EntryPoint",
+            "urlTemplate": "https://smartsht.com/app",
+            "actionPlatform": [
+              "https://schema.org/DesktopWebPlatform",
+              "https://schema.org/MobileWebPlatform"
+            ]
           }
-        ]
+        },
+        "offers": {
+          "@type": "Offer",
+          "@id": "https://smartsht.com/#offer-free",
+          "name": "Free",
+          "url": "https://smartsht.com/app",
+          "price": 0,
+          "priceCurrency": "USD",
+          "availability": "https://schema.org/InStock",
+          "seller": { "@id": "https://smartsht.com/#organization" },
+          "description": "Free forever: 3 AI questions per day, full spreadsheet, all templates, Excel import/export, auditor, BYOK. Pro is $7/month."
+        },
+        "hasOfferCatalog": {
+          "@type": "OfferCatalog",
+          "name": "smartsht plans",
+          "url": "https://smartsht.com/#pricing",
+          "itemListElement": [
+            {
+              "@type": "Offer",
+              "@id": "https://smartsht.com/#offer-free",
+              "name": "Free",
+              "url": "https://smartsht.com/app",
+              "price": 0,
+              "priceCurrency": "USD",
+              "availability": "https://schema.org/InStock",
+              "seller": { "@id": "https://smartsht.com/#organization" },
+              "description": "3 AI questions per day, full spreadsheet, all templates, Excel import/export, auditor error detection, 3 auto-fixes, 1 cloud workbook, view-only share links, BYOK for unlimited AI on your own key"
+            },
+            {
+              "@type": "Offer",
+              "@id": "https://smartsht.com/#offer-pro",
+              "name": "Pro",
+              "url": "https://smartsht.com/#pricing",
+              "price": 7.00,
+              "priceCurrency": "USD",
+              "availability": "https://schema.org/InStock",
+              "priceValidUntil": "2026-12-31",
+              "seller": { "@id": "https://smartsht.com/#organization" },
+              "priceSpecification": {
+                "@type": "UnitPriceSpecification",
+                "price": 7.00,
+                "priceCurrency": "USD",
+                "billingDuration": "P1M",
+                "referenceQuantity": {
+                  "@type": "QuantitativeValue",
+                  "value": 1,
+                  "unitCode": "MON"
+                }
+              },
+              "description": "Unlimited AI questions, unlimited auto-fix, unlimited cloud backup and sync, version history, priority AI models. Early adopter rate."
+            }
+          ]
+        }
       },
       {
         "@type": "FAQPage",
         "@id": "https://smartsht.com/#faq",
+        "url": "https://smartsht.com/#faq",
+        "isPartOf": { "@id": "https://smartsht.com/#webpage" },
         "mainEntity": [
           {
             "@type": "Question",
+            "@id": "https://smartsht.com/#faq-free",
             "name": "Is smartsht free?",
+            "url": "https://smartsht.com/#faq-free",
             "acceptedAnswer": {
               "@type": "Answer",
               "text": "Yes. The Free plan includes the full spreadsheet, templates, Excel/CSV import and export, the formula auditor, and 3 AI questions per day. You can also bring your own API key (BYOK) for unlimited AI on your own provider account at no subscription cost."
@@ -153,7 +232,9 @@
           },
           {
             "@type": "Question",
+            "@id": "https://smartsht.com/#faq-pro",
             "name": "How much is Pro?",
+            "url": "https://smartsht.com/#faq-pro",
             "acceptedAnswer": {
               "@type": "Answer",
               "text": "Pro is $7 per month at the early adopter rate (listed vs $12/mo). It unlocks unlimited AI questions, unlimited auto-fix, unlimited cloud backup and sync, version history, and priority AI models."
@@ -161,7 +242,9 @@
           },
           {
             "@type": "Question",
+            "@id": "https://smartsht.com/#faq-privacy",
             "name": "Does my spreadsheet data stay private?",
+            "url": "https://smartsht.com/#faq-privacy",
             "acceptedAnswer": {
               "@type": "Answer",
               "text": "By default your spreadsheet data stays in your browser. Nothing syncs to smartsht servers unless you explicitly enable cloud backup. Self-hosted and BYOK setups are supported for users who want full control."
@@ -169,7 +252,9 @@
           },
           {
             "@type": "Question",
+            "@id": "https://smartsht.com/#faq-excel",
             "name": "Can I import Excel files?",
+            "url": "https://smartsht.com/#faq-excel",
             "acceptedAnswer": {
               "@type": "Answer",
               "text": "Yes. You can import existing .xlsx and CSV files and export back anytime. smartsht is designed to work alongside Excel and Google Sheets without vendor lock-in."
@@ -177,19 +262,54 @@
           },
           {
             "@type": "Question",
+            "@id": "https://smartsht.com/#faq-auditor",
             "name": "What does the formula auditor catch?",
+            "url": "https://smartsht.com/#faq-auditor",
             "acceptedAnswer": {
               "@type": "Answer",
               "text": "The auditor checks for issues like skipped cells in SUM ranges, inconsistent formula patterns, statistical outliers, and hardcoded constants — then can propose fixes with a preview before anything changes."
             }
+          },
+          {
+            "@type": "Question",
+            "@id": "https://smartsht.com/#faq-install",
+            "name": "Do I need to install anything?",
+            "url": "https://smartsht.com/#faq-install",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "No. smartsht runs in the browser. Open smartsht.com/app on Windows, macOS, Linux, or a mobile browser — no desktop install required."
+            }
+          },
+          {
+            "@type": "Question",
+            "@id": "https://smartsht.com/#faq-excel-alternative",
+            "name": "Is smartsht an Excel alternative?",
+            "url": "https://smartsht.com/#faq-excel-alternative",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Yes, for everyday work like budgets, invoices, and expense tracking. You get a real spreadsheet with formulas, charts, and pivot tables, plus an AI assistant. Import and export .xlsx so you can keep using Excel when you need to."
+            }
+          },
+          {
+            "@type": "Question",
+            "@id": "https://smartsht.com/#faq-sheets-alternative",
+            "name": "Is this a Google Sheets alternative?",
+            "url": "https://smartsht.com/#faq-sheets-alternative",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "It is a browser spreadsheet you can use instead of Google Sheets for personal and small-business files. Data stays in your browser by default instead of a Google account. Collaboration is view-only share links today, not live multiplayer editing."
+            }
+          },
+          {
+            "@type": "Question",
+            "@id": "https://smartsht.com/#faq-ai-spreadsheet",
+            "name": "What is an AI spreadsheet?",
+            "url": "https://smartsht.com/#faq-ai-spreadsheet",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "An AI spreadsheet lets you describe the sheet you want in plain English. smartsht builds or edits real cells and formulas, shows a preview before applying changes, and can audit formula errors. It is a full spreadsheet, not a chat window that dumps a table."
+            }
           }
-        ]
-      },
-      {
-        "@type": "BreadcrumbList",
-        "@id": "https://smartsht.com/#breadcrumb",
-        "itemListElement": [
-          { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://smartsht.com/" }
         ]
       }
     ]
@@ -198,7 +318,7 @@
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&family=General+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&display=swap" rel="stylesheet" />
 
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -221,7 +341,7 @@
       --radius: 14px;
       --radius-lg: 24px;
       --font-display: 'Bricolage Grotesque', system-ui, sans-serif;
-      --font-body: 'General Sans', system-ui, sans-serif;
+      --font-body: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 
       /* New: Enterprise depth */
       --shadow-sm: 0 2px 4px oklch(0.1 0.01 250 / 0.03);
@@ -667,6 +787,104 @@
       line-height: 1.65;
     }
 
+    .reviews {
+      padding: 80px 0;
+    }
+    .reviews-header {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+    .reviews-header h2 {
+      font-family: var(--font-display);
+      font-size: clamp(1.6rem, 3vw, 2.2rem);
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      margin-bottom: 10px;
+    }
+    .reviews-header p { color: var(--ink-secondary); font-size: 1rem; }
+    .reviews-aggregate {
+      display: none;
+      justify-content: center;
+      align-items: baseline;
+      gap: 10px;
+      margin-bottom: 28px;
+      font-family: var(--font-display);
+    }
+    .reviews-aggregate.is-visible { display: flex; }
+    .reviews-score {
+      font-size: 2rem;
+      font-weight: 800;
+      color: var(--ink);
+    }
+    .reviews-stars { color: var(--accent); letter-spacing: 2px; font-size: 1.1rem; }
+    .reviews-count { color: var(--ink-muted); font-size: 0.95rem; }
+    .reviews-list {
+      display: none;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 16px;
+      max-width: 900px;
+      margin: 0 auto 40px;
+    }
+    .reviews-list.is-visible { display: grid; }
+    .review-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px 24px;
+    }
+    .review-card .review-meta {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 8px;
+      font-size: 0.85rem;
+    }
+    .review-card .review-author { font-weight: 600; color: var(--ink); }
+    .review-card .review-rating { color: var(--accent); }
+    .review-card p {
+      font-size: 0.92rem;
+      color: var(--ink-secondary);
+      line-height: 1.65;
+    }
+    .review-form {
+      max-width: 520px;
+      margin: 0 auto;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+    }
+    .review-form h3 {
+      font-family: var(--font-display);
+      font-size: 1.05rem;
+      margin-bottom: 6px;
+    }
+    .review-form > p {
+      font-size: 0.88rem;
+      color: var(--ink-secondary);
+      margin-bottom: 16px;
+    }
+    .review-form label {
+      display: block;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--ink-muted);
+      margin: 12px 0 6px;
+    }
+    .review-form input,
+    .review-form textarea,
+    .review-form select {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font: inherit;
+      background: var(--bg);
+      color: var(--ink);
+    }
+    .review-form textarea { min-height: 96px; resize: vertical; }
+    .review-form button { margin-top: 16px; width: 100%; }
+
     .pricing-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -916,6 +1134,7 @@
       <div class="nav-links">
         <a href="#features">Features</a>
         <a href="#pricing">Pricing</a>
+        <a href="#reviews">Reviews</a>
         <a href="#faq">FAQ</a>
         <a href="/app" class="btn btn-primary" style="padding: 8px 18px; font-size: 0.82rem;">Launch App</a>
       </div>
@@ -930,6 +1149,7 @@
     <div class="mobile-nav-content" onclick="event.stopPropagation()">
       <a href="#features" onclick="document.getElementById('mobile-nav').classList.remove('open')">Features</a>
       <a href="#pricing" onclick="document.getElementById('mobile-nav').classList.remove('open')">Pricing</a>
+      <a href="#reviews" onclick="document.getElementById('mobile-nav').classList.remove('open')">Reviews</a>
       <a href="#faq" onclick="document.getElementById('mobile-nav').classList.remove('open')">FAQ</a>
       <a href="/app" class="btn btn-primary" style="text-align:center; color:white; margin-top:8px;">Launch App</a>
     </div>
@@ -941,9 +1161,9 @@
   <section class="hero">
     <div class="container">
       <div class="hero-tagline animate-fade-in">Free forever, no credit card needed</div>
-      <h1 class="animate-fade-up delay-100">Talk to your spreadsheet.<br/><em class="animate-fade-in delay-200">No formulas required.</em></h1>
+      <h1 class="animate-fade-up delay-100">The AI spreadsheet that understands plain English.<br/><em class="animate-fade-in delay-200">No formulas required.</em></h1>
       <p class="hero-sub animate-fade-up delay-200">
-        A complete spreadsheet with AI that actually understands your data. Build budgets, catch formula errors, create charts, and manage expenses — all in plain English. Your private, instant Excel alternative.
+        Build budgets, track expenses, generate invoices, and catch formula errors in a real spreadsheet. Type what you need. Import Excel or CSV. A private Excel and Google Sheets alternative that stays in your browser.
       </p>
       <div class="hero-actions animate-fade-up delay-300">
         <a href="/app" class="btn btn-primary">
@@ -955,7 +1175,7 @@
       <!-- Product screenshot -->
       <div class="product-shot animate-fade-up delay-400">
         <div class="product-shot-frame">
-          <img src="/screenshot.png" alt="smartsh!t spreadsheet with AI chat panel open, showing a monthly budget with formulas and conditional formatting" loading="eager" width="900" height="506" />
+          <img src="/screenshot.png" alt="smartsht AI spreadsheet with chat panel open, showing a monthly budget planner with formulas" loading="eager" fetchpriority="high" decoding="async" width="900" height="506" />
         </div>
       </div>
     </div>
@@ -1158,8 +1378,8 @@
   <section style="padding:100px 0; background: oklch(0.12 0.015 250); color: white;" aria-labelledby="comparison-heading">
     <div class="container">
       <div class="demo-header">
-        <h2 id="comparison-heading" style="color:white;">How smartsh!t compares</h2>
-        <p style="color: oklch(0.7 0.01 250);">Same power, less friction, lower cost.</p>
+        <h2 id="comparison-heading" style="color:white;">smartsht vs Excel and Google Sheets</h2>
+        <p style="color: oklch(0.7 0.01 250);">An AI spreadsheet alternative with a lower starting price and local-first privacy.</p>
       </div>
 
       <div style="overflow-x:auto;margin:0 auto;max-width:800px; background: oklch(1 0 0 / 0.03); padding: 32px; border-radius: var(--radius-lg); border: 1px solid oklch(1 0 0 / 0.1);">
@@ -1186,6 +1406,35 @@
     </div>
   </section>
 
+  <!-- Reviews: visible copy must match aggregateRating/review JSON-LD. Do not invent ratings. -->
+  <section class="reviews" id="reviews" aria-labelledby="reviews-heading">
+    <div class="container">
+      <div class="reviews-header">
+        <h2 id="reviews-heading">Ratings from people who used the app</h2>
+        <p>Google star ratings only appear for verified reviews shown on this page. We do not publish placeholder scores.</p>
+      </div>
+      <div class="reviews-aggregate" id="reviews-aggregate" aria-live="polite"></div>
+      <div class="reviews-list" id="reviews-list"></div>
+      <form class="review-form" id="review-form">
+        <h3>Used smartsht? Send a rating</h3>
+        <p>Verified reviews are added to this page (and to the star-rating markup) after we confirm they came from a real user. Fake or incentivized reviews are not accepted.</p>
+        <label for="review-name">Your name</label>
+        <input id="review-name" name="name" type="text" maxlength="80" required autocomplete="name" />
+        <label for="review-rating">Rating</label>
+        <select id="review-rating" name="rating" required>
+          <option value="5">5 — excellent</option>
+          <option value="4">4 — good</option>
+          <option value="3">3 — okay</option>
+          <option value="2">2 — poor</option>
+          <option value="1">1 — terrible</option>
+        </select>
+        <label for="review-body">What should other people know?</label>
+        <textarea id="review-body" name="body" maxlength="1000" required></textarea>
+        <button type="submit" class="btn btn-primary">Email this review</button>
+      </form>
+    </div>
+  </section>
+
   <!-- FAQ (visible content required for FAQPage schema) -->
   <section class="faq" id="faq" aria-labelledby="faq-heading">
     <div class="container">
@@ -1194,25 +1443,41 @@
         <p>Straight answers about pricing, privacy, and what the app can do.</p>
       </div>
       <div class="faq-list">
-        <div class="faq-item">
+        <div class="faq-item" id="faq-free">
           <h3>Is smartsht free?</h3>
           <p>Yes. The Free plan includes the full spreadsheet, templates, Excel/CSV import and export, the formula auditor, and 3 AI questions per day. You can also bring your own API key (BYOK) for unlimited AI on your own provider account at no subscription cost.</p>
         </div>
-        <div class="faq-item">
+        <div class="faq-item" id="faq-pro">
           <h3>How much is Pro?</h3>
           <p>Pro is $7 per month at the early adopter rate (listed vs $12/mo). It unlocks unlimited AI questions, unlimited auto-fix, unlimited cloud backup and sync, version history, and priority AI models.</p>
         </div>
-        <div class="faq-item">
+        <div class="faq-item" id="faq-privacy">
           <h3>Does my spreadsheet data stay private?</h3>
           <p>By default your spreadsheet data stays in your browser. Nothing syncs to smartsht servers unless you explicitly enable cloud backup. Self-hosted and BYOK setups are supported for users who want full control.</p>
         </div>
-        <div class="faq-item">
+        <div class="faq-item" id="faq-excel">
           <h3>Can I import Excel files?</h3>
           <p>Yes. You can import existing .xlsx and CSV files and export back anytime. smartsht is designed to work alongside Excel and Google Sheets without vendor lock-in.</p>
         </div>
-        <div class="faq-item">
+        <div class="faq-item" id="faq-auditor">
           <h3>What does the formula auditor catch?</h3>
           <p>The auditor checks for issues like skipped cells in SUM ranges, inconsistent formula patterns, statistical outliers, and hardcoded constants — then can propose fixes with a preview before anything changes.</p>
+        </div>
+        <div class="faq-item" id="faq-install">
+          <h3>Do I need to install anything?</h3>
+          <p>No. smartsht runs in the browser. Open smartsht.com/app on Windows, macOS, Linux, or a mobile browser — no desktop install required.</p>
+        </div>
+        <div class="faq-item" id="faq-excel-alternative">
+          <h3>Is smartsht an Excel alternative?</h3>
+          <p>Yes, for everyday work like budgets, invoices, and expense tracking. You get a real spreadsheet with formulas, charts, and pivot tables, plus an AI assistant. Import and export .xlsx so you can keep using Excel when you need to.</p>
+        </div>
+        <div class="faq-item" id="faq-sheets-alternative">
+          <h3>Is this a Google Sheets alternative?</h3>
+          <p>It is a browser spreadsheet you can use instead of Google Sheets for personal and small-business files. Data stays in your browser by default instead of a Google account. Collaboration is view-only share links today, not live multiplayer editing.</p>
+        </div>
+        <div class="faq-item" id="faq-ai-spreadsheet">
+          <h3>What is an AI spreadsheet?</h3>
+          <p>An AI spreadsheet lets you describe the sheet you want in plain English. smartsht builds or edits real cells and formulas, shows a preview before applying changes, and can audit formula errors. It is a full spreadsheet, not a chat window that dumps a table.</p>
         </div>
       </div>
     </div>
@@ -1246,6 +1511,111 @@
       </div>
     </div>
   </footer>
+
+  <script>
+    // First-party reviews only. Each item must be a real user who used the product.
+    // After you verify a submission, append it here. The visible cards and
+    // SoftwareApplication aggregateRating / review JSON-LD are generated from this list.
+    // Example:
+    // { author: "Alex R.", rating: 5, reviewBody: "Caught a SUM gap I had missed for months.", datePublished: "2026-08-16" }
+    window.__SMARTSHT_REVIEWS__ = [];
+
+    (function () {
+      var reviews = window.__SMARTSHT_REVIEWS__ || [];
+      var listEl = document.getElementById("reviews-list");
+      var aggEl = document.getElementById("reviews-aggregate");
+      var form = document.getElementById("review-form");
+
+      function escapeHtml(value) {
+        return String(value)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;");
+      }
+
+      function stars(n) {
+        var filled = Math.max(1, Math.min(5, Number(n) || 0));
+        return "★★★★★".slice(0, filled) + "☆☆☆☆☆".slice(filled);
+      }
+
+      if (reviews.length && listEl && aggEl) {
+        var sum = 0;
+        var html = "";
+        for (var i = 0; i < reviews.length; i++) {
+          var r = reviews[i];
+          sum += Number(r.rating) || 0;
+          html += '<article class="review-card">' +
+            '<div class="review-meta">' +
+              '<span class="review-author">' + escapeHtml(r.author) + '</span>' +
+              '<span class="review-rating" aria-label="' + escapeHtml(r.rating) + ' out of 5">' + stars(r.rating) + '</span>' +
+            "</div>" +
+            "<p>" + escapeHtml(r.reviewBody) + "</p>" +
+          "</article>";
+        }
+        var avg = Math.round((sum / reviews.length) * 10) / 10;
+        aggEl.innerHTML =
+          '<span class="reviews-score">' + avg.toFixed(1) + '</span>' +
+          '<span class="reviews-stars" aria-hidden="true">' + stars(Math.round(avg)) + "</span>" +
+          '<span class="reviews-count">from ' + reviews.length + (reviews.length === 1 ? " review" : " reviews") + "</span>";
+        aggEl.classList.add("is-visible");
+        listEl.innerHTML = html;
+        listEl.classList.add("is-visible");
+
+        var ld = {
+          "@context": "https://schema.org",
+          "@type": "SoftwareApplication",
+          "@id": "https://smartsht.com/#app",
+          "name": "smartsht",
+          "aggregateRating": {
+            "@type": "AggregateRating",
+            "ratingValue": String(avg),
+            "bestRating": "5",
+            "worstRating": "1",
+            "ratingCount": reviews.length,
+            "reviewCount": reviews.length
+          },
+          "review": reviews.map(function (item) {
+            return {
+              "@type": "Review",
+              "author": { "@type": "Person", "name": item.author },
+              "datePublished": item.datePublished,
+              "reviewBody": item.reviewBody,
+              "reviewRating": {
+                "@type": "Rating",
+                "ratingValue": item.rating,
+                "bestRating": 5,
+                "worstRating": 1
+              }
+            };
+          })
+        };
+        var script = document.createElement("script");
+        script.type = "application/ld+json";
+        script.textContent = JSON.stringify(ld);
+        document.head.appendChild(script);
+      }
+
+      if (form) {
+        form.addEventListener("submit", function (event) {
+          event.preventDefault();
+          var name = document.getElementById("review-name").value.trim();
+          var rating = document.getElementById("review-rating").value;
+          var body = document.getElementById("review-body").value.trim();
+          var subject = "smartsht review: " + rating + "/5 from " + name;
+          var message =
+            "Name: " + name + "\n" +
+            "Rating: " + rating + "/5\n" +
+            "Date: " + new Date().toISOString().slice(0, 10) + "\n\n" +
+            body +
+            "\n\nAfter verification, add to landing/index.html window.__SMARTSHT_REVIEWS__.";
+          window.location.href =
+            "mailto:support@smartsht.com?subject=" + encodeURIComponent(subject) +
+            "&body=" + encodeURIComponent(message);
+        });
+      }
+    })();
+  </script>
 
 </body>
 </html>

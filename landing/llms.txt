@@ -1,6 +1,6 @@
 # smartsht (smartsh!t)
 
-> AI-powered spreadsheet that understands plain English. Build budgets, track expenses, generate invoices, and catch formula errors — no formulas required.
+> Free AI spreadsheet and Excel alternative that understands plain English. Build budgets, track expenses, generate invoices, and catch formula errors. No formulas required. Data stays in the browser by default.
 
 - Site: https://smartsht.com/
 - App: https://smartsht.com/app

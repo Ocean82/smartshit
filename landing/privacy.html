@@ -13,21 +13,38 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
   <meta name="robots" content="index, follow" />
 
-  <!-- Breadcrumb structured data -->
+  <!-- WebPage + breadcrumb structured data -->
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
-    "@type": "BreadcrumbList",
-    "itemListElement": [
-      { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://smartsht.com/" },
-      { "@type": "ListItem", "position": 2, "name": "Privacy Policy", "item": "https://smartsht.com/privacy" }
+    "@graph": [
+      {
+        "@type": "WebPage",
+        "@id": "https://smartsht.com/privacy#webpage",
+        "url": "https://smartsht.com/privacy",
+        "name": "Privacy Policy — smartsht",
+        "description": "Privacy Policy for smartsht. Your spreadsheet data stays in your browser. We collect minimal data.",
+        "isPartOf": { "@id": "https://smartsht.com/#website" },
+        "about": { "@id": "https://smartsht.com/#organization" },
+        "dateModified": "2026-07-23",
+        "inLanguage": "en-US",
+        "breadcrumb": { "@id": "https://smartsht.com/privacy#breadcrumb" }
+      },
+      {
+        "@type": "BreadcrumbList",
+        "@id": "https://smartsht.com/privacy#breadcrumb",
+        "itemListElement": [
+          { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://smartsht.com/" },
+          { "@type": "ListItem", "position": 2, "name": "Privacy Policy", "item": "https://smartsht.com/privacy" }
+        ]
+      }
     ]
   }
   </script>
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&family=General+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&display=swap" rel="stylesheet" />
 
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -42,7 +59,7 @@
       --border: oklch(0.90 0.008 250);
       --radius: 12px;
       --font-display: 'Bricolage Grotesque', system-ui, sans-serif;
-      --font-body: 'General Sans', system-ui, sans-serif;
+      --font-body: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     }
 
     html { scroll-behavior: smooth; }

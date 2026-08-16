@@ -3,27 +3,32 @@ User-agent: *
 Allow: /
 Disallow: /app
 Disallow: /api/
+Disallow: /cdn-cgi/
 
 # Allow AI search crawlers to read the landing page for AI Overviews / citations
 User-agent: GPTBot
 Allow: /
 Disallow: /app
 Disallow: /api/
+Disallow: /cdn-cgi/
 
 User-agent: Google-Extended
 Allow: /
 Disallow: /app
 Disallow: /api/
+Disallow: /cdn-cgi/
 
 User-agent: ChatGPT-User
 Allow: /
 Disallow: /app
 Disallow: /api/
+Disallow: /cdn-cgi/
 
 User-agent: anthropic-ai
 Allow: /
 Disallow: /app
 Disallow: /api/
+Disallow: /cdn-cgi/
 
 # Sitemap
 Sitemap: https://smartsht.com/sitemap.xml
