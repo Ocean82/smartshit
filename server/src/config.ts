@@ -1,6 +1,13 @@
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { loadEnv } from './loadEnv.js'
+import {
+  MAX_HISTORY_CLOUD,
+  MAX_HISTORY_LOCAL,
+  OUTLIER_STD_THRESHOLD,
+  MAX_WORKBOOK_VERSIONS,
+  FREE_CLOUD_WORKBOOK_LIMIT,
+} from '../../shared/config.js'
 
 loadEnv()
 
@@ -216,18 +223,18 @@ export const config = {
   appUrl: process.env.APP_URL ?? 'https://smartsht.com',
 
   /** Max cloud workbooks for free-tier users (Pro is unlimited). */
-  freeCloudWorkbookLimit: Math.max(1, Number(process.env.FREE_CLOUD_WORKBOOK_LIMIT ?? 1)),
+  freeCloudWorkbookLimit: Math.max(1, Number(process.env.FREE_CLOUD_WORKBOOK_LIMIT ?? FREE_CLOUD_WORKBOOK_LIMIT)),
 
   analysis: {
     maxRowsPreview: 120,
     maxRowsAnalysis: 10_000,
-    outlierStdThreshold: 2.5,
+    outlierStdThreshold: OUTLIER_STD_THRESHOLD,
   },
 
   /** Max conversation history sent to cloud providers (Groq, OpenRouter, HuggingFace) */
-  maxHistoryCloud: Number(process.env.MAX_HISTORY_CLOUD ?? 12),
+  maxHistoryCloud: Number(process.env.MAX_HISTORY_CLOUD ?? MAX_HISTORY_CLOUD),
   /** Max conversation history sent to local Ollama */
-  maxHistoryLocal: Number(process.env.MAX_HISTORY_LOCAL ?? 4),
+  maxHistoryLocal: Number(process.env.MAX_HISTORY_LOCAL ?? MAX_HISTORY_LOCAL),
 
   intentConfidenceThreshold: Math.max(0, Math.min(1, Number(process.env.INTENT_CONFIDENCE_THRESHOLD ?? 0.6))),
 }

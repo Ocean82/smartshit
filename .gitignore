@@ -34,6 +34,10 @@ docs/images/notes
 .cursor/
 .kiro/
 .junie
+.superpowers/
+.impeccable/
+.github/skills/
+.github/hooks/
 
 # PM2 ecosystem config (contains server secrets)
 server/ecosystem.config.cjs

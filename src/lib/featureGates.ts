@@ -6,16 +6,18 @@
  * so client and server stay aligned.
  */
 
+import { FREE_DAILY_LIMIT, FREE_CLOUD_WORKBOOK_LIMIT as SHARED_CLOUD_LIMIT } from '../../shared/config'
+
 // ─── Limits ──────────────────────────────────────────────────────────────────
 
 /** AI chat questions per day for free users */
-export const FREE_DAILY_CHAT_LIMIT = 7
+export const FREE_DAILY_CHAT_LIMIT = FREE_DAILY_LIMIT
 
 /** Lifetime auto-fix uses before gate (free users get a taste) */
 export const FREE_AUTOFIX_LIFETIME_LIMIT = 3
 
 /** Maximum cloud workbooks for free users */
-export const FREE_CLOUD_WORKBOOK_LIMIT = 1
+export const FREE_CLOUD_WORKBOOK_LIMIT = SHARED_CLOUD_LIMIT
 
 // ─── Feature Flags ───────────────────────────────────────────────────────────
 

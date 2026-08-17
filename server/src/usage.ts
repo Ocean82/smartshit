@@ -11,8 +11,9 @@
 
 import { config } from './config.js'
 import { query } from './db.js'
+import { FREE_DAILY_LIMIT as SHARED_FREE_DAILY_LIMIT } from '../../shared/config.js'
 
-const FREE_DAILY_LIMIT = Number(process.env.FREE_DAILY_LIMIT ?? 7)
+const FREE_DAILY_LIMIT = Number(process.env.FREE_DAILY_LIMIT ?? SHARED_FREE_DAILY_LIMIT)
 
 /** Fallback store used only when no database is configured. */
 const memoryUsage = new Map<string, { count: number; date: string }>()

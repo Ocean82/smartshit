@@ -1,9 +1,9 @@
 import { useAuth } from '@clerk/react'
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { loadUserApiKey } from '@/lib/userApiKey'
+import { FREE_DAILY_LIMIT } from '../../shared/config'
 
 const CLERK_PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ?? ''
-const FREE_DAILY_LIMIT = 7
 const STORAGE_KEY = 'smartsht_usage'
 
 interface UsageData {
