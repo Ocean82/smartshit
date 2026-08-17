@@ -117,13 +117,30 @@ export interface ChatResponseBody {
   meta?: { provider: string; model: string }
 }
 
-function formatContextBlock(context?: SpreadsheetContextInput): string {
+/**
+ * Format the spreadsheet context block for injection into the system prompt.
+ *
+ * When `maxTokens` is provided, uses progressive truncation to fit within
+ * the token budget. Priority order (highest → lowest):
+ * 1. Workbook metadata (name, sheets, dimensions) — always included
+ * 2. Compressed encoding (most token-efficient representation)
+ * 3. Deterministic summary / pre-computed analysis
+ * 4. Sheet profile + column info
+ * 5. Headers + selection snapshot
+ * 6. Computed insights
+ * 7. Sample rows (dropped first — compressed encoding is superior)
+ *
+ * @param context Spreadsheet context payload from the client
+ * @param maxTokens Optional token budget ceiling for this block
+ */
+function formatContextBlock(context?: SpreadsheetContextInput, maxTokens?: number): string {
   if (!context) return '\nNo spreadsheet data loaded yet.'
 
   const sheetNames = context.sheetNames ?? []
   const selectedCells = context.selectedCells ?? []
   const headers = context.headers ?? []
 
+  // ─── Priority 1: Core metadata (always included) ─────────────────────────
   const lines: string[] = [
     `\nWorkbook: "${context.workbookName ?? 'Untitled'}"`,
     `Active sheet: "${context.activeSheet ?? 'Sheet1'}"`,
@@ -145,59 +162,77 @@ function formatContextBlock(context?: SpreadsheetContextInput): string {
     )
   }
 
+  // ─── Priority 2–7: Budget-aware sections ─────────────────────────────────
+  // Build optional sections as labeled blocks, then progressively include
+  // as many as fit within the token budget.
+
+  interface ContextSection {
+    priority: number
+    label: string
+    content: string
+  }
+
+  const sections: ContextSection[] = []
+
+  // Priority 2: Compressed encoding
+  if (context.compressedEncoding) {
+    sections.push({
+      priority: 2,
+      label: 'compressed',
+      content: `Compressed data (inverted-index format — value:"addresses"):\n${context.compressedEncoding}`,
+    })
+  }
+
+  // Priority 3: Deterministic summary
+  if (context.deterministicSummary?.trim()) {
+    sections.push({
+      priority: 3,
+      label: 'summary',
+      content: `Pre-computed analysis (cite these numbers):\n${context.deterministicSummary}`,
+    })
+  }
+
+  // Priority 4: Profile
+  if (context.profile) {
+    const p = context.profile
+    let profileText = `Sheet profile: ${p.name} (${p.detectedPurpose}), ${p.rowCount}x${p.colCount}`
+    if (p.columns?.length) {
+      profileText += `\nColumns: ${p.columns.slice(0, 8).map((c) => `${c.name}(${c.role})`).join(', ')}`
+    }
+    sections.push({ priority: 4, label: 'profile', content: profileText })
+  }
+
+  // Priority 5: Headers + selection
+  const headerSelectionParts: string[] = []
   if (headers.length) {
-    lines.push(`Headers: ${headers.join(' | ')}`)
+    headerSelectionParts.push(`Headers: ${headers.join(' | ')}`)
   }
-
   if (selectedCells.length) {
-    lines.push(`Selected: ${selectedCells.join(', ')}`)
+    headerSelectionParts.push(`Selected: ${selectedCells.join(', ')}`)
   }
-
   if (context.selectionSnapshot && Object.keys(context.selectionSnapshot).length > 0) {
     const sel = Object.entries(context.selectionSnapshot)
       .map(([k, v]) => `${k}=${v}`)
       .join(', ')
-    lines.push(`Selection values: ${sel}`)
+    headerSelectionParts.push(`Selection values: ${sel}`)
+  }
+  if (headerSelectionParts.length) {
+    sections.push({ priority: 5, label: 'headers', content: headerSelectionParts.join('\n') })
   }
 
-  if (context.sampleRows?.length) {
-    const preview = context.sampleRows
-      .slice(0, 50)
-      .map((row, i) => `  Row ${i + 1}: ${(row ?? []).join(' | ')}`)
-      .join('\n')
-    lines.push(`Data preview:\n${preview}`)
-    if (context.sampleRowsTruncated) {
-      lines.push('Data preview is truncated. Mention this limitation before giving high-confidence conclusions.')
-    }
-  }
-
-  if (context.compressedEncoding) {
-    lines.push(`Compressed data (inverted-index format — value:"addresses"):\n${context.compressedEncoding}`)
-  }
-
-  if (context.deterministicSummary?.trim()) {
-    lines.push(`Pre-computed analysis (cite these numbers):\n${context.deterministicSummary}`)
-  }
-
+  // Priority 5.5: User preferences
   if (context.userPreferences && Object.keys(context.userPreferences).length > 0) {
     const prefs = Object.entries(context.userPreferences)
       .map(([k, v]) => `  - ${k}: ${v}`)
       .join('\n')
-    lines.push(`User preferences (respect these):\n${prefs}`)
+    sections.push({
+      priority: 5.5,
+      label: 'prefs',
+      content: `User preferences (respect these):\n${prefs}`,
+    })
   }
 
-  if (context.profile) {
-    const p = context.profile
-    lines.push(
-      `Sheet profile: ${p.name} (${p.detectedPurpose}), ${p.rowCount}x${p.colCount}`,
-    )
-    if (p.columns?.length) {
-      lines.push(
-        `Columns: ${p.columns.slice(0, 8).map((c) => `${c.name}(${c.role})`).join(', ')}`,
-      )
-    }
-  }
-
+  // Priority 6: Computed insights
   if (context.insights) {
     const ins = context.insights
     const insightLines: string[] = []
@@ -233,7 +268,63 @@ function formatContextBlock(context?: SpreadsheetContextInput): string {
     }
 
     if (insightLines.length > 0) {
-      lines.push(`Computed insights:\n${insightLines.map((l) => `  - ${l}`).join('\n')}`)
+      sections.push({
+        priority: 6,
+        label: 'insights',
+        content: `Computed insights:\n${insightLines.map((l) => `  - ${l}`).join('\n')}`,
+      })
+    }
+  }
+
+  // Priority 7: Sample rows (dropped first when budget is tight)
+  if (context.sampleRows?.length) {
+    const preview = context.sampleRows
+      .slice(0, 50)
+      .map((row, i) => `  Row ${i + 1}: ${(row ?? []).join(' | ')}`)
+      .join('\n')
+    let sampleText = `Data preview:\n${preview}`
+    if (context.sampleRowsTruncated) {
+      sampleText += '\nData preview is truncated. Mention this limitation before giving high-confidence conclusions.'
+    }
+    sections.push({ priority: 7, label: 'samples', content: sampleText })
+  }
+
+  // ─── Budget enforcement ──────────────────────────────────────────────────
+  // Sort by priority (lower number = higher priority = include first)
+  sections.sort((a, b) => a.priority - b.priority)
+
+  if (maxTokens && maxTokens > 0) {
+    const baseText = lines.join('\n')
+    const baseTokens = Math.ceil(baseText.length / 3.5)
+    let remainingBudget = maxTokens - baseTokens
+
+    for (const section of sections) {
+      const sectionTokens = Math.ceil(section.content.length / 3.5)
+      if (sectionTokens <= remainingBudget) {
+        lines.push(section.content)
+        remainingBudget -= sectionTokens
+      } else if (remainingBudget > 100 && section.label === 'compressed') {
+        // For compressed encoding, truncate to fit rather than drop entirely
+        const maxChars = Math.floor(remainingBudget * 3.5)
+        const truncated = section.content.slice(0, maxChars)
+        const lastNewline = truncated.lastIndexOf('\n')
+        lines.push(lastNewline > 0 ? truncated.slice(0, lastNewline) : truncated)
+        lines.push('[context truncated — ask about specific cells/sheets for detail]')
+        remainingBudget = 0
+      }
+      // else: skip this section (doesn't fit)
+    }
+
+    if (remainingBudget <= 0 && sections.some((s) => !lines.includes(s.content))) {
+      // Only add truncation notice if we actually dropped something
+      if (!lines[lines.length - 1]?.includes('[context truncated')) {
+        lines.push('[context truncated — ask about specific cells/sheets for detail]')
+      }
+    }
+  } else {
+    // No budget constraint — include everything
+    for (const section of sections) {
+      lines.push(section.content)
     }
   }
 
@@ -248,8 +339,9 @@ export function buildExplainPrompt(
   context: SpreadsheetContextInput | undefined,
   mode: AgentMode,
   userIntent?: UserIntent,
+  maxContextTokens?: number,
 ): string {
-  const contextBlock = formatContextBlock(context)
+  const contextBlock = formatContextBlock(context, maxContextTokens)
 
   const intentBlock = userIntent
     ? `\nParsed user intent: ${userIntent.intentType} (confidence ${userIntent.confidence})` +
@@ -273,8 +365,8 @@ ${contextBlock}`
 /**
  * JSON tool-calling assistant for act mode.
  */
-export function buildActionPrompt(context?: SpreadsheetContextInput): string {
-  const contextBlock = formatContextBlock(context)
+export function buildActionPrompt(context?: SpreadsheetContextInput, maxContextTokens?: number): string {
+  const contextBlock = formatContextBlock(context, maxContextTokens)
 
   return `You are smartsh!t, a spreadsheet AI assistant. Respond ONLY with valid JSON.
 
@@ -320,6 +412,6 @@ ${contextBlock}`
 }
 
 /** @deprecated use buildActionPrompt or buildExplainPrompt */
-export function buildSystemPrompt(context?: SpreadsheetContextInput): string {
-  return buildActionPrompt(context)
+export function buildSystemPrompt(context?: SpreadsheetContextInput, maxContextTokens?: number): string {
+  return buildActionPrompt(context, maxContextTokens)
 }

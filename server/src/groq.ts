@@ -162,7 +162,7 @@ export function groqAvailable(): boolean {
 export interface GroqCallOptions {
   /** Enable response_format: json_object for structured output. Default: false */
   jsonMode?: boolean
-  /** Override max_tokens (default: 1280) */
+  /** Override max_tokens (default: 2048) */
   maxTokens?: number
 }
 
@@ -174,7 +174,7 @@ export async function chatWithGroq(
     throw new Error('GROQ_API_KEY not set')
   }
 
-  const { jsonMode = false, maxTokens = 1280 } = options
+  const { jsonMode = false, maxTokens = 2048 } = options
 
   const body: Record<string, unknown> = {
     model: config.groqModel,
@@ -232,7 +232,7 @@ export async function chatWithGroqStream(
     throw new Error('GROQ_API_KEY not set')
   }
 
-  const { jsonMode = false, maxTokens = 1280 } = options
+  const { jsonMode = false, maxTokens = 2048 } = options
 
   const body: Record<string, unknown> = {
     model: config.groqModel,

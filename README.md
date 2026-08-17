@@ -154,8 +154,8 @@ Copy `.env.example` to `.env` in the `server/` directory:
 | `PORT` | `8787` | API port |
 | `OLLAMA_BASE_URL` | `http://127.0.0.1:11434` | Ollama endpoint |
 | `SMARTSHIT_MODEL` | `smartshit` | Ollama model name (prod: Spreadsheet-RL-4B) |
-| `NUM_CTX` | `4096` | Context window size |
-| `NUM_PREDICT` | `768` | Max tokens per response |
+| `NUM_CTX` | `8192` | Context window size |
+| `NUM_PREDICT` | `1024` | Max tokens per response |
 | `OPENROUTER_API_KEY` | — | Recommended cloud provider |
 | `GROQ_API_KEY` | — | Alternative cloud provider (fast, free tier) |
 | `LLM_PROVIDER_ORDER` | `groq,openrouter,ollama` | Failover order |

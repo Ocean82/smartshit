@@ -34,6 +34,7 @@ import {
   recordSuccess,
   recordFailure,
 } from './providers.js'
+import { allocateBudget, estimateTokens, type ProviderName as BudgetProvider } from './tokenBudget.js'
 
 import { checkUsage, recordUsage, getUsageStats } from './usage.js'
 import { decideAiAccess, shouldRecordServerUsage } from './aiAccess.js'
@@ -325,9 +326,34 @@ async function runLlmChat(params: {
   const llmOnly = isLlmOnlyMode(mode) || Boolean(body.forceLlm)
 
   const history = (body.history ?? []).filter((m) => m.role === 'user' || m.role === 'assistant')
+
+  // ─── Token budget — determine context ceiling for the target provider ─────
+  const isCloudAvailable = providerOrder().filter(providerIsConfigured)
+    .some((p) => p !== 'ollama')
+  const targetProvider: BudgetProvider = isCloudAvailable
+    ? (providerOrder().find((p) => p !== 'ollama' && providerIsConfigured(p)) as BudgetProvider ?? 'ollama')
+    : 'ollama'
+
+  // Build system prompt with budget-aware context truncation
+  // First pass: build without context to measure base prompt cost
+  const basePrompt = llmOnly
+    ? buildExplainPrompt(undefined, mode, userIntent)
+    : buildActionPrompt(undefined)
+  const basePromptTokens = estimateTokens(basePrompt)
+
+  // Allocate budget to determine how much context we can include
+  const budget = allocateBudget({
+    provider: targetProvider,
+    systemPromptText: basePrompt,
+    historyMessages: history,
+    userMessageText: userMessage,
+  })
+
+  // Now build the real prompt with context, capping at the budget's context allocation
+  const maxContextTokens = budget.isConstrained ? budget.context : undefined
   const systemPrompt = llmOnly
-    ? buildExplainPrompt(body.context, mode, userIntent)
-    : buildActionPrompt(body.context)
+    ? buildExplainPrompt(body.context, mode, userIntent, maxContextTokens)
+    : buildActionPrompt(body.context, maxContextTokens)
 
   // Few-shot examples for explain/advise mode — teaches the model the response style.
   const contextSize = systemPrompt.length
@@ -337,8 +363,6 @@ async function runLlmChat(params: {
     : []
 
   // ─── Conversation history — use larger window for cloud providers ───────────
-  const isCloudAvailable = providerOrder().filter(providerIsConfigured)
-    .some((p) => p !== 'ollama')
   const maxHistory = isCloudAvailable ? config.maxHistoryCloud : config.maxHistoryLocal
 
   let conversationSummary: string | null = null

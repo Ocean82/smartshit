@@ -19,6 +19,7 @@
 import type { PipelineContext, PipelineStage, StageResult } from '../types'
 import { chatWithAgentServerStream } from '@/ai/agentClient'
 import { buildSpreadsheetContext } from '@/ai/buildContext'
+import { buildAdaptiveContext, getClientContextBudget } from '@/ai/adaptiveContext'
 import { formatInsights, mergeToolResultContent } from '@/ai/responseBuilder'
 import { isLlmOnlyMode } from '@/ai/mode'
 import { runAudit, formatAuditForContext } from '@/auditor'
@@ -33,12 +34,17 @@ export function createLLMGatewayStage(): PipelineStage {
       const onToken = context.onToken ?? (() => {})
 
       // Build spreadsheet context payload for the server
-      const sheetContext = buildSpreadsheetContext(
-        context.workbook,
-        context.sheet,
-        context.selection,
-        context.getComputedValue,
-      )
+      // Use adaptive context for multi-sheet workbooks (budget-aware compression)
+      const isCloudAvailable = true // LLM gateway implies cloud/Ollama is available
+      const tokenBudget = getClientContextBudget(isCloudAvailable)
+
+      const sheetContext = buildAdaptiveContext({
+        tokenBudget,
+        workbook: context.workbook,
+        activeSheet: context.sheet,
+        selection: context.selection,
+        getComputedValue: context.getComputedValue,
+      })
 
       // Build deterministic summary for LLM context enrichment
       const isFollowUp = Boolean(context.priorInsights)

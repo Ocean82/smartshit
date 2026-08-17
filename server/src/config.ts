@@ -176,10 +176,10 @@ export const config = {
   modelName: process.env.SMARTSHIT_MODEL ?? 'smartshit',
   modelfilePath: path.join(projectRoot, 'server', 'Modelfile.spreadsheet-rl'),
 
-  /** Context window — 4096 allows room for system prompt + history + context */
-  numCtx: Number(process.env.NUM_CTX ?? 4096),
-  /** Max tokens to generate per response (768 for 4B models; Groq overrides in its own config) */
-  numPredict: Number(process.env.NUM_PREDICT ?? 768),
+  /** Context window — 8192 provides adequate room for system prompt + history + multi-sheet context */
+  numCtx: Number(process.env.NUM_CTX ?? 8192),
+  /** Max tokens to generate per response (1024 for 4B models; Groq overrides in its own config) */
+  numPredict: Number(process.env.NUM_PREDICT ?? 1024),
   corsOrigin: resolveCorsOrigin(),
   /**
    * Origins allowed in Clerk JWT `azp`. Defaults to APP_URL + www + local Vite.
