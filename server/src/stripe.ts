@@ -129,7 +129,7 @@ export function handleStripeWebhook(event: {
 }): { userId: string; plan: 'pro' | 'free'; stripeSubscriptionId?: string | null } | null {
   const obj = event.data.object
 
-  if (event.type === 'checkout.session.completed') {
+  if (event.type === 'checkout.session.completed' || event.type === 'checkout.session.async_payment_succeeded') {
     const metadata = obj.metadata as Record<string, string> | undefined
     const userId = (obj.client_reference_id as string) ?? metadata?.userId
     const stripeSubscriptionId =
