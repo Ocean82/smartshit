@@ -43,27 +43,33 @@ export function useEditingController(config: EditingControllerConfig) {
   }, [editingCell]);
 
   const commitEdit = useCallback(() => {
-    if (!editingCell) return;
-    pushHistory('Edit cell ' + editingCell);
-    const val = editValue;
+    // Read from store as the authoritative source — React closures may be stale
+    // if another event handler ran between the trigger and this callback.
+    const storeState = useStore.getState();
+    const currentEditingCell = storeState.editingCell;
+    const currentEditValue = storeState.editValue;
+    if (!currentEditingCell) return;
+    
+    pushHistory('Edit cell ' + currentEditingCell);
+    const val = currentEditValue;
     
     if (val.startsWith('=')) {
-      setCellValue(editingCell, null, val);
+      setCellValue(currentEditingCell, null, val);
     } else {
       const num = Number(val);
       if (val !== '' && !isNaN(num)) {
-        setCellValue(editingCell, num);
+        setCellValue(currentEditingCell, num);
       } else {
-        setCellValue(editingCell, val || null);
+        setCellValue(currentEditingCell, val || null);
       }
     }
 
     // Validate cell value
     const cellVal = val.startsWith('=') ? null : (val !== '' && !isNaN(Number(val)) ? Number(val) : (val || null));
-    const result = validateCellValue(editingCell, cellVal);
+    const result = validateCellValue(currentEditingCell, cellVal);
     
     const state = useStore.getState();
-    const cell = state.getActiveSheet().cells[editingCell];
+    const cell = state.getActiveSheet().cells[currentEditingCell];
     if (cell) {
       if (!result.valid) {
         cell.validationError = result.message;
@@ -74,7 +80,7 @@ export function useEditingController(config: EditingControllerConfig) {
 
     setEditingCell(null);
     setEditValue('');
-  }, [editingCell, editValue, pushHistory, setCellValue, setEditingCell, setEditValue, validateCellValue]);
+  }, [pushHistory, setCellValue, setEditingCell, setEditValue, validateCellValue]);
 
   const cancelEdit = useCallback(() => {
     setEditingCell(null);

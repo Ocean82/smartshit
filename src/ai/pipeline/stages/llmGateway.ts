@@ -18,7 +18,6 @@
 
 import type { PipelineContext, PipelineStage, StageResult } from '../types'
 import { chatWithAgentServerStream } from '@/ai/agentClient'
-import { buildSpreadsheetContext } from '@/ai/buildContext'
 import { buildAdaptiveContext, getClientContextBudget } from '@/ai/adaptiveContext'
 import { formatInsights, mergeToolResultContent } from '@/ai/responseBuilder'
 import { isLlmOnlyMode } from '@/ai/mode'

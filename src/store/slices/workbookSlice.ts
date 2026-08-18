@@ -691,6 +691,23 @@ export function createWorkbookActions(
           return '⏳ Loading...';
         }
 
+        // For cells with formulas, use the engine's evaluation
+        if (cell?.formula) {
+          const engineVal = state.engine.getComputedValue(state.activeSheetId, row, col);
+          // If the engine returns a valid result, use it; otherwise fall back to stored value
+          if (engineVal !== '' && engineVal !== null && engineVal !== undefined) {
+            return engineVal;
+          }
+          // Fallback: use stored value if engine can't evaluate
+          return cell.value !== null && cell.value !== undefined ? String(cell.value) : '';
+        }
+
+        // For plain-value cells, prefer the store's value (single source of truth after editing)
+        // but consult the engine first in case something references this cell with a formula
+        if (cell && cell.value !== null && cell.value !== undefined) {
+          return String(cell.value);
+        }
+
         return state.engine.getComputedValue(state.activeSheetId, row, col);
       }
   }

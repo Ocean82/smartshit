@@ -91,6 +91,21 @@ function parseSheetRows(
 const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype'])
 
 /**
+ * Check if a SheetJS format string appears to be a date/time format.
+ * This catches cases where mapExcelNumFmt might miss date formats
+ * (e.g., custom date formats or locale-specific patterns).
+ */
+function isExcelDateFormatId(fmt: string | undefined): boolean {
+  if (!fmt || fmt === 'General') return false
+  // Strip locale blocks
+  const stripped = fmt.replace(/\[\$[^\]]*\]/g, '').toLowerCase()
+  // Check for date/time tokens that aren't part of number formats
+  const hasDateTokens = /[dmy]/.test(stripped) && !/[#0]/.test(stripped)
+  const hasTimeTokens = /[h]/.test(stripped) && /[ms]/.test(stripped) && !/[#0]/.test(stripped)
+  return hasDateTokens || hasTimeTokens
+}
+
+/**
  * Extract a hex color string from an XLSX color object.
  * Handles rgb, argb, theme-based colors.
  */
@@ -116,19 +131,41 @@ function isDefaultBg(hex: string): boolean {
 /**
  * Map an Excel number format string to the app's internal format key.
  * Excel numFmt examples: "0.00%", "#,##0", "$#,##0.00", "0%"
+ * 
+ * IMPORTANT: Excel uses [$-xxx] syntax for locale identifiers (e.g. [$-409] for US English).
+ * These contain '$' but are NOT currency formats. We strip them before checking for currency symbols.
  */
 function mapExcelNumFmt(fmt: string): string | null {
-  const lower = fmt.toLowerCase()
+  // Strip locale/conditional blocks like [$-409], [$-F800], [$USD-409] before analysis
+  const stripped = fmt.replace(/\[\$[^\]]*\]/g, '')
+  const lower = stripped.toLowerCase()
+  
+  // Date formats — check BEFORE currency because some date formats include locale blocks with $
+  // Check for date-specific patterns: d, m, y tokens (but not when they're part of number formats)
+  if ((lower.includes('d') || lower.includes('m') || lower.includes('y')) && !lower.includes('#') && !lower.includes('0')) {
+    if (lower.includes('yyyy') && lower.includes('mm') && lower.includes('dd')) return 'date-iso'
+    if (lower.includes('mmm') && lower.includes('d')) return 'date-d-mmm'
+    if (lower.includes('d') && lower.includes('m') && lower.includes('y')) return 'date'
+    return 'date'
+  }
+  
+  // Time formats  
+  if (lower.includes('h') && lower.includes('m') && !lower.includes('d') && !lower.includes('y')) {
+    if (lower.includes('ss')) return 'time-seconds'
+    if (lower.includes('am') || lower.includes('pm')) return 'time'
+    return 'time-24'
+  }
+
   // Percentage formats
   if (lower.includes('%')) {
     if (lower.includes('.')) return 'percent'
     return 'percent-int'
   }
-  // Currency formats
-  if (lower.includes('$') || lower.includes('€') || lower.includes('£') || lower.includes('¥')) {
-    if (lower.includes('€')) return 'currency-eur'
-    if (lower.includes('£')) return 'currency-gbp'
-    if (lower.includes('¥')) return 'currency-jpy'
+  // Currency formats — only check the stripped string (locale identifiers removed)
+  if (stripped.includes('$') || stripped.includes('€') || stripped.includes('£') || stripped.includes('¥')) {
+    if (stripped.includes('€')) return 'currency-eur'
+    if (stripped.includes('£')) return 'currency-gbp'
+    if (stripped.includes('¥')) return 'currency-jpy'
     if (lower.includes('.00') || lower.includes('.##')) return 'currency'
     return 'currency-int'
   }
@@ -143,19 +180,6 @@ function mapExcelNumFmt(fmt: string): string | null {
   // Integer with thousands separator
   if (lower.includes('#,##0') || lower.includes('#,###')) {
     return 'number-int'
-  }
-  // Date formats
-  if ((lower.includes('m') || lower.includes('d') || lower.includes('y')) && !lower.includes('#') && !lower.includes('0')) {
-    if (lower.includes('yyyy') && lower.includes('mm') && lower.includes('dd')) return 'date-iso'
-    if (lower.includes('mmm') && lower.includes('d')) return 'date-d-mmm'
-    if (lower.includes('d') && lower.includes('m') && lower.includes('y')) return 'date'
-    return 'date'
-  }
-  // Time formats  
-  if (lower.includes('h') && lower.includes('m') && !lower.includes('d') && !lower.includes('y')) {
-    if (lower.includes('ss')) return 'time-seconds'
-    if (lower.includes('am') || lower.includes('pm')) return 'time'
-    return 'time-24'
   }
   // Scientific
   if (lower.includes('e+') || lower.includes('e-')) return 'scientific'
@@ -264,6 +288,16 @@ export async function importWorkbookFromFileWithMeta(file: File): Promise<Workbo
             }
           }
 
+          // Detect date cells via SheetJS cell type 't' === 'd' or via known date format IDs
+          // SheetJS uses 't' field: 'n' = number, 's' = string, 'b' = boolean, 'd' = date
+          if (rawCell.t === 'd' || (rawCell.t === 'n' && isExcelDateFormatId(rawCell.z))) {
+            const cell = sheet.cells[cellId]
+            if (cell && !cell.format?.numberFormat) {
+              if (!cell.format) cell.format = {}
+              cell.format.numberFormat = 'date'
+            }
+          }
+
           // Extract styles (background color, borders)
           if (rawCell.s) {
             const style = rawCell.s
@@ -336,6 +370,48 @@ export async function importWorkbookFromFileWithMeta(file: File): Promise<Workbo
         importedRows: parsed.importedRows,
         importedCols: parsed.importedCols,
       })
+    }
+
+    // Extract column widths from Excel's !cols metadata
+    if (ws && (ws as Record<string, unknown>)['!cols']) {
+      const cols = (ws as Record<string, unknown>)['!cols'] as Array<{ wpx?: number; wch?: number; width?: number } | undefined>
+      const columnWidths: Record<number, number> = {}
+      for (let i = 0; i < Math.min(cols.length, maxCols); i++) {
+        const colDef = cols[i]
+        if (!colDef) continue
+        // wpx = width in pixels; wch = width in characters; width = width in Excel's character units
+        if (colDef.wpx && colDef.wpx > 0) {
+          columnWidths[i] = Math.round(colDef.wpx)
+        } else if (colDef.wch && colDef.wch > 0) {
+          // Approximate pixel width from character width (1 char ≈ 7.5px + 5px padding)
+          columnWidths[i] = Math.round(colDef.wch * 7.5 + 5)
+        } else if (colDef.width && colDef.width > 0) {
+          columnWidths[i] = Math.round(colDef.width * 7.5 + 5)
+        }
+      }
+      if (Object.keys(columnWidths).length > 0) {
+        sheet.columnWidths = columnWidths
+      }
+    }
+
+    // Extract row heights from Excel's !rows metadata
+    if (ws && (ws as Record<string, unknown>)['!rows']) {
+      const rows = (ws as Record<string, unknown>)['!rows'] as Array<{ hpx?: number; hpt?: number } | undefined>
+      const rowHeights: Record<number, number> = {}
+      for (let i = 0; i < Math.min(rows.length, maxRows); i++) {
+        const rowDef = rows[i]
+        if (!rowDef) continue
+        // hpx = height in pixels; hpt = height in points
+        if (rowDef.hpx && rowDef.hpx > 0) {
+          rowHeights[i] = Math.round(rowDef.hpx)
+        } else if (rowDef.hpt && rowDef.hpt > 0) {
+          // Convert points to pixels (1pt ≈ 1.333px)
+          rowHeights[i] = Math.round(rowDef.hpt * 1.333)
+        }
+      }
+      if (Object.keys(rowHeights).length > 0) {
+        sheet.rowHeights = rowHeights
+      }
     }
 
     return sheet

@@ -90,8 +90,10 @@ export function useSelectionManager(config: SelectionManagerConfig) {
     } else {
       setSelection({ startRow: row, startCol: col, endRow: row, endCol: col });
     }
-    if (editingCell) setEditingCell(null);
-  }, [selection, setSelection, editingCell, setEditingCell]);
+    // Don't clear editingCell here — let the input's onBlur handler (commitEdit)
+    // handle the commit and cleanup. This prevents a race condition where
+    // editingCell is nulled before onBlur fires, causing the edit to be lost.
+  }, [selection, setSelection]);
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (useStore.getState().editingCell) {
@@ -155,6 +157,7 @@ export function useSelectionManager(config: SelectionManagerConfig) {
       }
       default:
         if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
+          e.preventDefault();
           const cellId = refToCell(r, c);
           setEditingCell(cellId);
           setEditValue(e.key);

@@ -10,7 +10,7 @@ See also `docs/NAMING.md` and `.env.example`.
 | `CLERK_SECRET_KEY`, `CLERK_PUBLISHABLE_KEY` | Yes (server) | SmartSht instance at `clerk.smartsht.com`. Server must set `CLERK_PUBLISHABLE_KEY` (or `VITE_CLERK_PUBLISHABLE_KEY` as fallback). |
 | `CLERK_AUTHORIZED_PARTIES` | Optional (server) | Comma-separated origins for JWT `azp`. Defaults to `APP_URL` + www + local Vite. |
 | `STRIPE_SECRET_KEY`, `STRIPE_PRICE_ID`, `STRIPE_WEBHOOK_SECRET`, `APP_URL` | Yes | Use **live** keys in production |
-| `SMARTSHIT_MODEL`, `OLLAMA_BASE_URL`, `NUM_CTX`, `NUM_PREDICT` | Yes | Local Ollama; model id spelling is intentional. Prod uses Spreadsheet-RL-4B (4096 ctx, 768 predict) — GGUF already on prod; verify Modelfile only |
+| `SMARTSHIT_MODEL`, `OLLAMA_BASE_URL`, `NUM_CTX`, `NUM_PREDICT` | Yes | Local Ollama; model id spelling is intentional. Prod uses Spreadsheet-RL-4B (8192 ctx, 1024 predict) — GGUF already on prod; verify Modelfile only |
 | `SMARTSHT_MINILM_SRC` | Optional | Override source dir/file for `npm run model:copy-deploy` (MiniLM ONNX Path B). Runtime loads from `server/models/minilm/` only — never `temp/` |
 | `LLM_PROVIDER_ORDER`, `GROQ_*`, `OPENROUTER_*`, `HUGGINGFACE_*` | Yes | Optional cloud LLM failover |
 | `PORT`, `HOST` | Yes | Server bind |

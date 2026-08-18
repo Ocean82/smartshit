@@ -100,7 +100,21 @@ export class SpreadsheetEngine {
           const v = cellData.value;
           if (v !== null && v !== undefined) this.wb.setValue(sheetName, r, c, v as string | number | boolean);
         } else if (cellData.formula) {
-          this.wb.setFormula(sheetName, r, c, cellData.formula);
+          // For imported formulas, store the Excel-computed value in the engine
+          // rather than re-evaluating the formula (which may produce incorrect results
+          // due to unsupported functions or dependency ordering issues).
+          // The formula is preserved in the store for display/editing.
+          const v = cellData.value;
+          if (v !== null && v !== undefined) {
+            this.wb.setValue(sheetName, r, c, v as string | number | boolean);
+          } else {
+            // Only evaluate formula if we don't have a pre-computed value
+            try {
+              this.wb.setFormula(sheetName, r, c, cellData.formula);
+            } catch {
+              // Formula evaluation failed — leave cell empty in engine
+            }
+          }
         } else if (cellData.value !== null && cellData.value !== undefined) {
           this.wb.setValue(sheetName, r, c, cellData.value as string | number | boolean);
         }

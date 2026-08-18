@@ -414,6 +414,15 @@ export function SpreadsheetGrid() {
            row <= Math.max(selectionManager.selection.startRow, selectionManager.selection.endRow);
   }, [selectionManager.selection]);
 
+  // Combined keyboard handler: editing keys first, then selection/navigation
+  const handleGridKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (useStore.getState().editingCell) {
+      editingController.handleKeyDown(e);
+      return;
+    }
+    selectionManager.handleKeyDown(e);
+  }, [editingController, selectionManager]);
+
   // ─── Render ─────────────────────────────────────────────────────────────────
 
   return (
@@ -426,7 +435,7 @@ export function SpreadsheetGrid() {
       aria-colcount={viewport.TOTAL_COLS}
       className="flex-1 overflow-auto relative touch-pan-x touch-pan-y"
       tabIndex={0}
-      onKeyDown={selectionManager.handleKeyDown}
+      onKeyDown={handleGridKeyDown}
       onMouseUp={selectionManager.handleMouseUp}
       onTouchStart={touch.onTouchStart}
       onTouchMove={touch.onTouchMove}
