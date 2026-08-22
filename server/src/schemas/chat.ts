@@ -53,7 +53,7 @@ export const chatStreamBodySchema = z.object({
   history: z.array(historyMessageSchema).max(100).optional(),
   context: contextSchema.optional(),
   forceLlm: z.boolean().optional(),
-  byok: byokSchema.optional(),
+  byok: byokSchema.nullable().optional(),
   sheetData: z.unknown().optional(),
 })
 

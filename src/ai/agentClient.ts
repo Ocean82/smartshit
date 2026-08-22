@@ -72,15 +72,17 @@ async function postAgentChat(
 ): Promise<Response> {
   const headers = await getAuthHeaders()
   const byok = getByokPayload()
+  const payload: Record<string, unknown> = {
+    message: request.message,
+    context: request.context,
+    history: request.history,
+  }
+  if (byok) payload.byok = byok
+
   return fetch(`${API_BASE}${path}`, {
     method: 'POST',
     headers,
-    body: JSON.stringify({
-      message: request.message,
-      context: request.context,
-      history: request.history,
-      byok,
-    }),
+    body: JSON.stringify(payload),
     signal,
   })
 }
