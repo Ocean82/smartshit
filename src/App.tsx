@@ -95,6 +95,11 @@ function App() {
   useEffect(() => {
     engine.loadWorkbook(workbook)
     setIsLoaded(true)
+
+    // Start NLP engine initialization (non-blocking, lazy model load)
+    import('@/ai/nlp/nlpEngine').then(({ getNLPEngine }) => {
+      getNLPEngine().startInit()
+    })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Cloud sync: schedule a save whenever workbook updates
