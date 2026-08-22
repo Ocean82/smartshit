@@ -96,9 +96,11 @@ function App() {
     engine.loadWorkbook(workbook)
     setIsLoaded(true)
 
-    // Start NLP engine initialization (non-blocking, lazy model load)
-    import('@/ai/nlp/nlpEngine').then(({ getNLPEngine }) => {
-      getNLPEngine().startInit()
+    // NLP engine initialization — deferred until first chat interaction.
+    // Pre-computed intent vectors (intent-vectors.bin) are loaded eagerly since
+    // they're tiny (<30KB) and enable instant semantic classification.
+    import('@/ai/nlp/intentEmbeddings').then(({ loadPrecomputedEmbeddings }) => {
+      loadPrecomputedEmbeddings() // fire-and-forget, <10ms
     })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 

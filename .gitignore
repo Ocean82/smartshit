@@ -22,6 +22,9 @@ server/models/**
 !server/models/README.md
 !server/models/.gitkeep
 
+# Client-side ONNX models (Path A) — deployed by npm run model:copy-deploy --public
+public/models/**
+
 server/node_modules/
 server/dist/
 

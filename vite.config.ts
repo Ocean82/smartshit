@@ -11,7 +11,22 @@ const __dirname = path.dirname(__filename);
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [wasm(), react(), tailwindcss(), viteSingleFile()],
+  plugins: [
+    wasm(),
+    react(),
+    tailwindcss(),
+    viteSingleFile({
+      // Inline main JS/CSS into index.html, but don't base64-encode large WASM binaries.
+      deleteInlinedFiles: true,
+      // Override the plugin's default assetsInlineLimit to prevent 70MB WASM
+      // binary from being inlined into worker JS chunks.
+      overrideConfig: {
+        build: {
+          assetsInlineLimit: 100_000, // Only inline assets < 100KB
+        },
+      },
+    }),
+  ],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "src"),

@@ -4,6 +4,11 @@
  * Dedicated Web Worker that loads the all-MiniLM-L6-v2 ONNX model and
  * produces 384-dimensional sentence embeddings for intent classification.
  *
+ * Bundle size: ~2-3MB (onnxruntime-web WASM runtime).
+ * This chunk is code-split by Vite and only downloaded when the worker
+ * is first instantiated (on first chat message, not on page load).
+ * After first load, the Service Worker caches it for instant subsequent use.
+ *
  * Message protocol follows NLPWorkerRequest/NLPWorkerResponse from ./types.ts.
  *
  * Pipeline per classify request:
@@ -57,8 +62,27 @@ async function handleInit(modelUrl: string): Promise<void> {
       {
         executionProviders: ['wasm'],
         graphOptimizationLevel: 'all',
+        // onnxruntime-web can use multi-threaded WASM with SharedArrayBuffer.
+        // This requires COOP/COEP headers on the server:
+        //   Cross-Origin-Embedder-Policy: require-corp
+        //   Cross-Origin-Opener-Policy: same-origin
+        // When headers aren't set, it falls back to single-threaded WASM (fine for MiniLM).
+        // Explicitly set numThreads=1 to avoid console warnings about missing headers.
+        interOpNumThreads: 1,
+        intraOpNumThreads: 1,
       }
     )
+
+    // Validate that model has expected input names (prevents silent failures)
+    const expectedInputs = ['input_ids', 'attention_mask', 'token_type_ids']
+    const actualInputs = session.inputNames
+    const missing = expectedInputs.filter((name) => !actualInputs.includes(name))
+    if (missing.length > 0) {
+      throw new Error(
+        `Model input mismatch: expected [${expectedInputs.join(', ')}], ` +
+        `got [${actualInputs.join(', ')}]. Missing: ${missing.join(', ')}`,
+      )
+    }
 
     postState('ready')
   } catch (error) {

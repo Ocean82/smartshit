@@ -103,7 +103,7 @@ function resolveOutliersForFollowUp(
 /**
  * Convert a ToolResult from a deterministic skill into a pipeline StageResult.
  */
-function toStageResult(result: ToolResult): StageResult {
+function toStageResult(result: ToolResult, routingSource?: string): StageResult {
   return {
     success: result.success,
     message: result.message,
@@ -116,6 +116,7 @@ function toStageResult(result: ToolResult): StageResult {
     stageName: 'deterministic-dispatcher',
     metadata: {
       toolUsed: result.toolUsed,
+      routingSource,
     },
   }
 }
@@ -173,7 +174,7 @@ export function createDeterministicDispatcherStage(
               ]
             : ['Analyze my data for patterns', 'Explain this spreadsheet I just loaded'],
         }
-        return toStageResult(result)
+        return toStageResult(result, intent?.routingSource)
       }
 
       // ─── Data Awareness ─────────────────────────────────────────────────────
@@ -184,17 +185,17 @@ export function createDeterministicDispatcherStage(
           message: buildDataAwarenessResponse(profile, insights, resolvedWorkbookName, resolvedTarget),
           toolUsed: 'data-awareness',
         }
-        return toStageResult(result)
+        return toStageResult(result, intent?.routingSource)
       }
 
       // ─── Clean ──────────────────────────────────────────────────────────────
       if (intent.intentType === 'clean') {
-        return toStageResult({ ...runCleaningSkill(resolvedTarget.sheet), toolUsed: 'cleaning' })
+        return toStageResult({ ...runCleaningSkill(resolvedTarget.sheet), toolUsed: 'cleaning' }, intent?.routingSource)
       }
 
       // ─── Report ─────────────────────────────────────────────────────────────
       if (intent.intentType === 'report') {
-        return toStageResult({ ...generateReport(profile, insights, resolvedWorkbookName), toolUsed: 'reporting' })
+        return toStageResult({ ...generateReport(profile, insights, resolvedWorkbookName), toolUsed: 'reporting' }, intent?.routingSource)
       }
 
       // ─── Compare ────────────────────────────────────────────────────────────
@@ -202,13 +203,13 @@ export function createDeterministicDispatcherStage(
         return toStageResult({
           ...queryComparison(resolvedTarget.workbook, resolvedTarget.sheet, message, resolvedTarget.getSheetComputedValue),
           toolUsed: 'comparison',
-        })
+        }, intent?.routingSource)
       }
 
       // ─── Query ──────────────────────────────────────────────────────────────
       if (isQueryIntent(intent)) {
         const queryResult = runQueryFromIntent(resolvedTarget.sheet, intent, resolvedTarget.getComputedValue, insights)
-        return queryResult ? toStageResult({ ...queryResult, toolUsed: 'query' }) : null
+        return queryResult ? toStageResult({ ...queryResult, toolUsed: 'query' }, intent?.routingSource) : null
       }
 
       // ─── Budget / Advise ────────────────────────────────────────────────────
@@ -218,15 +219,15 @@ export function createDeterministicDispatcherStage(
           : insights.totalIncome
 
         if (monthlyIncome && monthlyIncome > 0) {
-          return toStageResult({ ...savingsRecommendation(monthlyIncome, insights), toolUsed: 'budget' })
+          return toStageResult({ ...savingsRecommendation(monthlyIncome, insights), toolUsed: 'budget' }, intent?.routingSource)
         }
 
-        return toStageResult({ ...budgetAnalysisToToolResult(analyzeBudget(profile, insights)), toolUsed: 'budget' })
+        return toStageResult({ ...budgetAnalysisToToolResult(analyzeBudget(profile, insights)), toolUsed: 'budget' }, intent?.routingSource)
       }
 
       // ─── Budget Explain (explain mode + budget sheet) ───────────────────────
       if (mode === 'explain' && profile.detectedPurpose === 'budget' && isBudgetExplainQuery(message)) {
-        return toStageResult({ ...budgetAnalysisToToolResult(analyzeBudget(profile, insights)), toolUsed: 'budget' })
+        return toStageResult({ ...budgetAnalysisToToolResult(analyzeBudget(profile, insights)), toolUsed: 'budget' }, intent?.routingSource)
       }
 
       // ─── No deterministic skill matched — pass to next stage ────────────────

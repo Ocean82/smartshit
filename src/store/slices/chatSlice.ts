@@ -107,6 +107,18 @@ export function createChatActions(
       const input = get().chatInput.trim()
       if (!input) return
 
+      // Lazy-init NLP engine on first message (downloads 22MB model in background).
+      // Respects data-saver mode — skips if user has requested reduced data usage.
+      import('@/ai/nlp/nlpEngine').then(({ getNLPEngine }) => {
+        const engine = getNLPEngine()
+        if (!engine.isReady && !engine.status.initialized) {
+          const conn = (navigator as unknown as { connection?: { saveData?: boolean } }).connection
+          if (!conn?.saveData) {
+            engine.startInit()
+          }
+        }
+      })
+
       const userMsg: ChatMessage = {
         id: uuid(),
         role: 'user',

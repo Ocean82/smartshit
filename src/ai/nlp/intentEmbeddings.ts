@@ -171,11 +171,11 @@ export const INTENT_PHRASES: Record<IntentType, string[]> = {
 
 /**
  * The computed intent embeddings. Initially empty (zero vectors).
- * Populated by bootstrapIntentEmbeddings() after engine initialization.
+ * Populated by loadPrecomputedEmbeddings() (instant) or bootstrapIntentEmbeddings() (slow fallback).
  */
 export let INTENT_EMBEDDINGS: IntentEmbeddingEntry[] = buildPlaceholders()
 
-/** Whether bootstrap has completed */
+/** Whether bootstrap has completed (either from pre-computed file or runtime computation) */
 let _bootstrapped = false
 
 export function isBootstrapped(): boolean {
@@ -201,6 +201,80 @@ function buildPlaceholders(): IntentEmbeddingEntry[] {
   }
 
   return entries
+}
+
+// ─── Pre-computed Loading (Fast Path) ───────────────────────────────────────
+
+/** URL for the pre-computed intent vectors binary */
+const INTENT_VECTORS_URL = '/models/minilm/intent-vectors.bin'
+
+/**
+ * Load pre-computed intent embeddings from a binary file.
+ * This is the fast path — loads in <10ms vs 2-4s for runtime computation.
+ *
+ * Binary format:
+ *   [version: u32][numIntents: u32][dim: u32]
+ *   [name: 32 bytes utf8][numPhrases: u32] × numIntents
+ *   [embedding: float32 × dim] × numIntents
+ *
+ * @returns true if loaded successfully, false if file not available
+ */
+export async function loadPrecomputedEmbeddings(): Promise<boolean> {
+  if (_bootstrapped) return true
+
+  try {
+    const response = await fetch(INTENT_VECTORS_URL)
+    if (!response.ok) return false
+
+    const buffer = await response.arrayBuffer()
+    const view = new DataView(buffer)
+
+    // Read header
+    const version = view.getUint32(0, true)
+    if (version !== 1) return false
+
+    const numIntents = view.getUint32(4, true)
+    const dim = view.getUint32(8, true)
+    if (dim !== EMBEDDING_DIM) return false
+
+    let offset = 12
+    const entries: IntentEmbeddingEntry[] = []
+
+    // Read per-intent headers
+    const intentMeta: Array<{ name: string; numPhrases: number }> = []
+    for (let i = 0; i < numIntents; i++) {
+      const nameBytes = new Uint8Array(buffer, offset, 32)
+      const name = new TextDecoder().decode(nameBytes).replace(/\0+$/, '')
+      offset += 32
+      const numPhrases = view.getUint32(offset, true)
+      offset += 4
+      intentMeta.push({ name, numPhrases })
+    }
+
+    // Read embeddings
+    for (let i = 0; i < numIntents; i++) {
+      const embedding = new Float32Array(dim)
+      for (let d = 0; d < dim; d++) {
+        embedding[d] = view.getFloat32(offset, true)
+        offset += 4
+      }
+
+      const intentType = intentMeta[i].name as IntentType
+      const phrases = INTENT_PHRASES[intentType] ?? []
+
+      entries.push({ intentType, embedding, phrases })
+    }
+
+    if (entries.length > 0) {
+      INTENT_EMBEDDINGS = entries
+      _bootstrapped = true
+      return true
+    }
+
+    return false
+  } catch {
+    return false
+  }
 }
 
 /**
@@ -277,4 +351,27 @@ export async function bootstrapIntentEmbeddings(
 export function resetIntentEmbeddings(): void {
   INTENT_EMBEDDINGS = buildPlaceholders()
   _bootstrapped = false
+}
+
+/**
+ * Bootstrap from a cached set of intent embeddings (from IndexedDB).
+ * Faster than runtime computation since no inference is needed.
+ */
+export function bootstrapFromCache(
+  cached: Array<{ name: string; embedding: Float32Array }>,
+): void {
+  if (_bootstrapped) return
+
+  const entries: IntentEmbeddingEntry[] = []
+  for (const { name, embedding } of cached) {
+    const intentType = name as IntentType
+    const phrases = INTENT_PHRASES[intentType] ?? []
+    if (phrases.length === 0) continue
+    entries.push({ intentType, embedding, phrases })
+  }
+
+  if (entries.length > 0) {
+    INTENT_EMBEDDINGS = entries
+    _bootstrapped = true
+  }
 }

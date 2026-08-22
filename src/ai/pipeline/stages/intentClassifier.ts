@@ -50,6 +50,13 @@ export function createIntentClassifierStage(): PipelineStage {
             nlpResult.confidence > regexIntent.confidence &&
             nlpResult.intentType !== 'unknown'
           ) {
+            // Log classification decision for threshold tuning
+            if (import.meta.env.DEV) {
+              console.debug(
+                `[IntentClassifier] NLP override: "${context.message.slice(0, 50)}" → ${nlpResult.intentType} (${nlpResult.confidence}) over regex ${regexIntent.intentType} (${regexIntent.confidence})`,
+              )
+            }
+
             regexIntent.intentType = nlpResult.intentType
             regexIntent.confidence = nlpResult.confidence
             regexIntent.routingSource = 'nlp'
@@ -59,6 +66,12 @@ export function createIntentClassifierStage(): PipelineStage {
               regexIntent.entities = nlpResult.entities
             }
           } else {
+            // Log when NLP was available but regex won (for threshold analysis)
+            if (import.meta.env.DEV && nlpResult.intentType !== 'unknown') {
+              console.debug(
+                `[IntentClassifier] Regex kept: "${context.message.slice(0, 50)}" → regex=${regexIntent.intentType}(${regexIntent.confidence}) nlp=${nlpResult.intentType}(${nlpResult.confidence})`,
+              )
+            }
             regexIntent.routingSource = 'regex'
           }
         } catch {

@@ -15,9 +15,10 @@
 import type { IntentType } from '@shared/intentTypes'
 import type { ClassificationResult, NLPEngineState, WorkbookContext } from './types'
 import { NLPWorkerBridge, type NLPBridgeOptions } from './nlpBridge'
-import { INTENT_EMBEDDINGS, type IntentEmbeddingEntry, bootstrapIntentEmbeddings, isBootstrapped } from './intentEmbeddings'
+import { INTENT_EMBEDDINGS, type IntentEmbeddingEntry, bootstrapIntentEmbeddings, isBootstrapped, loadPrecomputedEmbeddings } from './intentEmbeddings'
 import { classifyIntent as classifyIntentKeyword } from './intentClassifier'
 import { extractEntities } from './entityExtractor'
+import { getCachedEmbedding, setCachedEmbedding, getCachedBootstrap, setCachedBootstrap } from './embeddingCache'
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -161,6 +162,16 @@ export class NLPEngine {
     if (this.initStarted) return
     this.initStarted = true
 
+    // Fast path: try loading pre-computed embeddings (no worker needed for this)
+    loadPrecomputedEmbeddings().then((loaded) => {
+      if (loaded) {
+        // Pre-computed vectors loaded — still init the worker for user query embeddings
+        console.debug('[NLP] Pre-computed intent vectors loaded (instant bootstrap)')
+      }
+    }).catch(() => {
+      // Non-fatal — will fall back to runtime bootstrap
+    })
+
     this.bridge = new NLPWorkerBridge(this.bridgeOptions)
     this.bridge.initialize()
       .then(() => this.runBootstrap())
@@ -172,16 +183,32 @@ export class NLPEngine {
 
   /**
    * Bootstrap intent embeddings after engine becomes ready.
-   * Computes MiniLM embeddings for all reference phrases and stores them.
+   * Skips if pre-computed vectors were already loaded from intent-vectors.bin.
+   * Falls back to computing MiniLM embeddings for all reference phrases.
+   * Caches the result in IndexedDB for instant load next session.
    */
   private async runBootstrap(): Promise<void> {
     if (isBootstrapped() || !this.bridge?.isReady) return
+
+    // Try loading from IndexedDB cache (faster than runtime computation)
+    const cached = await getCachedBootstrap('minilm-v1')
+    if (cached && cached.length > 0) {
+      const { INTENT_PHRASES } = await import('./intentEmbeddings')
+      const { bootstrapFromCache } = await import('./intentEmbeddings')
+      bootstrapFromCache(cached)
+      return
+    }
 
     try {
       await bootstrapIntentEmbeddings(async (text: string) => {
         const result = await this.bridge!.embed(text)
         return result.rawEmbedding ?? null
       })
+
+      // Cache the computed vectors in IndexedDB for next session
+      const { INTENT_EMBEDDINGS: embeddings } = await import('./intentEmbeddings')
+      const toCache = embeddings.map((e) => ({ name: e.intentType, embedding: e.embedding }))
+      setCachedBootstrap('minilm-v1', toCache)
     } catch {
       // Bootstrap failure is non-fatal — engine stays in 'ready' state
       // but classify will fall back to keyword since isBootstrapped() = false
@@ -223,8 +250,16 @@ export class NLPEngine {
         }
       }
 
-      // Check cache
+      // Check in-memory cache
       let embedding = this.cache.get(normalizedText)
+
+      if (!embedding) {
+        // Check IndexedDB persistent cache
+        embedding = await getCachedEmbedding(normalizedText)
+        if (embedding) {
+          this.cache.set(normalizedText, embedding)
+        }
+      }
 
       if (!embedding) {
         // Compute embedding via worker
@@ -236,8 +271,9 @@ export class NLPEngine {
           return this.classifyWithKeyword(text, options?.workbookContext)
         }
 
-        // Cache the embedding
+        // Cache the embedding (memory + IndexedDB)
         this.cache.set(normalizedText, embedding)
+        setCachedEmbedding(normalizedText, embedding) // fire-and-forget
       }
 
       // Match against intent reference embeddings

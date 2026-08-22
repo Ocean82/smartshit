@@ -34,6 +34,7 @@ const TOKENIZER_FILES = [
 const HF_BASE =
   'https://huggingface.co/Xenova/all-MiniLM-L6-v2/resolve/main'
 const HF_ONNX_URL = `${HF_BASE}/onnx/model.onnx`
+const HF_ONNX_QUANTIZED_URL = `${HF_BASE}/onnx/model_quantized.onnx`
 
 const args = new Set(process.argv.slice(2))
 const withPublic = args.has('--public')
@@ -97,6 +98,29 @@ function resolveLocalMiniLmSource() {
   return null
 }
 
+/**
+ * Resolve the quantized MiniLM model for client-side (Path A).
+ * Quantized variant is ~22MB vs 86MB full — much better for browser delivery.
+ */
+function resolveLocalQuantizedSource() {
+  const candidates = [
+    path.join(repoRoot, 'temp/models/all-MiniLM-L6-v2/onnx/model_quantized.onnx'),
+    path.join(repoRoot, 'temp/all-MiniLM-L6-v2/onnx/model_quantized.onnx'),
+    path.join(repoRoot, 'temp/onnx/model_quantized.onnx'),
+  ]
+
+  const envSrc = process.env.SMARTSHT_MINILM_SRC?.trim()
+  if (envSrc) {
+    if (envSrc.endsWith('.onnx')) candidates.unshift(envSrc.replace('.onnx', '_quantized.onnx'))
+    else candidates.unshift(path.join(envSrc, 'model_quantized.onnx'), path.join(envSrc, 'onnx', 'model_quantized.onnx'))
+  }
+
+  for (const c of candidates) {
+    if (exists(c)) return c
+  }
+  return null
+}
+
 function companionSearchRoots(modelOnnxPath) {
   const onnxDir = path.dirname(modelOnnxPath)
   const modelRoot = path.dirname(onnxDir) // .../all-MiniLM-L6-v2 when under .../onnx/
@@ -136,10 +160,40 @@ function copyFile(src, dest) {
   console.log(`  copied ${src} → ${dest} (${size} bytes)`)
 }
 
-async function ensureMiniLm(destDir) {
+async function ensureMiniLm(destDir, { quantized = false } = {}) {
   fs.mkdirSync(destDir, { recursive: true })
   const destModel = path.join(destDir, 'model.onnx')
 
+  // For client-side (--public), prefer the quantized model (~22MB vs 86MB)
+  if (quantized) {
+    const quantizedSrc = resolveLocalQuantizedSource()
+    if (quantizedSrc) {
+      console.log(`MiniLM source (local quantized): ${quantizedSrc}`)
+      copyFile(quantizedSrc, destModel)
+      // Tokenizer files come from the same directory tree
+      for (const name of TOKENIZER_FILES) {
+        const src = findCompanion(quantizedSrc, name)
+        if (src) copyFile(src, path.join(destDir, name))
+      }
+      return { source: 'local-quantized', modelPath: destModel }
+    }
+
+    // Fall back to download quantized from HuggingFace
+    console.log('MiniLM source: Hugging Face download (quantized, requires network)')
+    console.log(`  repo: Xenova/all-MiniLM-L6-v2`)
+    await downloadFile(HF_ONNX_QUANTIZED_URL, destModel)
+    for (const name of TOKENIZER_FILES) {
+      const url = `${HF_BASE}/${name}`
+      try {
+        await downloadFile(url, path.join(destDir, name))
+      } catch (err) {
+        console.warn(`  skip ${name}: ${err instanceof Error ? err.message : err}`)
+      }
+    }
+    return { source: 'download-quantized', modelPath: destModel }
+  }
+
+  // Server-side: use the full model for maximum quality
   const localSrc = resolveLocalMiniLmSource()
   if (localSrc) {
     console.log(`MiniLM source (local): ${localSrc}`)
@@ -202,9 +256,9 @@ async function main() {
   const result = await ensureMiniLm(serverDest)
 
   if (withPublic) {
-    console.log('Also copying to public/models/minilm/ (Path A)')
+    console.log('Also copying to public/models/minilm/ (Path A, quantized ~22MB)')
     const publicDest = path.join(repoRoot, 'public/models/minilm')
-    await ensureMiniLm(publicDest)
+    await ensureMiniLm(publicDest, { quantized: true })
   }
 
   copySpreadsheetRlOptional()

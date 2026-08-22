@@ -96,6 +96,24 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
+  // ONNX model + NLP assets: aggressive cache-first (immutable after deploy).
+  // These are large binary files that never change for a given version.
+  if (url.origin === self.location.origin && url.pathname.startsWith('/models/')) {
+    event.respondWith(
+      caches.match(request).then((cached) => {
+        if (cached) return cached
+        return fetch(request).then((response) => {
+          if (response.ok) {
+            const clone = response.clone()
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone))
+          }
+          return response
+        })
+      }),
+    )
+    return
+  }
+
   event.respondWith(
     caches.match(request).then((cached) => {
       if (cached) return cached

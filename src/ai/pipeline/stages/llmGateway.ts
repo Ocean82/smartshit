@@ -102,6 +102,7 @@ export function createLLMGatewayStage(): PipelineStage {
             source: serverResult.source,
             reasoning: serverResult.reasoning,
             providerMeta: serverResult.meta,
+            routingSource: context.intent?.routingSource,
           },
         }
       }

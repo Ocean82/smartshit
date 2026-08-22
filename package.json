@@ -45,6 +45,7 @@
     "deploy:frontend": "powershell -ExecutionPolicy Bypass -File scripts/deploy-remote.ps1 -Frontend",
     "release:check:v1": "node scripts/v1-release-checklist.mjs",
     "model:copy-deploy": "node scripts/copy-deploy-models.mjs",
+    "model:precompute": "node scripts/precompute-embeddings.mjs",
     "model:setup": "npm run setup-model --prefix server"
   },
   "dependencies": {
