@@ -75,8 +75,11 @@ npm run model:setup   # uses Qwen2.5-Coder-1.5B for dev (fast, lower quality)
 **Option B — Cloud (faster, no GPU needed):**
 Copy `.env.example` to `.env` in `server/` and add one API key:
 ```
-OPENROUTER_API_KEY=your-key-here
+GROQ_API_KEY=your-key-here
 ```
+
+> Groq is the primary cloud provider (fast inference via `openai/gpt-oss-120b`).
+> OpenRouter and HuggingFace are supported as failover. See `.env.example` for all options.
 
 ### 3. Run
 
@@ -156,10 +159,12 @@ Copy `.env.example` to `.env` in the `server/` directory:
 | `SMARTSHIT_MODEL` | `smartshit` | Ollama model name (prod: Spreadsheet-RL-4B) |
 | `NUM_CTX` | `8192` | Context window size |
 | `NUM_PREDICT` | `1024` | Max tokens per response |
-| `OPENROUTER_API_KEY` | — | Recommended cloud provider |
-| `GROQ_API_KEY` | — | Alternative cloud provider (fast, free tier) |
+| `GROQ_API_KEY` | — | Primary cloud provider (fast inference) |
+| `GROQ_MODEL` | `openai/gpt-oss-120b` | Groq model identifier |
+| `OPENROUTER_API_KEY` | — | Failover cloud provider |
+| `HUGGINGFACE_API_KEY` | — | Failover cloud provider |
 | `LLM_PROVIDER_ORDER` | `groq,openrouter,ollama` | Failover order |
-| `FREE_DAILY_LIMIT` | `10` | Free-tier AI requests per day per user |
+| `FREE_DAILY_LIMIT` | `7` | Free-tier AI requests per day per user |
 
 ---
 

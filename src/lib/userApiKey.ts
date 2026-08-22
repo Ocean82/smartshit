@@ -29,7 +29,7 @@ const PROVIDER_DEFAULTS: Record<ByokProvider, { baseUrl: string; model: string; 
   },
   groq: {
     baseUrl: 'https://api.groq.com/openai/v1',
-    model: 'llama-3.1-8b-instant',
+    model: 'openai/gpt-oss-20b',
     label: 'Groq',
   },
   openai: {

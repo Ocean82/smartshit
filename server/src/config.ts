@@ -18,16 +18,10 @@ const projectRoot = path.resolve(__dirname, '../..')
 
 /** Known Groq-supported model identifiers. Update when Groq adds new models. */
 const KNOWN_GROQ_MODELS = new Set([
-  'llama-3.3-70b-versatile',
-  'llama-3.3-70b-specdec',
-  'llama-3.1-8b-instant',
-  'llama-3.1-70b-versatile',
-  'llama-3.2-1b-preview',
-  'llama-3.2-3b-preview',
-  'llama-3.2-11b-vision-preview',
-  'llama-3.2-90b-vision-preview',
-  'gemma2-9b-it',
-  'mixtral-8x7b-32768',
+  'openai/gpt-oss-120b',
+  'openai/gpt-oss-20b',
+  'qwen/qwen3.6-27b',
+  'qwen/qwen3-32b',
   'qwen-qwq-32b',
   'deepseek-r1-distill-llama-70b',
 ])
@@ -55,7 +49,7 @@ const validatedProviderOrder = rawProviderOrder.filter((p): p is AllowedProvider
 
 // ─── Validate Groq model ────────────────────────────────────────────────────
 
-const groqModel = process.env.GROQ_MODEL ?? 'llama-3.3-70b-versatile'
+const groqModel = process.env.GROQ_MODEL ?? 'openai/gpt-oss-120b'
 if (groqModel && !KNOWN_GROQ_MODELS.has(groqModel)) {
   console.warn(
     `[config] GROQ_MODEL="${groqModel}" is not in the known models list. ` +

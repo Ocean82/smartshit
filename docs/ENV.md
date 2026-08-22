@@ -9,17 +9,19 @@ See also `docs/NAMING.md` and `.env.example`.
 | `VITE_CLERK_PUBLISHABLE_KEY` | Yes (frontend build) | SmartSht `pk_live_*` for production builds |
 | `CLERK_SECRET_KEY`, `CLERK_PUBLISHABLE_KEY` | Yes (server) | SmartSht instance at `clerk.smartsht.com`. Server must set `CLERK_PUBLISHABLE_KEY` (or `VITE_CLERK_PUBLISHABLE_KEY` as fallback). |
 | `CLERK_AUTHORIZED_PARTIES` | Optional (server) | Comma-separated origins for JWT `azp`. Defaults to `APP_URL` + www + local Vite. |
-| `STRIPE_SECRET_KEY`, `STRIPE_PRICE_ID`, `STRIPE_WEBHOOK_SECRET`, `APP_URL` | Yes | Use **live** keys in production |
+| `STRIPE_SECRET_KEY`, `STRIPE_PRICE_ID`, `STRIPE_PRICE_ID_ANNUAL`, `STRIPE_WEBHOOK_SECRET`, `APP_URL` | Yes | Use **live** keys in production. Annual price: `price_1U5HPKP38C54URjEl9wtgi5X` ($59/yr) |
 | `SMARTSHIT_MODEL`, `OLLAMA_BASE_URL`, `NUM_CTX`, `NUM_PREDICT` | Yes | Local Ollama; model id spelling is intentional. Prod uses Spreadsheet-RL-4B (8192 ctx, 1024 predict) — GGUF already on prod; verify Modelfile only |
 | `SMARTSHT_MINILM_SRC` | Optional | Override source dir/file for `npm run model:copy-deploy` (MiniLM ONNX Path B). Runtime loads from `server/models/minilm/` only — never `temp/` |
 | `LLM_PROVIDER_ORDER`, `GROQ_*`, `OPENROUTER_*`, `HUGGINGFACE_*` | Yes | Optional cloud LLM failover |
 | `PORT`, `HOST` | Yes | Server bind |
 | `TRUST_PROXY` | Yes | Express `trust proxy`. Default `loopback` (nginx on 127.0.0.1). Required for correct client IPs and rate limiting |
 | `CORS_ORIGIN` | Yes | Comma-separated allowlist. Defaults to `APP_URL` + www variant + localhost dev origins. `*` opts into a public API |
-| `FREE_DAILY_LIMIT` | No | Free-tier daily AI quota per user (default 3, persisted in Postgres) |
-| `WORKBOOK_BODY_LIMIT` | No | Max body size for workbook save routes (default `25mb`) |
-| `MAX_WORKBOOK_VERSIONS` | No | Versions retained per workbook before pruning from RDS + S3 (default 50) |
-| `INTENT_CONFIDENCE_THRESHOLD` | Yes | Optional; default 0.6 |
+| `FREE_DAILY_LIMIT` | Yes | Free-tier daily AI quota per user (default 7, persisted in Postgres) |
+| `WORKBOOK_BODY_LIMIT` | Yes | Max body size for workbook save routes (default `25mb`) |
+| `MAX_WORKBOOK_VERSIONS` | Yes | Versions retained per workbook before pruning from RDS + S3 (default 50) |
+| `INTENT_CONFIDENCE_THRESHOLD` | Yes | Optional; default 0.6. Controls when low-confidence intents trigger clarification prompts |
+| `MAX_HISTORY_CLOUD` | Yes | Optional; default 12. Max conversation history messages sent to cloud LLM providers |
+| `MAX_HISTORY_LOCAL` | Yes | Optional; default 4. Max conversation history messages sent to local Ollama |
 | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER` | No | Docs only — server reads `DATABASE_URL` |
 | `S3_ENABLED`, `S3_PREFIX=stems`, `S3_DELETE_LOCAL_AFTER_UPLOAD` | No | BurntBeats leftovers |
 
