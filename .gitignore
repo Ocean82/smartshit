@@ -33,6 +33,7 @@ prototypes/
 temp/
 # Local scratch notes (not shipped documentation)
 docs/images/notes
+docs/superpowers/
 
 # Editor / agent local state
 .claude/

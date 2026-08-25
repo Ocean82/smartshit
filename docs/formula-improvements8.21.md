@@ -220,5 +220,3 @@ Show:
 "This calculates total grocery spending for the current month."
 
 The formula becomes an implementation detail.
-
-That's the same reason most people use Canva instead of Photoshop—they want the result, not the mechanism.

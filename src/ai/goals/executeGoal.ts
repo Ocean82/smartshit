@@ -10,7 +10,15 @@ export function executeGoal(match: GoalMatch): GoalExecution {
   }
 
   const output = match.output
-  const executor = executors[match.goal.id][output]
+  const executor = executors[match.goal.id]?.[output]
+  if (!executor) {
+    return {
+      actions: [],
+      message: `No ${output} implementation for ${match.goal.title}.`,
+      explain: match.explain,
+    }
+  }
+
   const result = executor(match)
   return {
     ...result,
