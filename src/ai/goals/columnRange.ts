@@ -1,6 +1,13 @@
 import type { SheetProfile } from '@/ai/types'
 
-/** A1 range for a column's data rows (excludes header and optional totals row). */
+/**
+ * A1 range for a column's data rows (excludes header and optional totals row).
+ *
+ * @deprecated Approximate — only clips header and one bottom row. Does not skip
+ * intermediate summary rows. Prefer `getColumnDataRows` from `@/lib/sheetRows`
+ * when sheet + getComputedValue are available (goal executor, tool handlers).
+ * Retained for legacy fallback and LLM prompt context.
+ */
 export function columnDataRange(profile: SheetProfile | null | undefined, letter: string): string | null {
   if (!profile || !letter || profile.rowCount < 2) return null
   const lastA1 = profile.hasTotalsRow && profile.rowCount > 2

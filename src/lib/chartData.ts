@@ -167,5 +167,16 @@ export function parseMultiSeriesData(
   cells: CellGrid,
   getComputedValue: ChartValueReader,
 ): MultiSeriesChartData {
+  if (chart.snapshot) {
+    const colors = chartColors(chart)
+    return {
+      labels: chart.snapshot.labels,
+      series: chart.snapshot.series.map((s, i) => ({
+        label: s.label,
+        values: s.values,
+        color: s.color || colors[i % colors.length],
+      })),
+    }
+  }
   return parseExplicitSeries(chart, getComputedValue) ?? parseLegacyRange(chart, cells, getComputedValue)
 }

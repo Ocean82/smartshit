@@ -12,5 +12,6 @@ export type {
 export { GOAL_REGISTRY, getGoalDef } from './registry'
 export { matchGoal, rolesSatisfied } from './matchGoal'
 export { executeGoal } from './executeGoal'
+export type { GoalContext } from './executeGoal'
 export { listSuggestedGoals } from './suggestGoals'
 export { explainGoal } from './explain'

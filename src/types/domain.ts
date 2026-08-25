@@ -215,6 +215,11 @@ export interface SheetData {
   pivotResult?: PivotResult;
 }
 
+export interface ChartSnapshot {
+  labels: string[];
+  series: { label: string; values: number[]; color?: string }[];
+}
+
 export interface ChartConfig {
   id: string;
   type: 'bar' | 'line' | 'pie' | 'scatter' | 'area' | 'column';
@@ -225,6 +230,9 @@ export interface ChartConfig {
   colors?: string[];
   /** Multi-series definitions. When present, each series is plotted separately. */
   series?: ChartSeries[];
+  /** Pre-aggregated data snapshot. When present, the renderer uses this
+   *  instead of reading cell ranges. Produced by goal-driven grouped charts. */
+  snapshot?: ChartSnapshot;
   /** Trend line configuration. Only applies to line/scatter/area/column/bar charts. */
   trendLine?: TrendLineConfig;
   /** Axis configuration (min/max, labels, gridlines). */

@@ -3,7 +3,7 @@
  * in this module is declarative data applied by applyTemplate().
  */
 import { v4 as uuid } from 'uuid';
-import type { ChartConfig } from '@/types';
+import type { ChartConfig, ChartSnapshot } from '@/types';
 import type { ExecutionContext, ExecutionResult } from '@/agent/executor';
 import { applyCleaningChanges, previewCleaning, type CleaningPreview } from '@/ai/analysis/cleaning';
 import { defaultChartPosition, getChartOverlayBounds } from '@/lib/chartLayout';
@@ -14,12 +14,14 @@ export function createChart(params: Record<string, unknown>, ctx: ExecutionConte
   }
   const chartType = (params.type as string) || 'bar';
   const series = Array.isArray(params.series) ? params.series as ChartConfig['series'] : undefined;
+  const snapshot = params.snapshot as ChartSnapshot | undefined;
   ctx.addChart({
     id: uuid(),
     type: chartType as ChartConfig['type'],
     title: typeof params.title === 'string' && params.title.trim() ? params.title : 'Data Chart',
-    dataRange: typeof params.dataRange === 'string' && params.dataRange.trim() ? params.dataRange : 'A1:B10',
+    dataRange: typeof params.dataRange === 'string' && params.dataRange.trim() ? params.dataRange : '',
     series,
+    snapshot,
     position: defaultChartPosition(getChartOverlayBounds()),
     colors: ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'],
   });

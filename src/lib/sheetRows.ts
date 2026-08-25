@@ -72,3 +72,68 @@ export function findSummaryRowIndexes(
   }
   return rows
 }
+
+// ─── Unified Data Row Bounds ──────────────────────────────────────────────────
+
+export interface ColumnDataBounds {
+  /** 0-indexed first data row (non-header, non-summary, populated in this column). */
+  firstRow: number
+  /** 0-indexed last data row (non-summary, populated in this column). */
+  lastRow: number
+  /** All summary row indexes within the sheet (for iteration-time skipping). */
+  excludedRows: Set<number>
+}
+
+/**
+ * Compute the data row bounds for a given column, excluding header and summary rows.
+ *
+ * This is the single source of truth for "which rows are data" in a column.
+ * Used by goal executor (total summary, chart aggregation) and apply_formula.
+ *
+ * Returns null when the column has no usable data rows.
+ */
+export function getColumnDataRows(
+  sheet: SheetData,
+  colIdx: number,
+  getComputedValue: (row: number, col: number) => string,
+): ColumnDataBounds | null {
+  const { maxRow } = getSheetBounds(sheet)
+  if (maxRow < 0) return null
+
+  const summaryRows = findSummaryRowIndexes(sheet, getComputedValue)
+
+  // Detect header row: row 0 if it contains non-numeric text in this column
+  const headerRow = isHeaderRow(sheet, colIdx) ? 0 : -1
+
+  let firstRow = -1
+  let lastRow = -1
+
+  for (let r = 0; r <= maxRow; r++) {
+    if (r === headerRow) continue
+    if (summaryRows.has(r)) continue
+
+    const cellId = refToCell(r, colIdx)
+    const cell = sheet.cells[cellId]
+    const hasContent = (cell?.value != null && cell.value !== '') || !!cell?.formula
+    if (!hasContent) continue
+
+    if (firstRow === -1) firstRow = r
+    lastRow = r
+  }
+
+  if (firstRow === -1) return null
+
+  return { firstRow, lastRow, excludedRows: summaryRows }
+}
+
+/** Check if row 0 looks like a header for the given column (non-numeric text). */
+function isHeaderRow(sheet: SheetData, colIdx: number): boolean {
+  const cellId = refToCell(0, colIdx)
+  const cell = sheet.cells[cellId]
+  if (!cell || cell.value == null) return false
+  if (typeof cell.value === 'number' || typeof cell.value === 'boolean') return false
+  const text = String(cell.value).trim()
+  if (!text) return false
+  // If it parses as a number, it's data, not a header
+  return isNaN(parseFloat(text.replace(/[$,%]/g, '')))
+}

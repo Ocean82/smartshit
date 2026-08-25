@@ -47,7 +47,10 @@ export function createGoalRouterStage(deps: GoalRouterDeps): PipelineStage {
         }
       }
 
-      const execution = executeGoal(match, spreadsheetCtx.profile)
+      const execution = executeGoal(match, spreadsheetCtx.profile, {
+        getComputedValue: context.getComputedValue,
+        sheet: context.sheet,
+      })
       const suggestions = listSuggestedGoals(spreadsheetCtx.profile)
         .map((item) => item.goal?.title)
         .filter((title): title is string => Boolean(title))

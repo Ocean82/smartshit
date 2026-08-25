@@ -4,6 +4,7 @@
 import type { SheetData } from '@/types'
 import { refToCell, cellToRef, letterToCol } from '@/engine/spreadsheet'
 import { findHeaderRow } from '@/lib/sheetSort'
+import { getColumnDataRows } from '@/lib/sheetRows'
 import type { ToolHandler, BulkUpdates } from './types'
 import { applyBulk, requireColumn, findLastDataRowInCol, findFirstDataRowInCol } from './types'
 import type { ExecutionContext } from '../executor'
@@ -94,22 +95,18 @@ function applyFormulaToColumn(
   ctx: ExecutionContext,
 ) {
   const colIdx = letterToCol(colLetter)
-  const lastRow = findLastDataRowInCol(sheet, colIdx)
-  if (lastRow < 0) {
+
+  // Use unified row bounds that exclude summary rows
+  const bounds = getColumnDataRows(sheet, colIdx, ctx.getComputedValue)
+  if (!bounds) {
     return { success: false, message: `Column ${colLetter} has no data to summarise`, modified: 0 }
   }
 
-  const headerRow = findHeaderRow(sheet)
-  const firstDataRow = findFirstDataRowInCol(sheet, colIdx, headerRow)
-  if (firstDataRow < 0 || firstDataRow > lastRow) {
-    return { success: false, message: `Column ${colLetter} has no data to summarise`, modified: 0 }
-  }
-
-  const targetRow = lastRow + 1
+  const targetRow = bounds.lastRow + 1
   const cellId = refToCell(targetRow, colIdx)
   const fullFormula = formula.includes('(')
     ? formula
-    : `${formula}(${colLetter}${firstDataRow + 1}:${colLetter}${lastRow + 1})`
+    : `${formula}(${colLetter}${bounds.firstRow + 1}:${colLetter}${bounds.lastRow + 1})`
 
   ctx.pushHistory('Apply formula')
   ctx.setCellValue(cellId, null, fullFormula)
