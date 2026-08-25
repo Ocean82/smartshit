@@ -10,8 +10,8 @@ Items are added as local development work creates production requirements. Check
 
 - [ ] **Update `GROQ_MODEL` on production server** (URGENT - model deprecated)
   - File: `/opt/smartsht/.env`
-  - Change: `GROQ_MODEL=llama-3.3-70b-versatile` → `GROQ_MODEL=openai/gpt-oss-120b`
-  - Reason: Groq deprecated `llama-3.3-70b-versatile` on June 17, 2026. Requests to this model are failing, causing "AI is currently unavailable" for all users.
+  - Change: `GROQ_MODEL=llama-3.3-70b-versatile` → `GROQ_MODEL=qwen/qwen3.6-27b`
+  - Reason: Groq deprecated `llama-3.3-70b-versatile` on June 17, 2026. `qwen/qwen3.6-27b` is Groq's flagship replacement — 131K context, dual-mode reasoning, json_object mode supported, $0.60/$3.00 per 1M tokens.
   - After: `pm2 restart smartsht-api` and verify via `curl https://smartsht.com/health`
   - Added: 2026-08-22
 
@@ -26,7 +26,7 @@ Items are added as local development work creates production requirements. Check
 - [ ] **Add OpenRouter API key to production for real failover**
   - File: `/opt/smartsht/.env`
   - Add: `OPENROUTER_API_KEY=<your-key>` (get from https://openrouter.ai/keys)
-  - Add: `OPENROUTER_MODEL=qwen/qwen3-32b`
+  - Add: `OPENROUTER_MODEL=qwen/qwen3.6-27b`
   - Add: `OPENROUTER_BASE_URL=https://openrouter.ai/api/v1`
   - Reason: Currently only groq + ollama are in the chain. If either goes down, there's no cloud fallback. OpenRouter gives access to 100+ models behind a single key.
   - Added: 2026-08-22
