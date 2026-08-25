@@ -23,10 +23,12 @@ export function getContextualSuggestions(ctx: SuggestionContext): string[] {
   const suggestions: Array<{ text: string; priority: number }> = []
   const { insights, profile, lastUserMessage, hasMultipleSheets, sheetNames } = ctx
   const lower = lastUserMessage.toLowerCase()
+  const goalTitles = listSuggestedGoals(profile)
+    .map((goal) => goal.goal?.title)
+    .filter((title): title is string => Boolean(title))
 
-  for (const goal of listSuggestedGoals(profile)) {
-    if (!goal.goal) continue
-    suggestions.push({ text: goal.goal.title, priority: 10 })
+  for (const title of goalTitles) {
+    suggestions.push({ text: title, priority: 10 })
   }
 
   // Data-aware suggestions based on detected sheet purpose
@@ -52,16 +54,27 @@ export function getContextualSuggestions(ctx: SuggestionContext): string[] {
     suggestions.push({ text: 'Which invoices are overdue?', priority: 7 })
   }
 
-  // Column-aware suggestions
+  // Column-aware suggestions (skip when the same goal already appears as a chip)
   const hasDateColumn = profile?.columns.some((c) => c.role === 'date')
   const hasAmountColumn = profile?.columns.some((c) => c.role === 'amount')
   const hasCategoryColumn = profile?.columns.some((c) => c.role === 'category')
 
-  if (hasDateColumn && hasAmountColumn && !lower.includes('month') && !lower.includes('trend')) {
+  if (
+    hasDateColumn
+    && hasAmountColumn
+    && !goalTitles.includes('By Month')
+    && !lower.includes('month')
+    && !lower.includes('trend')
+  ) {
     suggestions.push({ text: 'Show me totals by month', priority: 6 })
   }
 
-  if (hasCategoryColumn && hasAmountColumn && !lower.includes('category')) {
+  if (
+    hasCategoryColumn
+    && hasAmountColumn
+    && !goalTitles.includes('By Category')
+    && !lower.includes('category')
+  ) {
     const catCol = profile?.columns.find((c) => c.role === 'category')
     if (catCol) {
       suggestions.push({ text: `Group totals by ${catCol.name}`, priority: 6 })

@@ -13,11 +13,13 @@ export function createChart(params: Record<string, unknown>, ctx: ExecutionConte
     return { success: false, message: 'Charts are not available in this context', modified: 0 };
   }
   const chartType = (params.type as string) || 'bar';
+  const series = Array.isArray(params.series) ? params.series as ChartConfig['series'] : undefined;
   ctx.addChart({
     id: uuid(),
     type: chartType as ChartConfig['type'],
     title: typeof params.title === 'string' && params.title.trim() ? params.title : 'Data Chart',
     dataRange: typeof params.dataRange === 'string' && params.dataRange.trim() ? params.dataRange : 'A1:B10',
+    series,
     position: defaultChartPosition(getChartOverlayBounds()),
     colors: ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'],
   });

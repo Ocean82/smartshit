@@ -10,7 +10,7 @@ import type { ExecutionContext } from '@/agent/executor'
 import { executeToolAsync } from '@/agent'
 import { getToolDefinition } from '@shared/toolRegistry'
 import { buildSpreadsheetContext } from '@/ai/buildContext'
-import { executeGoal, matchGoal } from '@/ai/goals'
+import { executeGoal, listSuggestedGoals, matchGoal } from '@/ai/goals'
 
 export interface GoalRouterDeps {
   buildExecContext: (opts?: { suppressHistory?: boolean }) => ExecutionContext
@@ -41,16 +41,23 @@ export function createGoalRouterStage(deps: GoalRouterDeps): PipelineStage {
         return {
           success: true,
           message: match.question ?? match.explain,
+          suggestions: match.chips,
           stageName: 'goal-router',
           metadata: { goalId: match.goal?.id, matchStatus: 'ambiguous', explain: match.explain },
         }
       }
 
-      const execution = executeGoal(match)
+      const execution = executeGoal(match, spreadsheetCtx.profile)
+      const suggestions = listSuggestedGoals(spreadsheetCtx.profile)
+        .map((item) => item.goal?.title)
+        .filter((title): title is string => Boolean(title))
+        .slice(0, 3)
+
       if (execution.actions.length === 0) {
         return {
           success: true,
           message: execution.message,
+          suggestions,
           stageName: 'goal-router',
           metadata: { goalId: match.goal?.id, matchStatus: 'matched', explain: match.explain },
         }
@@ -91,6 +98,7 @@ export function createGoalRouterStage(deps: GoalRouterDeps): PipelineStage {
           modified: totalModified,
           toolUsed: execution.actions.map((action) => action.tool).join(', '),
         },
+        suggestions,
       }
     },
   }

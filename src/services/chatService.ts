@@ -277,5 +277,6 @@ function stageResultToChatMessage(
     role: 'assistant',
     content: result.message,
     timestamp: Date.now(),
+    suggestions: result.suggestions,
   }
 }

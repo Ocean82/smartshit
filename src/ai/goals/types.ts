@@ -30,6 +30,8 @@ export interface GoalMatch {
   output?: GoalOutput
   explain: string
   question?: string
+  /** Follow-up chips that re-enter matchGoal as utterances. */
+  chips?: string[]
 }
 
 export interface MatchGoalInput {

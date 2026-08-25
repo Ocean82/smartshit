@@ -67,13 +67,24 @@ describe('matchGoal', () => {
       utterance: 'total spending',
     })
     expect(match.status).toBe('ambiguous')
-    expect(match.question).toMatch(/Revenue|Profit/)
+    expect(match.chips).toEqual(['sum column B', 'sum column C'])
   })
 
   it('matches by category and by month from utterance', () => {
     expect(matchGoal({ profile: expenses, utterance: 'break down spending by category' }).goal?.id).toBe('by_category')
     expect(matchGoal({ profile: expenses, utterance: 'show me totals by month' }).goal?.id).toBe('by_month')
     expect(matchGoal({ profile: expenses, utterance: 'show me totals by month' }).output).toBe('chart')
+  })
+
+  it('resolves an amount column from an ambiguous follow-up chip', () => {
+    expect(matchGoal({
+      profile: profile([
+        col('Revenue', 'B', 'amount', [100]),
+        col('Profit', 'C', 'amount', [40]),
+        col('Category', 'A', 'category'),
+      ]),
+      utterance: 'spending by category using Revenue',
+    }).slots.amountColumn).toBe('B')
   })
 
   it('does not steal template or sort commands', () => {
@@ -101,9 +112,30 @@ describe('executeGoal', () => {
 
   it('dispatches by-category to create_chart', () => {
     const match = matchGoal({ profile: expenses, utterance: 'spending by category' })
-    const result = executeGoal(match)
+    const result = executeGoal(match, expenses)
     expect(result.actions[0].tool).toBe('create_chart')
-    expect(result.actions[0].params).toMatchObject({ type: 'pie' })
+    expect(result.actions[0].params).toMatchObject({
+      type: 'pie',
+      dataRange: 'B2:B5',
+      series: [{ label: 'Amount', dataRange: 'C2:C5' }],
+    })
+  })
+
+  it('does not write SUM for a monthly formula request', () => {
+    const match = matchGoal({ profile: expenses, utterance: 'monthly spending formula' })
+    const result = executeGoal(match, expenses)
+    expect(result.actions).toEqual([])
+    expect(result.message).toMatch(/chart/i)
+  })
+
+  it('summarizes the actual column total', () => {
+    const withSum = profile([
+      { ...col('Amount', 'C', 'amount', [1500, 400]), sumVal: 1900 },
+    ])
+    const match = matchGoal({ profile: withSum, utterance: 'what is my total spending?' })
+    const result = executeGoal(match, withSum)
+    expect(result.actions).toEqual([])
+    expect(result.message).toContain('1,900')
   })
 })
 

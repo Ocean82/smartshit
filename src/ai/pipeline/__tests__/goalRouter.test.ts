@@ -55,6 +55,7 @@ describe('GoalRouter stage', () => {
     expect(result?.stageName).toBe('goal-router')
     expect(result?.success).toBe(true)
     expect(result?.message).toContain('Goal: Total')
+    expect(result?.suggestions).toEqual(['Total', 'By Category'])
     expect(executeToolAsync).toHaveBeenCalledWith(
       expect.objectContaining({ tool: 'apply_formula' }),
       expect.anything(),

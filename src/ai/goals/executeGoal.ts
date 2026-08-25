@@ -1,10 +1,15 @@
 import type { GoalAction, GoalExecution, GoalMatch, GoalOutput } from './types'
+import type { SheetProfile } from '@/ai/types'
+import { columnDataRange, formatAmount } from './columnRange'
 
-export function executeGoal(match: GoalMatch): GoalExecution {
+export function executeGoal(
+  match: GoalMatch,
+  profile?: SheetProfile | null,
+): GoalExecution {
   if (match.status !== 'matched' || !match.goal || !match.output) {
     return {
       actions: [],
-        message: match.question ?? (match.explain || 'I could not run that goal.'),
+      message: match.question ?? (match.explain || 'I could not run that goal.'),
       explain: match.explain,
     }
   }
@@ -19,7 +24,7 @@ export function executeGoal(match: GoalMatch): GoalExecution {
     }
   }
 
-  const result = executor(match)
+  const result = executor(match, profile ?? null)
   return {
     ...result,
     explain: match.explain,
@@ -27,7 +32,41 @@ export function executeGoal(match: GoalMatch): GoalExecution {
   }
 }
 
-type ExecutorFn = (match: GoalMatch) => { actions: GoalAction[]; message: string }
+type ExecutorFn = (
+  match: GoalMatch,
+  profile: SheetProfile | null,
+) => { actions: GoalAction[]; message: string }
+
+function chartAction(
+  type: 'pie' | 'bar',
+  title: string,
+  labelCol: string,
+  valueCol: string,
+  valueLabel: string,
+  profile: SheetProfile | null,
+): { actions: GoalAction[]; message: string } {
+  const labels = columnDataRange(profile, labelCol)
+  const values = columnDataRange(profile, valueCol)
+  if (!labels || !values) {
+    return {
+      actions: [],
+      message: `I need more rows in ${labelCol} and ${valueCol} before I can chart ${title}.`,
+    }
+  }
+  return {
+    actions: [{
+      tool: 'create_chart',
+      params: {
+        type,
+        title,
+        dataRange: labels,
+        series: [{ label: valueLabel, dataRange: values }],
+      },
+      description: title,
+    }],
+    message: `Creating ${title} from ${labelCol} and ${valueCol}.`,
+  }
+}
 
 const executors: Record<string, Partial<Record<GoalOutput, ExecutorFn>>> = {
   total: {
@@ -42,28 +81,27 @@ const executors: Record<string, Partial<Record<GoalOutput, ExecutorFn>>> = {
         message: `Adding a SUM formula for column ${col}.`,
       }
     },
-    summary: (match) => ({
-      actions: [],
-      message: `I can total column ${match.slots.amountColumn}. Ask me to add a formula if you want it on the sheet.`,
-    }),
-  },
-  by_category: {
-    chart: (match) => {
-      const cat = match.slots.categoryColumn!
-      const amt = match.slots.amountColumn!
+    summary: (match, profile) => {
+      const col = match.slots.amountColumn!
+      const amount = profile?.columns.find((c) => c.column === col)
+      const formatted = formatAmount(amount?.sumVal)
       return {
-        actions: [{
-          tool: 'create_chart',
-          params: {
-            type: 'pie',
-            dataRange: `${cat}:${amt}`,
-            title: 'By Category',
-          },
-          description: 'Chart totals by category',
-        }],
-        message: `Creating a category breakdown chart from ${cat} and ${amt}.`,
+        actions: [],
+        message: formatted
+          ? `Total of ${amount?.name ?? col}: ${formatted}`
+          : `I can total column ${col}. Ask me to add a formula if you want it on the sheet.`,
       }
     },
+  },
+  by_category: {
+    chart: (match, profile) => chartAction(
+      'pie',
+      'By Category',
+      match.slots.categoryColumn!,
+      match.slots.amountColumn!,
+      'Amount',
+      profile,
+    ),
     summary: (match) => ({
       actions: [],
       message: `I can group ${match.slots.amountColumn} by ${match.slots.categoryColumn}. Ask for a chart or name a category for a SUMIF.`,
@@ -72,58 +110,39 @@ const executors: Record<string, Partial<Record<GoalOutput, ExecutorFn>>> = {
       const amt = match.slots.amountColumn!
       const cat = match.slots.categoryColumn!
       const value = match.slots.categoryValue
-      if (value) {
-        const formula = `=SUMIF(${cat}:${cat},${JSON.stringify(value)},${amt}:${amt})`
+      if (!value) {
         return {
-          actions: [{
-            tool: 'apply_formula',
-            params: { cell: amt, formula },
-            description: `SUMIF ${value} in ${cat}`,
-          }],
-          message: `Adding ${formula} for ${value}.`,
+          actions: [],
+          message: `Name a category to write SUMIF, or ask for a By Category chart.`,
         }
       }
+      const formula = `=SUMIF(${cat}:${cat},${JSON.stringify(value)},${amt}:${amt})`
       return {
         actions: [{
           tool: 'apply_formula',
-          params: { cell: amt, formula: '=SUM' },
-          description: `Sum column ${amt}`,
+          params: { cell: amt, formula },
+          description: `SUMIF ${value} in ${cat}`,
         }],
-        message: `No category filter given, so I am totaling ${amt}. Name a category to use SUMIF.`,
+        message: `Adding ${formula} for ${value}.`,
       }
     },
   },
   by_month: {
-    chart: (match) => {
-      const date = match.slots.dateColumn!
-      const amt = match.slots.amountColumn!
-      return {
-        actions: [{
-          tool: 'create_chart',
-          params: {
-            type: 'bar',
-            dataRange: `${date}:${amt}`,
-            title: 'By Month',
-          },
-          description: 'Chart totals by month',
-        }],
-        message: `Creating a monthly trend chart from ${date} and ${amt}.`,
-      }
-    },
+    chart: (match, profile) => chartAction(
+      'bar',
+      'By Month',
+      match.slots.dateColumn!,
+      match.slots.amountColumn!,
+      'Amount',
+      profile,
+    ),
     summary: (match) => ({
       actions: [],
       message: `I can total ${match.slots.amountColumn} by month using date column ${match.slots.dateColumn}. Ask for a chart to put it on the sheet.`,
     }),
-    formula: (match) => {
-      const amt = match.slots.amountColumn!
-      return {
-        actions: [{
-          tool: 'apply_formula',
-          params: { cell: amt, formula: '=SUM' },
-          description: `Sum column ${amt}`,
-        }],
-        message: `Monthly splits need a chart or a date filter. Adding a total on ${amt} for now.`,
-      }
-    },
+    formula: () => ({
+      actions: [],
+      message: 'A monthly split is a chart, not a single SUM. Ask for a By Month chart.',
+    }),
   },
 }

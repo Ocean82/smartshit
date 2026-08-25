@@ -43,8 +43,10 @@ export function matchGoal(input: MatchGoalInput): GoalMatch {
         status: 'ambiguous',
         goal: def,
         slots,
+        output,
         explain: explainGoal(def, slots, output),
         question: `There are multiple ${role} columns: ${names}. Which should I use?`,
+        chips: candidates.map((col) => ambiguousChip(def.id, col.column, col.name)),
       }
     }
     return {
@@ -66,6 +68,12 @@ export function matchGoal(input: MatchGoalInput): GoalMatch {
 
 function unmatched(): GoalMatch {
   return { status: 'unmatched', slots: {}, explain: '' }
+}
+
+function ambiguousChip(goalId: GoalId, column: string, name: string): string {
+  if (goalId === 'total') return `sum column ${column}`
+  if (goalId === 'by_category') return `spending by category using ${name}`
+  return `totals by month using ${name}`
 }
 
 function inferGoalId(utterance: string): GoalId | null {
