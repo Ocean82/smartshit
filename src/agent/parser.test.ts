@@ -151,7 +151,6 @@ describe('parseMessage — column and phrasing coverage', () => {
 
   it('handles multi-letter columns', () => {
     expect(parseMessage('sort by column AA').calls[0].params).toMatchObject({ column: 'AA' })
-    expect(parseMessage('sum column AA').calls[0].params).toMatchObject({ cell: 'AA' })
   })
 
   it('supports "set <cell> to <value>" phrasing', () => {

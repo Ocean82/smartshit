@@ -2,6 +2,9 @@
  * Pipeline stages — public exports.
  */
 
+export { createGoalRouterStage } from './goalRouter'
+export type { GoalRouterDeps } from './goalRouter'
+
 export { createAgentParserStage } from './agentParser'
 export type { AgentParserDeps } from './agentParser'
 

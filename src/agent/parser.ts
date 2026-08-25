@@ -388,28 +388,7 @@ export function parseMessage(message: string, sheetContext?: SheetContext): Pars
     return { calls, understood: true, explanation: `Decreasing all values in column ${col} by ${pct}%.` }
   }
 
-  // ─── Formula: "sum/total/average column X" ──────────────────────────────────
-  // Guard: skip if the message is educational/comparative (e.g., "explain SUM vs SUMIF")
-  const isEducational = /\b(?:explain|compare|vs|versus|difference\s+between|what\s+is)\b/i.test(lower)
-  const formulaCol = !isEducational && lower.match(/\b(?:sum|total|add up)\s+(?:of\s+)?(?:column\s+)?([a-z]{1,3})\b/i)
-  if (formulaCol) {
-    const rawCol = formulaCol[1].toUpperCase()
-    // First try resolving via header name (e.g., "sum column Tax" → column C)
-    const smartCol = resolveSmartColumn(message, sheetContext, { preferAmount: true })
-    if (smartCol) {
-      calls.push({ tool: 'apply_formula', params: { cell: smartCol, formula: '=SUM' }, description: `Sum column ${smartCol}` })
-      return { calls, understood: true, explanation: `Adding a SUM formula for column ${smartCol}.` }
-    }
-    // Fallback: only fire if the captured text looks like a column letter (A-Z,
-    // at most 2 chars) and isn't a common English word. Otherwise fall through.
-    const isValidColRef = rawCol.length <= 2 && /^[A-Z]{1,2}$/.test(rawCol)
-      && !COMMON_WORDS_NOT_COLUMNS.has(rawCol.toLowerCase())
-    if (isValidColRef) {
-      calls.push({ tool: 'apply_formula', params: { cell: rawCol, formula: '=SUM' }, description: `Sum column ${rawCol}` })
-      return { calls, understood: true, explanation: `Adding a SUM formula for column ${rawCol}.` }
-    }
-  }
-
+  // ─── Formula: average / count (totals route through the goal matcher) ────
   const avgCol = lower.match(/\b(?:average|avg|mean)\s+(?:of\s+)?(?:column\s+)?([a-z]{1,3})\b/i)
   if (avgCol) {
     const col = resolveSmartColumn(message, sheetContext, { preferAmount: true })

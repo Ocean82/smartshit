@@ -14,6 +14,7 @@ export type {
 
 // Stage factories
 export {
+  createGoalRouterStage,
   createAgentParserStage,
   createTemplateResolverStage,
   createIntentClassifierStage,
@@ -21,4 +22,4 @@ export {
   createDeterministicDispatcherStage,
   createLLMGatewayStage,
 } from './stages'
-export type { AgentParserDeps, TemplateResolverDeps } from './stages'
+export type { AgentParserDeps, GoalRouterDeps, TemplateResolverDeps } from './stages'

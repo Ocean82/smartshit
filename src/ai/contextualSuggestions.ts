@@ -3,6 +3,7 @@
  * the actual sheet data and conversation state, not just keyword matching.
  */
 
+import { listSuggestedGoals } from '@/ai/goals'
 import type { SheetInsights } from '@/ai/sheetInsights'
 import type { SheetProfile } from '@/ai/types'
 
@@ -22,6 +23,11 @@ export function getContextualSuggestions(ctx: SuggestionContext): string[] {
   const suggestions: Array<{ text: string; priority: number }> = []
   const { insights, profile, lastUserMessage, hasMultipleSheets, sheetNames } = ctx
   const lower = lastUserMessage.toLowerCase()
+
+  for (const goal of listSuggestedGoals(profile)) {
+    if (!goal.goal) continue
+    suggestions.push({ text: goal.goal.title, priority: 10 })
+  }
 
   // Data-aware suggestions based on detected sheet purpose
   if (profile?.detectedPurpose === 'budget') {

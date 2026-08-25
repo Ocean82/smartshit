@@ -16,8 +16,8 @@ export function createChart(params: Record<string, unknown>, ctx: ExecutionConte
   ctx.addChart({
     id: uuid(),
     type: chartType as ChartConfig['type'],
-    title: 'Data Chart',
-    dataRange: 'A1:B10',
+    title: typeof params.title === 'string' && params.title.trim() ? params.title : 'Data Chart',
+    dataRange: typeof params.dataRange === 'string' && params.dataRange.trim() ? params.dataRange : 'A1:B10',
     position: defaultChartPosition(getChartOverlayBounds()),
     colors: ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'],
   });

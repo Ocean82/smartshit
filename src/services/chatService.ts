@@ -3,8 +3,9 @@
  *
  * Uses the unified PipelineRouter to process messages through ordered stages:
  * 1. @-mention sheet switching (pre-pipeline input normalization)
- * 2. AgentParser — instant regex tool calls
- * 3. TemplateResolver — gallery template matching
+ * 2. GoalRouter — Total / By Category / By Month
+ * 3. AgentParser — instant regex tool calls
+ * 4. TemplateResolver — gallery template matching
  * 4. IntentClassifier — enriches context (never claims)
  * 5. MacroPlanner — multi-clause → pending execute_macro
  * 6. DeterministicDispatcher — local skills (clean/report/budget/query)
@@ -24,6 +25,7 @@ import type { SheetInsights } from '@/ai/sheetInsights'
 import type { AttachedFilePreview } from '@/ai/types'
 import {
   createPipelineRouter,
+  createGoalRouterStage,
   createAgentParserStage,
   createTemplateResolverStage,
   createIntentClassifierStage,
@@ -75,12 +77,13 @@ export interface ChatServiceDeps {
  * Process a user chat message through the unified pipeline.
  *
  * Stage order (first to claim wins):
- * 1. AgentParser — instant regex tool calls (sort, filter, add/delete row, etc.)
- * 2. TemplateResolver — gallery template matching ("Create a budget")
- * 3. IntentClassifier — enriches context with intent/mode (never claims)
- * 4. MacroPlanner — multi-clause plans as pending execute_macro
- * 5. DeterministicDispatcher — local skills (may claim or pass)
- * 6. LLMGateway — server LLM (always claims)
+ * 2. GoalRouter — Total / By Category / By Month
+ * 3. AgentParser — instant regex tool calls (sort, filter, add/delete row, etc.)
+ * 4. TemplateResolver — gallery template matching ("Create a budget")
+ * 5. IntentClassifier — enriches context with intent/mode (never claims)
+ * 6. MacroPlanner — multi-clause plans as pending execute_macro
+ * 7. DeterministicDispatcher — local skills (may claim or pass)
+ * 8. LLMGateway — server LLM (always claims)
  */
 export async function processChatMessage(
   input: string,
@@ -147,6 +150,7 @@ export async function processChatMessage(
 
     // ─── Create and run pipeline ─────────────────────────────────────────
     const router = createPipelineRouter([
+      createGoalRouterStage({ buildExecContext, pushHistory }),
       createAgentParserStage({ buildExecContext, pushHistory }),
       createTemplateResolverStage({ buildExecContext, pushHistory }),
       createIntentClassifierStage(),

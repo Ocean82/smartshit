@@ -47,7 +47,6 @@ describe('reported agent gap regressions', () => {
     ])
     expect(parseMessage('sort by Tax', shortHeaderContext).calls[0].params).toMatchObject({ column: 'Tax' })
     expect(parseMessage('sort by column Tax', shortHeaderContext).calls[0].params).toMatchObject({ column: 'Tax' })
-    expect(parseMessage('sum column Tax', shortHeaderContext).calls[0].params).toMatchObject({ cell: 'C' })
     expect(parseMessage('increase 10% to Tax', shortHeaderContext).calls[0].params).toMatchObject({ column: 'C' })
     expect(parseMessage('find the highest Tax', shortHeaderContext).calls[0].params).toMatchObject({ column: 'C' })
     expect(parseMessage('find the highest value in C', shortHeaderContext).calls[0].params).toMatchObject({ column: 'C' })

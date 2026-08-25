@@ -170,6 +170,7 @@ import { chatWithAgentServerStream } from '@/ai/agentClient'
 import { parseUserIntent } from '@shared/intentParser'
 import { classifyMode } from '@shared/mode'
 import { createPipelineRouter } from '../router'
+import { createGoalRouterStage } from '../stages/goalRouter'
 import { createAgentParserStage } from '../stages/agentParser'
 import { createTemplateResolverStage } from '../stages/templateResolver'
 import { createIntentClassifierStage } from '../stages/intentClassifier'
@@ -183,6 +184,7 @@ import { defaultIntent, makeContext, makeDeps } from './helpers'
 function buildPipeline() {
   const deps = makeDeps()
   const router = createPipelineRouter([
+    createGoalRouterStage(deps),
     createAgentParserStage(deps),
     createTemplateResolverStage(deps),
     createIntentClassifierStage(),
