@@ -1,5 +1,6 @@
 import { resolveIntent, isWeakResponse } from './intent.js'
 import { ACTION_TOOL_NAMES } from '../../shared/toolRegistry.js'
+import { stripThinkingTags } from './thinkingTagStripper.js'
 
 interface ParsedAgentJson {
   message?: string
@@ -15,12 +16,15 @@ interface ParsedAgentJson {
 const ALLOWED_TOOLS = new Set(ACTION_TOOL_NAMES)
 
 function extractJsonObject(text: string): string | null {
-  const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/i)
+  // Strip <think>...</think> blocks that reasoning models inject before/around JSON
+  const cleaned = stripThinkingTags(text)
+
+  const fence = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/i)
   if (fence?.[1]) return fence[1].trim()
 
-  const start = text.indexOf('{')
-  const end = text.lastIndexOf('}')
-  if (start >= 0 && end > start) return text.slice(start, end + 1)
+  const start = cleaned.indexOf('{')
+  const end = cleaned.lastIndexOf('}')
+  if (start >= 0 && end > start) return cleaned.slice(start, end + 1)
   return null
 }
 
@@ -30,7 +34,8 @@ export function parseAgentResponse(raw: string): {
 } {
   const jsonText = extractJsonObject(raw)
   if (!jsonText) {
-    return { message: raw.trim(), actions: [] }
+    // JSON extraction failed — return the cleaned text (thinking tags stripped)
+    return { message: stripThinkingTags(raw), actions: [] }
   }
 
   try {
@@ -49,7 +54,7 @@ export function parseAgentResponse(raw: string): {
 
     return { message, actions }
   } catch {
-    return { message: raw.trim(), actions: [] }
+    return { message: stripThinkingTags(raw), actions: [] }
   }
 }
 

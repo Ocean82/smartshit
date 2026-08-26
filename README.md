@@ -66,7 +66,7 @@ npm install --prefix server
 
 **Option A — Local (Ollama, free, private):**
 ```bash
-npm run model:setup   # uses Qwen2.5-Coder-1.5B for dev (fast, lower quality)
+npm run model:setup   # uses Qwen2.5-Coder-1.5B for dev (fast, lower quality) ##deprecated
 ```
 
 > **Production** uses Spreadsheet-RL-4B (a 4B instruct model trained for spreadsheet tool-use).

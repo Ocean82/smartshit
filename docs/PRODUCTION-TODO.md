@@ -8,38 +8,26 @@ Items are added as local development work creates production requirements. Check
 
 ## Pending
 
-- [ ] **Update `GROQ_MODEL` on production server** (URGENT - model deprecated)
-  - File: `/opt/smartsht/.env`
-  - Change: `GROQ_MODEL=llama-3.3-70b-versatile` → `GROQ_MODEL=qwen/qwen3.6-27b`
-  - Reason: Groq deprecated `llama-3.3-70b-versatile` on June 17, 2026. `qwen/qwen3.6-27b` is Groq's flagship replacement — 131K context, dual-mode reasoning, json_object mode supported, $0.60/$3.00 per 1M tokens.
-  - After: `pm2 restart smartsht-api` and verify via `curl https://smartsht.com/health`
-  - Added: 2026-08-22
-
-- [ ] **Verify Ollama is running on production server**
-  - Check: `systemctl status ollama` or `curl http://127.0.0.1:11434/api/tags`
-  - If not running: `sudo systemctl start ollama && sudo systemctl enable ollama`
-  - Verify model loaded: `ollama list` should show `smartshit` (Spreadsheet-RL-4B)
-  - If model missing: `ollama create smartshit -f /opt/smartsht/current/server/Modelfile.spreadsheet-rl`
-  - Reason: Ollama is the last-resort fallback. If it's not running, and Groq is dead, there's zero AI available.
-  - Added: 2026-08-22
-
-- [ ] **Add OpenRouter API key to production for real failover**
-  - File: `/opt/smartsht/.env`
-  - Add: `OPENROUTER_API_KEY=<your-key>` (get from https://openrouter.ai/keys)
-  - Add: `OPENROUTER_MODEL=qwen/qwen3.6-27b`
-  - Add: `OPENROUTER_BASE_URL=https://openrouter.ai/api/v1`
-  - Reason: Currently only groq + ollama are in the chain. If either goes down, there's no cloud fallback. OpenRouter gives access to 100+ models behind a single key.
-  - Added: 2026-08-22
-
-- [ ] **Update `LLM_PROVIDER_ORDER` on production to include OpenRouter**
-  - File: `/opt/smartsht/.env`
-  - Change: `LLM_PROVIDER_ORDER=groq,ollama` → `LLM_PROVIDER_ORDER=groq,openrouter,ollama`
-  - Reason: Even with the key added, OpenRouter won't be tried unless it's in the failover order.
-  - After: `pm2 restart smartsht-api`
-  - Added: 2026-08-22
+_(no pending items)_
 
 ---
 
 ## Completed
 
-_(move items here when done, add completion date)_
+- [x] **Update `GROQ_MODEL` on production server** — Completed 2026-08-25
+  - Changed to `qwen/qwen3.6-27b` (Groq's flagship replacement for deprecated llama-3.3-70b-versatile)
+  - 131K context, dual-mode reasoning, json_object mode, $0.60/$3.00 per 1M tokens
+
+- [x] **Verify Ollama is running on production server** — Verified 2026-08-25
+  - `systemctl status ollama` → active
+  - `ollama list` → `smartshit:latest` (2.7GB, Spreadsheet-RL-4B)
+  - Model correctly built from `/opt/smartsht/models/Spreadsheet-RL-4B.Q4_K_M.gguf`
+
+- [x] **Add OpenRouter API key to production for real failover** — Verified 2026-08-25
+  - Key was already present in `/opt/smartsht/.env`
+  - Updated model to `qwen/qwen3.6-27b` (same as Groq primary)
+  - Base URL correctly set to `https://openrouter.ai/api/v1`
+
+- [x] **Update `LLM_PROVIDER_ORDER` on production to include OpenRouter** — Completed 2026-08-25
+  - Changed from `groq,ollama` → `groq,openrouter,ollama`
+  - PM2 restarted, health check passed

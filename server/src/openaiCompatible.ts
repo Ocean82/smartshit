@@ -1,4 +1,5 @@
 import type { ChatMessageInput } from './prompt.js'
+import { stripThinkingTags, createThinkingTagFilter } from './thinkingTagStripper.js'
 
 interface OpenAICompatibleChoice {
   message?: { role: string; content: string }
@@ -67,7 +68,8 @@ export async function chatWithOpenAiCompatible(
 
   const data = (await res.json()) as OpenAICompatibleResponse
   if (data.error?.message) throw new Error(data.error.message)
-  return data.choices?.[0]?.message?.content?.trim() ?? ''
+  const raw = data.choices?.[0]?.message?.content?.trim() ?? ''
+  return stripThinkingTags(raw)
 }
 
 export async function chatWithOpenAiCompatibleStream(
@@ -111,6 +113,7 @@ export async function chatWithOpenAiCompatibleStream(
 
   const decoder = new TextDecoder()
   let accumulated = ''
+  const cleanOnChunk = createThinkingTagFilter(onChunk)
 
   while (true) {
     const { done, value } = await reader.read()
@@ -129,12 +132,12 @@ export async function chatWithOpenAiCompatibleStream(
         const token = parsed.choices?.[0]?.delta?.content ?? ''
         if (!token) continue
         accumulated += token
-        onChunk(token)
+        cleanOnChunk(token)
       } catch {
         // Skip malformed chunks
       }
     }
   }
 
-  return accumulated
+  return stripThinkingTags(accumulated)
 }

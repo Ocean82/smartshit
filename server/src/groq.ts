@@ -1,5 +1,6 @@
 import { config } from './config.js'
 import type { ChatMessageInput } from './prompt.js'
+import { stripThinkingTags, createThinkingTagFilter } from './thinkingTagStripper.js'
 
 /**
  * Groq API client — OpenAI-compatible endpoint.
@@ -182,6 +183,7 @@ export async function chatWithGroq(
     temperature: 0.2,
     max_tokens: maxTokens,
     stream: false,
+    reasoning_format: 'none',
   }
 
   if (jsonMode) {
@@ -216,7 +218,8 @@ export async function chatWithGroq(
 
   const data = (await res.json()) as GroqResponse
   if (data.error) throw new Error(data.error.message)
-  return data.choices?.[0]?.message?.content?.trim() ?? ''
+  const raw = data.choices?.[0]?.message?.content?.trim() ?? ''
+  return stripThinkingTags(raw)
 }
 
 /**
@@ -240,6 +243,7 @@ export async function chatWithGroqStream(
     temperature: 0.2,
     max_tokens: maxTokens,
     stream: true,
+    reasoning_format: 'none',
   }
 
   if (jsonMode) {
@@ -277,6 +281,7 @@ export async function chatWithGroqStream(
 
   const decoder = new TextDecoder()
   let accumulated = ''
+  const cleanOnChunk = createThinkingTagFilter(onChunk)
 
   while (true) {
     const { done, value } = await reader.read()
@@ -296,7 +301,7 @@ export async function chatWithGroqStream(
         const token = parsed.choices?.[0]?.delta?.content ?? ''
         if (token) {
           accumulated += token
-          onChunk(token)
+          cleanOnChunk(token)
         }
       } catch {
         // Skip malformed chunks
@@ -304,5 +309,5 @@ export async function chatWithGroqStream(
     }
   }
 
-  return accumulated
+  return stripThinkingTags(accumulated)
 }

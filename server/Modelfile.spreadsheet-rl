@@ -1,5 +1,6 @@
 # SmartSht primary model — Spreadsheet-RL-4B (Qwen3 + RL for spreadsheet tool-use)
-# Run: ollama create smartshit -f /home/ubuntu/Modelfile
+# Linux production: Run on the server with: ollama create smartshit -f server/Modelfile.spreadsheet-rl
+# Windows local dev: Use Modelfile.local instead: ollama create smartshit -f server/Modelfile.local
 FROM /home/ubuntu/Spreadsheet-RL-4B.Q4_K_M.gguf
 
 TEMPLATE """{{- if .System }}<|im_start|>system

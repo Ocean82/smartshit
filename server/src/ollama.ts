@@ -1,5 +1,6 @@
 import { config } from './config.js'
 import type { ChatMessageInput } from './prompt.js'
+import { stripThinkingTags, createThinkingTagFilter } from './thinkingTagStripper.js'
 
 interface OllamaChatResponse {
   message?: { role: string; content: string }
@@ -61,7 +62,8 @@ export async function chatWithOllama(
 
   const data = (await res.json()) as OllamaChatResponse
   if (data.error) throw new Error(data.error)
-  return data.message?.content?.trim() ?? ''
+  const raw = data.message?.content?.trim() ?? ''
+  return stripThinkingTags(raw)
 }
 
 
@@ -108,6 +110,7 @@ export async function chatWithOllamaStream(
 
   const decoder = new TextDecoder()
   let accumulated = ''
+  const cleanOnChunk = createThinkingTagFilter(onChunk)
 
   while (true) {
     const { done, value } = await reader.read()
@@ -123,7 +126,7 @@ export async function chatWithOllamaStream(
         const token = parsed.message?.content ?? ''
         if (token) {
           accumulated += token
-          onChunk(token)
+          cleanOnChunk(token)
         }
       } catch {
         // Skip malformed lines
@@ -131,5 +134,5 @@ export async function chatWithOllamaStream(
     }
   }
 
-  return accumulated
+  return stripThinkingTags(accumulated)
 }
