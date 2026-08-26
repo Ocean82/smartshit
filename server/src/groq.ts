@@ -183,7 +183,7 @@ export async function chatWithGroq(
     temperature: 0.2,
     max_tokens: maxTokens,
     stream: false,
-    reasoning_format: 'none',
+    reasoning_effort: 'none',
   }
 
   if (jsonMode) {
@@ -243,7 +243,7 @@ export async function chatWithGroqStream(
     temperature: 0.2,
     max_tokens: maxTokens,
     stream: true,
-    reasoning_format: 'none',
+    reasoning_effort: 'none',
   }
 
   if (jsonMode) {

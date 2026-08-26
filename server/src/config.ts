@@ -21,9 +21,12 @@ const KNOWN_GROQ_MODELS = new Set([
   'openai/gpt-oss-120b',
   'openai/gpt-oss-20b',
   'qwen/qwen3.6-27b',
+  'qwen/qwen3.8-27b',
   'qwen/qwen3-32b',
   'qwen-qwq-32b',
   'deepseek-r1-distill-llama-70b',
+  'llama-3.3-70b-versatile',
+  'llama-3.1-8b-instant',
 ])
 
 /** Canonical list of supported LLM provider identifiers. */
