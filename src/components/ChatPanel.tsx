@@ -772,8 +772,26 @@ function ActionCard({ action, onApply, onReject }: { action: AgentAction; onAppl
             {action.preview.changes.slice(0, 5).map((change, i) => (
               <div key={i} className="flex items-center gap-1 text-[10px]">
                 <span className="font-mono text-blue-600">{change.cell}</span>
-                <span className="text-gray-400">→</span>
-                <span className="text-gray-700 truncate">{String(change.newValue ?? change.newFormula ?? '')}</span>
+                {change.description ? (
+                  <>
+                    <span className="text-gray-400">→</span>
+                    <span className="text-gray-700 truncate">{change.description}</span>
+                  </>
+                ) : (
+                  <>
+                    {change.oldValue != null && (
+                      <span className="font-mono text-gray-400 line-through truncate">
+                        {String(change.oldValue)}
+                      </span>
+                    )}
+                    <span className="text-gray-400">→</span>
+                    <span className="text-gray-700 truncate">
+                      {change.newValue != null
+                        ? String(change.newValue)
+                        : String(change.newFormula ?? '')}
+                    </span>
+                  </>
+                )}
               </div>
             ))}
             {action.preview.changes.length > 5 && (

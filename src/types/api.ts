@@ -46,6 +46,9 @@ export interface CellChange {
   newValue: string | number | boolean | null;
   oldFormula?: string;
   newFormula?: string;
+  /** Optional human-readable note for changes that don't map to old/new cell
+   * values (e.g. a format applied to a cell, or a row insert/delete). */
+  description?: string;
 }
 
 export interface ServerHealth {

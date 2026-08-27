@@ -11,6 +11,11 @@ jobs:
     runs-on: ubuntu-latest
     env:
       NODE_OPTIONS: "--max-old-space-size=4096"
+      # onnxruntime-node downloads CUDA EP binaries from NuGet during
+      # postinstall. CI doesn't run GPU inference, and the download is flaky
+      # (frequent ETIMEDOUT on runner egress), so skip it — the bundled CPU
+      # runtime is used for build and test.
+      ONNXRUNTIME_NODE_INSTALL: "skip"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

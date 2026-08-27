@@ -11,6 +11,7 @@ import { buildFilePreview } from '@/ai/filePreview'
 import { recordTelemetry } from '@/ai/telemetry'
 import { AI_ANALYSIS_CONFIG } from '@/ai/config'
 import type { ExecutionResult } from '@/agent'
+import { buildScriptPreview } from '@/lib/scriptPreview'
 import { v4 as uuid } from 'uuid'
 import {
   processAICommand,
@@ -267,11 +268,72 @@ export function createChatActions(
         'clean_sheet_data',
         'delete_row',
         'modify_column',
+        'execute_script',
       ])
       for (const msg of state.messages) {
         if (!msg.actions) continue
         const action = msg.actions.find((a) => a.id === actionId)
         if (!action || action.status !== 'pending') continue
+
+        // execute_script is the most powerful (and least predictable) tool —
+        // its side effects cannot be statically predicted. Before it can be
+        // applied we must run a collect-only dry-run and show the exact
+        // changes for approval. This mirrors the real sandbox so the preview
+        // reflects precisely what would be written to the sheet.
+        if (action.tool === 'execute_script' && !action.preview) {
+          const code = String(action.params.code ?? '')
+          if (!code.trim()) {
+            recordTelemetry('previewDeniedActions', action.tool)
+            set((s) => {
+              s.messages.push({
+                id: uuid(),
+                role: 'assistant',
+                content: '⚠️ execute_script requires a non-empty `code` parameter before it can run.',
+                timestamp: Date.now(),
+              })
+            })
+            return
+          }
+          buildScriptPreview(code, {
+            sheet: get().getActiveSheet(),
+            getComputedValue: get().getComputedValue,
+          }).then((preview) => {
+            if (!preview.success) {
+              set((s) => {
+                for (const m of s.messages) {
+                  if (m.actions) {
+                    const a = m.actions.find((act) => act.id === actionId)
+                    if (a) {
+                      a.status = 'rejected'
+                    }
+                  }
+                }
+                s.messages.push({
+                  id: uuid(),
+                  role: 'assistant',
+                  content: `⚠️ The script could not be reviewed: ${preview.error ?? 'unknown error'}`,
+                  timestamp: Date.now(),
+                })
+              })
+              return
+            }
+            set((s) => {
+              for (const m of s.messages) {
+                if (m.actions) {
+                  const a = m.actions.find((act) => act.id === actionId)
+                  if (a) {
+                    a.preview = { changes: preview.changes ?? [] }
+                    const changeLabel = a.preview.changes.length
+                      ? ` (about ${a.preview.changes.length} changes)`
+                      : ''
+                    a.description = `${a.description.replace(/ \(about \d+ changes\)$/, '')}${changeLabel}`
+                  }
+                }
+              }
+            })
+          })
+          return
+        }
 
         const estimatedChanges = estimateActionChangeCount(action)
         const requiresPreview = highImpactTools.has(action.tool) && !action.preview
