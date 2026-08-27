@@ -76,9 +76,11 @@ export function createThinkingTagFilter(
         } else {
           // No opening tag found. Check for a partial opening tag at the tail.
           const partialMatch = buffer.match(/<[^>]*$/)
-          if (partialMatch && partialMatch.index! > 0) {
+          if (partialMatch) {
             // Flush everything before the potential partial tag
-            onChunk(buffer.slice(0, partialMatch.index))
+            if (partialMatch.index! > 0) {
+              onChunk(buffer.slice(0, partialMatch.index))
+            }
             buffer = buffer.slice(partialMatch.index)
           } else {
             // No partial tag — flush entire buffer

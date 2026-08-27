@@ -78,9 +78,21 @@ export interface MacroPlanUICallbacks {
 export type MacroPlanUserDecision =
   | { action: 'confirm' }
   | { action: 'reject' }
+  | { action: 'retry' }
   | { action: 'edit'; stepIndex: number; newParams: Record<string, unknown> }
 
 // ─── Small Utilities ────────────────────────────────────────────────────────
+
+/** Convert 0-based column index to spreadsheet letter(s): 0→A, 25→Z, 26→AA. */
+function colIndexToLetter(index: number): string {
+  let letter = ''
+  let n = index
+  while (n >= 0) {
+    letter = String.fromCharCode(65 + (n % 26)) + letter
+    n = Math.floor(n / 26) - 1
+  }
+  return letter
+}
 
 function withTool(result: ToolResult, toolUsed: string): ToolResult {
   return { ...result, toolUsed }
@@ -93,6 +105,34 @@ function resolveOutliersForFollowUp(
   if (current.outliers?.length) return current.outliers
   if (prior?.outliers?.length) return prior.outliers
   return []
+}
+
+// ─── Conditional Predicates ──────────────────────────────────────────────────
+
+/** Prior insights are relevant only when column structure hasn't changed. */
+function hasPriorInsightsForSameColumns(
+  priorInsights?: SheetInsights | null,
+  currentInsights?: SheetInsights,
+): boolean {
+  return Boolean(
+    priorInsights && currentInsights
+    && priorInsights.headers?.join() === currentInsights.headers?.join(),
+  )
+}
+
+/** A macro execution result that failed at a step. */
+function isMacroExecutionFailure(
+  result: MacroExecutionResult | null | undefined,
+): result is MacroExecutionResult & { failedStep: NonNullable<MacroExecutionResult['failedStep']> } {
+  return Boolean(result && !result.success && result.failedStep)
+}
+
+/** Should return deterministic result immediately when it has concrete actions and LLM is not required. */
+function shouldShortCircuitDeterministic(
+  deterministic: ToolResult,
+  mode: ReturnType<typeof classifyMode>,
+): boolean {
+  return !isLlmOnlyMode(mode) && Boolean(deterministic.actions?.length)
 }
 
 // ─── Data Awareness (Phase 5: data-driven sections) ─────────────────────────
@@ -343,8 +383,7 @@ function buildDeterministicSummary(
   currentInsights?: SheetInsights,
 ): string {
   const parts: string[] = []
-  if (priorInsights && currentInsights
-    && priorInsights.headers?.join() === currentInsights.headers?.join()) {
+  if (hasPriorInsightsForSameColumns(priorInsights, currentInsights)) {
     parts.push('Prior turn insights still apply for follow-up questions.')
   }
   if (insightsBlock) parts.push(`Deterministic sheet findings:\n${insightsBlock}`)
@@ -378,7 +417,7 @@ function extractSheetColumns(
 ): Array<{ letter: string; headerName: string; index: number }> {
   const colCount = Object.keys(sheetData.columnWidths).length || 26
   return Array.from({ length: colCount }, (_, col) => {
-    const letter = String.fromCharCode(65 + col)
+    const letter = colIndexToLetter(col)
     let headerName: string
     if (isActiveSheet) {
       headerName = getComputedValue(0, col)
@@ -468,7 +507,7 @@ async function executeSingleStepPlan(
         actions: [{ tool: step.tool, params: step.params, description: step.description }],
       }
     }
-    if (result && !result.success && result.failedStep) {
+    if (isMacroExecutionFailure(result)) {
       return {
         success: false,
         message: `Step failed: ${result.failedStep.reason}`,
@@ -525,13 +564,15 @@ async function executeMultiStepPlan(
       continue // re-present
     }
 
+    if (decision.action === 'retry') {
+      continue // re-present after error recovery
+    }
+
     // Confirmed — execute
     const result = await executeConfirmedPlan(currentPlan, undoManager, callbacks, stepExecutor)
     if (result === 'retry') continue
     return result
   }
-
-  return null
 }
 
 /** Present the plan safely, handling errors. Returns null if user cancels on error. */
@@ -546,8 +587,7 @@ async function presentPlanSafely(
     const errMsg = error instanceof Error ? error.message : 'Failed to present plan'
     const userChoice = await callbacks.onError(errMsg)
     if (userChoice === 'retry') {
-      // caller will re-present via continue
-      return { action: 'confirm' } // sentinel — but we need a different approach
+      return { action: 'retry' }
     }
     recordTelemetry('macroExecution', 'cancelled-on-error')
     return null
@@ -600,7 +640,7 @@ async function executeConfirmedPlan(
       }
     }
 
-    if (result && !result.success && result.failedStep) {
+    if (isMacroExecutionFailure(result)) {
       const { index, step, reason } = result.failedStep
       recordTelemetry('macroExecution', 'step-failed')
       return {
@@ -655,6 +695,11 @@ async function handleMacroPlan(
 
 // ─── Phase 1: Extracted processMessage helpers ──────────────────────────────
 
+/** A macro plan is actionable when it has multiple steps, or a single step with callbacks to present it. */
+function isMacroPlanActionable(plan: MacroPlan, callbacks?: MacroPlanUICallbacks): boolean {
+  return plan.steps.length > 1 || (plan.steps.length === 1 && Boolean(callbacks))
+}
+
 /**
  * Attempt macro dispatch for multi-step commands.
  * Returns a ToolResult if the macro handled the message, null otherwise.
@@ -665,7 +710,7 @@ async function tryMacroDispatch(input: ProcessMessageInput): Promise<ToolResult 
   const workbookContext = buildWorkbookContext(input.workbook, input.sheet, input.getComputedValue)
   const plan = tryPlanMacro(input.message, workbookContext)
 
-  if (plan && (plan.steps.length > 1 || (plan.steps.length === 1 && input.macroPlanCallbacks))) {
+  if (plan && isMacroPlanActionable(plan, input.macroPlanCallbacks)) {
     return handleMacroPlan(plan, input, workbookContext)
   }
 
@@ -692,19 +737,40 @@ interface FinalResponseContext {
   input: ProcessMessageInput
 }
 
+/** Fallback source is redundant when we already have local deterministic or insight content. */
+function isFallbackRedundantWithLocalContent(
+  source: string,
+  deterministicText: string,
+  insightsBlock: string,
+): boolean {
+  return source === 'fallback' && Boolean(deterministicText.trim() || insightsBlock.trim())
+}
+
+/**
+ * Deterministic content substantially covers the answer when it's long enough
+ * and the LLM text is significantly shorter (and the LLM isn't the authoritative source).
+ */
+function isDeterministicContentSubstantial(
+  deterministicText: string,
+  llmText: string,
+  source: string,
+): boolean {
+  const deterministicLen = deterministicText.trim().length
+  const llmLen = llmText.trim().length
+  return deterministicLen > 100 && llmLen > 0 && llmLen < deterministicLen * 0.8 && source !== 'llm'
+}
+
 /** Determine whether LLM text should be used or skipped due to overlap with deterministic content. */
 function resolveLlmText(deterministicText: string, insightsBlock: string, serverResult: ServerResult): string {
   // Skip LLM text if it's just a fallback restatement and we have local content
-  if (serverResult.source === 'fallback' && (deterministicText.trim() || insightsBlock.trim())) {
+  if (isFallbackRedundantWithLocalContent(serverResult.source, deterministicText, insightsBlock)) {
     return ''
   }
 
   const llmText = serverResult.message
 
   // Skip LLM text if deterministic content substantially covers the answer
-  const deterministicLen = deterministicText.trim().length
-  const llmLen = llmText.trim().length
-  if (deterministicLen > 100 && llmLen > 0 && llmLen < deterministicLen * 0.8 && serverResult.source !== 'llm') {
+  if (isDeterministicContentSubstantial(deterministicText, llmText, serverResult.source)) {
     return ''
   }
 
@@ -838,7 +904,7 @@ export async function processMessage(input: ProcessMessageInput): Promise<ToolRe
   }
 
   // 5. Short-circuit for actionable deterministic results
-  if (deterministic && !isLlmOnlyMode(mode) && deterministic.actions?.length) {
+  if (deterministic && shouldShortCircuitDeterministic(deterministic, mode)) {
     recordTelemetry('deterministicResponses', deterministic.toolUsed ?? 'deterministic-action')
     return deterministic
   }
