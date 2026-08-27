@@ -13,9 +13,8 @@
  */
 
 import type { WorkbookData, SheetData, Selection } from '@/types'
-import { cellToRef, refToCell } from '@/engine/spreadsheet'
-import { compressSheet, type CompressorOptions } from '@/ai/sheetCompressor'
-import { buildSpreadsheetContext, summarizeSheet, type SpreadsheetContextPayload } from '@/ai/buildContext'
+import { compressSheet } from '@/ai/sheetCompressor'
+import { buildSpreadsheetContext, type SpreadsheetContextPayload } from '@/ai/buildContext'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -190,7 +189,6 @@ function buildReferencedSheetEncodings(
 ): string | null {
   if (referenced.length === 0 || tokenBudget < 200) return null
 
-  const perSheetBudget = Math.floor(tokenBudget / referenced.length)
   const parts: string[] = []
   let totalUsed = 0
 

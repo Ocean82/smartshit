@@ -34,7 +34,7 @@ import {
   recordSuccess,
   recordFailure,
 } from './providers.js'
-import { allocateBudget, estimateTokens, type ProviderName as BudgetProvider } from './tokenBudget.js'
+import { allocateBudget, type ProviderName as BudgetProvider } from './tokenBudget.js'
 
 import { checkUsage, recordUsage, getUsageStats } from './usage.js'
 import { decideAiAccess, shouldRecordServerUsage } from './aiAccess.js'
@@ -339,7 +339,6 @@ async function runLlmChat(params: {
   const basePrompt = llmOnly
     ? buildExplainPrompt(undefined, mode, userIntent)
     : buildActionPrompt(undefined)
-  const basePromptTokens = estimateTokens(basePrompt)
 
   // Allocate budget to determine how much context we can include
   const budget = allocateBudget({

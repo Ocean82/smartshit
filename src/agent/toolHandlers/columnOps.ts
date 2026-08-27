@@ -6,7 +6,7 @@ import { refToCell, cellToRef, letterToCol } from '@/engine/spreadsheet'
 import { findHeaderRow } from '@/lib/sheetSort'
 import { getColumnDataRows } from '@/lib/sheetRows'
 import type { ToolHandler, BulkUpdates } from './types'
-import { applyBulk, requireColumn, findLastDataRowInCol, findFirstDataRowInCol } from './types'
+import { applyBulk, requireColumn } from './types'
 import type { ExecutionContext } from '../executor'
 
 export const handleRenameHeader: ToolHandler = (params, ctx, sheet) => {

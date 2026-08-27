@@ -51,20 +51,6 @@ const QUESTION_PREFIXES_RE = /^(?:can\s+i|should\s+i|would\s+it|how\s+(?:do|can)
  */
 const VAGUE_MATCH_RE = /^(?:that\s+one|this\s+one|it|that|this|them|those|these|one)$/i
 
-/**
- * Short English words (2-3 letters) that look like column refs but aren't.
- * Used to prevent "sum vs" from being interpreted as "sum column VS".
- */
-const COMMON_WORDS_NOT_COLUMNS = new Set([
-  'vs', 'of', 'to', 'in', 'on', 'at', 'by', 'or', 'an', 'do', 'is', 'it',
-  'up', 'if', 'so', 'no', 'my', 'me', 'we', 'he', 'be', 'as', 'go', 'am',
-  'the', 'for', 'and', 'but', 'not', 'you', 'all', 'can', 'had', 'her',
-  'was', 'one', 'our', 'out', 'are', 'has', 'his', 'how', 'its', 'may',
-  'new', 'now', 'old', 'see', 'way', 'who', 'did', 'get', 'let', 'say',
-  'too', 'use', 'row', 'col', 'add', 'set', 'put', 'sum', 'avg', 'min',
-  'max', 'top', 'end', 'per', 'tax', 'net', 'due', 'via',
-])
-
 const NON_ROW_DELETE_RE = NON_ROW_DELETE_TARGETS.map(
   (word) => new RegExp(`\\b${word}\\b`),
 )
