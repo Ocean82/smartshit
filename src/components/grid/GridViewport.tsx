@@ -8,9 +8,9 @@ import type { Dispatch, RefObject, SetStateAction, UIEvent } from 'react';
 import { cellToRef } from '@/engine/spreadsheet';
 import { findHeaderRow, findLastDataRow } from '@/lib/sheetSort';
 import { buildFilteredRowIndex } from '@/lib/rowFilter';
+import { getRowHeight, rowCumulativeOffsets, rowIndexAtY } from '@/lib/rowLayout';
 import type { SheetData, FilterConfig } from '@/types';
 
-const CELL_HEIGHT = 28;
 const BUFFER_ROWS = 5;
 const BUFFER_COLS = 3;
 const MAX_ROWS = 10000;
@@ -39,6 +39,7 @@ interface GridViewportReturn {
   displayRowCount: number;
   visibleRange: { startRow: number; endRow: number; startCol: number; endCol: number };
   filteredRows: number[] | null;
+  rowOffsets: number[];
   totalWidth: number;
   totalHeight: number;
   rowOffset: number;
@@ -77,11 +78,24 @@ export function useGridViewport(config: GridViewportConfig): GridViewportReturn 
 
   const displayRowCount = filteredRows ? filteredRows.length : TOTAL_ROWS;
 
+  // Variable row heights: derive a height per displayed row (honoring imported
+  // `sheet.rowHeights` overrides) and the cumulative vertical offsets.
+  const rowOffsets = useMemo(() => {
+    const count = filteredRows ? filteredRows.length : TOTAL_ROWS;
+    const heights = new Array<number>(count);
+    for (let r = 0; r < count; r++) {
+      const actualRow = filteredRows ? filteredRows[r] : r;
+      heights[r] = getRowHeight(sheet.rowHeights, actualRow);
+    }
+    return rowCumulativeOffsets(heights);
+  }, [filteredRows, sheet.rowHeights, TOTAL_ROWS]);
+
   // Calculate visible range
   const visibleRange = useMemo(() => {
     const { scrollTop, scrollLeft, viewportHeight, viewportWidth } = scrollState;
-    const startRow = Math.max(0, Math.floor(scrollTop / CELL_HEIGHT) - BUFFER_ROWS);
-    const endRow = Math.min(displayRowCount - 1, Math.ceil((scrollTop + viewportHeight) / CELL_HEIGHT) + BUFFER_ROWS);
+    const lastRow = rowOffsets.length - 2;
+    const startRow = Math.max(0, rowIndexAtY(rowOffsets, scrollTop) - BUFFER_ROWS);
+    const endRow = Math.min(lastRow, rowIndexAtY(rowOffsets, scrollTop + viewportHeight) + BUFFER_ROWS);
     
     let colStart = 0;
     let accWidth = 0;
@@ -105,7 +119,7 @@ export function useGridViewport(config: GridViewportConfig): GridViewportReturn 
     }
     
     return { startRow, endRow, startCol: colStart, endCol: colEnd };
-  }, [scrollState, getColWidth, displayRowCount, TOTAL_COLS]);
+  }, [scrollState, getColWidth, TOTAL_COLS, rowOffsets]);
 
   // Total dimensions
   const totalWidth = useMemo(() => {
@@ -116,8 +130,8 @@ export function useGridViewport(config: GridViewportConfig): GridViewportReturn 
     return width;
   }, [getColWidth, TOTAL_COLS]);
 
-  const totalHeight = displayRowCount * CELL_HEIGHT;
-  const rowOffset = visibleRange.startRow * CELL_HEIGHT;
+  const totalHeight = rowOffsets.length > 0 ? rowOffsets[rowOffsets.length - 1] : 0;
+  const rowOffset = rowOffsets.length > 0 ? rowOffsets[visibleRange.startRow] : 0;
 
   // Column offsets for visible columns
   const visibleColOffsets = useMemo(() => {
@@ -154,6 +168,7 @@ export function useGridViewport(config: GridViewportConfig): GridViewportReturn 
     displayRowCount,
     visibleRange,
     filteredRows,
+    rowOffsets,
     totalWidth,
     totalHeight,
     rowOffset,

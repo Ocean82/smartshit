@@ -231,7 +231,7 @@ export function GridRows({
       <SelectionOverlay
         getColWidth={getColWidth}
         totalCols={visibleRange.endCol - visibleRange.startCol + 1}
-        cellHeight={CELL_HEIGHT}
+        rowHeights={{}}
         rowHeaderWidth={ROW_HEADER_WIDTH}
         colHeaderHeight={COL_HEADER_HEIGHT}
       />

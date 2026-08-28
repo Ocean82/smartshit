@@ -20,7 +20,8 @@ function fakeFile(name: string, buffer: ArrayBuffer): File {
 
 function xlsxBuffer(rows: (string | number | null)[][], sheetName = 'Sheet1'): ArrayBuffer {
   const book = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet(rows), sheetName)
+  const ws = XLSX.utils.aoa_to_sheet(rows)
+  XLSX.utils.book_append_sheet(book, ws, sheetName)
   const out = XLSX.write(book, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer
   return out
 }
@@ -71,5 +72,22 @@ describe('workbook import', () => {
     expect(workbook.sheets[0]).toBeDefined()
     expect(meta.appliedMaxRows).toBeGreaterThan(0)
     expect(Array.isArray(meta.warnings)).toBe(true)
+  })
+
+  it('preserves merged cell regions as anchor refs', async () => {
+    const book = XLSX.utils.book_new()
+    const ws = XLSX.utils.aoa_to_sheet([['Header', 'B', 'C'], [1, 2, 3]])
+    // Merge A1:C1 (a header spanning three columns) and B2:C2.
+    ws['!merges'] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 2 } },
+      { s: { r: 1, c: 1 }, e: { r: 1, c: 2 } },
+    ]
+    XLSX.utils.book_append_sheet(book, ws, 'Sheet1')
+    const buffer = XLSX.write(book, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer
+
+    const { workbook } = await importWorkbookFromFileWithMeta(fakeFile('merged.xlsx', buffer))
+    const sheet = workbook.sheets[0]
+
+    expect(sheet.mergedCells).toEqual(['A1', 'B2'])
   })
 })

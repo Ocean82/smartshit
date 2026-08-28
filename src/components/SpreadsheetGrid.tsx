@@ -9,6 +9,7 @@ import { getCheckboxToggleValue } from '@/lib/checkbox';
 import { findLastDataRow } from '@/lib/sheetSort';
 import { columnDataBarPeerValues, columnColorScalePeerValues, columnIconSetPeerValues } from '@/lib/conditionalFormat';
 import { findActivePendingPreview } from '@/lib/pendingActionPreview';
+import { getRowHeight } from '@/lib/rowLayout';
 import { useTouch } from '@/hooks/useTouch';
 import { getCellNotesService } from '@/lib/cellNotes';
 import { GridCell } from './grid';
@@ -19,7 +20,6 @@ import { useSelectionManager } from './grid/SelectionManager';
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const DEFAULT_CELL_WIDTH = 100;
-const CELL_HEIGHT = 28;
 const ROW_HEADER_WIDTH = 46;
 const COL_HEADER_HEIGHT = 26;
 const MIN_COL_WIDTH = 40;
@@ -170,9 +170,10 @@ interface TouchAdapterConfig {
   getColWidth: (col: number) => number;
   visibleRange: { startRow: number; endRow: number; startCol: number; endCol: number };
   visibleColOffsets: { offsets: number[]; baseOffset: number };
+  rowOffsets: number[];
 }
 
-function useGridTouch({ gridRef, selectionManager, getColWidth, visibleRange, visibleColOffsets }: TouchAdapterConfig) {
+function useGridTouch({ gridRef, selectionManager, getColWidth, visibleRange, visibleColOffsets, rowOffsets }: TouchAdapterConfig) {
   const getScrollOffset = useCallback(() => {
     if (!gridRef.current) return { scrollTop: 0, scrollLeft: 0 };
     return { scrollTop: gridRef.current.scrollTop, scrollLeft: gridRef.current.scrollLeft };
@@ -184,7 +185,7 @@ function useGridTouch({ gridRef, selectionManager, getColWidth, visibleRange, vi
     onLongPress: (row, col, x, y) => selectionManager.handleContextMenu({ preventDefault: () => {}, clientX: x, clientY: y } as React.MouseEvent, row, col),
     onDragSelect: (row, col) => selectionManager.handleMouseMove(row, col, { buttons: 1 } as React.MouseEvent),
     onDragEnd: selectionManager.handleMouseUp,
-    cellHeight: CELL_HEIGHT,
+    rowOffsets,
     rowHeaderWidth: ROW_HEADER_WIDTH,
     colHeaderHeight: COL_HEADER_HEIGHT,
     getColWidth,
@@ -215,7 +216,7 @@ function useGridTouch({ gridRef, selectionManager, getColWidth, visibleRange, vi
 
 // ─── Freeze Pane Indicator ────────────────────────────────────────────────────
 
-function FreezePaneIndicators({ frozenRows, frozenCols, getColWidth }: { frozenRows?: number | null; frozenCols?: number | null; getColWidth: (col: number) => number }) {
+function FreezePaneIndicators({ frozenRows, frozenCols, getColWidth, rowHeights }: { frozenRows?: number | null; frozenCols?: number | null; getColWidth: (col: number) => number; rowHeights: Record<number, number> }) {
   const frozenColLeft = useMemo(() => {
     if (!frozenCols || frozenCols <= 0) return 0;
     let w = ROW_HEADER_WIDTH;
@@ -223,10 +224,17 @@ function FreezePaneIndicators({ frozenRows, frozenCols, getColWidth }: { frozenR
     return w;
   }, [frozenCols, getColWidth]);
 
+  const frozenRowTop = useMemo(() => {
+    if (!frozenRows || frozenRows <= 0) return 0;
+    let h = 0;
+    for (let r = 0; r < frozenRows; r++) h += getRowHeight(rowHeights, r);
+    return h;
+  }, [frozenRows, rowHeights]);
+
   return (
     <>
       {frozenRows != null && frozenRows > 0 && (
-        <div className="absolute pointer-events-none z-[8]" style={{ top: frozenRows * CELL_HEIGHT + COL_HEADER_HEIGHT, left: 0, right: 0, height: 2, backgroundColor: '#3b82f6', opacity: 0.6 }} />
+        <div className="absolute pointer-events-none z-[8]" style={{ top: frozenRowTop + COL_HEADER_HEIGHT, left: 0, right: 0, height: 2, backgroundColor: '#3b82f6', opacity: 0.6 }} />
       )}
       {frozenCols != null && frozenCols > 0 && (
         <div className="absolute pointer-events-none z-[8]" style={{ top: 0, left: frozenColLeft, bottom: 0, width: 2, backgroundColor: '#3b82f6', opacity: 0.6 }} />
@@ -357,8 +365,10 @@ export function SpreadsheetGrid() {
   const scrollCellIntoView = useCallback((row: number, col: number) => {
     const gridEl = viewport.gridRef.current;
     if (!gridEl) return;
-    const cellTop = row * CELL_HEIGHT;
-    const cellBottom = cellTop + CELL_HEIGHT;
+    // Vertical position of an actual row = sum of heights of preceding rows.
+    let cellTop = 0;
+    for (let r = 0; r < row; r++) cellTop += getRowHeight(sheet.rowHeights, r);
+    const cellBottom = cellTop + getRowHeight(sheet.rowHeights, row);
     const { scrollTop, clientHeight } = gridEl;
 
     if (cellBottom > scrollTop + clientHeight) gridEl.scrollTop = cellBottom - clientHeight;
@@ -371,7 +381,7 @@ export function SpreadsheetGrid() {
 
     if (cellRight > scrollLeft + clientWidth) gridEl.scrollLeft = cellRight - clientWidth;
     else if (cellLeft < scrollLeft) gridEl.scrollLeft = cellLeft;
-  }, [viewport.gridRef, resolvedGetColWidth]);
+  }, [viewport.gridRef, resolvedGetColWidth, sheet.rowHeights]);
 
   const selectionManager = useSelectionManager({
     TOTAL_ROWS: viewport.TOTAL_ROWS,
@@ -398,6 +408,7 @@ export function SpreadsheetGrid() {
     getColWidth: resolvedGetColWidth,
     visibleRange: viewport.visibleRange,
     visibleColOffsets: viewport.visibleColOffsets,
+    rowOffsets: viewport.rowOffsets,
   });
 
   // ─── Helpers for selection state ────────────────────────────────────────────
@@ -493,7 +504,7 @@ export function SpreadsheetGrid() {
           if (row == null) return null;
 
           return (
-            <div key={`${displayIndex}-${row}`} className="flex" role="row" aria-rowindex={row + 2} style={{ height: CELL_HEIGHT }}>
+            <div key={`${displayIndex}-${row}`} className="flex" role="row" aria-rowindex={row + 2} style={{ height: getRowHeight(sheet.rowHeights, row) }}>
               {/* Sticky row-number gutter */}
               <div
                 role="rowheader"
@@ -503,14 +514,14 @@ export function SpreadsheetGrid() {
                     ? 'bg-blue-100 text-blue-700 border-blue-300'
                     : 'bg-gradient-to-r from-gray-50 to-gray-100 text-gray-500 hover:bg-gray-200'
                 }`}
-                style={{ width: ROW_HEADER_WIDTH, height: CELL_HEIGHT }}
+                style={{ width: ROW_HEADER_WIDTH, height: getRowHeight(sheet.rowHeights, row) }}
                 onClick={() => selectionManager.handleRowSelect(row)}
               >
                 {row + 1}
               </div>
 
               {viewport.visibleColOffsets.baseOffset > 0 && (
-                <div style={{ width: viewport.visibleColOffsets.baseOffset, height: CELL_HEIGHT, flexShrink: 0 }} />
+                <div style={{ width: viewport.visibleColOffsets.baseOffset, height: getRowHeight(sheet.rowHeights, row), flexShrink: 0 }} />
               )}
 
               {Array.from({ length: viewport.visibleRange.endCol - viewport.visibleRange.startCol + 1 }, (_, j) => {
@@ -530,7 +541,7 @@ export function SpreadsheetGrid() {
                     cellData={sheet.cells[cellId]}
                     computed={getComputedValue(row, col)}
                     colWidth={resolvedGetColWidth(col)}
-                    cellHeight={CELL_HEIGHT}
+                    cellHeight={getRowHeight(sheet.rowHeights, row)}
                     isEditing={editingController.editingCell === cellId}
                     isActive={active}
                     isSelected={selected}
@@ -564,12 +575,12 @@ export function SpreadsheetGrid() {
         <SelectionOverlay
           getColWidth={resolvedGetColWidth}
           totalCols={viewport.TOTAL_COLS}
-          cellHeight={CELL_HEIGHT}
+          rowHeights={sheet.rowHeights}
           rowHeaderWidth={ROW_HEADER_WIDTH}
           colHeaderHeight={COL_HEADER_HEIGHT}
         />
 
-        <FreezePaneIndicators frozenRows={sheet.frozenRows} frozenCols={sheet.frozenCols} getColWidth={resolvedGetColWidth} />
+        <FreezePaneIndicators frozenRows={sheet.frozenRows} frozenCols={sheet.frozenCols} getColWidth={resolvedGetColWidth} rowHeights={sheet.rowHeights} />
       </div>
 
       <FormulaAutocomplete

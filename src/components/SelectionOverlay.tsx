@@ -10,24 +10,34 @@
 import { useMemo } from 'react';
 import { useStore } from '@/store/useStore';
 import type { Selection } from '@/types';
+import { getRowHeight } from '@/lib/rowLayout';
 
 interface SelectionOverlayProps {
   /** Column width getter */
   getColWidth: (col: number) => number;
   /** Total number of columns (optional) */
   totalCols?: number;
-  /** Cell height constant */
-  cellHeight: number;
+  /** Sparse map of per-row height overrides (imported from .xlsx) */
+  rowHeights: Record<number, number>;
   /** Row header width constant */
   rowHeaderWidth: number;
   /** Column header height constant */
   colHeaderHeight: number;
 }
 
+/** Vertical span [rowsMin, rowsMax] in pixels, honoring variable row heights. */
+function rowSpanPx(rowHeights: Record<number, number>, minRow: number, maxRow: number): { top: number; height: number } {
+  let top = 0;
+  for (let r = 0; r < minRow; r++) top += getRowHeight(rowHeights, r);
+  let height = 0;
+  for (let r = minRow; r <= maxRow; r++) height += getRowHeight(rowHeights, r);
+  return { top, height };
+}
+
 function computeRect(
   sel: Selection,
   getColWidth: (col: number) => number,
-  cellHeight: number,
+  rowHeights: Record<number, number>,
 ): { top: number; left: number; width: number; height: number } | null {
   const minRow = Math.min(sel.startRow, sel.endRow);
   const maxRow = Math.max(sel.startRow, sel.endRow);
@@ -43,15 +53,14 @@ function computeRect(
   let width = 0;
   for (let c = minCol; c <= maxCol; c++) width += getColWidth(c);
 
-  const top = minRow * cellHeight;
-  const height = (maxRow - minRow + 1) * cellHeight;
+  const { top, height } = rowSpanPx(rowHeights, minRow, maxRow);
 
   return { top, left, width, height };
 }
 
 export function SelectionOverlay({
   getColWidth,
-  cellHeight,
+  rowHeights,
   rowHeaderWidth,
   colHeaderHeight,
 }: SelectionOverlayProps) {
@@ -61,15 +70,15 @@ export function SelectionOverlay({
   const selectionRects = useMemo(() => {
     const rects: Array<{ top: number; left: number; width: number; height: number }> = [];
     if (selection) {
-      const r = computeRect(selection, getColWidth, cellHeight);
+      const r = computeRect(selection, getColWidth, rowHeights);
       if (r) rects.push(r);
     }
     for (const sel of additionalSelections) {
-      const r = computeRect(sel, getColWidth, cellHeight);
+      const r = computeRect(sel, getColWidth, rowHeights);
       if (r) rects.push(r);
     }
     return rects;
-  }, [selection, additionalSelections, getColWidth, cellHeight]);
+  }, [selection, additionalSelections, getColWidth, rowHeights]);
 
   // Calculate pixel bounds for copied range (marching ants)
   const copiedRect = useMemo(() => {
@@ -86,11 +95,10 @@ export function SelectionOverlay({
     let width = 0;
     for (let c = minCol; c <= maxCol; c++) width += getColWidth(c);
 
-    const top = minRow * cellHeight;
-    const height = (maxRow - minRow + 1) * cellHeight;
+    const { top, height } = rowSpanPx(rowHeights, minRow, maxRow);
 
     return { top, left, width, height };
-  }, [copiedRange, getColWidth, cellHeight]);
+  }, [copiedRange, getColWidth, rowHeights]);
 
   return (
     <>

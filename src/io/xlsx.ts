@@ -414,6 +414,19 @@ export async function importWorkbookFromFileWithMeta(file: File): Promise<Workbo
       }
     }
 
+    // Extract merged cell regions — anchor (top-left) ref for each merge
+    if (ws && (ws as Record<string, unknown>)['!merges']) {
+      const merges = (ws as Record<string, unknown>)['!merges'] as Array<{ s: { r: number; c: number } }>
+      const refs: string[] = []
+      for (const merge of merges) {
+        if (!merge?.s) continue
+        const { r, c } = merge.s
+        if (r >= maxRows || c >= maxCols) continue
+        refs.push(refToCell(r, c))
+      }
+      if (refs.length > 0) sheet.mergedCells = refs
+    }
+
     return sheet
   })
 

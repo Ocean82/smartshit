@@ -5,6 +5,7 @@
  */
 import { useCallback, useRef } from 'react';
 import type { TouchEvent } from 'react';
+import { rowIndexAtY } from '@/lib/rowLayout';
 
 interface UseTouchOptions {
   onTap: (row: number, col: number) => void;
@@ -13,7 +14,7 @@ interface UseTouchOptions {
   onDragSelect: (row: number, col: number) => void;
   onDragEnd: () => void;
   onPinchZoom?: (scale: number) => void;
-  cellHeight: number;
+  rowOffsets: number[];
   rowHeaderWidth: number;
   colHeaderHeight: number;
   getColWidth: (col: number) => number;
@@ -33,7 +34,7 @@ export function useTouch({
   onDragSelect,
   onDragEnd,
   onPinchZoom,
-  cellHeight,
+  rowOffsets,
   rowHeaderWidth,
   colHeaderHeight,
   getColWidth,
@@ -55,7 +56,7 @@ export function useTouch({
 
     if (relX < 0 || relY < 0) return null;
 
-    const row = Math.floor(relY / cellHeight);
+    const row = rowIndexAtY(rowOffsets, relY);
 
     // Find column from accumulated widths
     let accWidth = 0;
@@ -70,7 +71,7 @@ export function useTouch({
     }
 
     return { row, col };
-  }, [cellHeight, rowHeaderWidth, colHeaderHeight, getColWidth, getScrollOffset]);
+  }, [rowOffsets, rowHeaderWidth, colHeaderHeight, getColWidth, getScrollOffset]);
 
   const handleTouchStart = useCallback((e: TouchEvent, gridRect: DOMRect) => {
     // Pinch-to-zoom: two fingers down
