@@ -412,8 +412,8 @@ function TitleBar({ onOpenTemplates, onOpenCloudPicker, onOpenShare, onOpenComma
       />
 
       <div className="flex items-center gap-2">
-        <img src="/app/pwa-icon-192.png" alt="smartsh!t" className="w-6 h-6 rounded-lg" />
-        <span className="text-sm font-semibold tracking-tight hidden sm:inline" style={{ color: 'var(--ink-on-dark)' }}>smartsh!t</span>
+        <img src="/app/pwa-icon-192.png" alt="smartsh!t" className="w-6 h-6 rounded-lg opacity-80" />
+        <span className="text-sm font-medium tracking-tight hidden sm:inline" style={{ color: 'var(--neutral-400)' }}>smartsh!t</span>
       </div>
 
       <div className="w-px h-4 hidden md:block" style={{ background: 'var(--neutral-800)' }} />

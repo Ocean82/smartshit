@@ -48,11 +48,11 @@ export function PanelRail() {
 
   return (
     <div
-      className="flex flex-col items-center border-l py-2.5 gap-1 shrink-0 transition-all"
+      className="flex flex-col items-center border-l py-3 gap-2 shrink-0 transition-all"
       style={{
         background: 'var(--neutral-50)',
         borderColor: 'var(--neutral-200)',
-        width: showLabels ? '72px' : '44px',
+        width: showLabels ? '76px' : '48px',
         boxShadow: 'inset 1px 0 0 var(--neutral-200)',
       }}
     >
@@ -66,8 +66,8 @@ export function PanelRail() {
             onClick={() => handleClick(panel.id)}
             className={`
               rounded-lg flex items-center transition-all duration-150 relative group
-              ${showLabels ? 'w-[60px] h-8 gap-1.5 px-2 justify-start' : 'w-8 h-8 justify-center'}
-              ${isActive ? '' : 'hover:text-slate-700'}
+              ${showLabels ? 'w-[64px] h-10 gap-2 px-2 justify-start' : 'w-10 h-10 justify-center'}
+              ${isActive ? '' : 'hover:text-slate-700 hover:bg-slate-100'}
             `}
             style={isActive
               ? { background: colors.bg, color: colors.text, boxShadow: `inset 0 0 0 1px ${colors.ring}` }
