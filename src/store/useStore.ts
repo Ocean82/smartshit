@@ -2,12 +2,16 @@ import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import type { FileItem, SheetData, WorkbookData } from '@/types'
 import {
-  createEmptyWorkbook,
   SpreadsheetEngine,
 } from '@/engine/spreadsheet'
 import { loadPersistedState } from '@/lib/persistence'
+import {
+  resolveInitialState,
+  switchFileState,
+  computePostDeleteSwitch,
+  rebindActiveFile,
+} from '@/lib/fileWorkbooks'
 import { defaultSkills } from '@/data/chatPresets'
-import { v4 as uuid } from 'uuid'
 import {
   createUIState,
   createUIActions,
@@ -26,53 +30,7 @@ export const useStore = create<AppState>()(
   immer((set, get) => {
     const engine = new SpreadsheetEngine()
     const persisted = loadPersistedState()
-
-    // All workbooks keyed by workbookId. The active file's workbook is loaded
-    // from here and becomes the live `workbook`; the rest stay parked.
-    const slots: Record<string, WorkbookData> = { ...(persisted?.workbooks ?? {}) }
-
-    // Files are the source of truth. Seed a starter file only on first launch.
-    let files: FileItem[]
-    if (persisted?.files?.length) {
-      files = persisted.files
-    } else {
-      const starter = createEmptyWorkbook('My Budget')
-      slots[starter.id] = starter
-      files = [
-        {
-          id: uuid(),
-          name: starter.name,
-          type: 'file',
-          parentId: null,
-          workbookId: starter.id,
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-        },
-      ]
-    }
-
-    const activeFileId = files.some((f) => f.id === persisted?.activeFileId)
-      ? persisted!.activeFileId
-      : (files.find((f) => f.type === 'file')?.id ?? files[0].id)
-    const activeFile = files.find((f) => f.id === activeFileId)
-
-    // Load the active workbook: prefer the active file's slot, then the denormalized
-    // activeWorkbookId, then any slot, then a fresh workbook. A fresh workbook is
-    // assigned the active file's id so the slot stays addressable.
-    const activeSlotId = activeFile?.workbookId ?? persisted?.activeWorkbookId ?? null
-    let initialWorkbook = activeSlotId && slots[activeSlotId] ? slots[activeSlotId] : null
-    if (!initialWorkbook && persisted?.activeWorkbookId && slots[persisted.activeWorkbookId]) {
-      initialWorkbook = slots[persisted.activeWorkbookId]
-    }
-    if (!initialWorkbook) {
-      const firstKey = Object.keys(slots)[0]
-      if (firstKey) initialWorkbook = slots[firstKey]
-    }
-    if (!initialWorkbook) {
-      initialWorkbook = createEmptyWorkbook(activeFile?.name ?? 'My Budget')
-      initialWorkbook.id = activeFile?.workbookId ?? initialWorkbook.id
-      slots[initialWorkbook.id] = initialWorkbook
-    }
+    const seeded = resolveInitialState(persisted)
 
     // Wire AI function registry to push async results back into cells
     engine.aiRegistry.setUpdateCallback((cellId, value) => {
@@ -93,38 +51,21 @@ export const useStore = create<AppState>()(
     /** Switch the live workbook to another file. Saves the current one first. */
     const swapToFile = (id: string) => {
       const s = useStore.getState()
-      const target = s.files.find((f) => f.id === id)
-      if (!target || target.type !== 'file' || id === s.activeFileId) return
+      const next = switchFileState({
+        workbookSlots: s.workbookSlots,
+        files: s.files,
+        activeFileId: s.activeFileId,
+        workbook: s.workbook,
+        targetId: id,
+      })
+      if (!next) return
 
-      let wbId = target.workbookId
-      if (!wbId) {
-        // Legacy file without a workbook slot — attach one lazily.
-        wbId = uuid()
-        useStore.setState((st) => {
-          const f = st.files.find((x) => x.id === id)
-          if (f) f.workbookId = wbId
-        })
-      }
-
-      // Stash the live workbook into its own slot (guard: file may have been deleted).
-      const currentFile = useStore.getState().files.find((f) => f.id === s.activeFileId)
-      if (currentFile && currentFile.workbookId && currentFile.id !== id) {
-        useStore.setState((st) => {
-          st.workbookSlots[currentFile.workbookId!] = st.workbook
-        })
-      }
-
-      // Load the target workbook, creating one lazily if it was never opened.
-      let wb = useStore.getState().workbookSlots[wbId]
-      if (!wb) {
-        wb = createEmptyWorkbook(target.name)
-        wb.id = wbId
-      }
-
-      useStore.getState().loadWorkbookData(wb)
+      useStore.getState().loadWorkbookData(next.workbook)
       useStore.setState((st) => {
-        st.activeFileId = id
-        st.workbookSlots[wbId!] = wb
+        st.workbook = next.workbook
+        st.workbookSlots = next.workbookSlots
+        st.files = next.files
+        st.activeFileId = next.activeFileId
       })
     }
 
@@ -150,9 +91,9 @@ export const useStore = create<AppState>()(
     )
 
     return {
-      workbook: initialWorkbook,
+      workbook: seeded.workbook,
       engine,
-      activeSheetId: initialWorkbook.activeSheetId,
+      activeSheetId: seeded.workbook.activeSheetId,
       selection: null,
       editingCell: null,
       editValue: '',
@@ -163,9 +104,9 @@ export const useStore = create<AppState>()(
 
       undoStack: [],
       redoStack: [],
-      files,
-      activeFileId,
-      workbookSlots: slots,
+      files: seeded.files,
+      activeFileId: seeded.activeFileId,
+      workbookSlots: seeded.workbookSlots,
       messages: persisted?.messages?.length ? persisted.messages : [createWelcomeMessage()],
       chatInput: '',
       isAiProcessing: false,
@@ -188,18 +129,20 @@ export const useStore = create<AppState>()(
       deleteFile: (id: string) => {
         const state = useStore.getState()
         const target = state.files.find((f) => f.id === id)
-        if (target?.workbookId) {
+        if (!target) return
+        if (target.workbookId) {
           useStore.setState((st) => {
             delete st.workbookSlots[target.workbookId!]
           })
         }
+        const wasActive = state.activeFileId === id
         fileActions.deleteFile(id)
-        if (target && state.activeFileId === id) {
-          const remaining = useStore.getState().files.filter((f) => f.type === 'file')
-          if (remaining.length) {
-            swapToFile(remaining[0].id)
-          } else {
-            fileActions.createFile('My Workbook')
+        if (wasActive) {
+          const decision = computePostDeleteSwitch(useStore.getState().files)
+          if (decision.type === 'switch') {
+            swapToFile(decision.fileId)
+          } else if (decision.type === 'create-fallback') {
+            fileActions.createFile(decision.name)
             swapToFile(useStore.getState().files[0].id)
           }
         }
@@ -223,20 +166,17 @@ export const useStore = create<AppState>()(
       // New Workbook replaces the active file's content: rebind the file's
       // workbookId to the fresh workbook and drop the previous slot.
       initWorkbook: (name?: string) => {
-        const s = useStore.getState()
-        const current = s.files.find((f) => f.id === s.activeFileId)
-        if (current?.workbookId) {
-          const oldId = current.workbookId
-          useStore.setState((st) => {
-            delete st.workbookSlots[oldId]
-          })
-        }
         workbookActions.initWorkbook(name)
-        const fresh = useStore.getState().workbook
+        const s = useStore.getState()
+        const next = rebindActiveFile({
+          workbookSlots: s.workbookSlots,
+          files: s.files,
+          activeFileId: s.activeFileId,
+          workbook: s.workbook,
+        })
         useStore.setState((st) => {
-          const f = st.files.find((x) => x.id === st.activeFileId)
-          if (f) f.workbookId = fresh.id
-          st.workbookSlots[fresh.id] = fresh
+          st.workbookSlots = next.workbookSlots
+          st.files = next.files
         })
       },
     }

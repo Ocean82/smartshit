@@ -7,6 +7,7 @@ import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { AuthProvider, AuthGate, ClerkUserSync } from '@/auth'
 import { useStore } from '@/store/useStore'
 import { savePersistedState } from '@/lib/persistence'
+import { buildPersistenceSnapshot } from '@/lib/fileWorkbooks'
 import { flushSave, isCloudConfigured } from '@/lib/cloudSync'
 import { migrateLegacyStorageKeys } from '@/lib/storageKeys'
 import { initErrorReporting } from '@/lib/errorReporting'
@@ -16,19 +17,18 @@ initErrorReporting()
 
 migrateLegacyStorageKeys()
 
-/** Compose a full persisted snapshot from the live store. */
+/** Compose and persist a full snapshot from the live store. */
 function persistLocalSnapshot() {
   const s = useStore.getState()
-  const activeFile = s.files.find((f) => f.id === s.activeFileId)
-  const workbooks = { ...s.workbookSlots }
-  if (activeFile?.workbookId) workbooks[activeFile.workbookId] = s.workbook
-  savePersistedState({
-    workbooks,
-    files: s.files,
-    activeFileId: s.activeFileId,
-    activeWorkbookId: activeFile?.workbookId ?? null,
-    messages: s.messages,
-  })
+  savePersistedState(
+    buildPersistenceSnapshot({
+      workbook: s.workbook,
+      workbookSlots: s.workbookSlots,
+      files: s.files,
+      activeFileId: s.activeFileId,
+      messages: s.messages,
+    }),
+  )
 }
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null
