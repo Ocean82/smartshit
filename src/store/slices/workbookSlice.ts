@@ -28,6 +28,7 @@ import { getActionRecorder } from '@/lib/actionRecorder'
 import { validateCell } from '@/lib/validation'
 import type { HistoryEntry } from '@/lib/historyDiff'
 import { mergeChartLayout } from '@/lib/chartLayout'
+import { MAX_UNDO_STACK } from '../storeTypes'
 
 export interface WorkbookSliceState {
   workbook: WorkbookData
@@ -102,7 +103,7 @@ export interface WorkbookActions {
   deleteColumn: (col: number) => void
   bulkSetCells: (cells: Record<string, { value: string | number | boolean | null; formula?: string }>) => void
   importWorkbook: (workbook: WorkbookData, meta?: { fileName?: string }) => void
-  loadWorkbookData: (workbook: WorkbookData) => void
+  loadWorkbookData: (workbook: WorkbookData, opts?: { pushUndo?: boolean }) => void
   getActiveSheet: () => SheetData
   getCellData: (cellId: string) => CellData | undefined
   getComputedValue: (row: number, col: number) => string
@@ -641,15 +642,37 @@ export function createWorkbookActions(
         );
       },
 
-      loadWorkbookData: (workbook) => {
+      loadWorkbookData: (workbook, opts) => {
         const eng = get().engine;
+        // When requested, snapshot the current workbook BEFORE replacing it so
+        // the change is reversible via undo (Ctrl+Z).
+        const beforeSnapshot =
+          opts?.pushUndo ? structuredClone(get().workbook) : null;
+
         eng.loadWorkbook(workbook);
 
         set((s) => {
           s.workbook = workbook;
           s.activeSheetId = workbook.activeSheetId;
-          s.undoStack = [];
-          s.redoStack = [];
+          if (opts?.pushUndo && beforeSnapshot) {
+            // Structural patch referencing the pre-restore workbook makes
+            // undo() restore the exact prior document, including cells,
+            // layout, and undo-able history.
+            s.undoStack.push({
+              patch: {
+                sheets: [],
+                activeSheetIdBefore: beforeSnapshot.activeSheetId,
+                activeSheetIdAfter: beforeSnapshot.activeSheetId,
+                structuralBefore: beforeSnapshot,
+              },
+              description: 'Restore version',
+            });
+            if (s.undoStack.length > MAX_UNDO_STACK) s.undoStack.shift();
+            s.redoStack = [];
+          } else {
+            s.undoStack = [];
+            s.redoStack = [];
+          }
         });
 
         // Execute AI formulas for the active sheet after state is updated

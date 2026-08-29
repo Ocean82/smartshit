@@ -3,13 +3,14 @@ import { useEffect, useRef, useCallback } from 'react';
 /**
  * Trap keyboard focus inside a container when `active` is true.
  * Returns a ref to attach to the container element.
- * 
+ *
  * Automatically:
  * - Focuses the first focusable element on activation
  * - Returns focus to the previously focused element on deactivation
  * - Cycles Tab/Shift+Tab within the container
+ * - Invokes `onEscape` when Escape is pressed while active
  */
-export function useFocusTrap<T extends HTMLElement>(active: boolean) {
+export function useFocusTrap<T extends HTMLElement>(active: boolean, onEscape?: () => void) {
   const containerRef = useRef<T>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
 
@@ -35,6 +36,20 @@ export function useFocusTrap<T extends HTMLElement>(active: boolean) {
 
     // Small delay to allow rendering
     requestAnimationFrame(() => {
+      // Prefer an element the dialog marked as its initial focus target.
+      const preferred = container.querySelector<HTMLElement>('[data-focus-on-open]');
+      if (preferred) {
+        preferred.focus();
+        return;
+      }
+      // A focusable container (e.g. one carrying tabindex) keeps its own focus.
+      const isContainerFocusable =
+        container.hasAttribute('tabindex') ||
+        /^(BUTTON|INPUT|SELECT|TEXTAREA|A|AREA)$/.test(container.tagName);
+      if (isContainerFocusable) {
+        container.focus();
+        return;
+      }
       const firstFocusable = container.querySelector<HTMLElement>(focusableSelector);
       firstFocusable?.focus();
     });
@@ -42,7 +57,12 @@ export function useFocusTrap<T extends HTMLElement>(active: boolean) {
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
-      if (!active || e.key !== 'Tab') return;
+      if (!active) return;
+      if (e.key === 'Escape') {
+        onEscape?.();
+        return;
+      }
+      if (e.key !== 'Tab') return;
 
       const container = containerRef.current;
       if (!container) return;
@@ -73,7 +93,7 @@ export function useFocusTrap<T extends HTMLElement>(active: boolean) {
         }
       }
     },
-    [active]
+    [active, onEscape]
   );
 
   useEffect(() => {

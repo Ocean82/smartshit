@@ -399,6 +399,7 @@ export function SpreadsheetGrid() {
     pushHistory,
     validateCellValue: useStore.getState().validateCellValue,
     setSelection: selectionManager.setSelection,
+    focusGrid: () => viewport.gridRef.current?.focus({ preventScroll: true }),
   });
 
   // Touch support

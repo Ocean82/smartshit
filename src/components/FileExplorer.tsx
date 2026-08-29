@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useStore } from '@/store/useStore';
 import {
   File, Folder, FolderPlus, FilePlus, Trash2, Edit3,
@@ -16,6 +16,7 @@ export function FileExplorer() {
     deleteFile,
     renameFile,
     openFile,
+    showConfirm,
   } = useStore();
 
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
@@ -23,6 +24,18 @@ export function FileExplorer() {
   const [renameValue, setRenameValue] = useState('');
   const [showNewInput, setShowNewInput] = useState<'file' | 'folder' | null>(null);
   const [newName, setNewName] = useState('');
+
+  // Close the full-screen mobile drawer with Escape (desktop is an inline sidebar).
+  useEffect(() => {
+    if (!showFileExplorer) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && window.matchMedia('(max-width: 767px)').matches) {
+        toggleFileExplorer();
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [showFileExplorer, toggleFileExplorer]);
 
   if (!showFileExplorer) return null;
 
@@ -61,6 +74,17 @@ export function FileExplorer() {
       renameFile(renamingId, renameValue.trim());
     }
     setRenamingId(null);
+  };
+
+  const handleDelete = (id: string) => {
+    const target = files.find((f) => f.id === id);
+    showConfirm({
+      title: 'Delete file',
+      message: `"${target?.name || 'this file'}" will be permanently deleted from local storage. This cannot be undone.`,
+      confirmLabel: 'Delete',
+      variant: 'danger',
+      onConfirm: () => deleteFile(id),
+    });
   };
 
   return (
@@ -133,7 +157,7 @@ export function FileExplorer() {
             expandedFolders={expandedFolders}
             onToggleFolder={handleToggleFolder}
             onOpen={openFile}
-            onDelete={deleteFile}
+            onDelete={handleDelete}
             onStartRename={handleStartRename}
             renamingId={renamingId}
             renameValue={renameValue}
@@ -192,7 +216,7 @@ function FileItem({
   return (
     <div>
       <div
-        className={`flex items-center gap-1 px-2 py-1 cursor-pointer group text-xs transition-colors ${
+        className={`flex items-center gap-1 px-2 py-1 max-md:py-2.5 cursor-pointer group text-xs transition-colors ${
           isActive ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'
         }`}
         style={{ paddingLeft: `${depth * 12 + 8}px` }}
@@ -225,22 +249,26 @@ function FileItem({
           <span className="flex-1 truncate">{file.name}</span>
         )}
 
-        <div className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5">
+        <div className="opacity-0 group-hover:opacity-100 max-md:opacity-100 flex items-center gap-0.5">
           <button
-            className="p-0.5 hover:text-blue-600"
+            className="p-0.5 max-md:p-2 hover:text-blue-600"
             onClick={(e) => {
               e.stopPropagation();
               onStartRename(file.id, file.name);
             }}
+            title="Rename"
+            aria-label={`Rename ${file.name}`}
           >
             <Edit3 size={10} />
           </button>
           <button
-            className="p-0.5 hover:text-red-600"
+            className="p-0.5 max-md:p-2 hover:text-red-600"
             onClick={(e) => {
               e.stopPropagation();
               onDelete(file.id);
             }}
+            title="Delete"
+            aria-label={`Delete ${file.name}`}
           >
             <Trash2 size={10} />
           </button>

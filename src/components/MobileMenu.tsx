@@ -6,6 +6,8 @@ import React, { useState, useRef } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useStore } from '@/store/useStore';
 import { exportWorkbookToXlsx, exportSheetToCsv, importWorkbookFromFileWithMeta } from '@/io/xlsx';
+import { workbookHasContent } from '@/lib/workbookGuard';
+import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { v4 as uuid } from 'uuid';
 import {
   Menu, X, FileText, FolderOpen, Download,
@@ -25,6 +27,7 @@ interface MobileMenuProps {
 export function MobileMenu({ onOpenTemplates, onOpenCloudPicker, onOpenShare, onOpenCommandPalette }: MobileMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const sheetRef = useFocusTrap<HTMLDivElement>(isOpen, () => setIsOpen(false));
   const {
     workbook,
     undo,
@@ -102,7 +105,7 @@ export function MobileMenu({ onOpenTemplates, onOpenCloudPicker, onOpenShare, on
     if (Object.keys(getActiveSheet().cells).length > 0) {
       showConfirm({
         title: 'New workbook',
-        message: 'Your current work hasn\'t been saved. Creating a new workbook will discard all unsaved changes.',
+        message: 'This will replace the current workbook with a new, blank workbook. Undo history will be cleared.',
         confirmLabel: 'Create new',
         variant: 'warning',
         onConfirm: () => {
@@ -119,7 +122,20 @@ export function MobileMenu({ onOpenTemplates, onOpenCloudPicker, onOpenShare, on
   const actions = [
     { section: 'File' },
     { label: 'New Workbook', icon: <FileText size={18} />, action: handleNewWorkbook },
-    { label: 'Open File...', icon: <FolderOpen size={18} />, action: () => { fileInputRef.current?.click(); } },
+    { label: 'Open File...', icon: <FolderOpen size={18} />, action: () => {
+      const proceed = () => fileInputRef.current?.click()
+      if (workbookHasContent(useStore.getState().workbook)) {
+        showConfirm({
+          title: 'Open file',
+          message: 'Opening a file will replace the current workbook and clear undo history. This cannot be undone.',
+          confirmLabel: 'Open file',
+          variant: 'warning',
+          onConfirm: proceed,
+        })
+      } else {
+        proceed()
+      }
+    } },
     { label: 'Templates', icon: <LayoutTemplate size={18} />, action: () => { setIsOpen(false); onOpenTemplates(); } },
     { label: 'Cloud workbooks', icon: <Cloud size={18} />, action: () => { setIsOpen(false); onOpenCloudPicker(); } },
     { label: 'Share', icon: <Share2 size={18} />, action: () => { setIsOpen(false); onOpenShare(); } },
@@ -166,7 +182,7 @@ export function MobileMenu({ onOpenTemplates, onOpenCloudPicker, onOpenShare, on
 
       {/* Overlay + Bottom Sheet */}
       {isOpen && (
-        <div className="fixed inset-0 z-[100] md:hidden" role="dialog" aria-modal="true">
+        <div ref={sheetRef} className="fixed inset-0 z-[100] md:hidden" role="dialog" aria-modal="true">
           {/* Backdrop */}
           <div
             className="absolute inset-0 bg-black/40 backdrop-blur-sm"
@@ -180,7 +196,7 @@ export function MobileMenu({ onOpenTemplates, onOpenCloudPicker, onOpenShare, on
             </div>
             {/* Header */}
             <div className="flex items-center justify-between px-4 pb-3 border-b" style={{ borderColor: 'var(--neutral-100)' }}>
-              <h2 className="text-base font-semibold" style={{ color: 'var(--ink-primary)' }}>Menu</h2>
+              <h2 data-focus-on-open tabIndex={-1} className="text-base font-semibold" style={{ color: 'var(--ink-primary)' }}>Menu</h2>
               <button
                 type="button"
                 onClick={() => setIsOpen(false)}

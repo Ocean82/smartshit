@@ -55,7 +55,7 @@ function App() {
   // The NLP worker was a stub (always returned 'unknown'). When NLP is re-enabled
   // in the future, it will be integrated as a pipeline stage.
 
-  const {
+const {
     workbook,
     engine,
     showValidationDialog,
@@ -72,7 +72,7 @@ function App() {
   } = useStore(useShallow((s) => ({
     workbook: s.workbook,
     engine: s.engine,
-    showValidationDialog: s.showValidationDialog,
+showValidationDialog: s.showValidationDialog,
     setShowValidationDialog: s.setShowValidationDialog,
     showPivotDialog: s.showPivotDialog,
     setShowPivotDialog: s.setShowPivotDialog,

@@ -51,6 +51,8 @@ export interface AppState extends UIState, UIActions, FileActions, ChatActions {
   // Files
   files: FileItem[]
   activeFileId: string | null
+  /** Non-active workbooks keyed by workbookId (the active one lives in `workbook`). */
+  workbookSlots: Record<string, WorkbookData>
 
   // Chat
   messages: ChatMessage[]
@@ -126,7 +128,7 @@ export interface AppState extends UIState, UIActions, FileActions, ChatActions {
   // Bulk operations (for AI)
   bulkSetCells: (cells: Record<string, { value: string | number | boolean | null; formula?: string }>) => void
   importWorkbook: (workbook: WorkbookData, meta?: { fileName?: string }) => void
-  loadWorkbookData: (workbook: WorkbookData) => void
+  loadWorkbookData: (workbook: WorkbookData, opts?: { pushUndo?: boolean }) => void
 
   // Get helpers
   getActiveSheet: () => SheetData

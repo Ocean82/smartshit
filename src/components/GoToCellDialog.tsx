@@ -8,6 +8,7 @@ import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { useStore } from '@/store/useStore';
 import { cellToRef } from '@/engine/spreadsheet';
 import { X } from 'lucide-react';
+import { useFocusTrap } from '@/hooks/useFocusTrap';
 
 interface GoToCellDialogProps {
   open: boolean;
@@ -19,6 +20,7 @@ export function GoToCellDialog({ open, onClose }: GoToCellDialogProps) {
   const [value, setValue] = useState('');
   const [error, setError] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
+  const containerRef = useFocusTrap<HTMLDivElement>(open, onClose);
 
   useEffect(() => {
     if (open && inputRef.current) {
@@ -61,6 +63,7 @@ export function GoToCellDialog({ open, onClose }: GoToCellDialogProps) {
       handleSubmit();
     } else if (e.key === 'Escape') {
       e.preventDefault();
+      e.stopPropagation();
       onClose();
     }
   }, [handleSubmit, onClose]);
@@ -70,9 +73,10 @@ export function GoToCellDialog({ open, onClose }: GoToCellDialogProps) {
   return (
     <div className="fixed inset-0 z-50 flex items-end md:items-start justify-center p-4 md:pt-[20vh]">
       {/* Backdrop */}
-      <div className="absolute inset-0" onClick={onClose} style={{ background: 'oklch(0.1 0.02 250 / 0.4)', backdropFilter: 'blur(2px)' }} />
+      <div className="absolute inset-0" style={{ background: 'oklch(0.1 0.02 250 / 0.4)', backdropFilter: 'blur(2px)' }} />
       {/* Dialog */}
       <div
+        ref={containerRef}
         className="relative rounded-t-2xl md:rounded-xl shadow-2xl border w-80 max-w-[calc(100vw-2rem)] p-4 animate-slide-up"
         style={{ background: 'var(--surface-panel)', borderColor: 'var(--neutral-200)', boxShadow: '0 24px 48px oklch(0.1 0 0 / 0.18), 0 4px 12px oklch(0.1 0 0 / 0.08)' }}
         role="dialog"
@@ -94,6 +98,7 @@ export function GoToCellDialog({ open, onClose }: GoToCellDialogProps) {
         <div className="space-y-2">
           <input
             ref={inputRef}
+            data-focus-on-open
             type="text"
             value={value}
             onChange={(e) => { setValue(e.target.value.toUpperCase()); setError(''); }}

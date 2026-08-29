@@ -8,10 +8,13 @@ import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '@/store/useStore'
 import { exportWorkbookToXlsx, exportSheetToCsv, importWorkbookFromFileWithMeta } from '@/io/xlsx'
 import { exportWorkbookToJson, importWorkbookFromJsonFile, normalizeImportedWorkbook } from '@/io/workbookJson'
+import { workbookHasContent } from '@/lib/workbookGuard'
 import { v4 as uuid } from 'uuid'
 import { AnchoredPanel } from '@/components/AnchoredPanel'
 
 type MenuId = 'file' | 'edit' | 'view' | 'insert' | 'format' | 'data'
+
+const MENU_ORDER: MenuId[] = ['file', 'edit', 'view', 'insert', 'format', 'data']
 
 interface MenuItem {
   label: string
@@ -103,6 +106,71 @@ export function MenuBar() {
     setOpenMenu(id)
   }, [])
 
+  const itemRefs = useRef<(HTMLButtonElement | null)[]>([])
+
+  const focusItem = useCallback((index: number) => {
+    itemRefs.current[index]?.focus()
+  }, [])
+
+  const navigateMenu = useCallback((next: MenuId) => {
+    openMenuId(next)
+    triggerRefs.current[next]?.focus()
+  }, [openMenuId])
+
+  const handleTriggerKeyDown = useCallback((e: React.KeyboardEvent<HTMLButtonElement>, id: MenuId) => {
+    const idx = MENU_ORDER.indexOf(id)
+    if (e.key === 'ArrowRight') {
+      e.preventDefault()
+      navigateMenu(MENU_ORDER[(idx + 1) % MENU_ORDER.length])
+    } else if (e.key === 'ArrowLeft') {
+      e.preventDefault()
+      navigateMenu(MENU_ORDER[(idx - 1 + MENU_ORDER.length) % MENU_ORDER.length])
+    } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter' || e.key === ' ') {
+      if (openMenu !== id) {
+        e.preventDefault()
+        openMenuId(id)
+      }
+      // Defer so the menu items are mounted before focusing one of them.
+      setTimeout(() => focusItem(e.key === 'ArrowUp' ? openMenuItemsRef.current.length - 1 : 0), 0)
+    } else if (e.key === 'Escape') {
+      setOpenMenu(null)
+    }
+  }, [openMenu, openMenuId, navigateMenu, focusItem])
+
+  const handleItemKeyDown = useCallback((e: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
+    const items = openMenuItemsRef.current
+    if (items.length === 0) return
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      focusItem((index + 1) % items.length)
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      focusItem((index - 1 + items.length) % items.length)
+    } else if (e.key === 'Home') {
+      e.preventDefault()
+      focusItem(0)
+    } else if (e.key === 'End') {
+      e.preventDefault()
+      focusItem(items.length - 1)
+    } else if (e.key === 'ArrowLeft') {
+      e.preventDefault()
+      navigateMenu(MENU_ORDER[(MENU_ORDER.indexOf(currentMenuIdRef.current) - 1 + MENU_ORDER.length) % MENU_ORDER.length])
+    } else if (e.key === 'ArrowRight') {
+      e.preventDefault()
+      navigateMenu(MENU_ORDER[(MENU_ORDER.indexOf(currentMenuIdRef.current) + 1) % MENU_ORDER.length])
+    } else if (e.key === 'Escape') {
+      e.preventDefault()
+      setOpenMenu(null)
+      triggerRefs.current[currentMenuIdRef.current]?.focus()
+    } else if (e.key === 'Tab') {
+      // WAI-ARIA menubar: Tab dismisses the open menu.
+      setOpenMenu(null)
+    }
+  }, [navigateMenu, focusItem])
+
+  const currentMenuIdRef = useRef<MenuId>('file')
+  const openMenuItemsRef = useRef<MenuItem[]>([])
+
   const toggleMenu = useCallback((id: MenuId) => {
     if (openMenu === id) {
       setOpenMenu(null)
@@ -126,7 +194,7 @@ export function MenuBar() {
     if (Object.keys(getActiveSheet().cells).length > 0) {
       showConfirm({
         title: 'New workbook',
-        message: 'Your current work hasn\'t been saved. Creating a new workbook will discard all unsaved changes.',
+        message: 'This will replace the current workbook with a new, blank workbook. Undo history will be cleared.',
         confirmLabel: 'Create new',
         variant: 'warning',
         onConfirm: doCreate,
@@ -137,7 +205,19 @@ export function MenuBar() {
   }
 
   const handleOpen = () => {
-    fileInputRef.current?.click()
+    const proceed = () => fileInputRef.current?.click()
+    if (workbookHasContent(useStore.getState().workbook)) {
+      showConfirm({
+        title: 'Open file',
+        message:
+          'Opening a file will replace the current workbook and clear undo history. This cannot be undone.',
+        confirmLabel: 'Open file',
+        variant: 'warning',
+        onConfirm: proceed,
+      })
+    } else {
+      proceed()
+    }
     setOpenMenu(null)
   }
 
@@ -171,7 +251,19 @@ export function MenuBar() {
   }
 
   const handleRestoreJson = () => {
-    jsonInputRef.current?.click()
+    const proceed = () => jsonInputRef.current?.click()
+    if (workbookHasContent(useStore.getState().workbook)) {
+      showConfirm({
+        title: 'Restore from backup',
+        message:
+          'Restoring a backup will replace the current workbook. This cannot be undone.',
+        confirmLabel: 'Restore',
+        variant: 'warning',
+        onConfirm: proceed,
+      })
+    } else {
+      proceed()
+    }
     setOpenMenu(null)
   }
 
@@ -179,9 +271,9 @@ export function MenuBar() {
     const file = e.target.files?.[0]
     if (!file) return
     try {
-      pushHistory('Restore JSON backup')
       const wb = normalizeImportedWorkbook(await importWorkbookFromJsonFile(file))
-      useStore.getState().loadWorkbookData(wb)
+      // Snapshot the current workbook so the restore is reversible with Ctrl+Z.
+      useStore.getState().loadWorkbookData(wb, { pushUndo: true })
       addMessage({
         id: uuid(),
         role: 'assistant',
@@ -279,6 +371,8 @@ export function MenuBar() {
   }
 
   const openItems = openMenu ? menus[openMenu].items : []
+  openMenuItemsRef.current = openItems
+  currentMenuIdRef.current = openMenu ?? 'file'
 
   return (
     <nav className="flex items-center gap-0.5 text-[11px] relative z-50" aria-label="Application">
@@ -291,10 +385,13 @@ export function MenuBar() {
               ref={(el) => { triggerRefs.current[id] = el }}
               aria-expanded={openMenu === id}
               aria-controls={openMenu === id ? panelId : undefined}
+              aria-haspopup="menu"
               onMouseDown={(e) => {
+                // Keep the button from stealing focus so the click toggles feel native.
                 e.preventDefault()
-                toggleMenu(id)
               }}
+              onClick={() => toggleMenu(id)}
+              onKeyDown={(e) => handleTriggerKeyDown(e, id)}
               onMouseEnter={() => {
                 if (openMenu && openMenu !== id) openMenuId(id)
               }}
@@ -321,8 +418,10 @@ export function MenuBar() {
         {openItems.map((item, i) => (
           <div key={`${item.label}-${i}`}>
             <button
+              ref={(el) => { itemRefs.current[i] = el }}
               type="button"
               onClick={item.action}
+              onKeyDown={(e) => handleItemKeyDown(e, i)}
               disabled={item.disabled}
               className={`w-full text-left px-3 py-1.5 text-xs flex items-center justify-between gap-4 ${
                 item.disabled

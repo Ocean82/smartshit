@@ -10,7 +10,7 @@ import {
   type PivotAssignState,
   type PivotZone,
 } from '@/lib/pivotFieldAssign';
-import { useEscapeToClose } from '@/hooks/useEscapeToClose';
+import { useFocusTrap } from '@/hooks/useFocusTrap';
 
 interface Props {
   isOpen: boolean;
@@ -45,7 +45,7 @@ export function PivotDialog({ isOpen, onClose }: Props) {
     !rowFields.includes(c.letter) && !colFields.includes(c.letter) && !valueFields.find((v) => v.col === c.letter)
   );
 
-  useEscapeToClose(isOpen, onClose);
+  const containerRef = useFocusTrap<HTMLDivElement>(isOpen, onClose);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -146,10 +146,10 @@ export function PivotDialog({ isOpen, onClose }: Props) {
   return (
     <div
       className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/50 p-0 md:p-4"
-      onClick={onClose}
       role="presentation"
     >
       <div
+        ref={containerRef}
         className="bg-white rounded-t-2xl md:rounded-xl shadow-2xl w-full md:w-[520px] max-w-full max-h-[min(92dvh,100%)] overflow-y-auto p-5 md:p-6"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
@@ -158,7 +158,7 @@ export function PivotDialog({ isOpen, onClose }: Props) {
       >
         <div className="flex items-start justify-between gap-3 mb-1">
           <div>
-            <h3 id="pivot-dialog-title" className="text-lg font-semibold text-gray-900">Create Pivot Table</h3>
+            <h3 id="pivot-dialog-title" data-focus-on-open tabIndex={-1} className="text-lg font-semibold text-gray-900">Create Pivot Table</h3>
             <p className="text-xs text-gray-500 mt-1">
               Tap Rows, Columns, or Values on a field. Drag still works on desktop.
             </p>

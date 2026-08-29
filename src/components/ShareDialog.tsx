@@ -37,7 +37,7 @@ export function ShareDialog({ open, onClose }: ShareDialogProps) {
   // Shared links are read-only until collaborative editing is implemented.
   const permission = 'view' as const
   const [expiresIn, setExpiresIn] = useState<'24h' | '7d' | '30d' | 'never'>('never')
-  const containerRef = useFocusTrap<HTMLDivElement>(open)
+  const containerRef = useFocusTrap<HTMLDivElement>(open, onClose)
 
   const cloudId = getCloudWorkbookId()
   const canShare = isCloudConfigured() && Boolean(cloudId)
@@ -139,7 +139,7 @@ export function ShareDialog({ open, onClose }: ShareDialogProps) {
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
           <div className="flex items-center gap-2">
             <Share2 size={18} className="text-blue-600" />
-            <h2 className="text-base font-semibold text-gray-900">Share Workbook</h2>
+            <h2 data-focus-on-open tabIndex={-1} className="text-base font-semibold text-gray-900">Share Workbook</h2>
           </div>
           <button
             type="button"
@@ -221,7 +221,7 @@ export function ShareDialog({ open, onClose }: ShareDialogProps) {
                     return (
                       <div
                         key={share.id}
-                        className={`flex items-center gap-3 px-5 py-3 hover:bg-gray-50 transition-colors group ${
+                        className={`flex items-center gap-3 px-5 py-3 max-md:py-3.5 hover:bg-gray-50 transition-colors group ${
                           expired ? 'opacity-50' : ''
                         }`}
                       >
@@ -252,12 +252,13 @@ export function ShareDialog({ open, onClose }: ShareDialogProps) {
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 max-md:opacity-100 transition-opacity">
                           <button
                             type="button"
                             onClick={() => handleCopy(share.share_token)}
-                            className="p-1.5 rounded-md hover:bg-blue-100 text-blue-600 transition-colors"
+                            className="p-1.5 max-md:p-2.5 rounded-md hover:bg-blue-100 text-blue-600 transition-colors"
                             title="Copy link"
+                            aria-label="Copy link"
                           >
                             {copiedToken === share.share_token ? (
                               <Check size={13} className="text-green-600" />
@@ -268,8 +269,9 @@ export function ShareDialog({ open, onClose }: ShareDialogProps) {
                           <button
                             type="button"
                             onClick={() => handleRevoke(share.share_token)}
-                            className="p-1.5 rounded-md hover:bg-red-100 text-red-500 transition-colors"
+                            className="p-1.5 max-md:p-2.5 rounded-md hover:bg-red-100 text-red-500 transition-colors"
                             title="Revoke"
+                            aria-label="Revoke share link"
                           >
                             <Trash2 size={13} />
                           </button>

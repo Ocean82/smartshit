@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState } from 'react'
 import { useStore } from '@/store/useStore'
 import { colToLetter } from '@/engine/spreadsheet'
 import type { FilterConditionType } from '@/lib/rowFilter'
-import { useEscapeToClose } from '@/hooks/useEscapeToClose'
+import { useFocusTrap } from '@/hooks/useFocusTrap'
 
 interface Props {
   isOpen: boolean
@@ -35,14 +35,7 @@ export function FilterDialog({ isOpen, onClose }: Props) {
   const [condition, setCondition] = useState<FilterConditionType>('equals')
   const [value, setValue] = useState('')
   const [value2, setValue2] = useState('')
-  const dialogRef = useRef<HTMLDivElement>(null)
-
-  useEscapeToClose(isOpen, onClose)
-
-  // Focus the dialog on open
-  useEffect(() => {
-    if (isOpen) dialogRef.current?.focus()
-  }, [isOpen])
+  const dialogRef = useFocusTrap<HTMLDivElement>(isOpen, onClose)
 
   if (!isOpen) return null
 
@@ -79,7 +72,7 @@ export function FilterDialog({ isOpen, onClose }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center p-4" onClick={onClose} style={{ background: 'oklch(0.1 0.02 250 / 0.5)', backdropFilter: 'blur(3px)' }}>
+    <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center p-4" style={{ background: 'oklch(0.1 0.02 250 / 0.5)', backdropFilter: 'blur(3px)' }}>
       <div
         ref={dialogRef}
         role="dialog"
@@ -91,7 +84,7 @@ export function FilterDialog({ isOpen, onClose }: Props) {
         style={{ background: 'var(--surface-panel)', boxShadow: '0 24px 48px oklch(0.1 0 0 / 0.18), 0 4px 12px oklch(0.1 0 0 / 0.08)' }}
       >
         <div className="flex items-center justify-between">
-          <h3 id="filter-dialog-title" className="text-sm font-semibold" style={{ color: 'var(--ink-primary)' }}>Filter</h3>
+          <h3 id="filter-dialog-title" data-focus-on-open tabIndex={-1} className="text-sm font-semibold" style={{ color: 'var(--ink-primary)' }}>Filter</h3>
           <button type="button" onClick={onClose} className="p-2.5 rounded-md transition-colors" style={{ color: 'var(--neutral-400)' }} aria-label="Close">✕</button>
         </div>
 

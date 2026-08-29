@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import type { KeyboardEvent } from 'react'
 import { useStore } from '@/store/useStore'
+import { useFocusTrap } from '@/hooks/useFocusTrap'
 import { cellToRef } from '@/engine/spreadsheet'
 import { Search, Replace, X, ArrowDown, ArrowUp } from 'lucide-react'
 
@@ -29,6 +30,7 @@ export function FindReplaceDialog({ isOpen, onClose }: Props) {
   const [currentMatch, setCurrentMatch] = useState(-1)
   const [replaceCount, setReplaceCount] = useState<number | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const containerRef = useFocusTrap<HTMLDivElement>(isOpen, onClose)
 
   useEffect(() => {
     if (isOpen && inputRef.current) {
@@ -189,6 +191,7 @@ export function FindReplaceDialog({ isOpen, onClose }: Props) {
       }
     }
     if (e.key === 'Escape') {
+      e.stopPropagation()
       onClose()
     }
   }
@@ -198,10 +201,10 @@ export function FindReplaceDialog({ isOpen, onClose }: Props) {
   return (
     <div
       className="fixed inset-0 z-50 flex items-end justify-center md:items-start md:justify-end bg-black/40 md:bg-transparent md:pointer-events-none"
-      onClick={onClose}
       role="presentation"
     >
       <div
+        ref={containerRef}
         role="dialog"
         aria-modal="true"
         aria-label={showReplace ? 'Find and replace' : 'Find'}
@@ -239,6 +242,7 @@ export function FindReplaceDialog({ isOpen, onClose }: Props) {
         <div className="flex gap-1.5">
           <input
             ref={inputRef}
+            data-focus-on-open
             type="text"
             value={findText}
             onChange={(e) => { setFindText(e.target.value); setReplaceCount(null) }}

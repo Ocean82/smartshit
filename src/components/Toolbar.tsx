@@ -4,6 +4,7 @@ import { refToCell } from '@/engine/spreadsheet';
 import { importWorkbookFromFileWithMeta, exportWorkbookToXlsx, exportSheetToCsv } from '@/io/xlsx';
 import { recordTelemetry } from '@/ai/telemetry';
 import { isBankCSV, parseBankCSV } from '@/lib/bankImport';
+import { workbookHasContent } from '@/lib/workbookGuard';
 import {
   Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight,
   Undo2, Redo2, Paintbrush, Type, Grid3x3, BarChart3,
@@ -35,6 +36,7 @@ export function Toolbar() {
     setShowConditionalFormatDialog,
     pushHistory,
     getActiveSheet,
+    showConfirm,
   } = useStore(useShallow((s) => ({
     selection: s.selection,
     setRangeFormat: s.setRangeFormat,
@@ -52,6 +54,7 @@ export function Toolbar() {
     setShowConditionalFormatDialog: s.setShowConditionalFormatDialog,
     pushHistory: s.pushHistory,
     getActiveSheet: s.getActiveSheet,
+    showConfirm: s.showConfirm,
   })));
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -460,7 +463,21 @@ export function Toolbar() {
           <ToolButton
             icon={<Upload size={15} />}
             title="Import file"
-            onClick={() => fileInputRef.current?.click()}
+            onClick={() => {
+              const proceed = () => fileInputRef.current?.click()
+              if (workbookHasContent(useStore.getState().workbook)) {
+                showConfirm({
+                  title: 'Import file',
+                  message:
+                    'Importing a file will replace the current workbook and clear undo history. This cannot be undone.',
+                  confirmLabel: 'Import file',
+                  variant: 'warning',
+                  onConfirm: proceed,
+                })
+              } else {
+                proceed()
+              }
+            }}
           />
 
           <button

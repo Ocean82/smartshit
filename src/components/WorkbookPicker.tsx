@@ -10,6 +10,7 @@ import {
 } from '@/lib/cloudSync'
 import { useStore } from '@/store/useStore'
 import { useFocusTrap } from '@/hooks/useFocusTrap'
+import { workbookHasContent } from '@/lib/workbookGuard'
 
 interface WorkbookPickerProps {
   open: boolean
@@ -21,7 +22,7 @@ export function WorkbookPicker({ open, onClose }: WorkbookPickerProps) {
   const [workbooks, setWorkbooks] = useState<CloudWorkbook[]>([])
   const [loading, setLoading] = useState(false)
   const [actionId, setActionId] = useState<string | null>(null)
-  const containerRef = useFocusTrap<HTMLDivElement>(open)
+  const containerRef = useFocusTrap<HTMLDivElement>(open, onClose)
 
   useEffect(() => {
     if (open && isCloudConfigured()) {
@@ -34,7 +35,7 @@ export function WorkbookPicker({ open, onClose }: WorkbookPickerProps) {
 
   if (!open) return null
 
-  const handleOpen = async (id: string) => {
+  const doOpen = async (id: string) => {
     setActionId(id)
     const data = await loadFromCloud(id)
     if (data) {
@@ -43,6 +44,21 @@ export function WorkbookPicker({ open, onClose }: WorkbookPickerProps) {
       onClose()
     }
     setActionId(null)
+  }
+
+  const handleOpen = (id: string) => {
+    if (workbookHasContent(useStore.getState().workbook)) {
+      showConfirm({
+        title: 'Open cloud workbook',
+        message:
+          'Opening a cloud workbook will replace the current workbook and clear undo history. This cannot be undone.',
+        confirmLabel: 'Open',
+        variant: 'warning',
+        onConfirm: () => void doOpen(id),
+      })
+    } else {
+      void doOpen(id)
+    }
   }
 
   const handleDelete = async (id: string) => {
@@ -100,7 +116,7 @@ export function WorkbookPicker({ open, onClose }: WorkbookPickerProps) {
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
           <div className="flex items-center gap-2">
             <Cloud size={18} className="text-blue-600" />
-            <h2 className="text-base font-semibold text-gray-900">Cloud Workbooks</h2>
+            <h2 data-focus-on-open tabIndex={-1} className="text-base font-semibold text-gray-900">Cloud Workbooks</h2>
           </div>
           <button
             type="button"
@@ -141,7 +157,12 @@ export function WorkbookPicker({ open, onClose }: WorkbookPickerProps) {
                     <Cloud size={16} className="text-blue-500" />
                   </div>
 
-                  <div className="flex-1 min-w-0">
+                  <button
+                    type="button"
+                    onClick={() => void handleOpen(wb.id)}
+                    className="flex-1 min-w-0 text-left bg-transparent border-0 p-0 cursor-pointer"
+                    aria-label={`Open ${wb.name}`}
+                  >
                     <p className="text-sm font-medium text-gray-900 truncate">{wb.name}</p>
                     <div className="flex items-center gap-2 text-[11px] text-gray-400 mt-0.5">
                       <span>{formatDate(wb.last_saved_at)}</span>
@@ -150,15 +171,16 @@ export function WorkbookPicker({ open, onClose }: WorkbookPickerProps) {
                       <span>·</span>
                       <span>{wb.sheet_count} sheet{wb.sheet_count !== 1 ? 's' : ''}</span>
                     </div>
-                  </div>
+                  </button>
 
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 max-md:opacity-100 transition-opacity">
                     <button
                       type="button"
                       onClick={() => handleOpen(wb.id)}
                       disabled={actionId === wb.id}
-                      className="p-1.5 rounded-md hover:bg-blue-100 text-blue-600 transition-colors disabled:opacity-50"
+                      className="p-2 rounded-md hover:bg-blue-100 text-blue-600 transition-colors disabled:opacity-50"
                       title="Open"
+                      aria-label={`Open ${wb.name}`}
                     >
                       {actionId === wb.id ? (
                         <Loader2 size={14} className="animate-spin" />
@@ -170,7 +192,7 @@ export function WorkbookPicker({ open, onClose }: WorkbookPickerProps) {
                       type="button"
                       onClick={() => handleDelete(wb.id)}
                       disabled={actionId === wb.id}
-                      className="p-1.5 rounded-md hover:bg-red-100 text-red-500 transition-colors disabled:opacity-50"
+                      className="p-2 rounded-md hover:bg-red-100 text-red-500 transition-colors disabled:opacity-50"
                       title="Delete"
                     >
                       <Trash2 size={14} />

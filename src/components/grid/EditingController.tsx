@@ -15,6 +15,7 @@ interface EditingControllerConfig {
   pushHistory: (desc: string) => void;
   validateCellValue: (cellId: string, value: string | number | null) => { valid: boolean; message?: string };
   setSelection: (sel: { startRow: number; startCol: number; endRow: number; endCol: number }) => void;
+  focusGrid: () => void;
 }
 
 export function useEditingController(config: EditingControllerConfig) {
@@ -25,6 +26,7 @@ export function useEditingController(config: EditingControllerConfig) {
     pushHistory,
     validateCellValue,
     setSelection,
+    focusGrid,
   } = config;
 
   const inputRef = useRef<HTMLInputElement>(null);
@@ -87,6 +89,13 @@ export function useEditingController(config: EditingControllerConfig) {
     setEditValue('');
   }, [setEditingCell, setEditValue]);
 
+  // After a keyboard-driven edit ends, return focus to the grid so the user can
+  // immediately continue navigating with the arrow keys. Deferred to the next
+  // frame so the edit input has unmounted and the new selection is applied.
+  const focusGridAfterEdit = useCallback(() => {
+    setTimeout(() => focusGrid(), 0);
+  }, [focusGrid]);
+
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (!editingCell) return;
     
@@ -95,17 +104,20 @@ export function useEditingController(config: EditingControllerConfig) {
       commitEdit();
       const ref = cellToRef(editingCell);
       setSelection({ startRow: ref.row + 1, startCol: ref.col, endRow: ref.row + 1, endCol: ref.col });
+      focusGridAfterEdit();
     } else if (e.key === 'Escape') {
       setEditingCell(null);
       setEditValue('');
+      focusGridAfterEdit();
     } else if (e.key === 'Tab') {
       e.preventDefault();
       commitEdit();
       const ref = cellToRef(editingCell);
       const newCol = e.shiftKey ? Math.max(0, ref.col - 1) : ref.col + 1;
       setSelection({ startRow: ref.row, startCol: newCol, endRow: ref.row, endCol: newCol });
+      focusGridAfterEdit();
     }
-  }, [editingCell, commitEdit, setSelection, setEditingCell, setEditValue]);
+  }, [editingCell, commitEdit, setSelection, setEditingCell, setEditValue, focusGridAfterEdit]);
 
   const handleAutocompleteSelect = useCallback((functionName: string) => {
     if (!functionName) return;

@@ -33,7 +33,7 @@ export function ChartDialog() {
   const [xLabel, setXLabel] = useState('');
   const [yLabel, setYLabel] = useState('');
   const [showGrid, setShowGrid] = useState(true);
-  const containerRef = useFocusTrap<HTMLDivElement>(showChartDialog);
+  const containerRef = useFocusTrap<HTMLDivElement>(showChartDialog, () => setShowChartDialog(false));
 
   if (!showChartDialog) return null;
 
@@ -68,7 +68,7 @@ export function ChartDialog() {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50" onClick={() => setShowChartDialog(false)}>
+    <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50">
       <div
         ref={containerRef}
         className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:w-[480px] max-h-[85vh] sm:max-h-[90vh] flex flex-col overflow-hidden"
@@ -78,7 +78,7 @@ export function ChartDialog() {
         aria-labelledby="chart-dialog-title"
       >
         <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between shrink-0">
-          <h3 id="chart-dialog-title" className="text-sm font-semibold text-gray-800">Insert Chart</h3>
+          <h3 id="chart-dialog-title" data-focus-on-open tabIndex={-1} className="text-sm font-semibold text-gray-800">Insert Chart</h3>
           <button
             className="p-2 -mr-1 text-gray-400 hover:text-gray-600 rounded-lg active:bg-gray-100"
             onClick={() => setShowChartDialog(false)}

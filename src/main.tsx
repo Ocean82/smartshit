@@ -7,6 +7,7 @@ import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { AuthProvider, AuthGate, ClerkUserSync } from '@/auth'
 import { useStore } from '@/store/useStore'
 import { savePersistedState } from '@/lib/persistence'
+import { flushSave, isCloudConfigured } from '@/lib/cloudSync'
 import { migrateLegacyStorageKeys } from '@/lib/storageKeys'
 import { initErrorReporting } from '@/lib/errorReporting'
 
@@ -15,18 +16,36 @@ initErrorReporting()
 
 migrateLegacyStorageKeys()
 
+/** Compose a full persisted snapshot from the live store. */
+function persistLocalSnapshot() {
+  const s = useStore.getState()
+  const activeFile = s.files.find((f) => f.id === s.activeFileId)
+  const workbooks = { ...s.workbookSlots }
+  if (activeFile?.workbookId) workbooks[activeFile.workbookId] = s.workbook
+  savePersistedState({
+    workbooks,
+    files: s.files,
+    activeFileId: s.activeFileId,
+    activeWorkbookId: activeFile?.workbookId ?? null,
+    messages: s.messages,
+  })
+}
+
 let saveTimer: ReturnType<typeof setTimeout> | null = null
 
-useStore.subscribe((state) => {
+useStore.subscribe(() => {
   if (saveTimer) clearTimeout(saveTimer)
-  saveTimer = setTimeout(() => {
-    savePersistedState({
-      workbook: state.workbook,
-      files: state.files,
-      activeFileId: state.activeFileId,
-      messages: state.messages,
-    })
-  }, 400)
+  saveTimer = setTimeout(persistLocalSnapshot, 400)
+})
+
+// Flush local + cloud saves on page unload so nothing is lost on close.
+window.addEventListener('beforeunload', () => {
+  if (saveTimer) {
+    clearTimeout(saveTimer)
+    saveTimer = null
+  }
+  persistLocalSnapshot()
+  if (isCloudConfigured()) flushSave(useStore.getState().workbook)
 })
 
 // Check if this is a shared workbook view (/shared/:token)
