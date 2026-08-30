@@ -25,6 +25,7 @@ function ToastItem({ toast }: { toast: ToastType }) {
   const dismissToast = useStore((s) => s.dismissToast);
   const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const [exiting, setExiting] = useState(false);
+  const [paused, setPaused] = useState(false);
 
   const handleDismiss = () => {
     setExiting(true);
@@ -32,6 +33,7 @@ function ToastItem({ toast }: { toast: ToastType }) {
   };
 
   useEffect(() => {
+    if (paused) return;
     if (toast.duration !== Infinity) {
       timerRef.current = setTimeout(() => {
         handleDismiss();
@@ -40,7 +42,7 @@ function ToastItem({ toast }: { toast: ToastType }) {
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [toast.id, toast.duration]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [toast.id, toast.duration, paused]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const icons = {
     success: <CheckCircle2 size={16} />,
@@ -54,6 +56,8 @@ function ToastItem({ toast }: { toast: ToastType }) {
       className={`toast-item toast-${toast.type} ${exiting ? 'toast-exit' : ''}`}
       role={toast.type === 'error' ? 'alert' : 'status'}
       aria-atomic="true"
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
     >
       <div className="toast-icon">
         {icons[toast.type]}

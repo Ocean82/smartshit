@@ -100,6 +100,7 @@ export function SheetTabs() {
                   if (e.key === 'Escape') setRenamingId(null);
                 }}
                 autoFocus
+                aria-label={`Rename sheet ${sheet.name}`}
               />
               <button type="button" onClick={handleFinishRename} style={{ color: 'var(--success)' }}>
                 <Check size={12} />

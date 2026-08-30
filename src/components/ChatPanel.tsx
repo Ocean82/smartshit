@@ -105,6 +105,8 @@ export function ChatPanel({ isMobileOpen, onCloseMobile, embedded }: ChatPanelPr
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesListRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const lastLiveIdRef = useRef('')
+  const lastLiveLenRef = useRef(0)
 
   const [waitSeconds, setWaitSeconds] = useState(0)
   const health = useServerHealth()
@@ -264,6 +266,12 @@ export function ChatPanel({ isMobileOpen, onCloseMobile, embedded }: ChatPanelPr
           />
         )}
         <div ref={messagesEndRef} />
+        <LiveStreamRegion
+          streaming={isAiProcessing}
+          message={messages[messages.length - 1]}
+          liveIdRef={lastLiveIdRef}
+          liveLenRef={lastLiveLenRef}
+        />
       </div>
 
       <ChatInputArea
@@ -662,6 +670,7 @@ function ChatInputArea({
           onChange={(e) => setChatInput(e.target.value)}
           onKeyDown={onKeyDown}
           placeholder='e.g. "Explain this spreadsheet" or "Build a monthly budget"'
+          aria-label="Message the AI assistant"
         />
         <button
           type="button"
@@ -681,6 +690,34 @@ function ChatInputArea({
       <ApiKeySettings />
     </div>
   )
+}
+
+// ─── LiveStreamRegion ─────────────────────────────────────────────────────────
+
+function LiveStreamRegion({
+  streaming,
+  message,
+  liveIdRef,
+  liveLenRef,
+}: {
+  streaming: boolean
+  message: ChatMessageType | undefined
+  liveIdRef: React.MutableRefObject<string>
+  liveLenRef: React.MutableRefObject<number>
+}) {
+  let delta = ''
+  if (streaming && message?.role === 'assistant') {
+    if (message.id !== liveIdRef.current) {
+      liveIdRef.current = message.id
+      liveLenRef.current = 0
+    }
+    const content = message.content
+    if (content.length > liveLenRef.current) {
+      delta = content.slice(liveLenRef.current)
+      liveLenRef.current = content.length
+    }
+  }
+  return delta ? <div aria-live="polite" className="sr-only">{delta}</div> : null
 }
 
 // ─── AttachmentBanner ─────────────────────────────────────────────────────────
@@ -755,7 +792,6 @@ function ActionCard({ action, onApply, onReject }: { action: AgentAction; onAppl
       <div className="flex items-start justify-between gap-2">
         <div>
           <p className="text-xs font-medium text-gray-700">{action.description}</p>
-          <p className="text-[10px] text-gray-500 mt-0.5 font-mono">tool: {action.tool}</p>
         </div>
         {action.status === 'applied' && (
           <span className="text-[10px] font-medium text-green-600 bg-green-100 px-2 py-0.5 rounded-full">Applied</span>

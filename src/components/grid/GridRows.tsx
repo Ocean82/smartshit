@@ -43,6 +43,7 @@ interface GridRowsProps {
   onContextMenu: (e: MouseEvent, row: number, col: number) => void;
   onEditChange: (val: string) => void;
   onEditBlur: () => void;
+  totalCols: number;
 }
 
 export function GridRows({
@@ -73,11 +74,12 @@ export function GridRows({
   onContextMenu,
   onEditChange,
   onEditBlur,
+  totalCols,
 }: GridRowsProps) {
   // Grid rows
   const rows = useMemo(() => {
     const handleRowSelect = (row: number) => {
-      useStore.getState().setSelection({ startRow: row, startCol: 0, endRow: row, endCol: 9999 });
+      useStore.getState().setSelection({ startRow: row, startCol: 0, endRow: row, endCol: totalCols - 1 });
     };
 
     const isSelected = (row: number, col: number) => {
@@ -223,6 +225,7 @@ export function GridRows({
     onContextMenu,
     onEditChange,
     onEditBlur,
+    totalCols,
   ]);
 
   return (

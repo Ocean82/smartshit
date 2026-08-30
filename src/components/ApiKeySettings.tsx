@@ -84,6 +84,7 @@ export function ApiKeySettings() {
             value={provider}
             onChange={(e) => handleProviderChange(e.target.value as ByokProvider)}
             className="w-full text-[11px] px-2 py-1.5 border border-gray-200 rounded-lg bg-white focus:border-blue-400 outline-none"
+            aria-label="API provider"
           >
             {getAllProviders().map((p) => (
               <option key={p.value} value={p.value}>{p.label}</option>
@@ -97,6 +98,7 @@ export function ApiKeySettings() {
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
             className="w-full text-[11px] px-2 py-1.5 border border-gray-200 rounded-lg focus:border-blue-400 outline-none font-mono"
+            aria-label="API key"
           />
 
           {/* Model (optional override) */}
@@ -106,6 +108,7 @@ export function ApiKeySettings() {
             value={model}
             onChange={(e) => setModel(e.target.value)}
             className="w-full text-[11px] px-2 py-1.5 border border-gray-200 rounded-lg focus:border-blue-400 outline-none"
+            aria-label="Model (optional)"
           />
 
           {/* Custom base URL (only shown for custom provider) */}
@@ -116,6 +119,7 @@ export function ApiKeySettings() {
               value={baseUrl}
               onChange={(e) => setBaseUrl(e.target.value)}
               className="w-full text-[11px] px-2 py-1.5 border border-gray-200 rounded-lg focus:border-blue-400 outline-none"
+              aria-label="Base URL"
             />
           )}
 

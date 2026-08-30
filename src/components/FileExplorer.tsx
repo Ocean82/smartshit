@@ -220,9 +220,19 @@ function FileItem({
           isActive ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'
         }`}
         style={{ paddingLeft: `${depth * 12 + 8}px` }}
+        role="button"
+        tabIndex={0}
+        aria-expanded={isFolder ? isExpanded : undefined}
         onClick={() => {
           if (isFolder) onToggleFolder(file.id);
           else onOpen(file.id);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            if (isFolder) onToggleFolder(file.id);
+            else onOpen(file.id);
+          }
         }}
       >
         {isFolder && (
@@ -244,6 +254,7 @@ function FileItem({
               if (e.key === 'Enter') onFinishRename();
             }}
             autoFocus
+            aria-label={`Rename ${isFolder ? 'folder' : 'file'}`}
           />
         ) : (
           <span className="flex-1 truncate">{file.name}</span>

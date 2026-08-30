@@ -276,10 +276,21 @@ export const GridCell = memo(function GridCell({
       {/* Checkbox cell */}
       {cellData?.validation?.type === 'checkbox' && !isEditing && (
         <div
+          role="checkbox"
+          aria-checked={isCellChecked(cellData.value, cellData.validation?.checkedValue)}
+          aria-label={`Toggle checkbox in ${cellId}`}
+          tabIndex={0}
           className="absolute inset-0 flex items-center justify-center cursor-pointer z-[1]"
           onClick={(e) => {
             e.stopPropagation()
             onCheckboxToggle(cellId, cellData)
+          }}
+          onKeyDown={(e) => {
+            if (e.key === ' ' || e.key === 'Enter') {
+              e.preventDefault()
+              e.stopPropagation()
+              onCheckboxToggle(cellId, cellData)
+            }
           }}
         >
           <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${

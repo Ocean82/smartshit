@@ -49,7 +49,7 @@ export function ConditionalFormatDialog({ isOpen, onClose }: Props) {
         const cellId = refToCell(r, column)
         const cell = sheet.cells[cellId]
         if (!cell || (cell.value == null && !cell.formula)) continue
-        setCellFormat(cellId, { conditionalRules: [rule], bgColor: undefined })
+        setCellFormat(cellId, { conditionalRules: [rule] })
       }
     } else if (category === 'iconSet') {
       const icons = ICON_SETS[iconSetType]
@@ -66,7 +66,7 @@ export function ConditionalFormatDialog({ isOpen, onClose }: Props) {
         const cellId = refToCell(r, column)
         const cell = sheet.cells[cellId]
         if (!cell || (cell.value == null && !cell.formula)) continue
-        setCellFormat(cellId, { conditionalRules: [rule], bgColor: undefined })
+        setCellFormat(cellId, { conditionalRules: [rule] })
       }
     }
     onClose()

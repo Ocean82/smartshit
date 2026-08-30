@@ -11,6 +11,7 @@ import { exportWorkbookToJson, importWorkbookFromJsonFile, normalizeImportedWork
 import { workbookHasContent } from '@/lib/workbookGuard'
 import { v4 as uuid } from 'uuid'
 import { AnchoredPanel } from '@/components/AnchoredPanel'
+import { RenameWorkbookDialog } from '@/components/RenameWorkbookDialog'
 
 type MenuId = 'file' | 'edit' | 'view' | 'insert' | 'format' | 'data'
 
@@ -26,6 +27,7 @@ interface MenuItem {
 
 export function MenuBar() {
   const [openMenu, setOpenMenu] = useState<MenuId | null>(null)
+  const [renameOpen, setRenameOpen] = useState(false)
   const triggerRefs = useRef<Partial<Record<MenuId, HTMLButtonElement | null>>>({})
   const activeTriggerRef = useRef<HTMLButtonElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -292,10 +294,7 @@ export function MenuBar() {
   }
 
   const handleRename = () => {
-    const name = prompt('Workbook name:', workbook.name)
-    if (name && name.trim()) {
-      useStore.setState((s) => { s.workbook.name = name.trim() })
-    }
+    setRenameOpen(true)
     setOpenMenu(null)
   }
 
@@ -451,6 +450,8 @@ export function MenuBar() {
         className="hidden"
         onChange={handleImportJsonFile}
       />
+
+      <RenameWorkbookDialog open={renameOpen} onClose={() => setRenameOpen(false)} />
     </nav>
   )
 }

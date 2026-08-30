@@ -28,6 +28,8 @@ interface GridHeadersProps {
   handleResizeEnd: (e: PointerEvent<HTMLDivElement>) => void;
   handleAutoFitColumn: (col: number) => void;
   rowOffset: number;
+  totalRows: number;
+  totalCols: number;
 }
 
 export function GridHeaders({
@@ -49,6 +51,8 @@ export function GridHeaders({
   handleResizeEnd,
   handleAutoFitColumn,
   rowOffset,
+  totalRows,
+  totalCols,
 }: GridHeadersProps) {
   // Top-left corner header
   const cornerHeader = (
@@ -56,7 +60,7 @@ export function GridHeaders({
       role="columnheader"
       className="bg-gradient-to-b from-gray-100 to-gray-150 border-b border-r border-gray-300 flex items-center justify-center text-[10px] text-gray-400 font-medium shrink-0 sticky left-0 z-30"
       style={{ width: ROW_HEADER_WIDTH, height: COL_HEADER_HEIGHT }}
-      onClick={() => useStore.getState().setSelection({ startRow: 0, startCol: 0, endRow: 9999, endCol: 9999 })}
+      onClick={() => useStore.getState().setSelection({ startRow: 0, startCol: 0, endRow: totalRows - 1, endCol: totalCols - 1 })}
       aria-label="Select all cells"
     >
       ▾

@@ -241,6 +241,7 @@ export function PivotDialog({ isOpen, onClose }: Props) {
                       });
                     }}
                     className="border border-gray-200 rounded px-2 py-1 text-xs"
+                    aria-label={`Aggregation for ${columns.find((c) => c.letter === vf.col)?.header ?? 'value field'}`}
                   >
                     <option value="sum">Sum</option>
                     <option value="count">Count</option>

@@ -218,7 +218,7 @@ showValidationDialog: s.showValidationDialog,
         <FileExplorer />
 
         {/* Spreadsheet — always takes remaining space */}
-        <div id="spreadsheet-main" className="flex-1 flex flex-col overflow-hidden min-w-0 relative max-md:pb-[52px]">
+        <div id="spreadsheet-main" role="main" tabIndex={-1} className="flex-1 flex flex-col overflow-hidden min-w-0 relative max-md:pb-[52px]">
           <div className="flex-1 flex flex-col overflow-hidden relative">
             <ErrorBoundary scope="Spreadsheet Grid">
               <SpreadsheetGrid />
@@ -341,7 +341,7 @@ function TitleBar({ onOpenTemplates, onOpenCloudPicker, onOpenShare, onOpenComma
   const syncBadge = (() => {
     if (!isCloudConfigured()) {
       return (
-        <div className="flex items-center gap-1.5 px-2 py-1 rounded-md" style={{ background: 'var(--neutral-900)' }}>
+        <div role="status" aria-live="polite" className="flex items-center gap-1.5 px-2 py-1 rounded-md" style={{ background: 'var(--neutral-900)' }}>
           <Zap size={11} style={{ color: 'var(--success)' }} />
           <span style={{ color: 'var(--neutral-300)' }}>Local</span>
         </div>
@@ -350,14 +350,14 @@ function TitleBar({ onOpenTemplates, onOpenCloudPicker, onOpenShare, onOpenComma
     switch (syncStatus) {
       case 'syncing':
         return (
-          <div className="flex items-center gap-1.5 px-2 py-1 rounded-md" style={{ background: 'var(--neutral-900)' }}>
+          <div role="status" aria-live="polite" className="flex items-center gap-1.5 px-2 py-1 rounded-md" style={{ background: 'var(--neutral-900)' }}>
             <Loader2 size={11} className="animate-spin" style={{ color: 'var(--info)' }} />
             <span style={{ color: 'var(--info)' }}>Syncing</span>
           </div>
         )
       case 'saved':
         return (
-          <div className="flex items-center gap-1.5 px-2 py-1 rounded-md" style={{ background: 'var(--neutral-900)' }}>
+          <div role="status" aria-live="polite" className="flex items-center gap-1.5 px-2 py-1 rounded-md" style={{ background: 'var(--neutral-900)' }}>
             <Cloud size={11} style={{ color: 'var(--success)' }} />
             <span style={{ color: 'var(--success)' }}>Saved</span>
           </div>
@@ -365,6 +365,8 @@ function TitleBar({ onOpenTemplates, onOpenCloudPicker, onOpenShare, onOpenComma
       case 'too-large':
         return (
           <div
+            role="status"
+            aria-live="polite"
             className="flex items-center gap-1.5 px-2 py-1 rounded-md"
             style={{ background: 'var(--neutral-900)' }}
             title={describeSyncStatus('too-large') ?? undefined}
@@ -376,6 +378,8 @@ function TitleBar({ onOpenTemplates, onOpenCloudPicker, onOpenShare, onOpenComma
       case 'error':
         return (
           <div
+            role="status"
+            aria-live="polite"
             className="flex items-center gap-1.5 px-2 py-1 rounded-md"
             style={{ background: 'var(--neutral-900)' }}
             title={describeSyncStatus('error') ?? undefined}
@@ -386,14 +390,14 @@ function TitleBar({ onOpenTemplates, onOpenCloudPicker, onOpenShare, onOpenComma
         )
       case 'offline':
         return (
-          <div className="flex items-center gap-1.5 px-2 py-1 rounded-md" style={{ background: 'var(--neutral-900)' }}>
+          <div role="status" aria-live="polite" className="flex items-center gap-1.5 px-2 py-1 rounded-md" style={{ background: 'var(--neutral-900)' }}>
             <CloudOff size={11} style={{ color: 'var(--warning)' }} />
             <span style={{ color: 'var(--warning)' }}>Offline</span>
           </div>
         )
       default:
         return (
-          <div className="flex items-center gap-1.5 px-2 py-1 rounded-md" style={{ background: 'var(--neutral-900)' }}>
+          <div role="status" aria-live="polite" className="flex items-center gap-1.5 px-2 py-1 rounded-md" style={{ background: 'var(--neutral-900)' }}>
             <Cloud size={11} style={{ color: 'var(--neutral-400)' }} />
             <span style={{ color: 'var(--neutral-300)' }}>Cloud</span>
           </div>

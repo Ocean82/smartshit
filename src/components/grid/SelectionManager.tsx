@@ -35,7 +35,6 @@ export function useSelectionManager(config: SelectionManagerConfig) {
     selection,
     additionalSelections,
     setSelection,
-    editingCell,
     setEditingCell,
     setEditValue,
   } = useStore(useShallow((s) => ({
@@ -43,7 +42,6 @@ export function useSelectionManager(config: SelectionManagerConfig) {
     selection: s.selection,
     additionalSelections: s.additionalSelections,
     setSelection: s.setSelection,
-    editingCell: s.editingCell,
     setEditingCell: s.setEditingCell,
     setEditValue: s.setEditValue,
   })));
@@ -295,8 +293,8 @@ export function useSelectionManager(config: SelectionManagerConfig) {
     handleMouseUp,
     handleContextMenu,
     getSelectionInfo,
-    handleColSelect: (col: number) => setSelection({ startRow: 0, startCol: col, endRow: 9999, endCol: col }),
-    handleRowSelect: (row: number) => setSelection({ startRow: row, startCol: 0, endRow: row, endCol: 9999 }),
+    handleColSelect: (col: number) => setSelection({ startRow: 0, startCol: col, endRow: TOTAL_ROWS - 1, endCol: col }),
+    handleRowSelect: (row: number) => setSelection({ startRow: row, startCol: 0, endRow: row, endCol: TOTAL_COLS - 1 }),
     setEditingCell,
     setEditValue,
     setSelection,

@@ -82,13 +82,29 @@ export function WorkbookPicker({ open, onClose }: WorkbookPickerProps) {
     })
   }
 
-  const handleSaveCurrent = async () => {
+  const doSaveCurrent = async () => {
     setActionId('new')
     await createInCloud(workbook)
     // Refresh the list
     const fresh = await listCloudWorkbooks()
     setWorkbooks(fresh)
     setActionId(null)
+  }
+
+  const handleSaveCurrent = async () => {
+    const trimmed = workbook.name.trim()
+    const duplicate = !!trimmed && workbooks.some((w) => w.name === trimmed)
+    if (duplicate) {
+      showConfirm({
+        title: 'Duplicate workbook name',
+        message: `"${trimmed}" already exists in the cloud. Save the current workbook as a new copy anyway?`,
+        confirmLabel: 'Save copy',
+        variant: 'warning',
+        onConfirm: () => void doSaveCurrent(),
+      })
+    } else {
+      void doSaveCurrent()
+    }
   }
 
   const formatBytes = (bytes: number): string => {

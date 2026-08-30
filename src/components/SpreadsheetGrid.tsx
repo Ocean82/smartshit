@@ -124,10 +124,10 @@ function useColumnResize(getColWidth: (col: number) => number, getActiveSheet: (
     e.preventDefault();
     e.stopPropagation();
     e.currentTarget.setPointerCapture(e.pointerId);
-    resizeStartRef.current = { col, startX: e.clientX, startWidth: getColWidth(col) };
+    resizeStartRef.current = { col, startX: e.clientX, startWidth: columnWidths[col] ?? getColWidth(col) };
     document.body.style.cursor = 'col-resize';
     document.body.style.userSelect = 'none';
-  }, [getColWidth]);
+  }, [getColWidth, columnWidths]);
 
   const handleResizeMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     const start = resizeStartRef.current;
@@ -343,7 +343,7 @@ export function SpreadsheetGrid() {
 
   // Column widths
   const getColWidth = useCallback((col: number) => {
-    return resizeState.columnWidths[col] || sheet.columnWidths[col] || DEFAULT_CELL_WIDTH;
+    return sheet.columnWidths[col] || DEFAULT_CELL_WIDTH;
   }, [sheet.columnWidths]);
 
   const resizeState = useColumnResize(getColWidth, getActiveSheet, getComputedValue);
@@ -445,7 +445,7 @@ export function SpreadsheetGrid() {
       aria-label="Spreadsheet grid"
       aria-rowcount={viewport.TOTAL_ROWS}
       aria-colcount={viewport.TOTAL_COLS}
-      className="flex-1 overflow-auto relative touch-pan-x touch-pan-y"
+      className="flex-1 overflow-auto relative touch-pan-x touch-pan-y focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-400/60"
       tabIndex={0}
       onKeyDown={handleGridKeyDown}
       onMouseUp={selectionManager.handleMouseUp}
@@ -467,7 +467,7 @@ export function SpreadsheetGrid() {
             aria-label="Select all"
             className="shrink-0 border-b border-r border-gray-300 bg-gray-100 flex items-center justify-center text-[10px] text-gray-400 font-medium cursor-pointer hover:bg-gray-200 sticky left-0 z-30"
             style={{ width: ROW_HEADER_WIDTH, height: COL_HEADER_HEIGHT }}
-            onClick={() => useStore.getState().setSelection({ startRow: 0, startCol: 0, endRow: 9999, endCol: 9999 })}
+            onClick={() => useStore.getState().setSelection({ startRow: 0, startCol: 0, endRow: viewport.TOTAL_ROWS - 1, endCol: viewport.TOTAL_COLS - 1 })}
           >
             ▾
           </div>

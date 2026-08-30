@@ -82,6 +82,7 @@ export function ChartDialog() {
           <button
             className="p-2 -mr-1 text-gray-400 hover:text-gray-600 rounded-lg active:bg-gray-100"
             onClick={() => setShowChartDialog(false)}
+            aria-label="Close chart dialog"
           >
             <X size={18} />
           </button>

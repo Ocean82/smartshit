@@ -78,6 +78,7 @@
 .toolbar-font-size:focus {
   outline: none;
   border-color: var(--accent-400);
+  box-shadow: 0 0 0 2px var(--accent-100);
 }
 
 /* ─── Color button (text "A" with underline swatch) ─── */

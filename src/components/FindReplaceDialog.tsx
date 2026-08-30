@@ -224,6 +224,7 @@ export function FindReplaceDialog({ isOpen, onClose }: Props) {
             onClick={() => setShowReplace(!showReplace)}
             className={`p-1 rounded text-xs ${showReplace ? 'bg-blue-100 text-blue-700' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'}`}
             title="Toggle Replace"
+            aria-label="Toggle replace mode"
           >
             <Replace size={13} />
           </button>
@@ -231,6 +232,7 @@ export function FindReplaceDialog({ isOpen, onClose }: Props) {
             type="button"
             onClick={onClose}
             className="p-2.5 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+            aria-label="Close find and replace"
           >
             <X size={14} />
           </button>
@@ -249,6 +251,7 @@ export function FindReplaceDialog({ isOpen, onClose }: Props) {
             onKeyDown={handleKeyDown}
             placeholder="Find..."
             className="flex-1 border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:border-blue-400 focus:ring-1 focus:ring-blue-200 outline-none"
+            aria-label="Find"
           />
           <button onClick={goToPrev} disabled={matches.length === 0} className="p-1.5 rounded border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-30" title="Previous (Shift+Enter)">
             <ArrowUp size={14} />
@@ -271,6 +274,7 @@ export function FindReplaceDialog({ isOpen, onClose }: Props) {
               onKeyDown={handleKeyDown}
               placeholder="Replace with..."
               className="flex-1 border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:border-blue-400 focus:ring-1 focus:ring-blue-200 outline-none"
+              aria-label="Replace with"
             />
             <button
               onClick={handleReplaceCurrent}

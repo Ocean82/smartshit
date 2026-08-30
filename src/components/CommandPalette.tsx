@@ -249,7 +249,8 @@ export function CommandPalette({
               }
             }}
             placeholder="Type a command…"
-            className="flex-1 text-sm outline-none bg-transparent"
+            aria-label="Search commands"
+            className="flex-1 text-sm bg-transparent rounded-md focus:ring-2 focus:ring-inset focus:ring-blue-400/70 focus:outline-none"
             style={{ color: 'var(--ink-primary)' }}
           />
           <button type="button" onClick={onClose} className="p-1 rounded-lg transition-colors" style={{ color: 'var(--neutral-400)' }}>

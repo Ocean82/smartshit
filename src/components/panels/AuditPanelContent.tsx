@@ -233,7 +233,7 @@ export function AuditPanelContent() {
       <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2.5 scrollbar-thin">
         {!result && !loading && (
           <div className="text-center text-[11px] text-gray-400 mt-8 px-4 leading-relaxed">
-            Click "Run Audit" to scan your spreadsheet for formula errors, inconsistencies, and potential problems.
+            Run "Scan Spreadsheet" to check your spreadsheet for formula errors, inconsistencies, and potential problems.
           </div>
         )}
 

@@ -149,6 +149,7 @@ export function FormulaBar() {
             onBlur={handleNameBoxSubmit}
             onKeyDown={handleNameBoxKeyDown}
             autoFocus
+            aria-label="Cell reference (Go to cell)"
           />
         ) : (
           <button
@@ -176,6 +177,7 @@ export function FormulaBar() {
               className="p-1 rounded transition-colors"
               style={{ color: 'var(--error)' }}
               title="Cancel (Esc)"
+              aria-label="Cancel edit"
             >
               <X size={13} />
             </button>
@@ -185,6 +187,7 @@ export function FormulaBar() {
               className="p-1 rounded transition-colors"
               style={{ color: 'var(--success)' }}
               title="Confirm (Enter)"
+              aria-label="Confirm edit"
             >
               <Check size={13} />
             </button>
@@ -210,6 +213,7 @@ export function FormulaBar() {
             value={editValue}
             onChange={(e) => setEditValue(e.target.value)}
             onKeyDown={handleKeyDown}
+            aria-label="Formula"
           />
         ) : (
           <div
