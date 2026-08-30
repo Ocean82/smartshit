@@ -12,8 +12,6 @@
  * Falls back gracefully if IndexedDB is unavailable (private browsing, etc).
  */
 
-import { EMBEDDING_DIM } from './intentEmbeddings'
-
 // ─── Constants ──────────────────────────────────────────────────────────────
 
 const DB_NAME = 'smartsht-nlp-embeddings'

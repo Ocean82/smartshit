@@ -26,7 +26,6 @@ import type { NLPWorkerRequest, NLPWorkerResponse, NLPEngineState } from './type
 
 let session: ort.InferenceSession | null = null
 let tokenizer: WordPieceTokenizer | null = null
-let engineState: NLPEngineState = 'loading'
 
 // ─── Lifecycle ──────────────────────────────────────────────────────────────
 
@@ -230,7 +229,6 @@ function l2Normalize(vec: Float32Array): void {
 // ─── Message Helpers ────────────────────────────────────────────────────────
 
 function postState(state: NLPEngineState): void {
-  engineState = state
   const response: NLPWorkerResponse = { type: 'stateChange', state }
   self.postMessage(response)
 }

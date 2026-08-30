@@ -16,7 +16,6 @@ import type {
   NLPWorkerRequest,
   NLPWorkerResponse,
   NLPEngineState,
-  NLPConfig,
   ClassificationResult,
 } from './types'
 

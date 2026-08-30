@@ -48,7 +48,7 @@ export function useChartCardDrag({ chartId, position, bounds }: UseChartCardDrag
     )
     setPos({ x: next.x, y: next.y })
     posRef.current = { x: next.x, y: next.y }
-  }, [bounds.width, bounds.height, position.width, position.height])
+  }, [bounds, position.width, position.height])
 
   const endDrag = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     if (!isDraggingRef.current) return

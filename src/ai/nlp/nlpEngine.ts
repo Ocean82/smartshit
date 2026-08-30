@@ -15,7 +15,7 @@
 import type { IntentType } from '@shared/intentTypes'
 import type { ClassificationResult, NLPEngineState, WorkbookContext } from './types'
 import { NLPWorkerBridge, type NLPBridgeOptions } from './nlpBridge'
-import { INTENT_EMBEDDINGS, type IntentEmbeddingEntry, bootstrapIntentEmbeddings, isBootstrapped, loadPrecomputedEmbeddings } from './intentEmbeddings'
+import { INTENT_EMBEDDINGS, bootstrapIntentEmbeddings, isBootstrapped, loadPrecomputedEmbeddings } from './intentEmbeddings'
 import { classifyIntent as classifyIntentKeyword } from './intentClassifier'
 import { extractEntities } from './entityExtractor'
 import { getCachedEmbedding, setCachedEmbedding, getCachedBootstrap, setCachedBootstrap } from './embeddingCache'
@@ -166,7 +166,7 @@ export class NLPEngine {
     loadPrecomputedEmbeddings().then((loaded) => {
       if (loaded) {
         // Pre-computed vectors loaded — still init the worker for user query embeddings
-        console.debug('[NLP] Pre-computed intent vectors loaded (instant bootstrap)')
+        console.info('[NLP] Pre-computed intent vectors loaded (instant bootstrap)')
       }
     }).catch(() => {
       // Non-fatal — will fall back to runtime bootstrap
@@ -193,7 +193,6 @@ export class NLPEngine {
     // Try loading from IndexedDB cache (faster than runtime computation)
     const cached = await getCachedBootstrap('minilm-v1')
     if (cached && cached.length > 0) {
-      const { INTENT_PHRASES } = await import('./intentEmbeddings')
       const { bootstrapFromCache } = await import('./intentEmbeddings')
       bootstrapFromCache(cached)
       return

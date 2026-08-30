@@ -269,9 +269,13 @@ async function main() {
   try {
     ort = await import('onnxruntime-node')
   } catch {
-    // Try from server/node_modules
-    const serverOrt = path.join(repoRoot, 'server/node_modules/onnxruntime-node/dist/index.mjs')
-    if (fs.existsSync(serverOrt)) {
+    // Try from server/node_modules (entry is CJS dist/index.js for onnxruntime-node)
+    const candidates = [
+      path.join(repoRoot, 'server/node_modules/onnxruntime-node/dist/index.js'),
+      path.join(repoRoot, 'server/node_modules/onnxruntime-node/dist/index.mjs'),
+    ]
+    const serverOrt = candidates.find((p) => fs.existsSync(p))
+    if (serverOrt) {
       ort = await import(`file://${serverOrt}`)
     } else {
       console.error('onnxruntime-node not found. Install it or run from server directory.')

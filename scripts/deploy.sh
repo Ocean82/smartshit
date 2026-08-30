@@ -99,6 +99,34 @@ if [ "$SHARED_ENV" -nt "$APP_DIR/server/.env" ]; then
   chmod 600 "$APP_DIR/server/.env"
 fi
 
+# ─── ONNX Model Self-Heal (non-fatal) ────────────────────────────────────────
+# MiniLM ONNX assets are gitignored, so a fresh checkout (or wiped server)
+# would lack them. Ensure they exist before the frontend build embeds
+# public/models/ into dist/ and before the server serves Path B inference.
+# Each step is non-fatal (WARN on failure) so a Hugging Face network outage
+# cannot block a code deploy.
+
+run_model_step() {
+  if ! "$@" 2>&1 | tee -a "$DEPLOY_LOG" | tail -2; then
+    log "WARN: model step failed (non-fatal): $*"
+  fi
+}
+
+if [ "$DEPLOY_FRONTEND" = true ] && [ ! -f public/models/minilm/model.onnx ]; then
+  log "Syncing client MiniLM model (public/models/minilm, quantized)..."
+  run_model_step npm run model:copy-deploy -- --public
+fi
+
+if [ "$DEPLOY_SERVER" = true ] && [ ! -f server/models/minilm/model.onnx ]; then
+  log "Syncing server MiniLM model (server/models/minilm)..."
+  run_model_step npm run model:copy-deploy
+fi
+
+if [ "$DEPLOY_SERVER" = true ] && [ ! -f public/models/minilm/intent-vectors.bin ] && [ -f server/models/minilm/model.onnx ]; then
+  log "Pre-computing intent vectors (public/models/minilm/intent-vectors.bin)..."
+  run_model_step npm run model:precompute
+fi
+
 # ─── Build Frontend ───────────────────────────────────────────────────────────
 
 if [ "$DEPLOY_FRONTEND" = true ]; then
@@ -112,26 +140,15 @@ if [ "$DEPLOY_FRONTEND" = true ]; then
   BUNDLE_SIZE=$(du -sh dist/index.html | cut -f1)
   log "Frontend bundle: $BUNDLE_SIZE"
 
-  log "Deploying frontend to $FRONTEND_DEST..."
-  sudo cp dist/index.html "$FRONTEND_DEST/index.html"
-  sudo chown www-data:www-data "$FRONTEND_DEST/index.html"
-
-  # Copy any additional build artifacts (ONNX worker, etc.)
-  for artifact in dist/*.js dist/*.css; do
-    if [ -f "$artifact" ] && [ "$artifact" != "dist/index.html" ]; then
-      sudo cp "$artifact" "$FRONTEND_DEST/$(basename "$artifact")"
-      sudo chown www-data:www-data "$FRONTEND_DEST/$(basename "$artifact")"
-    fi
-  done
-
-  # Copy any new static assets (favicon, manifest, sw.js)
-  for asset in public/favicon.svg public/manifest.json public/sw.js public/apple-touch-icon.png public/robots.txt public/sitemap.xml; do
-    if [ -f "$asset" ]; then
-      sudo cp "$asset" "$FRONTEND_DEST/$(basename "$asset")"
-      sudo chown www-data:www-data "$FRONTEND_DEST/$(basename "$asset")"
-    fi
-  done
-
+  log "Mirroring dist/ → $FRONTEND_DEST"
+  if command -v rsync >/dev/null 2>&1; then
+    # Full tree mirror: index.html + app/ + assets/ + models/ + sw.js + .well-known
+    sudo rsync -a --delete dist/ "$FRONTEND_DEST/"
+  else
+    sudo cp -rf dist/. "$FRONTEND_DEST/"
+    echo "  (rsync not found — copied without pruning stale hashed assets)"
+  fi
+  sudo chown -R www-data:www-data "$FRONTEND_DEST"
   log "Frontend deployed ✓"
 fi
 

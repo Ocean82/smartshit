@@ -20,13 +20,13 @@ export function columnLabel(index: number): string {
  * Renders a plain HTML table — no editor/store dependency.
  */
 export function ReadOnlyGrid({ sheet }: { sheet: SheetData }) {
-  const { maxRow, maxCol, grid } = useMemo(() => {
+  const { maxCol, grid } = useMemo(() => {
     const cellIds = Object.keys(sheet.cells).filter(
       (id) => sheet.cells[id]?.value != null || sheet.cells[id]?.formula,
     )
 
     if (cellIds.length === 0) {
-      return { maxRow: 10, maxCol: 5, grid: [] as string[][] }
+      return { maxCol: 5, grid: [] as string[][] }
     }
 
     let mR = 0
@@ -54,7 +54,7 @@ export function ReadOnlyGrid({ sheet }: { sheet: SheetData }) {
       g.push(row)
     }
 
-    return { maxRow: mR, maxCol: mC, grid: g }
+    return { maxCol: mC, grid: g }
   }, [sheet.cells])
 
   const colHeaders = Array.from({ length: maxCol + 1 }, (_, i) => columnLabel(i))

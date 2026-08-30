@@ -38,13 +38,11 @@ export function ImportInsightsOverlay() {
     getActiveSheet,
     getComputedValue,
     lastAuditResult,
-    activePanel,
     setActivePanel,
   } = useStore(useShallow((s) => ({
     getActiveSheet: s.getActiveSheet,
     getComputedValue: s.getComputedValue,
     lastAuditResult: s.lastAuditResult,
-    activePanel: s.activePanel,
     setActivePanel: s.setActivePanel,
   })))
 

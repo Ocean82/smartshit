@@ -52,7 +52,7 @@ export function createIntentClassifierStage(): PipelineStage {
           ) {
             // Log classification decision for threshold tuning
             if (import.meta.env.DEV) {
-              console.debug(
+              console.info(
                 `[IntentClassifier] NLP override: "${context.message.slice(0, 50)}" → ${nlpResult.intentType} (${nlpResult.confidence}) over regex ${regexIntent.intentType} (${regexIntent.confidence})`,
               )
             }
@@ -68,7 +68,7 @@ export function createIntentClassifierStage(): PipelineStage {
           } else {
             // Log when NLP was available but regex won (for threshold analysis)
             if (import.meta.env.DEV && nlpResult.intentType !== 'unknown') {
-              console.debug(
+              console.info(
                 `[IntentClassifier] Regex kept: "${context.message.slice(0, 50)}" → regex=${regexIntent.intentType}(${regexIntent.confidence}) nlp=${nlpResult.intentType}(${nlpResult.confidence})`,
               )
             }
