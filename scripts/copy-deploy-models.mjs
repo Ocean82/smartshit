@@ -8,9 +8,14 @@
  *           (skipped by default — production already has Spreadsheet-RL-4B)
  *
  * Usage:
- *   node scripts/copy-deploy-models.mjs
- *   node scripts/copy-deploy-models.mjs --public
+ *   node scripts/copy-deploy-models.mjs                       # server copy only (full model)
+ *   node scripts/copy-deploy-models.mjs --public              # server + client copies
+ *   node scripts/copy-deploy-models.mjs --public-only         # client copy only (quantized)
  *   SMARTSHT_MINILM_SRC=/path/to/dir node scripts/copy-deploy-models.mjs
+ *
+ * Idempotent: an existing model.onnx + tokenizers are kept, so repeat runs
+ * don't re-download (~86 MB full / ~22 MB quantized). Delete the file to
+ * force a refresh.
  *
  * Network: Hugging Face download fallback requires outbound HTTPS.
  * Runtime: Node.js 18+ (uses global fetch).
@@ -37,7 +42,8 @@ const HF_ONNX_URL = `${HF_BASE}/onnx/model.onnx`
 const HF_ONNX_QUANTIZED_URL = `${HF_BASE}/onnx/model_quantized.onnx`
 
 const args = new Set(process.argv.slice(2))
-const withPublic = args.has('--public')
+const withPublic = args.has('--public') || args.has('--public-only')
+const publicOnly = args.has('--public-only')
 const withSpreadsheetRl = args.has('--with-spreadsheet-rl')
 
 function exists(p) {
@@ -164,7 +170,16 @@ async function ensureMiniLm(destDir, { quantized = false } = {}) {
   fs.mkdirSync(destDir, { recursive: true })
   const destModel = path.join(destDir, 'model.onnx')
 
-  // For client-side (--public), prefer the quantized model (~22MB vs 86MB)
+  // Idempotent: keep existing model + tokenizers, avoiding a ~86MB/~22MB
+  // re-download on every deploy. Delete model.onnx to force a refresh.
+  const hasModel = exists(destModel)
+  const hasTokenizers = TOKENIZER_FILES.every((name) => exists(path.join(destDir, name)))
+  if (hasModel && hasTokenizers) {
+    console.log(`Model already present, skipping: ${destDir}`)
+    return { source: 'existing', modelPath: destModel }
+  }
+
+  // For client-side (--public/-only), prefer the quantized model (~22MB vs 86MB)
   if (quantized) {
     const quantizedSrc = resolveLocalQuantizedSource()
     if (quantizedSrc) {
@@ -251,12 +266,16 @@ function copySpreadsheetRlOptional() {
 }
 
 async function main() {
-  console.log('copy-deploy-models: MiniLM → server/models/minilm/')
-  const serverDest = path.join(repoRoot, 'server/models/minilm')
-  const result = await ensureMiniLm(serverDest)
+  if (publicOnly) {
+    console.log('copy-deploy-models: public only (server copy skipped)')
+  } else {
+    console.log('copy-deploy-models: MiniLM → server/models/minilm/')
+    const serverDest = path.join(repoRoot, 'server/models/minilm')
+    await ensureMiniLm(serverDest)
+  }
 
   if (withPublic) {
-    console.log('Also copying to public/models/minilm/ (Path A, quantized ~22MB)')
+    console.log('Also ensuring public/models/minilm/ (Path A, quantized ~22MB)')
     const publicDest = path.join(repoRoot, 'public/models/minilm')
     await ensureMiniLm(publicDest, { quantized: true })
   }
@@ -264,8 +283,9 @@ async function main() {
   copySpreadsheetRlOptional()
 
   console.log('')
-  console.log(`Done (${result.source}). Runtime path: server/models/minilm/model.onnx`)
+  console.log('Done. Runtime path: server/models/minilm/model.onnx')
   console.log('Do not link the server to temp/ or D:\\spreadsht_workbook — copy only.')
+  console.log('Repeat runs skip existing models (idempotent).')
 }
 
 main().catch((err) => {

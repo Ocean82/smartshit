@@ -72,13 +72,29 @@ git reset --hard origin/main --quiet
 NEW_COMMIT=$(git rev-parse HEAD)
 log "Updated to: ${NEW_COMMIT:0:8}"
 
-if [ "$PREV_COMMIT" = "$NEW_COMMIT" ]; then
+# If nothing changed and model assets are already present, there is nothing to do.
+# Missing models should still trigger a repair pass (fresh checkout / wiped server).
+MISSING_MODELS=""
+if [ "$DEPLOY_SERVER" = true ] && [ ! -f server/models/minilm/model.onnx ]; then
+  MISSING_MODELS="$MISSING_MODELS server-model"
+fi
+if [ "$DEPLOY_FRONTEND" = true ] && [ ! -f public/models/minilm/model.onnx ]; then
+  MISSING_MODELS="$MISSING_MODELS client-model"
+fi
+
+if [ "$PREV_COMMIT" = "$NEW_COMMIT" ] && [ -z "$MISSING_MODELS" ]; then
   log "No changes detected — nothing to deploy."
   exit 0
 fi
 
-# Show what changed
-log "Changes: $(git log --oneline "${PREV_COMMIT}..${NEW_COMMIT}" | wc -l) commit(s)"
+if [ "$PREV_COMMIT" = "$NEW_COMMIT" ] && [ -n "$MISSING_MODELS" ]; then
+  log "No code changes, but missing:${MISSING_MODELS}. Running model repair only."
+fi
+
+# Show what changed (only when there is a real change)
+if [ "$PREV_COMMIT" != "$NEW_COMMIT" ]; then
+  log "Changes: $(git log --oneline "${PREV_COMMIT}..${NEW_COMMIT}" | wc -l) commit(s)"
+fi
 
 # ─── Install Dependencies ─────────────────────────────────────────────────────
 
@@ -112,14 +128,14 @@ run_model_step() {
   fi
 }
 
-if [ "$DEPLOY_FRONTEND" = true ] && [ ! -f public/models/minilm/model.onnx ]; then
-  log "Syncing client MiniLM model (public/models/minilm, quantized)..."
-  run_model_step npm run model:copy-deploy -- --public
-fi
-
 if [ "$DEPLOY_SERVER" = true ] && [ ! -f server/models/minilm/model.onnx ]; then
   log "Syncing server MiniLM model (server/models/minilm)..."
   run_model_step npm run model:copy-deploy
+fi
+
+if [ "$DEPLOY_FRONTEND" = true ] && [ ! -f public/models/minilm/model.onnx ]; then
+  log "Syncing client MiniLM model (public/models/minilm, quantized)..."
+  run_model_step npm run model:copy-deploy -- --public-only
 fi
 
 if [ "$DEPLOY_SERVER" = true ] && [ ! -f public/models/minilm/intent-vectors.bin ] && [ -f server/models/minilm/model.onnx ]; then
@@ -142,14 +158,37 @@ if [ "$DEPLOY_FRONTEND" = true ]; then
 
   log "Mirroring dist/ → $FRONTEND_DEST"
   if command -v rsync >/dev/null 2>&1; then
-    # Full tree mirror: index.html + app/ + assets/ + models/ + sw.js + .well-known
-    sudo rsync -a --delete dist/ "$FRONTEND_DEST/"
+    # Full tree mirror: index.html + app/ + assets/ + models/ + sw.js + .well-known.
+    # --delay-updates stages new files and renames them at the end, shrinking the
+    # window where the new index.html is live but hashed assets are still copying.
+    sudo rsync -a --delete --delay-updates dist/ "$FRONTEND_DEST/"
   else
     sudo cp -rf dist/. "$FRONTEND_DEST/"
     echo "  (rsync not found — copied without pruning stale hashed assets)"
   fi
   sudo chown -R www-data:www-data "$FRONTEND_DEST"
   log "Frontend deployed ✓"
+fi
+
+# ─── Landing statics (index/terms/privacy/404/og-image/llms/robots/sitemap) ───
+# Rsync the landing webroot WITHOUT --delete: /var/www/smartsht also holds app/
+# and the nginx conf copy, and must never be pruned from the landing folder.
+if [ -d "$APP_DIR/landing" ]; then
+  log "Syncing landing statics to /var/www/smartsht..."
+  if command -v rsync >/dev/null 2>&1; then
+    sudo rsync -a \
+      --exclude 'smartsht.nginx.conf' \
+      "$APP_DIR/landing/" /var/www/smartsht/
+  else
+    for f in index.html terms.html privacy.html 404.html og-image.png llms.txt robots.txt sitemap.xml apple-touch-icon.png favicon.svg favicon-16x16.png favicon-32x32.png favicon-48x48.png logo.png smart-favicon.png smart-logo.png screenshot.png; do
+      if [ -f "$APP_DIR/landing/$f" ]; then
+        sudo cp "$APP_DIR/landing/$f" "/var/www/smartsht/$f"
+      fi
+    done
+    echo "  (rsync not found — copied landing files individually)"
+  fi
+  sudo chown -R www-data:www-data /var/www/smartsht
+  log "Landing statics synced ✓"
 fi
 
 # ─── Nginx (CSP, sw.js cache) ────────────────────────────────────────────────
