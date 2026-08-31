@@ -138,19 +138,26 @@ if [ "$DEPLOY_FRONTEND" = true ] && [ ! -f public/models/minilm/model.onnx ]; th
   run_model_step npm run model:copy-deploy -- --public-only
 fi
 
-if [ "$DEPLOY_SERVER" = true ] && [ ! -f public/models/minilm/intent-vectors.bin ] && [ -f server/models/minilm/model.onnx ]; then
-  log "Pre-computing intent vectors (public/models/minilm/intent-vectors.bin)..."
+# Always attempt precompute when the model is present: the script self-skips
+# (cheap header read) if intent-vectors.bin already matches the current phrase
+# set, and regenerates when shared/intentPhrases.js has changed. Gating on file
+# absence alone would ship stale vectors after a phrase edit.
+if [ "$DEPLOY_SERVER" = true ] && [ -f server/models/minilm/model.onnx ]; then
+  log "Ensuring intent vectors are current (public/models/minilm/intent-vectors.bin)..."
   run_model_step npm run model:precompute
 fi
 
 # ─── Build Frontend ───────────────────────────────────────────────────────────
 
-if [ "$DEPLOY_FRONTEND" = true ]; then
+# Reusable function: build dist/ and mirror it to FRONTEND_DEST. Called by the
+# normal deploy path and again by the rollback path to restore the old frontend.
+mirror_frontend() {
   log "Building frontend (vite)..."
   npx vite build --mode production 2>&1 | tail -5
 
   if [ ! -f dist/index.html ]; then
-    die "Frontend build failed — dist/index.html not found"
+    log "Frontend build failed — dist/index.html not found"
+    return 1
   fi
 
   BUNDLE_SIZE=$(du -sh dist/index.html | cut -f1)
@@ -168,6 +175,13 @@ if [ "$DEPLOY_FRONTEND" = true ]; then
   fi
   sudo chown -R www-data:www-data "$FRONTEND_DEST"
   log "Frontend deployed ✓"
+}
+
+FRONTEND_MIRRORED=false
+
+if [ "$DEPLOY_FRONTEND" = true ]; then
+  mirror_frontend || die "Frontend build/mirror failed"
+  FRONTEND_MIRRORED=true
 fi
 
 # ─── Landing statics (index/terms/privacy/404/og-image/llms/robots/sitemap) ───
@@ -236,9 +250,24 @@ if [ "$DEPLOY_SERVER" = true ]; then
   else
     log "HEALTH CHECK FAILED — rolling back..."
     git reset --hard "$PREV_COMMIT" --quiet
+    npm ci --loglevel=warn 2>&1 | tail -1
     npm ci --prefix server --loglevel=warn 2>&1 | tail -1
     npm run build --prefix server 2>&1 | tail -1
     pm2 restart "$PM2_PROCESS" --update-env 2>&1 | tail -1
+
+    # If we already mirrored the NEW frontend to the webroot, it now mismatches
+    # the rolled-back server. Rebuild from PREV_COMMIT and remirror so the live
+    # SPA matches the running API. Non-fatal: a build failure here leaves the
+    # new frontend up, which we surface loudly rather than aborting the rollback.
+    if [ "$FRONTEND_MIRRORED" = true ]; then
+      log "Restoring frontend from ${PREV_COMMIT:0:8}..."
+      if mirror_frontend; then
+        log "Frontend rolled back ✓"
+      else
+        log "WARN: frontend rollback build failed — live SPA may be newer than the API"
+      fi
+    fi
+
     die "Deploy rolled back to ${PREV_COMMIT:0:8}. Check $LOGS_DIR/error.log"
   fi
 fi
