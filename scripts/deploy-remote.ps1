@@ -1,5 +1,5 @@
-# ─────────────────────────────────────────────────────────────────────────────
-# SmartSht Remote Deploy — PowerShell (Windows)
+# -----------------------------------------------------------------------------
+# SmartSht Remote Deploy - PowerShell (Windows)
 #
 # Pushes to main, then SSHs into the production server and runs the deploy.
 #
@@ -8,7 +8,7 @@
 #   .\scripts\deploy-remote.ps1 -Server      # server only
 #   .\scripts\deploy-remote.ps1 -Frontend    # frontend only
 #   .\scripts\deploy-remote.ps1 -SkipPush    # deploy without pushing first
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 
 param(
     [switch]$Server,
@@ -21,14 +21,14 @@ $ErrorActionPreference = 'Stop'
 $SshHost = 'ubuntu@52.0.207.242'
 $DeployScript = '/opt/smartsht/current/scripts/deploy.sh'
 
-# ─── Build deploy args ────────────────────────────────────────────────────────
+# --- Build deploy args --------------------------------------------------------
 
 $DeployArgs = @()
 if ($Server)   { $DeployArgs += '--server' }
 if ($Frontend) { $DeployArgs += '--frontend' }
 $DeployArgStr = $DeployArgs -join ' '
 
-# ─── Pre-flight ───────────────────────────────────────────────────────────────
+# --- Pre-flight ---------------------------------------------------------------
 
 Write-Host "[deploy] SmartSht remote deploy starting..." -ForegroundColor Green
 
@@ -50,7 +50,7 @@ if ($status) {
     }
 }
 
-# ─── Push ─────────────────────────────────────────────────────────────────────
+# --- Push ---------------------------------------------------------------------
 
 if (-not $SkipPush) {
     Write-Host "[deploy] Pushing to origin/main..." -ForegroundColor Green
@@ -62,7 +62,7 @@ if (-not $SkipPush) {
     Write-Host "[deploy] Push complete." -ForegroundColor Green
 }
 
-# ─── SSH Deploy ───────────────────────────────────────────────────────────────
+# --- SSH Deploy ---------------------------------------------------------------
 
 Write-Host "[deploy] Connecting to production server..." -ForegroundColor Green
 Write-Host ""
@@ -74,6 +74,6 @@ if ($LASTEXITCODE -eq 0) {
     Write-Host "[deploy] Deploy succeeded!" -ForegroundColor Green
 } else {
     Write-Host ""
-    Write-Host "[deploy] Deploy failed (exit $LASTEXITCODE) — check server logs" -ForegroundColor Red
+    Write-Host "[deploy] Deploy failed (exit $LASTEXITCODE) - check server logs" -ForegroundColor Red
     exit 1
 }
