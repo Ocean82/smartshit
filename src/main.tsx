@@ -17,10 +17,14 @@ initErrorReporting()
 
 migrateLegacyStorageKeys()
 
+// Warn once per quota episode — the snapshot save runs on every store change
+// (debounced 400ms), so we must not toast on every keystroke while full.
+let localSaveBlocked = false
+
 /** Compose and persist a full snapshot from the live store. */
 function persistLocalSnapshot() {
   const s = useStore.getState()
-  savePersistedState(
+  const result = savePersistedState(
     buildPersistenceSnapshot({
       workbook: s.workbook,
       workbookSlots: s.workbookSlots,
@@ -29,6 +33,24 @@ function persistLocalSnapshot() {
       messages: s.messages,
     }),
   )
+
+  if (result.ok) {
+    localSaveBlocked = false
+    return
+  }
+
+  // Save failed. localStorage is the only local durability, so a silent failure
+  // means the user's work isn't actually being persisted — surface it once.
+  if (!localSaveBlocked) {
+    localSaveBlocked = true
+    const cloud = isCloudConfigured()
+    useStore.getState().showToast({
+      type: 'warning',
+      message: result.reason === 'quota'
+        ? `Local autosave paused — browser storage is full. ${cloud ? 'Your work is still cloud-saved. ' : ''}Export a workbook or remove old ones to free space.`
+        : 'Local autosave failed — export your work to avoid losing it.',
+    })
+  }
 }
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null
