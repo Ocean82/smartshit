@@ -516,8 +516,32 @@ app.get('/health', async (req, res) => {
   const openrouter = providerIsConfigured('openrouter')
   const huggingface = providerIsConfigured('huggingface')
 
-  // Public: only expose operational status (ok/not ok)
+  // Liveness: an AI path is reachable (server can answer *something*).
   const isOk = groq || openrouter || huggingface || (ollama && modelReady)
+
+  // ─── Strict readiness (?strict=1) ────────────────────────────────────────
+  // The deploy gate uses this. Liveness (isOk) is not enough: a deploy that
+  // breaks the DB/S3 layer would still answer 200 and never roll back. Strict
+  // mode probes the deploy-critical subsystems and returns 503 if any is down.
+  //
+  // Deploy-critical = DB, S3, Clerk (mirrors config.ts error/warn tiers: cloud
+  // save/sharing/versions/usage need DB+S3; auth needs Clerk). AI providers and
+  // Stripe are intentionally NOT gated — they degrade gracefully, so gating
+  // rollback on a Groq/Stripe blip would revert a healthy deploy.
+  if (req.query.strict !== undefined && req.query.strict !== '0') {
+    const [db, s3] = await Promise.all([dbHealthCheck(), s3HealthCheck()])
+    const clerk = { ok: Boolean(config.clerkSecretKey), error: config.clerkSecretKey ? undefined : 'CLERK_SECRET_KEY not configured' }
+    const critical = { database: db, s3, clerk }
+    const ready = db.ok && s3.ok && clerk.ok
+    res.status(ready ? 200 : 503).json({
+      ok: ready,
+      service: 'smartsht-server',
+      mode: 'strict',
+      liveness: isOk,
+      critical,
+    })
+    return
+  }
 
   // Authenticated requests get full diagnostics; public gets minimal status
   const userId = getRequestUserId(req)

@@ -20,7 +20,10 @@ SHARED_ENV="/opt/smartsht/.env"
 LOGS_DIR="/opt/smartsht/logs"
 FRONTEND_DEST="/var/www/smartsht/app"
 PM2_PROCESS="smartsht-api"
-HEALTH_URL="http://127.0.0.1:8787/health"
+# Strict readiness: 503 (curl -f fails → rollback) when a deploy-critical
+# subsystem (DB, S3, Clerk) is down. Plain /health always returns 200 and only
+# reflects AI-provider liveness, so it would report a DB-broken deploy healthy.
+HEALTH_URL="http://127.0.0.1:8787/health?strict=1"
 HEALTH_TIMEOUT=30
 DEPLOY_LOG="${LOGS_DIR}/deploy.log"
 
