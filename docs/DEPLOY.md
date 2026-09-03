@@ -68,11 +68,17 @@ npm run build
 npm run build:server
 
 # Verify
-ls dist/index.html          # Frontend SPA (single file)
-ls server/dist/index.js     # Compiled server
+ls dist/index.html            # SPA shell (JS/CSS inlined)
+ls dist/assets/*.wasm          # Formula/ONNX engines (external, required)
+ls server/dist/index.js        # Compiled server
 ```
 
-The frontend build produces a single `dist/index.html` file (via vite-plugin-singlefile) that contains all JS and CSS inlined.
+The frontend build inlines all JS and CSS into `dist/index.html` (via
+vite-plugin-singlefile), but the WebAssembly engines are **not** inlined — the
+build emits several external `.wasm` binaries plus worker bundles under
+`dist/assets/` (the formualizer engine ~8.6MB and the ONNX runtime ~27MB are the
+large ones). The whole `dist/` tree must be deployed together; copying only
+`index.html` will 404 the engines and the app will fail to load formulas.
 
 ---
 
@@ -133,7 +139,9 @@ npm run deploy:frontend
 /var/www/smartsht/
 ├── index.html          # Landing page
 ├── app/
-│   └── index.html      # SPA (single-file build, ~14MB)
+│   ├── index.html      # SPA shell (~1.7MB, JS/CSS inlined)
+│   ├── assets/         # .wasm engines + worker bundles (~43MB, external — required)
+│   └── sw.js           # Service worker
 ├── terms.html
 ├── privacy.html
 └── (static assets)
@@ -148,7 +156,9 @@ git pull --ff-only origin main
 npm ci --omit=dev
 npm ci --omit=dev --prefix server
 npx vite build
-sudo cp dist/index.html /var/www/smartsht/app/index.html
+# Mirror the WHOLE dist/ tree — index.html AND assets/ (.wasm engines + workers).
+# Copying only index.html 404s the engines. --delete prunes stale hashed assets.
+sudo rsync -a --delete dist/ /var/www/smartsht/app/
 npm run build --prefix server
 pm2 restart smartsht-api
 curl -sf http://127.0.0.1:8787/health

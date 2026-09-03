@@ -167,6 +167,16 @@ mirror_frontend() {
     return 1
   fi
 
+  # The WASM engines are emitted as external files under dist/assets/, not
+  # inlined into index.html. If they're missing the app loads but can't run
+  # formulas, so treat their absence as a build failure (→ rollback).
+  WASM_COUNT=$(find dist/assets -maxdepth 1 -name '*.wasm' 2>/dev/null | wc -l)
+  if [ "$WASM_COUNT" -eq 0 ]; then
+    log "Frontend build failed — no .wasm engines found under dist/assets/"
+    return 1
+  fi
+  log "Frontend WASM engines present: ${WASM_COUNT} file(s)"
+
   BUNDLE_SIZE=$(du -sh dist/index.html | cut -f1)
   log "Frontend bundle: $BUNDLE_SIZE"
 
