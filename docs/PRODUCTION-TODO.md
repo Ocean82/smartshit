@@ -13,6 +13,11 @@ Items are added as local development work creates production requirements. Check
   - Action: confirm the deploy path does a full checkout and does **not** filter out `vendor/` (it is not gitignored). If `npm ci` ever errors with `ENOENT`/`Cannot read` for `vendor/xlsx-0.20.3.tgz`, the vendor dir was dropped in transit — restore it before retrying.
   - To bump xlsx later: download the new official tarball into `vendor/`, verify its SHA512 matches the SheetJS release, update the `file:` path in `package.json`, and `npm install`.
 
+- [ ] **Deploy health gate is now strict (DB + S3 + Clerk)** — added 2026-09-03
+  - `deploy.sh` now checks `GET /health?strict=1`, which returns **503** (→ `curl -f` fails → automatic rollback) unless the database, S3, and Clerk are all healthy. Plain `/health` still returns 200 for liveness.
+  - Action on the next deploy: ensure `DATABASE_URL`, the `S3_*`/`AWS_*` credentials, and `CLERK_SECRET_KEY` are present and reachable on the server. Production already has all three, so this should be a no-op — but if a deploy rolls back with a failed health check, read the deploy log: a 503 here means a real subsystem (DB/S3/Clerk) is down, not a false alarm. Curl `/health?strict=1` manually to see which one (`critical.{database,s3,clerk}`).
+  - AI providers (Groq/OpenRouter/Ollama) and Stripe are intentionally **not** part of the gate — they degrade gracefully, so a provider/Stripe outage will not block or roll back a deploy.
+
 ---
 
 ## Completed
