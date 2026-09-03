@@ -37,6 +37,9 @@ jobs:
       - run: npm run typecheck
       - run: npm run test --prefix server
       - run: npm run test
+      # Real-WASM formula engine tier (separate from the stubbed unit tests
+      # above). Loads the actual @ocean8219/formualizer via vite-plugin-wasm.
+      - run: npm run test:realengine
       - run: npm run build --prefix server
       - run: npm run build
 

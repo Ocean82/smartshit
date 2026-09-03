@@ -40,6 +40,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:realengine": "vitest run --config vitest.integration.config.ts",
     "deploy": "powershell -ExecutionPolicy Bypass -File scripts/deploy-remote.ps1",
     "deploy:server": "powershell -ExecutionPolicy Bypass -File scripts/deploy-remote.ps1 -Server",
     "deploy:frontend": "powershell -ExecutionPolicy Bypass -File scripts/deploy-remote.ps1 -Frontend",
