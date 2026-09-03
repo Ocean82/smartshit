@@ -281,16 +281,30 @@ function parseMessageInternal(message: string, sheetContext?: SheetContext): Par
   }
 
   // ─── Add row: "add [items]" ─────────────────────────────────────────────────
-  const addRow = lower.match(/(?:add|insert|new)\s+(?:a\s+)?(?:row|entry|line|item)\s*:?\s*(.+)/i)
+  // Trailing values are optional so the bare "add a row" (the README's own
+  // example) is claimed here for a clarification rather than falling silently
+  // through to the LLM. add_row itself needs at least one value, so we ask.
+  const addRow = lower.match(/(?:add|insert|new)\s+(?:a\s+)?(?:row|entry|line|item)\b\s*:?\s*(.*)/i)
   if (addRow && !lower.includes('column')) {
     // Strip naming verbs so "add a row called Total" doesn't write the literal
     // words "called total" into the first cell. What follows the verb is the
     // intended label, not a directive.
     const namingVerb = /^(?:called|named|labell?ed|titled|with\s+(?:the\s+)?(?:label|name|title))\s+/i
-    const hadNamingVerb = namingVerb.test(addRow[1].trim())
-    const capture = addRow[1].trim().replace(namingVerb, '').trim()
+    const raw = (addRow[1] ?? '').trim()
+    const hadNamingVerb = namingVerb.test(raw)
+    const capture = raw.replace(namingVerb, '').trim()
 
     const parts = capture.split(/[,;]/).map(s => s.trim()).filter(Boolean)
+
+    // No values given ("add a row") — ask what to put in it rather than emit an
+    // empty add_row, which the handler rejects.
+    if (parts.length === 0) {
+      return {
+        calls: [],
+        understood: true,
+        explanation: 'What should the new row contain? For example: "add a row: Groceries, 400, 2026-01-01".',
+      }
+    }
 
     // A single naming-verb value ("row called Total") is a label with no cell
     // data. Rather than guess column placement, confirm with the user.

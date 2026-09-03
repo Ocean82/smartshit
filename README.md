@@ -141,7 +141,7 @@ A rule-based engine that scans your spreadsheet for real problems:
 - **Circular references** — formulas that depend on themselves
 
 ### The Intent Parser
-80% of common operations (sort, format, add a row, sum a column) are handled instantly by a local regex parser — no LLM round-trip, no latency. Complex or open-ended questions route to the AI. Questions and hypotheticals ("Can I delete this?", "Should I add a total row?") are never treated as commands — they pass to the LLM for proper clarification.
+Common operations are handled instantly on-device — no LLM round-trip, no latency. A local regex parser covers sorting, formatting (bold headers, highlight rules, font colour), setting a cell, adding a row of values, deleting a row, find & replace, and percentage tweaks; totals and group-bys ("sum column B", "spending by category") are matched locally by the goal router. Anything the parser can't resolve — including complex or open-ended questions — routes to the AI. Questions and hypotheticals ("Can I delete this?", "Should I add a total row?") are never treated as commands — they pass to the LLM for proper clarification.
 
 ### Hybrid AI
 Deterministic analysis (budget breakdowns, outlier detection, auditor findings) runs locally in the browser. Only open-ended questions or complex requests go to an LLM. This means most of the app works without any AI backend at all.

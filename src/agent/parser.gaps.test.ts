@@ -169,4 +169,22 @@ describe('reported agent gap regressions', () => {
       params: { cell: 'A1', value: 'export' },
     })
   })
+
+  it('claims a bare "add a row" for clarification instead of falling through to the LLM', () => {
+    // The README advertises "add a row" as instant. With no values, add_row
+    // can't run (the handler rejects empty rows), so the parser must claim it
+    // and ask what to put in the row rather than silently deferring.
+    for (const phrase of ['add a row', 'insert a row', 'add row']) {
+      const result = parseMessage(phrase, expenseContext)
+      expect(result.understood, `"${phrase}"`).toBe(true)
+      expect(result.calls, `"${phrase}"`).toHaveLength(0)
+      expect(result.explanation, `"${phrase}"`).toMatch(/what should the new row contain/i)
+    }
+
+    // A row with values still parses straight to add_row.
+    expect(parseMessage('add a row: Groceries, 400').calls[0]).toMatchObject({
+      tool: 'add_row',
+      params: { values: ['groceries', 400] },
+    })
+  })
 })
