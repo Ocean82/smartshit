@@ -98,6 +98,10 @@ fi
 
 # ─── Install Dependencies ─────────────────────────────────────────────────────
 
+# NOTE: `xlsx` is pinned to file:vendor/xlsx-0.20.3.tgz (committed to the repo),
+# so `npm ci` resolves it from disk with no SheetJS CDN fetch. The git reset
+# above must keep vendor/ intact — if npm ci errors on that path, the tarball
+# was dropped in transit; restore vendor/xlsx-0.20.3.tgz and retry.
 log "Installing root dependencies..."
 npm ci --loglevel=warn 2>&1 | tail -3
 

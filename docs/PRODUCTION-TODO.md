@@ -8,7 +8,10 @@ Items are added as local development work creates production requirements. Check
 
 ## Pending
 
-_(no pending items)_
+- [ ] **Ensure `vendor/xlsx-0.20.3.tgz` is present on deploy** — added 2026-09-03
+  - `xlsx` is now pinned to `file:vendor/xlsx-0.20.3.tgz` (was a `cdn.sheetjs.com` URL). The tarball is committed to the repo, so a normal `git pull` / clean checkout includes it and `npm ci` resolves xlsx from that file — no network fetch to SheetJS.
+  - Action: confirm the deploy path does a full checkout and does **not** filter out `vendor/` (it is not gitignored). If `npm ci` ever errors with `ENOENT`/`Cannot read` for `vendor/xlsx-0.20.3.tgz`, the vendor dir was dropped in transit — restore it before retrying.
+  - To bump xlsx later: download the new official tarball into `vendor/`, verify its SHA512 matches the SheetJS release, update the `file:` path in `package.json`, and `npm install`.
 
 ---
 
