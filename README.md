@@ -166,6 +166,18 @@ Copy `.env.example` to `.env` in the `server/` directory:
 | `LLM_PROVIDER_ORDER` | `groq,openrouter,ollama` | Failover order |
 | `FREE_DAILY_LIMIT` | `7` | Free-tier AI requests per day per user |
 
+### Running locally (no account required)
+
+smartsh!t runs fully without any login. Leave `VITE_CLERK_PUBLISHABLE_KEY` **blank** and the app starts in open mode — no sign-in wall, unlimited local usage, and no upgrade prompts. This is the default for a fresh clone.
+
+The `pk_live_...` / `sk_live_...` values in `.env.example` are placeholders for the **hosted** deployment at [smartsht.com](https://smartsht.com); you do not need them to run or develop locally. Clerk (auth), Stripe (billing), and the RDS/S3 cloud-sync layer are only required if you want to run your own hosted, account-gated instance:
+
+- **Auth** — set `VITE_CLERK_PUBLISHABLE_KEY` + `CLERK_SECRET_KEY` from *your own* [Clerk](https://clerk.com) app. Publishable keys are domain-locked, so the project's keys won't authenticate from another origin.
+- **Billing** — set the `STRIPE_*` variables from your own Stripe account.
+- **Cloud save / sharing** — set `DATABASE_URL` + the `S3_*`/`AWS_*` variables.
+
+Everything else (the editor, auditor, intent parser, and — with a `GROQ_API_KEY` or a local Ollama model — the AI) works with none of the above.
+
 ---
 
 ## Contributing
