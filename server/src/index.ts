@@ -49,6 +49,7 @@ import { requireAuth, getRequestUserId, getClerkClient, getClerkMiddlewareOption
 import { resolveIsPro, invalidateProCache } from './plan.js'
 import { validateBody } from './middleware/validate.js'
 import { chatStreamBodySchema, chatBodySchema } from './schemas/index.js'
+import { assertPublicByokHost } from './schemas/byok.js'
 import { chatRateLimiter, checkoutRateLimiter, globalRateLimiter, sharedAccessRateLimiter } from './middleware/rateLimit.js'
 
 // ─── Validate critical configuration at startup ──────────────────────────────
@@ -230,6 +231,11 @@ async function callByokProvider(
   onChunk?: (chunk: string) => void,
   signal?: AbortSignal,
 ): Promise<ByokCallResult> {
+  // SSRF guard: re-validate the resolved IP right before the fetch. The Zod
+  // schema already blocked private IP literals; this catches DNS names that
+  // resolve to private addresses (rebinding / internal-pointing public names).
+  await assertPublicByokHost(byok.baseUrl)
+
   const { chatWithOpenAiCompatibleStream, chatWithOpenAiCompatible } = await import('./openaiCompatible.js')
   const byokParams = { apiKey: byok.apiKey, model: byok.model, baseUrl: byok.baseUrl }
 
