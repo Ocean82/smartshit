@@ -28,11 +28,39 @@ jobs:
           cache: 'npm'
       - run: npm ci
       - run: npm ci --prefix server
-      # Gate the build only on critical, fixable advisories. High/moderate drift
-      # is surfaced (non-blocking) by the scheduled `audit` job below, so a newly
-      # published high advisory with no fix yet can't block every unrelated PR.
-      - run: npm audit --audit-level=critical
-      - run: npm audit --audit-level=critical --prefix server
+      # Fail the build only on a real CRITICAL advisory. We parse `npm audit
+      # --json` rather than trusting its exit code, because npm's legacy audit
+      # endpoint is being retired and intermittently returns 400/410 — that
+      # infrastructure error must NOT fail an unrelated PR. A non-JSON / errored
+      # response is logged and skipped; genuine criticals still block.
+      # (High/moderate drift is surfaced non-blocking by the scheduled `audit`
+      # job below.)
+      - name: Audit (root + server) — critical only, brownout-tolerant
+        run: |
+          audit_dir() {
+            local dir="$1"
+            local json
+            json=$(npm audit --json --prefix "$dir" 2>/dev/null || true)
+            local critical
+            critical=$(node -e '
+              let s="";
+              process.stdin.on("data",d=>s+=d);
+              process.stdin.on("end",()=>{
+                try {
+                  const c=JSON.parse(s).metadata?.vulnerabilities?.critical;
+                  if (typeof c!=="number") { console.error("audit: no parseable result (endpoint brownout?) — skipping"); process.stdout.write("0"); }
+                  else process.stdout.write(String(c));
+                } catch { console.error("audit: non-JSON response (endpoint brownout?) — skipping"); process.stdout.write("0"); }
+              });
+            ' <<< "$json")
+            echo "$dir: critical=$critical"
+            if [ "$critical" -gt 0 ]; then
+              echo "::error::$dir has $critical critical advisory/advisories"
+              npm audit --audit-level=critical --prefix "$dir" || true
+              return 1
+            fi
+          }
+          audit_dir "." && audit_dir "server"
       - run: npm run lint:ci
       - run: npm run typecheck
       - run: npm run test --prefix server
@@ -76,13 +104,19 @@ jobs:
             npm audit --audit-level=high --prefix server
             server=$?
           } > audit-report.txt 2>&1
-          # npm audit exits non-zero when advisories at/above the level exist.
-          if [ "$root" -ne 0 ] || [ "$server" -ne 0 ]; then
+          cat audit-report.txt
+          # npm audit exits non-zero for a real finding OR an endpoint error
+          # (the legacy audit endpoint is being retired and returns 400/410).
+          # Only file an issue on a genuine finding — a brownout must not spam
+          # the tracker. Detect the endpoint error and treat it as "no finding".
+          if grep -qiE 'audit endpoint returned an error|Bad Request|400|410|ENOAUDIT|Invalid package tree' audit-report.txt; then
+            echo "npm audit endpoint error (brownout) — not filing an issue"
+            echo "failed=false" >> "$GITHUB_OUTPUT"
+          elif [ "$root" -ne 0 ] || [ "$server" -ne 0 ]; then
             echo "failed=true" >> "$GITHUB_OUTPUT"
           else
             echo "failed=false" >> "$GITHUB_OUTPUT"
           fi
-          cat audit-report.txt
 
       - name: Open or update advisory issue
         if: steps.audit.outputs.failed == 'true'
