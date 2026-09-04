@@ -66,7 +66,7 @@ npm install --prefix server
 
 **Option A — Local (Ollama, free, private):**
 ```bash
-npm run model:setup   # uses Qwen2.5-Coder-1.5B for dev (fast, lower quality) ##deprecated
+npm run model:setup   # dev model: Qwen2.5-Coder-1.5B (fast, lower quality)
 ```
 
 > **Production** uses Spreadsheet-RL-4B (a 4B instruct model trained for spreadsheet tool-use).
@@ -78,7 +78,7 @@ Copy `.env.example` to `.env` in `server/` and add one API key:
 GROQ_API_KEY=your-key-here
 ```
 
-> Groq is the primary cloud provider (fast inference via `openai/gpt-oss-120b`).
+> Groq is the primary cloud provider (fast inference via `qwen/qwen3.6-27b`).
 > OpenRouter and HuggingFace are supported as failover. See `.env.example` for all options.
 
 ### 3. Run
@@ -150,21 +150,37 @@ Deterministic analysis (budget breakdowns, outlier detection, auditor findings) 
 
 ## Configuration
 
-Copy `.env.example` to `.env` in the `server/` directory:
+Copy `.env.example` to `.env` in the `server/` directory. The common variables
+are below; **`server/.env.example` and [docs/ENV.md](docs/ENV.md) are the
+authoritative, complete list** — the table here is a starter subset. Auth,
+billing, and cloud-sync variables are only needed to run a hosted, account-gated
+instance (see "Running locally" above to run without them).
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PORT` | `8787` | API port |
+| `TRUST_PROXY` | `loopback` | Express trust-proxy setting (real client IP behind nginx) |
 | `OLLAMA_BASE_URL` | `http://127.0.0.1:11434` | Ollama endpoint |
 | `SMARTSHIT_MODEL` | `smartshit` | Ollama model name (prod: Spreadsheet-RL-4B) |
 | `NUM_CTX` | `8192` | Context window size |
 | `NUM_PREDICT` | `1024` | Max tokens per response |
 | `GROQ_API_KEY` | — | Primary cloud provider (fast inference) |
-| `GROQ_MODEL` | `openai/gpt-oss-120b` | Groq model identifier |
+| `GROQ_MODEL` | `qwen/qwen3.6-27b` | Groq model identifier |
 | `OPENROUTER_API_KEY` | — | Failover cloud provider |
 | `HUGGINGFACE_API_KEY` | — | Failover cloud provider |
 | `LLM_PROVIDER_ORDER` | `groq,openrouter,ollama` | Failover order |
 | `FREE_DAILY_LIMIT` | `7` | Free-tier AI requests per day per user |
+| `FREE_CLOUD_WORKBOOK_LIMIT` | `1` | Max cloud workbooks for free users (must match client) |
+| `WORKBOOK_BODY_LIMIT` | `25mb` | Max request body for workbook save routes |
+| `MAX_WORKBOOK_VERSIONS` | `50` | Version-history entries retained per workbook |
+| `CLERK_SECRET_KEY` | — | Clerk auth (hosted instance only; blank = open/no-login) |
+| `CLERK_PUBLISHABLE_KEY` | — | Clerk publishable key (hosted instance only) |
+| `STRIPE_SECRET_KEY` | — | Stripe billing (hosted instance only) |
+| `STRIPE_PRICE_ID` / `STRIPE_PRICE_ID_ANNUAL` | — | Pro plan price IDs (required for checkout) |
+| `STRIPE_WEBHOOK_SECRET` | — | Stripe webhook signature verification |
+| `DATABASE_URL` | — | Postgres for cloud save / sharing / usage (blank = disabled) |
+| `S3_BUCKET` / `S3_REGION` / `S3_SMARTSHT_PREFIX` | — | S3 storage for version history |
+| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | — | AWS credentials for S3 |
 
 ### Running locally (no account required)
 
