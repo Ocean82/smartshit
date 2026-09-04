@@ -4,7 +4,7 @@ import path from 'node:path'
 import cors from 'cors'
 import express from 'express'
 import { clerkMiddleware } from '@clerk/express'
-import { config, validateConfig } from './config.js'
+import { config, validateConfig, getRuntimeDiagnostics } from './config.js'
 import { createOnnxRouter } from './api/onnx-infer.js'
 import { SessionPool } from './onnx/sessionPool.js'
 import { getOnnxModelSize, resolveOnnxModelPath } from './onnx/modelPaths.js'
@@ -570,6 +570,10 @@ app.get('/health', async (req, res) => {
       database: db,
       s3: s3,
     },
+    // Non-secret runtime snapshot: which .env/cwd/model ids are actually in
+    // effect. Lets an operator confirm the live config matches the templates
+    // without SSHing in to diff files (auth-gated, so not publicly exposed).
+    runtime: getRuntimeDiagnostics(),
   })
 })
 
@@ -962,6 +966,11 @@ app.use((err: unknown, _req: express.Request, res: express.Response, next: expre
 
 app.listen(config.port, config.host, () => {
   console.log(`smartsh!t server listening on http://${config.host}:${config.port}`)
+  // Boot diagnostics: which .env and cwd are actually in effect. Printed first
+  // so a template-vs-live drift (e.g. stale GROQ_MODEL) is obvious in the log.
+  const diag = getRuntimeDiagnostics()
+  console.log(`Env: NODE_ENV=${diag.nodeEnv} | cwd=${diag.cwd}`)
+  console.log(`Env file: ${diag.envFile.loaded ? `✓ loaded ${diag.envFile.path} (${diag.envFile.keyCount} keys)` : `✗ NOT loaded (${diag.envFile.path}) — using process env / defaults`}`)
   console.log(`Provider order: ${providerOrder().join(' -> ')}`)
   console.log(`OpenRouter: ${providerIsConfigured('openrouter') ? `✓ (${config.openRouterModel})` : '✗ (no API key)'}`)
   console.log(`HuggingFace: ${providerIsConfigured('huggingface') ? `✓ (${config.huggingFaceModel})` : '✗ (no API key)'}`)

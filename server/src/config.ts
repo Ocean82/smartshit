@@ -1,6 +1,6 @@
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { loadEnv } from './loadEnv.js'
+import { loadEnv, type EnvLoadResult } from './loadEnv.js'
 import {
   MAX_HISTORY_CLOUD,
   MAX_HISTORY_LOCAL,
@@ -8,7 +8,7 @@ import {
   FREE_CLOUD_WORKBOOK_LIMIT,
 } from '../../shared/config.js'
 
-loadEnv()
+const envLoad: EnvLoadResult = loadEnv()
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const projectRoot = path.resolve(__dirname, '../..')
@@ -233,6 +233,48 @@ export const config = {
   maxHistoryLocal: Number(process.env.MAX_HISTORY_LOCAL ?? MAX_HISTORY_LOCAL),
 
   intentConfidenceThreshold: Math.max(0, Math.min(1, Number(process.env.INTENT_CONFIDENCE_THRESHOLD ?? 0.6))),
+}
+
+// ─── Runtime diagnostics ─────────────────────────────────────────────────────
+
+/**
+ * Non-secret snapshot of what the process actually resolved at boot: which
+ * `.env` file was loaded, the working directory (model paths resolve against
+ * it), and the effective model ids. Surfaced in the startup log and the
+ * authenticated `/health` response so template-vs-live drift (e.g. a stale
+ * GROQ_MODEL) is visible without SSHing in to diff files by hand.
+ *
+ * Contains NO secrets — only file paths, model identifiers, and booleans.
+ */
+export interface RuntimeDiagnostics {
+  nodeEnv: string
+  cwd: string
+  envFile: { path: string; loaded: boolean; keyCount: number; candidates: string[] }
+  models: {
+    groq: string
+    openRouter: string
+    huggingFace: string
+    ollama: string
+    /** Where server-side ONNX models are expected (resolves against cwd). */
+    onnxModelsRoot: string
+  }
+  providerOrder: string[]
+}
+
+export function getRuntimeDiagnostics(): RuntimeDiagnostics {
+  return {
+    nodeEnv: process.env.NODE_ENV ?? 'development',
+    cwd: process.cwd(),
+    envFile: { path: envLoad.path, loaded: envLoad.loaded, keyCount: envLoad.keyCount, candidates: envLoad.candidates },
+    models: {
+      groq: config.groqModel,
+      openRouter: config.openRouterModel,
+      huggingFace: config.huggingFaceModel,
+      ollama: config.modelName,
+      onnxModelsRoot: path.resolve(process.cwd(), 'models'),
+    },
+    providerOrder: config.llmProviderOrder,
+  }
 }
 
 // ─── Startup Validation ──────────────────────────────────────────────────────
