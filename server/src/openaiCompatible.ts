@@ -59,7 +59,15 @@ export async function chatWithOpenAiCompatible(
     },
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(30_000),
+    // SSRF guard: never follow redirects. A validated public baseUrl could
+    // otherwise 3xx the request to an internal address (e.g. the cloud
+    // metadata endpoint). opaqueredirect surfaces here as a non-ok response.
+    redirect: 'manual',
   })
+
+  if (res.type === 'opaqueredirect' || (res.status >= 300 && res.status < 400)) {
+    throw new Error('OpenAI-compatible API attempted a redirect, which is refused for security')
+  }
 
   if (!res.ok) {
     const text = await res.text()
@@ -101,7 +109,13 @@ export async function chatWithOpenAiCompatibleStream(
     },
     body: JSON.stringify(body),
     signal: signal ?? AbortSignal.timeout(30_000),
+    // SSRF guard: never follow redirects (see chatWithOpenAiCompatible).
+    redirect: 'manual',
   })
+
+  if (res.type === 'opaqueredirect' || (res.status >= 300 && res.status < 400)) {
+    throw new Error('OpenAI-compatible provider attempted a redirect, which is refused for security')
+  }
 
   if (!res.ok) {
     const text = await res.text()

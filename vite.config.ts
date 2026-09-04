@@ -36,8 +36,18 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['src/**/*.test.ts', 'shared/**/*.test.ts'],
+    // Real-engine tests run in the separate integration tier (they need the
+    // actual WASM via vitest.integration.config.ts). Exclude them here so the
+    // stubbed unit tier doesn't try to run them against the stub.
+    exclude: ['**/node_modules/**', '**/dist/**', 'src/**/*.realengine.test.ts'],
+    // NOTE: the default `vitest run` tier aliases the WASM formula engine to a
+    // lightweight STUB (arithmetic + SUM + single refs only). It has no
+    // dependency graph, recalc, structural ref rewrites, cross-sheet refs, or
+    // #REF! propagation. These unit tests verify app logic, NOT real-engine
+    // behavior. Real-engine coverage lives in the separate integration tier:
+    //   npx vitest run --config vitest.integration.config.ts
     alias: {
-      '@ocean8219/formualizer': new URL('src/__mocks__/@ocean8219/formualizer.ts', import.meta.url).pathname,
+      '@ocean8219/formualizer': new URL('src/__mocks__/@ocean8219/formualizer.stub.ts', import.meta.url).pathname,
     },
   },
   server: {

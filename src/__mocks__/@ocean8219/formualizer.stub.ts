@@ -1,10 +1,20 @@
 /**
- * Vitest mock for @ocean8219/formualizer.
- * Replaces the WASM-backed Workbook with a lightweight in-memory stub so
- * tests can run in Node without a .wasm loader.
+ * STUB for @ocean8219/formualizer — NOT the real formula engine.
  *
- * Formulas are evaluated with a minimal built-in evaluator covering the
- * arithmetic and cell-reference cases needed by integration tests.
+ * The default `vitest run` tier aliases the WASM engine to this file (see the
+ * `test.alias` in vite.config.ts) so unit tests can run in Node without a .wasm
+ * loader. It implements a MINIMAL evaluator: literal arithmetic, a single
+ * binary op, single cell refs, and SUM(range).
+ *
+ * It deliberately does NOT model: the dependency graph, recalculation
+ * propagation (`evaluateAll` is a no-op), structural reference rewrites on
+ * insert/delete, cross-sheet references, circular-reference detection, or
+ * error propagation (`#REF!`, most `#...!` errors).
+ *
+ * Therefore a passing unit-tier run verifies APP LOGIC against a toy engine,
+ * not real-engine behavior. Real-engine semantics are covered separately by the
+ * integration tier that loads the actual WASM:
+ *   npx vitest run --config vitest.integration.config.ts
  */
 
 type CellVal = null | boolean | number | string;

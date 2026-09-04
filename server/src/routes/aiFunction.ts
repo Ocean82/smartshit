@@ -18,6 +18,7 @@ import { decideAiAccess, shouldRecordServerUsage } from '../aiAccess.js'
 import { aiFunctionRateLimiter } from '../middleware/rateLimit.js'
 import { validateBody } from '../middleware/validate.js'
 import { aiFunctionBodySchema } from '../schemas/aiFunction.js'
+import { assertPublicByokHost } from '../schemas/byok.js'
 import { forecast } from '../forecast.js'
 import { score } from '../scoring.js'
 import { validateLabel, parseAllowlist, parseSentiment } from '../labelValidation.js'
@@ -334,6 +335,9 @@ aiFunctionRouter.post('/', aiFunctionRateLimiter, validateBody(aiFunctionBodySch
   // Try BYOK first if provided
   if (hasByokCredentials && body.byok) {
     try {
+      // SSRF guard: re-validate the resolved IP before fetching (catches DNS
+      // names that resolve to private addresses; IP literals were blocked by Zod).
+      await assertPublicByokHost(body.byok.baseUrl)
       const { chatWithOpenAiCompatible } = await import('../openaiCompatible.js')
       rawResult = await chatWithOpenAiCompatible(
         { apiKey: body.byok.apiKey, model: body.byok.model ?? 'gpt-4o-mini', baseUrl: body.byok.baseUrl },

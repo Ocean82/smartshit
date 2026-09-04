@@ -42,8 +42,32 @@ const NON_ROW_DELETE_TARGETS = [
 /**
  * Patterns that indicate a question/hypothetical rather than a command.
  * When detected, mutations should not fire — let the LLM handle the response.
+ *
+ * Anchored at the start of the message. Covers direct ("can i delete…") and
+ * subjective/deferential ("do you think…", "would you…", "could you…")
+ * framings. Trailing-`?` interrogatives that don't start with one of these
+ * stems are caught separately by the destructive-veto in parseMessage().
  */
-const QUESTION_PREFIXES_RE = /^(?:can\s+i|should\s+i|would\s+it|how\s+(?:do|can)\s+i|is\s+(?:it|there)|what\s+(?:if|happens))\b/i
+const QUESTION_PREFIXES_RE = /^(?:can\s+(?:i|you|we)|should\s+(?:i|we|the)|would\s+(?:it|you)|could\s+(?:i|you|we)|do\s+you(?:\s+(?:think|recommend|suggest))?|how\s+(?:do|can|should)\s+(?:i|we)|is\s+(?:it|there)|what\s+(?:if|happens))\b/i
+
+/**
+ * Tools that mutate or reorder data irreversibly enough that firing them from
+ * a question phrasing is a destructive surprise. If the raw message is phrased
+ * as a question (ends with `?`), a parse resolving to one of these is vetoed
+ * and handed to the LLM instead. Read-only tools are intentionally excluded.
+ */
+const DESTRUCTIVE_TOOLS = new Set([
+  'delete_row', 'clear_sheet', 'modify_column', 'sort_sheet', 'find_and_replace',
+])
+
+/**
+ * Connectors that indicate a compound, multi-clause request. When present, the
+ * single-clause regexes below would only half-parse the first clause (e.g.
+ * "sort by date and then bold the header" → a garbage column name). Detecting
+ * them lets parseMessage() defer to the macro-planner stage, which segments the
+ * clauses and parses each independently.
+ */
+const COMPOUND_CONNECTOR_RE = /\b(?:and\s+then|,\s*then\b|;\s*|after\s+that|\band\s+also\b)/i
 
 /**
  * Pronouns and vague references that should never be used as row match targets.
@@ -134,8 +158,37 @@ function describeColumnChoices(sheetContext?: SheetContext): string {
 /**
  * Parse a user message into zero or more tool calls.
  * Returns { understood: false } if no patterns match (should fallback to LLM).
+ *
+ * This is a thin safety wrapper around parseMessageInternal():
+ *  1. Compound multi-clause requests are deferred to the macro-planner stage
+ *     so each clause is parsed independently instead of half-matched here.
+ *  2. Question-framed messages that resolve to a destructive tool are vetoed
+ *     and handed to the LLM, backstopping the prefix guard for phrasings that
+ *     don't start with a known interrogative stem.
  */
 export function parseMessage(message: string, sheetContext?: SheetContext): ParseResult {
+  // ─── Compound-request guard ─────────────────────────────────────────────────
+  // "sort by date and then bold the header" must not be half-parsed into a
+  // single sort with a garbage column. Defer to the macro-planner, which
+  // segments clauses and parses each one via this same function.
+  if (COMPOUND_CONNECTOR_RE.test(message)) {
+    return { calls: [], understood: false }
+  }
+
+  const result = parseMessageInternal(message, sheetContext)
+
+  // ─── Destructive-question veto ──────────────────────────────────────────────
+  // A trailing `?` signals a question/hypothetical. If the parse resolved to a
+  // destructive mutation, don't act on it — let the LLM clarify. This catches
+  // interrogatives the prefix guard misses (e.g. "…remove the SUM?").
+  if (/\?\s*$/.test(message.trim()) && result.understood && result.calls.some((call) => DESTRUCTIVE_TOOLS.has(call.tool))) {
+    return { calls: [], understood: false }
+  }
+
+  return result
+}
+
+function parseMessageInternal(message: string, sheetContext?: SheetContext): ParseResult {
   const lower = message.toLowerCase().trim()
   const calls: ParsedToolCall[] = []
 
@@ -228,9 +281,42 @@ export function parseMessage(message: string, sheetContext?: SheetContext): Pars
   }
 
   // ─── Add row: "add [items]" ─────────────────────────────────────────────────
-  const addRow = lower.match(/(?:add|insert|new)\s+(?:a\s+)?(?:row|entry|line|item)\s*:?\s*(.+)/i)
+  // Trailing values are optional so the bare "add a row" (the README's own
+  // example) is claimed here for a clarification rather than falling silently
+  // through to the LLM. add_row itself needs at least one value, so we ask.
+  const addRow = lower.match(/(?:add|insert|new)\s+(?:a\s+)?(?:row|entry|line|item)\b\s*:?\s*(.*)/i)
   if (addRow && !lower.includes('column')) {
-    const parts = addRow[1].split(/[,;]/).map(s => s.trim()).filter(Boolean)
+    // Strip naming verbs so "add a row called Total" doesn't write the literal
+    // words "called total" into the first cell. What follows the verb is the
+    // intended label, not a directive.
+    const namingVerb = /^(?:called|named|labell?ed|titled|with\s+(?:the\s+)?(?:label|name|title))\s+/i
+    const raw = (addRow[1] ?? '').trim()
+    const hadNamingVerb = namingVerb.test(raw)
+    const capture = raw.replace(namingVerb, '').trim()
+
+    const parts = capture.split(/[,;]/).map(s => s.trim()).filter(Boolean)
+
+    // No values given ("add a row") — ask what to put in it rather than emit an
+    // empty add_row, which the handler rejects.
+    if (parts.length === 0) {
+      return {
+        calls: [],
+        understood: true,
+        explanation: 'What should the new row contain? For example: "add a row: Groceries, 400, 2026-01-01".',
+      }
+    }
+
+    // A single naming-verb value ("row called Total") is a label with no cell
+    // data. Rather than guess column placement, confirm with the user.
+    const looksLikeValues = parts.length > 1 || /[:]|\d/.test(capture)
+    if (hadNamingVerb && !looksLikeValues) {
+      return {
+        calls: [],
+        understood: true,
+        explanation: `What values should the new row contain? For example: "${capture}, 100, 2026-01-01".`,
+      }
+    }
+
     if (parts.length > 0) {
       const values = parts.map(p => {
         const n = parseFloat(p.replace(/[$,]/g, ''))
@@ -253,6 +339,12 @@ export function parseMessage(message: string, sheetContext?: SheetContext): Pars
   // ─── Delete row ─────────────────────────────────────────────────────────────
   const deleteRowNum = lower.match(/(?:delete|remove)\s+row\s+(\d+)/i)
   if (deleteRowNum) {
+    // A trailing condition ("delete row 3 if it is empty") changes the meaning
+    // entirely — an unconditional delete would be wrong. The regex can't
+    // evaluate the predicate, so defer to the LLM rather than silently drop it.
+    if (/\b(?:if|when|unless|only\s+if|provided|in\s+case)\b/i.test(lower)) {
+      return { calls: [], understood: false }
+    }
     const row = parseInt(deleteRowNum[1])
     calls.push({ tool: 'delete_row', params: { row }, description: `Delete row ${row}` })
     return { calls, understood: true, explanation: `Deleting row ${row}.` }

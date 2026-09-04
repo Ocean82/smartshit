@@ -241,4 +241,97 @@ describe('Agent Parser — False Positive Corpus (should NOT trigger mutations)'
       })
     }
   })
+
+  // ─── Adversarial probe corpus (docs/review) ───────────────────────────────
+  // These reproduce the exact false positives found while probing the real
+  // parser: subjective/deferential question framings that resolved to
+  // destructive mutations, and imperative sentences the single-clause regexes
+  // mangled. Each must pass through (or clarify) rather than mutate.
+
+  describe('Subjective/deferential questions with destructive verbs', () => {
+    const phrases = [
+      'Do you think I should remove the SUM?',
+      'Do you recommend I remove the SUM?',
+      'Would you delete the header row?',
+      'Could you delete the totals?',
+      'Can you delete the Netflix row?',
+      'Should we clear the sheet?',
+      'Do you think I should sort by amount?',
+      // Trailing-? without a known interrogative stem — caught by the veto.
+      'remove the SUM?',
+      'delete the totals row?',
+    ]
+
+    for (const phrase of phrases) {
+      it(`"${phrase}" → no mutations`, () => {
+        expectNoMutations(phrase)
+      })
+    }
+  })
+
+  describe('Conditional deletes must not fire unconditionally', () => {
+    const phrases = [
+      'delete row 3 if it is empty?',
+      'delete row 3 if it is empty',
+      'remove row 5 when the total is zero',
+      'delete row 2 unless it has data',
+    ]
+
+    for (const phrase of phrases) {
+      it(`"${phrase}" → does not trigger an unconditional delete_row`, () => {
+        const result = parseMessage(phrase, budgetContext)
+        const deleteCall = result.calls.find(c => c.tool === 'delete_row')
+        expect(
+          deleteCall,
+          `"${phrase}" incorrectly triggered delete_row with params: ${JSON.stringify(deleteCall?.params)}`,
+        ).toBeUndefined()
+      })
+    }
+  })
+
+  describe('add_row must not write naming verbs as cell data', () => {
+    const phrases = [
+      'add a row called Total',
+      'add a row named Summary',
+      'insert a row labeled Grand Total',
+      'add a row titled Notes',
+    ]
+
+    for (const phrase of phrases) {
+      it(`"${phrase}" → does not write the naming verb as a value`, () => {
+        const result = parseMessage(phrase, budgetContext)
+        const addCall = result.calls.find(c => c.tool === 'add_row')
+        if (addCall) {
+          const values = (addCall.params as { values?: unknown[] }).values ?? []
+          for (const v of values) {
+            expect(
+              /^(?:called|named|labell?ed|titled)\b/i.test(String(v)),
+              `"${phrase}" wrote a naming verb into a cell: ${JSON.stringify(values)}`,
+            ).toBe(false)
+          }
+        }
+      })
+    }
+  })
+
+  describe('Compound requests defer to the macro planner (no half-parse)', () => {
+    const phrases = [
+      'sort the sheet by date descending and then bold the header row',
+      'sort by amount and then highlight negatives',
+      'clear the filter, then sort by date',
+      'delete row 3 and also rename the sheet',
+    ]
+
+    for (const phrase of phrases) {
+      it(`"${phrase}" → passes through for clause segmentation`, () => {
+        const result = parseMessage(phrase, budgetContext)
+        expect(
+          result.understood === false,
+          `Expected "${phrase}" to defer to the macro planner, but parser claimed it with: ${
+            result.calls.map(c => `${c.tool}(${JSON.stringify(c.params)})`).join(', ') || result.explanation
+          }`,
+        ).toBe(true)
+      })
+    }
+  })
 })

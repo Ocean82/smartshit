@@ -100,4 +100,62 @@ describe('persistence', () => {
     store.set(STORAGE_KEY, JSON.stringify({ garbage: true }))
     expect(loadPersistedState()).toBeNull()
   })
+
+  it('reports ok on a successful save', () => {
+    const state: PersistedState = {
+      workbooks: { wb1: makeWorkbook('wb1', 'A') },
+      files: [makeFile('f1', 'wb1')],
+      activeFileId: 'f1',
+      activeWorkbookId: 'wb1',
+      messages: [],
+    }
+    expect(savePersistedState(state)).toEqual({ ok: true })
+  })
+
+  it('reports a quota failure instead of silently no-oping', () => {
+    const quota = new DOMException('full', 'QuotaExceededError')
+    vi.stubGlobal('localStorage', {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: () => { throw quota },
+      removeItem: (k: string) => void store.delete(k),
+    })
+    const state: PersistedState = {
+      workbooks: { wb1: makeWorkbook('wb1', 'A') },
+      files: [makeFile('f1', 'wb1')],
+      activeFileId: 'f1',
+      activeWorkbookId: 'wb1',
+      messages: [],
+    }
+    const result = savePersistedState(state)
+    expect(result.ok).toBe(false)
+    expect(result).toMatchObject({ reason: 'quota' })
+  })
+
+  it('reports a generic error for a non-quota setItem failure', () => {
+    vi.stubGlobal('localStorage', {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: () => { throw new Error('nope') },
+      removeItem: (k: string) => void store.delete(k),
+    })
+    const state: PersistedState = {
+      workbooks: { wb1: makeWorkbook('wb1', 'A') },
+      files: [makeFile('f1', 'wb1')],
+      activeFileId: 'f1',
+      activeWorkbookId: 'wb1',
+      messages: [],
+    }
+    expect(savePersistedState(state)).toMatchObject({ ok: false, reason: 'error' })
+  })
+
+  it('quarantines a corrupt payload before returning null on load', () => {
+    store.set(STORAGE_KEY, '{ this is not valid json')
+
+    expect(loadPersistedState()).toBeNull()
+
+    const backup = store.get('smartsht-state-v1.corrupt')
+    expect(backup).toBeTruthy()
+    const parsed = JSON.parse(backup!)
+    expect(parsed.raw).toBe('{ this is not valid json')
+    expect(typeof parsed.savedAt).toBe('string')
+  })
 })

@@ -50,7 +50,7 @@ Import a budget → the auditor flags a formula that skips a cell → the AI exp
 
 | Tool | Version |
 |------|---------|
-| Node.js | 20+ |
+| Node.js | 22+ |
 | Ollama | latest (optional — cloud AI works too) |
 
 ### 1. Clone and install
@@ -66,7 +66,7 @@ npm install --prefix server
 
 **Option A — Local (Ollama, free, private):**
 ```bash
-npm run model:setup   # uses Qwen2.5-Coder-1.5B for dev (fast, lower quality) ##deprecated
+npm run model:setup   # dev model: Qwen2.5-Coder-1.5B (fast, lower quality)
 ```
 
 > **Production** uses Spreadsheet-RL-4B (a 4B instruct model trained for spreadsheet tool-use).
@@ -78,7 +78,7 @@ Copy `.env.example` to `.env` in `server/` and add one API key:
 GROQ_API_KEY=your-key-here
 ```
 
-> Groq is the primary cloud provider (fast inference via `openai/gpt-oss-120b`).
+> Groq is the primary cloud provider (fast inference via `qwen/qwen3.6-27b`).
 > OpenRouter and HuggingFace are supported as failover. See `.env.example` for all options.
 
 ### 3. Run
@@ -141,7 +141,7 @@ A rule-based engine that scans your spreadsheet for real problems:
 - **Circular references** — formulas that depend on themselves
 
 ### The Intent Parser
-80% of common operations (sort, format, add a row, sum a column) are handled instantly by a local regex parser — no LLM round-trip, no latency. Complex or open-ended questions route to the AI. Questions and hypotheticals ("Can I delete this?", "Should I add a total row?") are never treated as commands — they pass to the LLM for proper clarification.
+Common operations are handled instantly on-device — no LLM round-trip, no latency. A local regex parser covers sorting, formatting (bold headers, highlight rules, font colour), setting a cell, adding a row of values, deleting a row, find & replace, and percentage tweaks; totals and group-bys ("sum column B", "spending by category") are matched locally by the goal router. Anything the parser can't resolve — including complex or open-ended questions — routes to the AI. Questions and hypotheticals ("Can I delete this?", "Should I add a total row?") are never treated as commands — they pass to the LLM for proper clarification.
 
 ### Hybrid AI
 Deterministic analysis (budget breakdowns, outlier detection, auditor findings) runs locally in the browser. Only open-ended questions or complex requests go to an LLM. This means most of the app works without any AI backend at all.
@@ -150,21 +150,49 @@ Deterministic analysis (budget breakdowns, outlier detection, auditor findings) 
 
 ## Configuration
 
-Copy `.env.example` to `.env` in the `server/` directory:
+Copy `.env.example` to `.env` in the `server/` directory. The common variables
+are below; **`server/.env.example` and [docs/ENV.md](docs/ENV.md) are the
+authoritative, complete list** — the table here is a starter subset. Auth,
+billing, and cloud-sync variables are only needed to run a hosted, account-gated
+instance (see "Running locally" above to run without them).
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PORT` | `8787` | API port |
+| `TRUST_PROXY` | `loopback` | Express trust-proxy setting (real client IP behind nginx) |
 | `OLLAMA_BASE_URL` | `http://127.0.0.1:11434` | Ollama endpoint |
 | `SMARTSHIT_MODEL` | `smartshit` | Ollama model name (prod: Spreadsheet-RL-4B) |
 | `NUM_CTX` | `8192` | Context window size |
 | `NUM_PREDICT` | `1024` | Max tokens per response |
 | `GROQ_API_KEY` | — | Primary cloud provider (fast inference) |
-| `GROQ_MODEL` | `openai/gpt-oss-120b` | Groq model identifier |
+| `GROQ_MODEL` | `qwen/qwen3.6-27b` | Groq model identifier |
 | `OPENROUTER_API_KEY` | — | Failover cloud provider |
 | `HUGGINGFACE_API_KEY` | — | Failover cloud provider |
 | `LLM_PROVIDER_ORDER` | `groq,openrouter,ollama` | Failover order |
 | `FREE_DAILY_LIMIT` | `7` | Free-tier AI requests per day per user |
+| `FREE_CLOUD_WORKBOOK_LIMIT` | `1` | Max cloud workbooks for free users (must match client) |
+| `WORKBOOK_BODY_LIMIT` | `25mb` | Max request body for workbook save routes |
+| `MAX_WORKBOOK_VERSIONS` | `50` | Version-history entries retained per workbook |
+| `CLERK_SECRET_KEY` | — | Clerk auth (hosted instance only; blank = open/no-login) |
+| `CLERK_PUBLISHABLE_KEY` | — | Clerk publishable key (hosted instance only) |
+| `STRIPE_SECRET_KEY` | — | Stripe billing (hosted instance only) |
+| `STRIPE_PRICE_ID` / `STRIPE_PRICE_ID_ANNUAL` | — | Pro plan price IDs (required for checkout) |
+| `STRIPE_WEBHOOK_SECRET` | — | Stripe webhook signature verification |
+| `DATABASE_URL` | — | Postgres for cloud save / sharing / usage (blank = disabled) |
+| `S3_BUCKET` / `S3_REGION` / `S3_SMARTSHT_PREFIX` | — | S3 storage for version history |
+| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | — | AWS credentials for S3 |
+
+### Running locally (no account required)
+
+smartsh!t runs fully without any login. Leave `VITE_CLERK_PUBLISHABLE_KEY` **blank** and the app starts in open mode — no sign-in wall, unlimited local usage, and no upgrade prompts. This is the default for a fresh clone.
+
+The `pk_live_...` / `sk_live_...` values in `.env.example` are placeholders for the **hosted** deployment at [smartsht.com](https://smartsht.com); you do not need them to run or develop locally. Clerk (auth), Stripe (billing), and the RDS/S3 cloud-sync layer are only required if you want to run your own hosted, account-gated instance:
+
+- **Auth** — set `VITE_CLERK_PUBLISHABLE_KEY` + `CLERK_SECRET_KEY` from *your own* [Clerk](https://clerk.com) app. Publishable keys are domain-locked, so the project's keys won't authenticate from another origin.
+- **Billing** — set the `STRIPE_*` variables from your own Stripe account.
+- **Cloud save / sharing** — set `DATABASE_URL` + the `S3_*`/`AWS_*` variables.
+
+Everything else (the editor, auditor, intent parser, and — with a `GROQ_API_KEY` or a local Ollama model — the AI) works with none of the above.
 
 ---
 
@@ -185,11 +213,13 @@ See **[CONTRIBUTING.md](CONTRIBUTING.md)** for setup and PR guidelines.
 
 See [docs/project_outline/roadmap-v1.md](docs/project_outline/roadmap-v1.md) for the full plan.
 
-**Next up:**
-- [ ] Auto-insights on import (proactive value without asking)
-- [ ] Cell inspector (explain any formula on hover)
-- [ ] Smart search (find things by description, not cell reference)
-- [ ] Auditor auto-run on import with prominent findings display
+Shipped since v1 planning: auto-insights on import, auditor auto-run with a findings panel, and the cell inspector (precedents/dependents + plain-English formula explanation).
+
+**Next up (guided navigation):**
+- [ ] Smart search — find things by description, not cell reference ("where are the expenses?")
+- [ ] Section detection — auto-outline of a sheet (income / expenses / totals) with click-to-navigate
+- [ ] Contextual suggestions on selection (sum/average/outliers for a selected range)
+- [ ] Selection-aware chat — "explain this" without asking "explain what?"
 
 ---
 

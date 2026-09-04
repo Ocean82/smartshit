@@ -20,7 +20,10 @@ SHARED_ENV="/opt/smartsht/.env"
 LOGS_DIR="/opt/smartsht/logs"
 FRONTEND_DEST="/var/www/smartsht/app"
 PM2_PROCESS="smartsht-api"
-HEALTH_URL="http://127.0.0.1:8787/health"
+# Strict readiness: 503 (curl -f fails → rollback) when a deploy-critical
+# subsystem (DB, S3, Clerk) is down. Plain /health always returns 200 and only
+# reflects AI-provider liveness, so it would report a DB-broken deploy healthy.
+HEALTH_URL="http://127.0.0.1:8787/health?strict=1"
 HEALTH_TIMEOUT=30
 DEPLOY_LOG="${LOGS_DIR}/deploy.log"
 
@@ -98,6 +101,10 @@ fi
 
 # ─── Install Dependencies ─────────────────────────────────────────────────────
 
+# NOTE: `xlsx` is pinned to file:vendor/xlsx-0.20.3.tgz (committed to the repo),
+# so `npm ci` resolves it from disk with no SheetJS CDN fetch. The git reset
+# above must keep vendor/ intact — if npm ci errors on that path, the tarball
+# was dropped in transit; restore vendor/xlsx-0.20.3.tgz and retry.
 log "Installing root dependencies..."
 npm ci --loglevel=warn 2>&1 | tail -3
 
@@ -138,20 +145,37 @@ if [ "$DEPLOY_FRONTEND" = true ] && [ ! -f public/models/minilm/model.onnx ]; th
   run_model_step npm run model:copy-deploy -- --public-only
 fi
 
-if [ "$DEPLOY_SERVER" = true ] && [ ! -f public/models/minilm/intent-vectors.bin ] && [ -f server/models/minilm/model.onnx ]; then
-  log "Pre-computing intent vectors (public/models/minilm/intent-vectors.bin)..."
+# Always attempt precompute when the model is present: the script self-skips
+# (cheap header read) if intent-vectors.bin already matches the current phrase
+# set, and regenerates when shared/intentPhrases.js has changed. Gating on file
+# absence alone would ship stale vectors after a phrase edit.
+if [ "$DEPLOY_SERVER" = true ] && [ -f server/models/minilm/model.onnx ]; then
+  log "Ensuring intent vectors are current (public/models/minilm/intent-vectors.bin)..."
   run_model_step npm run model:precompute
 fi
 
 # ─── Build Frontend ───────────────────────────────────────────────────────────
 
-if [ "$DEPLOY_FRONTEND" = true ]; then
+# Reusable function: build dist/ and mirror it to FRONTEND_DEST. Called by the
+# normal deploy path and again by the rollback path to restore the old frontend.
+mirror_frontend() {
   log "Building frontend (vite)..."
   npx vite build --mode production 2>&1 | tail -5
 
   if [ ! -f dist/index.html ]; then
-    die "Frontend build failed — dist/index.html not found"
+    log "Frontend build failed — dist/index.html not found"
+    return 1
   fi
+
+  # The WASM engines are emitted as external files under dist/assets/, not
+  # inlined into index.html. If they're missing the app loads but can't run
+  # formulas, so treat their absence as a build failure (→ rollback).
+  WASM_COUNT=$(find dist/assets -maxdepth 1 -name '*.wasm' 2>/dev/null | wc -l)
+  if [ "$WASM_COUNT" -eq 0 ]; then
+    log "Frontend build failed — no .wasm engines found under dist/assets/"
+    return 1
+  fi
+  log "Frontend WASM engines present: ${WASM_COUNT} file(s)"
 
   BUNDLE_SIZE=$(du -sh dist/index.html | cut -f1)
   log "Frontend bundle: $BUNDLE_SIZE"
@@ -168,6 +192,13 @@ if [ "$DEPLOY_FRONTEND" = true ]; then
   fi
   sudo chown -R www-data:www-data "$FRONTEND_DEST"
   log "Frontend deployed ✓"
+}
+
+FRONTEND_MIRRORED=false
+
+if [ "$DEPLOY_FRONTEND" = true ]; then
+  mirror_frontend || die "Frontend build/mirror failed"
+  FRONTEND_MIRRORED=true
 fi
 
 # ─── Landing statics (index/terms/privacy/404/og-image/llms/robots/sitemap) ───
@@ -236,9 +267,24 @@ if [ "$DEPLOY_SERVER" = true ]; then
   else
     log "HEALTH CHECK FAILED — rolling back..."
     git reset --hard "$PREV_COMMIT" --quiet
+    npm ci --loglevel=warn 2>&1 | tail -1
     npm ci --prefix server --loglevel=warn 2>&1 | tail -1
     npm run build --prefix server 2>&1 | tail -1
     pm2 restart "$PM2_PROCESS" --update-env 2>&1 | tail -1
+
+    # If we already mirrored the NEW frontend to the webroot, it now mismatches
+    # the rolled-back server. Rebuild from PREV_COMMIT and remirror so the live
+    # SPA matches the running API. Non-fatal: a build failure here leaves the
+    # new frontend up, which we surface loudly rather than aborting the rollback.
+    if [ "$FRONTEND_MIRRORED" = true ]; then
+      log "Restoring frontend from ${PREV_COMMIT:0:8}..."
+      if mirror_frontend; then
+        log "Frontend rolled back ✓"
+      else
+        log "WARN: frontend rollback build failed — live SPA may be newer than the API"
+      fi
+    fi
+
     die "Deploy rolled back to ${PREV_COMMIT:0:8}. Check $LOGS_DIR/error.log"
   fi
 fi

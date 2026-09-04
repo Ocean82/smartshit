@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  schedule:
+    # Weekly dependency advisory sweep (Mondays 06:00 UTC). Advisory only.
+    - cron: '0 6 * * 1'
+  workflow_dispatch: {}
 
 jobs:
   test:
@@ -24,11 +28,107 @@ jobs:
           cache: 'npm'
       - run: npm ci
       - run: npm ci --prefix server
-      - run: npm audit --audit-level=high || true
-      - run: npm audit --audit-level=high --prefix server || true
+      # Gate the build only on critical, fixable advisories. High/moderate drift
+      # is surfaced (non-blocking) by the scheduled `audit` job below, so a newly
+      # published high advisory with no fix yet can't block every unrelated PR.
+      - run: npm audit --audit-level=critical
+      - run: npm audit --audit-level=critical --prefix server
       - run: npm run lint:ci
       - run: npm run typecheck
       - run: npm run test --prefix server
       - run: npm run test
+      # Real-WASM formula engine tier (separate from the stubbed unit tests
+      # above). Loads the actual @ocean8219/formualizer via vite-plugin-wasm.
+      - run: npm run test:realengine
       - run: npm run build --prefix server
       - run: npm run build
+
+  # Advisory-only dependency audit. Runs on the weekly schedule (and on demand).
+  # Never blocks a merge — instead it opens/updates a tracking issue when a
+  # high-or-worse advisory is found, so drift is visible without gating PRs.
+  audit:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    env:
+      ONNXRUNTIME_NODE_INSTALL: "skip"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+      - run: npm ci
+      - run: npm ci --prefix server
+
+      - name: Audit (root + server)
+        id: audit
+        run: |
+          set +e
+          {
+            echo "## Root"
+            npm audit --audit-level=high
+            root=$?
+            echo ""
+            echo "## Server"
+            npm audit --audit-level=high --prefix server
+            server=$?
+          } > audit-report.txt 2>&1
+          # npm audit exits non-zero when advisories at/above the level exist.
+          if [ "$root" -ne 0 ] || [ "$server" -ne 0 ]; then
+            echo "failed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "failed=false" >> "$GITHUB_OUTPUT"
+          fi
+          cat audit-report.txt
+
+      - name: Open or update advisory issue
+        if: steps.audit.outputs.failed == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const report = fs.readFileSync('audit-report.txt', 'utf8').slice(0, 60000);
+            const title = 'Dependency advisory: npm audit found high-or-worse issues';
+            const body = [
+              'The scheduled dependency audit found advisories at `high` or above.',
+              '',
+              'This is advisory only — it does not block CI. Review and, where a fix',
+              'is available, run `npm audit fix` (root) and/or `npm audit fix --prefix server`.',
+              '',
+              '<details><summary>npm audit output</summary>',
+              '',
+              '```',
+              report,
+              '```',
+              '',
+              '</details>',
+              '',
+              `_Run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}_`,
+            ].join('\n');
+            const existing = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'dependencies',
+              per_page: 100,
+            });
+            const found = existing.data.find((i) => i.title === title);
+            if (found) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: found.number,
+                body,
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body,
+                labels: ['dependencies'],
+              });
+            }

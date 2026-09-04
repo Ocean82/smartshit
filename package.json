@@ -40,6 +40,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:realengine": "vitest run --config vitest.integration.config.ts",
     "deploy": "powershell -ExecutionPolicy Bypass -File scripts/deploy-remote.ps1",
     "deploy:server": "powershell -ExecutionPolicy Bypass -File scripts/deploy-remote.ps1 -Server",
     "deploy:frontend": "powershell -ExecutionPolicy Bypass -File scripts/deploy-remote.ps1 -Frontend",
@@ -63,7 +64,7 @@
     "remark-gfm": "^4.0.1",
     "tailwind-merge": "3.4.0",
     "uuid": "^14.0.1",
-    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
+    "xlsx": "file:vendor/xlsx-0.20.3.tgz",
     "zustand": "^5.0.14"
   },
   "devDependencies": {
