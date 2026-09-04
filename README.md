@@ -50,7 +50,7 @@ Import a budget → the auditor flags a formula that skips a cell → the AI exp
 
 | Tool | Version |
 |------|---------|
-| Node.js | 20+ |
+| Node.js | 22+ |
 | Ollama | latest (optional — cloud AI works too) |
 
 ### 1. Clone and install
@@ -197,11 +197,13 @@ See **[CONTRIBUTING.md](CONTRIBUTING.md)** for setup and PR guidelines.
 
 See [docs/project_outline/roadmap-v1.md](docs/project_outline/roadmap-v1.md) for the full plan.
 
-**Next up:**
-- [ ] Auto-insights on import (proactive value without asking)
-- [ ] Cell inspector (explain any formula on hover)
-- [ ] Smart search (find things by description, not cell reference)
-- [ ] Auditor auto-run on import with prominent findings display
+Shipped since v1 planning: auto-insights on import, auditor auto-run with a findings panel, and the cell inspector (precedents/dependents + plain-English formula explanation).
+
+**Next up (guided navigation):**
+- [ ] Smart search — find things by description, not cell reference ("where are the expenses?")
+- [ ] Section detection — auto-outline of a sheet (income / expenses / totals) with click-to-navigate
+- [ ] Contextual suggestions on selection (sum/average/outliers for a selected range)
+- [ ] Selection-aware chat — "explain this" without asking "explain what?"
 
 ---
 
