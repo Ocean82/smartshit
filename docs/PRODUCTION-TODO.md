@@ -18,11 +18,28 @@ Items are added as local development work creates production requirements. Check
   - Action on the next deploy: ensure `DATABASE_URL`, the `S3_*`/`AWS_*` credentials, and `CLERK_SECRET_KEY` are present and reachable on the server. Production already has all three, so this should be a no-op — but if a deploy rolls back with a failed health check, read the deploy log: a 503 here means a real subsystem (DB/S3/Clerk) is down, not a false alarm. Curl `/health?strict=1` manually to see which one (`critical.{database,s3,clerk}`).
   - AI providers (Groq/OpenRouter/Ollama) and Stripe are intentionally **not** part of the gate — they degrade gracefully, so a provider/Stripe outage will not block or roll back a deploy.
 
-- [ ] **Verify the server loads the intended `.env` and model locations** — added 2026-09-03
-  - Prompted by a doc/config drift: `GROQ_MODEL` on the live server (`/opt/smartsht/.env`) was `qwen/qwen3.6-27b`, but three committed templates (`server/.env.production`, root + server `.env.example`) and the README all said `openai/gpt-oss-120b`. The templates have now been aligned, but the drift shows we don't have a reliable check that the running process reads the file/values we think it does.
-  - Verify which `.env` the `smartsht-api` PM2 process actually loads (env-file flag vs. dotenv-from-cwd) and that it matches `/opt/smartsht/.env`. `pm2 env smartsht-api` did **not** surface dotenv-loaded vars, so confirm via a runtime signal (e.g. a startup log line printing the resolved `GROQ_MODEL` / model paths, or an authenticated `/health` field).
-  - Confirm the model/asset locations the server resolves at runtime match what's on disk: `SMARTSHIT_MODEL` / Ollama model (`ollama list`), the ONNX/MiniLM paths under `server/models/`, and that these agree with the config the process booted with.
-  - Goal: a single, non-secret runtime readout (log or health field) that states which env file and model ids/paths are in effect, so template-vs-live drift is caught on deploy instead of by manual SSH.
+- [ ] **Confirm env/model diagnostics on the live box after next deploy** — added 2026-09-03, mostly resolved in code
+  - Root cause found + fixed: the **compiled** server was loading the wrong `.env`.
+    `loadEnv()` resolved `<__dirname>/../.env`, which is correct for `tsx` (dev)
+    but resolved to `dist/server/.env` in the compiled build — a file that does
+    not exist — so **every env var silently fell back to defaults** (Clerk/DB/S3
+    off, `GROQ_MODEL` defaulting). Prod only worked to the extent PM2/cwd happened
+    to supply vars. `loadEnv()` now tries dev + compiled + cwd candidates and
+    loads the first that exists (`server/src/loadEnv.ts`); an override is
+    available via `SMARTSHT_ENV_FILE`.
+  - New diagnostics (no more manual SSH to diff): the startup log now prints
+    `Env: NODE_ENV=… | cwd=…` and `Env file: ✓ loaded <path> (N keys)` (or `✗ NOT
+    loaded`), and the **authenticated** `GET /health` includes a `runtime` block
+    (`envFile`, `cwd`, resolved model ids, `onnxModelsRoot`, `providerOrder`).
+  - Action on the next deploy: read the boot log / `pm2 logs smartsht-api` and
+    confirm `Env file: ✓ loaded /opt/smartsht/current/server/.env (…keys)` — NOT
+    `✗ NOT loaded`. Then hit authenticated `/health` and confirm `runtime.models.groq`
+    is `qwen/qwen3.6-27b` and `runtime.models.onnxModelsRoot` points at the real
+    models dir (`ollama list` for the Ollama model).
+  - Note: the PM2 ecosystem config sets `NODE_ENV=production` and `cwd` but does
+    **not** pass `--env-file`; env loading is now owned entirely by `loadEnv()`,
+    so no `--env-file` flag is needed. If a future start command adds one, make
+    sure it doesn't fight `loadEnv()`.
 
 ---
 
