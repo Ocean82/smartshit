@@ -47,3 +47,52 @@ describe('openaiCompatible SSRF redirect handling', () => {
     ).rejects.toThrow(/redirect/i)
   })
 })
+
+describe('openaiCompatible streaming — reasoning models', () => {
+  /** Build a mock SSE Response body from an array of delta objects. */
+  function sseResponse(deltas: Array<Record<string, unknown>>): Response {
+    const lines = deltas
+      .map((d) => `data: ${JSON.stringify({ choices: [{ delta: d }] })}\n`)
+      .concat('data: [DONE]\n')
+      .join('')
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(lines))
+        controller.close()
+      },
+    })
+    return new Response(stream, { status: 200, headers: { 'Content-Type': 'text/event-stream' } })
+  }
+
+  it('emits one empty liveness ping when reasoning arrives before content', async () => {
+    // qwen3-style stream: reasoning tokens first, then real content.
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      sseResponse([
+        { reasoning: 'let me think...' },
+        { reasoning: 'still thinking' },
+        { content: 'Hello' },
+        { content: ' world' },
+      ]),
+    )
+
+    const chunks: string[] = []
+    const result = await chatWithOpenAiCompatibleStream(params, messages, (c) => chunks.push(c))
+
+    // The first chunk is the empty liveness ping (disarms the caller's
+    // first-byte timeout during the reasoning phase); content follows.
+    expect(chunks[0]).toBe('')
+    expect(chunks.filter((c) => c === '').length).toBe(1) // pinged exactly once
+    expect(result).toBe('Hello world')
+    expect(chunks.join('')).toBe('Hello world')
+  })
+
+  it('does not ping when content arrives immediately (no reasoning)', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      sseResponse([{ content: 'Hi' }, { content: ' there' }]),
+    )
+    const chunks: string[] = []
+    const result = await chatWithOpenAiCompatibleStream(params, messages, (c) => chunks.push(c))
+    expect(chunks.some((c) => c === '')).toBe(false)
+    expect(result).toBe('Hi there')
+  })
+})
