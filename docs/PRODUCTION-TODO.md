@@ -8,48 +8,36 @@ Items are added as local development work creates production requirements. Check
 
 ## Pending
 
+- [ ] **Deploy the committed `ecosystem.config.cjs` and start PM2 from it** — added 2026-09-05
+  - Found during the 2026-09-05 deploy: `server/ecosystem.config.cjs` is committed but is **not** present at `/opt/smartsht/current/server/` on the box, and the running `smartsht-api` process was started by a manual `pm2 start` (during the Node 22 recovery), not from the ecosystem file. So the ecosystem config currently drives nothing.
+  - Also: the server now runs on **Node 22** (upgraded 2026-09-05 via NodeSource, in place). `pm2 update` during that upgrade dropped the process from the dump because the ecosystem file wasn't where expected — hence the manual start + `pm2 save`.
+  - Action: once a deploy checks out a tree that includes `server/ecosystem.config.cjs`, do a one-time `pm2 delete smartsht-api && pm2 start /opt/smartsht/current/server/ecosystem.config.cjs && pm2 save` so future restarts/reboots use the committed config (name, cwd, NODE_ENV, source-maps). `deploy.sh` uses `pm2 restart smartsht-api`, which reuses whatever definition exists, so this only needs doing once.
+
 - [ ] **Suppress reasoning output on OpenRouter/HuggingFace fallbacks (Option 2)** — added 2026-09-05
   - Context: `qwen/qwen3.6-27b` is a reasoning model. On Groq we send `reasoning_effort:'none'` so it returns clean content (no `<think>` dump). On the OpenRouter/HF fallbacks (the `openaiCompatible` client) we do NOT send an equivalent, so those providers stream a reasoning phase first.
-  - Already fixed (Option 1, this PR): the client now emits one empty liveness ping on the first `delta.reasoning` chunk so the caller's 30s first-byte timeout no longer trips during reasoning. Timeouts are resolved.
+  - Already fixed (Option 1, PR #25): the client now emits one empty liveness ping on the first `delta.reasoning` chunk so the caller's 30s first-byte timeout no longer trips during reasoning. Timeouts are resolved.
   - Still TODO (polish): actually **suppress** the reasoning on these providers so fallback output matches Groq's clean output and we don't waste tokens/latency generating reasoning we discard. OpenRouter accepts `reasoning: { exclude: true }` (or `{ effort: ... }`) in the request body; HuggingFace router support varies. Plumb a provider-appropriate "no reasoning" flag through `chatWithOpenAiCompatibleStream` / `chatWithOpenAiCompatible`. Verify against each provider's live API before shipping (the param differs from Groq's `reasoning_effort`).
   - Priority: low — Groq is primary and works; this only affects the rarely-hit fallback path.
-
-- [ ] **Ensure `vendor/xlsx-0.20.3.tgz` is present on deploy** — added 2026-09-03
-  - `xlsx` is now pinned to `file:vendor/xlsx-0.20.3.tgz` (was a `cdn.sheetjs.com` URL). The tarball is committed to the repo, so a normal `git pull` / clean checkout includes it and `npm ci` resolves xlsx from that file — no network fetch to SheetJS.
-  - Action: confirm the deploy path does a full checkout and does **not** filter out `vendor/` (it is not gitignored). If `npm ci` ever errors with `ENOENT`/`Cannot read` for `vendor/xlsx-0.20.3.tgz`, the vendor dir was dropped in transit — restore it before retrying.
-  - To bump xlsx later: download the new official tarball into `vendor/`, verify its SHA512 matches the SheetJS release, update the `file:` path in `package.json`, and `npm install`.
-
-- [ ] **Deploy health gate is now strict (DB + S3 + Clerk)** — added 2026-09-03
-  - `deploy.sh` now checks `GET /health?strict=1`, which returns **503** (→ `curl -f` fails → automatic rollback) unless the database, S3, and Clerk are all healthy. Plain `/health` still returns 200 for liveness.
-  - Action on the next deploy: ensure `DATABASE_URL`, the `S3_*`/`AWS_*` credentials, and `CLERK_SECRET_KEY` are present and reachable on the server. Production already has all three, so this should be a no-op — but if a deploy rolls back with a failed health check, read the deploy log: a 503 here means a real subsystem (DB/S3/Clerk) is down, not a false alarm. Curl `/health?strict=1` manually to see which one (`critical.{database,s3,clerk}`).
-  - AI providers (Groq/OpenRouter/Ollama) and Stripe are intentionally **not** part of the gate — they degrade gracefully, so a provider/Stripe outage will not block or roll back a deploy.
-
-- [ ] **Confirm env/model diagnostics on the live box after next deploy** — added 2026-09-03, mostly resolved in code
-  - Root cause found + fixed: the **compiled** server was loading the wrong `.env`.
-    `loadEnv()` resolved `<__dirname>/../.env`, which is correct for `tsx` (dev)
-    but resolved to `dist/server/.env` in the compiled build — a file that does
-    not exist — so **every env var silently fell back to defaults** (Clerk/DB/S3
-    off, `GROQ_MODEL` defaulting). Prod only worked to the extent PM2/cwd happened
-    to supply vars. `loadEnv()` now tries dev + compiled + cwd candidates and
-    loads the first that exists (`server/src/loadEnv.ts`); an override is
-    available via `SMARTSHT_ENV_FILE`.
-  - New diagnostics (no more manual SSH to diff): the startup log now prints
-    `Env: NODE_ENV=… | cwd=…` and `Env file: ✓ loaded <path> (N keys)` (or `✗ NOT
-    loaded`), and the **authenticated** `GET /health` includes a `runtime` block
-    (`envFile`, `cwd`, resolved model ids, `onnxModelsRoot`, `providerOrder`).
-  - Action on the next deploy: read the boot log / `pm2 logs smartsht-api` and
-    confirm `Env file: ✓ loaded /opt/smartsht/current/server/.env (…keys)` — NOT
-    `✗ NOT loaded`. Then hit authenticated `/health` and confirm `runtime.models.groq`
-    is `qwen/qwen3.6-27b` and `runtime.models.onnxModelsRoot` points at the real
-    models dir (`ollama list` for the Ollama model).
-  - Note: the PM2 ecosystem config sets `NODE_ENV=production` and `cwd` but does
-    **not** pass `--env-file`; env loading is now owned entirely by `loadEnv()`,
-    so no `--env-file` flag is needed. If a future start command adds one, make
-    sure it doesn't fight `loadEnv()`.
 
 ---
 
 ## Completed
+
+- [x] **Node 20 → 22 upgrade on production** — Completed 2026-09-05
+  - `package.json` engines require `>=22`; server was on Node 20.20.0. Upgraded in place via NodeSource `setup_22.x` → `apt install nodejs` (now v22.23.2). pm2 (6.0.13) and npm globals survived (prefix `/usr`). `onnxruntime-node` rebuilt cleanly against Node 22 during the deploy's `npm ci`.
+
+- [x] **Deploy hardening PRs #22–#24 shipped to prod** — Completed 2026-09-05 (`3c52e50 → 023283b`)
+  - Verified live after deploy: app online on Node 22 (0 unstable restarts); `deploy.sh` ran clean (vendored xlsx, 0 vulnerabilities, frontend WASM build, nginx `-t` + reload, server tsc build, health OK in 2s).
+
+- [x] **`vendor/xlsx-0.20.3.tgz` present on deploy** — Confirmed 2026-09-05
+  - `npm ci` resolved xlsx from the committed `file:vendor/` tarball with no CDN fetch; frontend built with the WASM engines present.
+
+- [x] **Strict health gate (DB + S3 + Clerk) live** — Confirmed 2026-09-05
+  - `GET /health?strict=1` returns **200** internally and publicly (`https://smartsht.com/health?strict=1`); DB, S3, and Clerk all healthy. Rollback-on-503 path is armed for future deploys.
+
+- [x] **Env/model diagnostics confirmed on the live box** — Confirmed 2026-09-05
+  - Boot log shows `Env: NODE_ENV=production | cwd=/opt/smartsht/current/server` and `Env file: ✓ loaded …/dist/server/.env` — that path is a **symlink → `/opt/smartsht/.env`** (the reconciled shared file), so effective config is correct: `GROQ_MODEL=qwen/qwen3.6-27b`, Clerk/DB/S3 all ✓, ONNX model resolved. The env-loading fix (#24) works; `loadEnv()` picks the symlinked compiled-dir `.env`, which resolves to the same reconciled file as `server/.env`.
+  - Verified `application/wasm` gzip is live: assets serve `content-encoding: gzip` + `content-type: application/wasm` + 30d cache.
 
 - [x] **Update `GROQ_MODEL` on production server** — Completed 2026-08-25
   - Changed to `qwen/qwen3.6-27b` (Groq's flagship replacement for deprecated llama-3.3-70b-versatile)

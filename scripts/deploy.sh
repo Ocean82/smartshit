@@ -294,6 +294,6 @@ fi
 log "═══ Deploy complete: ${PREV_COMMIT:0:8} → ${NEW_COMMIT:0:8} ═══"
 echo ""
 echo "  Frontend: https://smartsht.com/app"
-echo "  API:      https://smartsht.com/api/health"
+echo "  API:      https://smartsht.com/health"
 echo "  Logs:     pm2 logs smartsht-api --lines 20"
 echo ""
