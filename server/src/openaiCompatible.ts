@@ -128,6 +128,13 @@ export async function chatWithOpenAiCompatibleStream(
   const decoder = new TextDecoder()
   let accumulated = ''
   const cleanOnChunk = createThinkingTagFilter(onChunk)
+  // Reasoning models (e.g. qwen3) stream `delta.reasoning` before any
+  // `delta.content`. The caller's first-byte timeout disarms on the first
+  // onChunk() call, so a long reasoning phase with no content would trip it
+  // even though data is flowing. Emit ONE empty liveness ping (bypassing the
+  // thinking-tag filter, which swallows empty strings) so the timeout disarms
+  // without leaking reasoning text to the user.
+  let pingedForReasoning = false
 
   while (true) {
     const { done, value } = await reader.read()
@@ -142,11 +149,22 @@ export async function chatWithOpenAiCompatibleStream(
       if (!jsonStr || jsonStr === '[DONE]') continue
 
       try {
-        const parsed = JSON.parse(jsonStr) as { choices?: Array<{ delta?: { content?: string } }> }
-        const token = parsed.choices?.[0]?.delta?.content ?? ''
-        if (!token) continue
-        accumulated += token
-        cleanOnChunk(token)
+        const parsed = JSON.parse(jsonStr) as {
+          choices?: Array<{ delta?: { content?: string; reasoning?: string } }>
+        }
+        const delta = parsed.choices?.[0]?.delta
+        const token = delta?.content ?? ''
+        if (token) {
+          accumulated += token
+          cleanOnChunk(token)
+          continue
+        }
+        // Reasoning-only chunk: mark the stream live once so the first-byte
+        // timeout doesn't fire during the reasoning phase.
+        if (!pingedForReasoning && delta?.reasoning) {
+          pingedForReasoning = true
+          onChunk('')
+        }
       } catch {
         // Skip malformed chunks
       }
