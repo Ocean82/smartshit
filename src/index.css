@@ -270,6 +270,28 @@ body {
     opacity: 0.6 !important;
   }
 
+  /* Column-resize handle is a 6px hover-reveal sliver on desktop — impossible to
+     grab by finger. On touch, widen the invisible hit area to ~22px straddling
+     the column boundary and keep a faint always-visible grip so it's discoverable. */
+  .col-resize-handle {
+    width: 22px !important;
+    right: -11px !important; /* center the hit zone on the column edge */
+    opacity: 1 !important;
+    background: transparent;
+  }
+  /* Faint 2px grip drawn on the boundary itself, inside the wider hit zone. */
+  .col-resize-handle::after {
+    content: "";
+    position: absolute;
+    top: 25%;
+    bottom: 25%;
+    left: 50%;
+    width: 2px;
+    transform: translateX(-1px);
+    background: rgba(59, 130, 246, 0.35);
+    border-radius: 1px;
+  }
+
   /* Increase minimum touch targets for context menu items */
   [role="menuitem"] {
     min-height: 44px;

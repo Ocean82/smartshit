@@ -305,7 +305,7 @@ function ColumnHeader({ col, width, isSelected, sortDirection, isFiltered, onSel
       {sortDirection && <span className="ml-0.5 text-blue-500 text-[9px]">{sortDirection === 'asc' ? '▲' : '▼'}</span>}
       {isFiltered && <span className="ml-0.5 text-amber-500 text-[9px]">⏷</span>}
       <div
-        className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-400 opacity-0 group-hover:opacity-100 z-10 touch-none"
+        className="col-resize-handle absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-400 opacity-0 group-hover:opacity-100 z-10 touch-none"
         onPointerDown={(e) => onResizeStart(col, e)}
         onPointerMove={onResizeMove}
         onPointerUp={onResizeEnd}

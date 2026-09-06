@@ -268,7 +268,7 @@ export function VersionHistoryPanel() {
       {preview && previewSheet && (
         <div
           ref={focusTrapRef}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          className="fixed inset-0 z-50 flex items-end justify-center md:items-center md:p-4"
           role="dialog"
           aria-modal="true"
           aria-label={`Preview version v${preview.version.version_number}`}
@@ -278,7 +278,7 @@ export function VersionHistoryPanel() {
             onClick={closePreview}
             aria-hidden="true"
           />
-          <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-4xl h-[80vh] flex flex-col overflow-hidden">
+          <div className="relative bg-white rounded-t-2xl md:rounded-xl shadow-2xl w-full max-w-4xl h-[92dvh] md:h-[80vh] flex flex-col overflow-hidden safe-area-bottom">
             <header className="flex items-center gap-3 px-4 py-3 border-b border-gray-200 shrink-0">
               <FileText size={16} className="text-gray-400" />
               <div className="min-w-0">
