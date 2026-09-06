@@ -8,11 +8,6 @@ Items are added as local development work creates production requirements. Check
 
 ## Pending
 
-- [ ] **Deploy the committed `ecosystem.config.cjs` and start PM2 from it** — added 2026-09-05
-  - Found during the 2026-09-05 deploy: `server/ecosystem.config.cjs` is committed but is **not** present at `/opt/smartsht/current/server/` on the box, and the running `smartsht-api` process was started by a manual `pm2 start` (during the Node 22 recovery), not from the ecosystem file. So the ecosystem config currently drives nothing.
-  - Also: the server now runs on **Node 22** (upgraded 2026-09-05 via NodeSource, in place). `pm2 update` during that upgrade dropped the process from the dump because the ecosystem file wasn't where expected — hence the manual start + `pm2 save`.
-  - Action: once a deploy checks out a tree that includes `server/ecosystem.config.cjs`, do a one-time `pm2 delete smartsht-api && pm2 start /opt/smartsht/current/server/ecosystem.config.cjs && pm2 save` so future restarts/reboots use the committed config (name, cwd, NODE_ENV, source-maps). `deploy.sh` uses `pm2 restart smartsht-api`, which reuses whatever definition exists, so this only needs doing once.
-
 - [ ] **Suppress reasoning output on OpenRouter/HuggingFace fallbacks (Option 2)** — added 2026-09-05
   - Context: `qwen/qwen3.6-27b` is a reasoning model. On Groq we send `reasoning_effort:'none'` so it returns clean content (no `<think>` dump). On the OpenRouter/HF fallbacks (the `openaiCompatible` client) we do NOT send an equivalent, so those providers stream a reasoning phase first.
   - Already fixed (Option 1, PR #25): the client now emits one empty liveness ping on the first `delta.reasoning` chunk so the caller's 30s first-byte timeout no longer trips during reasoning. Timeouts are resolved.
@@ -22,6 +17,20 @@ Items are added as local development work creates production requirements. Check
 ---
 
 ## Completed
+
+- [x] **nginx broke deploy: missing Certbot HTTP-01 challenge include** — Fixed 2026-09-06
+  - The 2026-09-06 launch deploy died at the `nginx -t` gate (→ `deploy.sh` rolled back) with: `open() "/etc/letsencrypt/le_http_01_cert_challenge.conf" failed (2: No such file or directory) in /etc/nginx/nginx.conf:12`.
+  - Root cause: `nginx.conf` line 12 has `include /etc/letsencrypt/le_http_01_cert_challenge.conf;` (injected by Certbot's nginx installer). Certbot populates that file only during an active HTTP-01 renewal and empties it after; the file had gone missing entirely (likely a partial cleanup / tmp clearing), so the unconditional include failed and `nginx -t` failed for the **whole** config — our site config was fine (diffed identical to the repo conf).
+  - Fix: recreated it empty and root-owned — `sudo touch /etc/letsencrypt/le_http_01_cert_challenge.conf && sudo chmod 644 && sudo chown root:root`. An empty file is the correct idle state and preserves Certbot auto-renewal (do **not** remove the include line — that would break the next renewal). `nginx -t` then passed and reload succeeded.
+  - If this recurs after a reboot/renewal, the same one-line `touch` fixes it. Consider a Certbot deploy-hook or a systemd tmpfiles.d entry to recreate it on boot if it keeps disappearing.
+
+- [x] **PRs #25 (#OpenRouter reasoning timeout) + #26 (post-deploy docs) shipped to prod** — Completed 2026-09-06 (`023283b → 34cc9d5`)
+  - Full launch deploy: frontend rebuilt+mirrored (6 WASM engines present), server rebuilt (tsc), PM2 restarted on Node 22.23.2, `pm2 save` persisted. Strict health gate green in 2s; public `/` 200, `/app` 301, `/health` 200. Boot log: `Env file: ✓ loaded …/dist/server/.env (35 keys)`, Groq/Clerk/DB/S3 all ✓, `GROQ_MODEL=qwen/qwen3.6-27b`. Verified the #25 reasoning-ping fix is in the fresh compiled `openaiCompatible.js`.
+  - Live Groq probe against the deployed key/model: HTTP 200, content exactly `LAUNCH_OK`, no `<think>` dump — primary provider path confirmed clean end-to-end.
+
+- [x] **~~Deploy the committed `ecosystem.config.cjs` and start PM2 from it~~ — Not applicable (corrected 2026-09-06)**
+  - The earlier note assumed `server/ecosystem.config.cjs` was committed and just not deployed. It is actually **`.gitignore`d** (`.gitignore` line 49: "PM2 ecosystem config (contains server secrets)"), so it is never in the repo tree and never checked out on the box — there is nothing to migrate to.
+  - The running `smartsht-api` process was started via manual `pm2 start dist/server/src/index.js --name smartsht-api --node-args="--enable-source-maps"` during the Node-22 recovery and persisted with `pm2 save`. That dump (`~/.pm2/dump.pm2`) **is** the source of truth for restarts/reboots, and `deploy.sh`'s `pm2 restart smartsht-api --update-env` reuses it correctly. This is the intended steady state — no action needed.
 
 - [x] **Node 20 → 22 upgrade on production** — Completed 2026-09-05
   - `package.json` engines require `>=22`; server was on Node 20.20.0. Upgraded in place via NodeSource `setup_22.x` → `apt install nodejs` (now v22.23.2). pm2 (6.0.13) and npm globals survived (prefix `/usr`). `onnxruntime-node` rebuilt cleanly against Node 22 during the deploy's `npm ci`.
