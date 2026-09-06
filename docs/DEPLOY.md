@@ -2,11 +2,11 @@
 
 ## Prerequisites
 
-- Ubuntu/Debian server with nginx, Node.js 20+, PM2
+- Ubuntu/Debian server with nginx, Node.js 22+ (prod runs v22.x; `package.json` engines require `>=22`), PM2
 - AWS RDS (PostgreSQL) with `smartsht` schema created
 - AWS S3 bucket with `smartsht/` prefix
 - Clerk account with SmartSht app (live keys)
-- Stripe account with Pro product + $7/mo price created
+- Stripe account with Pro product — monthly $7/mo price and annual $59/yr price (`STRIPE_PRICE_ID` + `STRIPE_PRICE_ID_ANNUAL`)
 - Groq API key (free tier is sufficient for launch)
 - Domain: smartsht.com pointing to server IP
 - Let's Encrypt SSL certificate (certbot)
@@ -68,9 +68,9 @@ npm run build
 npm run build:server
 
 # Verify
-ls dist/index.html            # SPA shell (JS/CSS inlined)
-ls dist/assets/*.wasm          # Formula/ONNX engines (external, required)
-ls server/dist/index.js        # Compiled server
+ls dist/index.html                      # SPA shell (JS/CSS inlined)
+ls dist/assets/*.wasm                    # Formula/ONNX engines (external, required)
+ls server/dist/server/src/index.js       # Compiled server entrypoint (tsc preserves the server/src/ path)
 ```
 
 The frontend build inlines all JS and CSS into `dist/index.html` (via
@@ -112,13 +112,15 @@ npm run deploy:frontend
 1. Pushes your current `main` branch to GitHub
 2. SSHs into the production server (`ubuntu@52.0.207.242`)
 3. Runs `/opt/smartsht/current/scripts/deploy.sh` which:
-   - `git pull` (fast-forward to latest main)
-   - `npm ci --omit=dev` (install deps)
+   - `git fetch` + `git reset --hard origin/main` (sync to latest main)
+   - `npm ci` at root and in `server/` (full install — build tools like tsc/vite are required, so **not** `--omit=dev`)
    - Syncs the shared `.env` into `server/.env` if newer
-   - Builds frontend (`vite build`) → copies to `/var/www/smartsht/app/`
-   - Builds server (`tsc`) → restarts PM2
-   - Runs health check against `http://127.0.0.1:8787/health`
-   - **Rolls back** to the previous commit if health check fails
+   - Self-heals MiniLM ONNX models and precomputes intent vectors if needed
+   - Builds frontend (`vite build`) → mirrors the whole `dist/` tree to `/var/www/smartsht/app/`; fails (→ rollback) if no `.wasm` engines are emitted
+   - Installs `landing/smartsht.nginx.conf`, runs `nginx -t`, reloads nginx (a failed `nginx -t` aborts the deploy — see the nginx gotcha in §4)
+   - Builds server (`tsc`) → restarts PM2 (`pm2 restart smartsht-api --update-env`)
+   - Runs a **strict** health check against `http://127.0.0.1:8787/health?strict=1` (503 unless DB + S3 + Clerk are all healthy; plain `/health` always returns 200 and only reflects AI-provider liveness)
+   - **Rolls back** to the previous commit if the strict health check fails
 
 ### Server directory layout
 
@@ -128,9 +130,9 @@ npm run deploy:frontend
 ├── current/            # Git clone of main branch
 │   ├── dist/           # Frontend build output
 │   ├── server/
-│   │   ├── dist/       # Server build output (PM2 runs from here)
-│   │   ├── .env        # Copied from /opt/smartsht/.env
-│   │   └── ecosystem.config.cjs  # PM2 config (committed)
+│   │   ├── dist/server/src/index.js  # Compiled server entrypoint (PM2 runs this)
+│   │   └── .env        # Copied from /opt/smartsht/.env (compiled build loads dist/server/.env, a symlink to this)
+│   │   # NOTE: server/ecosystem.config.cjs is GITIGNORED — NOT present on the box. PM2 is driven by the saved dump (see §5).
 │   └── scripts/
 │       └── deploy.sh   # Server-side deploy logic
 ├── logs/               # PM2 error.log + out.log + deploy.log
@@ -152,16 +154,18 @@ npm run deploy:frontend
 ```bash
 ssh -i ~/.ssh/server_saver_key ubuntu@52.0.207.242
 cd /opt/smartsht/current
-git pull --ff-only origin main
-npm ci --omit=dev
-npm ci --omit=dev --prefix server
+git fetch origin main && git reset --hard origin/main
+# Full install (NOT --omit=dev): tsc/vite build tools live in devDependencies.
+npm ci
+npm ci --prefix server
 npx vite build
 # Mirror the WHOLE dist/ tree — index.html AND assets/ (.wasm engines + workers).
 # Copying only index.html 404s the engines. --delete prunes stale hashed assets.
 sudo rsync -a --delete dist/ /var/www/smartsht/app/
 npm run build --prefix server
-pm2 restart smartsht-api
-curl -sf http://127.0.0.1:8787/health
+pm2 restart smartsht-api --update-env
+# Strict readiness (503 unless DB+S3+Clerk healthy) — same gate deploy.sh uses:
+curl -sf 'http://127.0.0.1:8787/health?strict=1'
 ```
 
 ---
@@ -175,6 +179,20 @@ sudo cp /var/www/smartsht/smartsht.nginx.conf /etc/nginx/sites-available/smartsh
 sudo ln -sf /etc/nginx/sites-available/smartsht.com /etc/nginx/sites-enabled/
 sudo nginx -t && sudo systemctl reload nginx
 ```
+
+> **Gotcha — Certbot HTTP-01 challenge include (broke a deploy 2026-09-06):**
+> The system `nginx.conf` includes `/etc/letsencrypt/le_http_01_cert_challenge.conf`
+> (injected by Certbot's nginx installer). Certbot only populates that file during
+> an active HTTP-01 renewal and empties it afterward — but if the file goes missing
+> entirely, `nginx -t` fails for the **whole** config (`open() ... failed (2: No such
+> file or directory)`), which aborts the deploy even when the site config is fine.
+> Fix by recreating it empty and root-owned (do **not** delete the include line — that
+> breaks the next renewal):
+> ```bash
+> sudo touch /etc/letsencrypt/le_http_01_cert_challenge.conf && \
+> sudo chmod 644 /etc/letsencrypt/le_http_01_cert_challenge.conf && \
+> sudo chown root:root /etc/letsencrypt/le_http_01_cert_challenge.conf
+> ```
 
 The nginx config handles:
 - HTTPS with Let's Encrypt
@@ -195,17 +213,26 @@ After copying `landing/*`, confirm `https://smartsht.com/llms.txt` returns `text
 ## 5. Start the Server
 
 ```bash
-# Using PM2 for process management
-cd /var/www/smartsht/server
-pm2 start dist/index.js --name smartsht-api --node-args="--env-file=.env"
+# Using PM2 for process management. Run from the server package dir so the
+# process cwd resolves models/ and the .env correctly.
+cd /opt/smartsht/current/server
 
-# Or without --env-file (dotenv loads .env from server/ directory):
-pm2 start dist/index.js --name smartsht-api
+# The compiled entrypoint is nested under dist/server/src/ (tsc preserves the
+# source layout). loadEnv() locates the .env itself (dev/compiled/cwd candidates),
+# so no --env-file flag is needed.
+pm2 start dist/server/src/index.js --name smartsht-api --node-args="--enable-source-maps"
 
 # Save PM2 config for auto-restart on reboot
 pm2 save
 pm2 startup
 ```
+
+> **PM2 source of truth:** `ecosystem.config.cjs` is **gitignored** (it can hold
+> secrets), so it is never checked out on the server — there is nothing to start
+> "from the ecosystem file." The running process is defined by the manual
+> `pm2 start` above and persisted with `pm2 save` (`~/.pm2/dump.pm2`). `deploy.sh`'s
+> `pm2 restart smartsht-api --update-env` reuses that saved definition. This is the
+> intended steady state.
 
 ---
 
@@ -312,9 +339,9 @@ CREATE INDEX IF NOT EXISTS idx_usage_date ON smartsht.ai_usage_daily(usage_date)
 | Release gates | `npm run release:check:v1` |
 | Ollama model correct | `ollama create smartshit -f server/Modelfile.spreadsheet-rl` (Spreadsheet-RL-4B) |
 | HTTPS works | `curl -I https://smartsht.com` → 200 |
-| Health endpoint | `curl https://smartsht.com/health` → ok |
+| Health endpoint | `curl https://smartsht.com/health` → ok; `curl -sf https://smartsht.com/health?strict=1` → 200 (DB+S3+Clerk up) |
 | Clerk auth | Sign in works, JWT verified |
-| Free limit | 4th question shows upgrade prompt |
+| Free limit | 8th question of the day shows upgrade prompt (`FREE_DAILY_LIMIT=7`) |
 | Stripe checkout | Upgrade button → Stripe hosted page |
 | Stripe webhook | Payment → user metadata updated → unlimited |
 | Cloud save | Save workbook → appears in RDS + S3 |
