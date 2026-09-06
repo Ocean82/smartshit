@@ -18,6 +18,16 @@ Items are added as local development work creates production requirements. Check
 
 ## Completed
 
+- [x] **Formula engine WASM 404'd → served as HTML → compile error** — Fixed 2026-09-06 (nginx, PR #32)
+  - Symptom in browser console: `WebAssembly.instantiate(): expected magic word 00 61 73 6d, found 3c 21 44 4f` plus `Failed to load resource: 404` for `app/formualizer_wasm_bg-<hash>.wasm`. `3c 21 44 4f` = `<!DO` (index.html HTML).
+  - Root cause: `vite-plugin-singlefile` inlines the app JS into `/app/index.html`, so the formualizer wasm-bindgen glue's `new URL('formualizer_wasm_bg-<hash>.wasm', import.meta.url)` resolves against the **document** (`/app/`) instead of `/app/assets/`, where the binaries live. `/app/<hash>.wasm` 404'd → `location /app/ { try_files … /app/index.html }` returned the SPA HTML → WASM compile failed → **formula engine dead on every fresh load.** Verified live: `/app/formualizer_wasm_bg-DEKAAUOT.wasm` 404 (text/html) vs `/app/assets/…` 200 (application/wasm).
+  - Fix (PR #32, in `landing/smartsht.nginx.conf`): a regex `location ~ ^/app/([^/]+\.wasm)$` ahead of `location /app/` and the generic `\.wasm$` block, mapping bare `/app/<name>.wasm` → `/app/assets/<name>.wasm` via `try_files … =404` (clean 404, never HTML). Hashed names are unique so the remap is safe; `/app/assets/*.wasm` (with a slash) doesn't match `[^/]+` and is unaffected.
+  - Applied + verified live before the repo change was merged: all 6 engine wasm files (formualizer + 4 emscripten + ort) return 200 `application/wasm` (magic `0061736d`) at the bare `/app/` path; missing wasm now returns a clean 404. Merged to `main` so it survives future deploys (`deploy.sh` reinstalls the conf).
+
+- [x] **Certbot HTTP-01 challenge include now self-heals on boot** — Done 2026-09-06
+  - The `/etc/letsencrypt/le_http_01_cert_challenge.conf` include (see item below) went missing a **second** time on 2026-09-06 and again broke `nginx -t` mid-fix. Instead of another manual `touch`, installed a durable self-heal: `/etc/tmpfiles.d/certbot-challenge-include.conf` with `f /etc/letsencrypt/le_http_01_cert_challenge.conf 0644 root root -`. `systemd-tmpfiles-setup.service` recreates the empty file on every boot, so a reboot/renewal cleanup can no longer break nginx reloads or deploys.
+  - Verified: simulated `rm` of the include → `systemd-tmpfiles --create` restored it → `nginx -t` OK + reload OK. Note: this file is on the server only (not in the repo). If the box is ever rebuilt, recreate `/etc/tmpfiles.d/certbot-challenge-include.conf` with that one line.
+
 - [x] **nginx broke deploy: missing Certbot HTTP-01 challenge include** — Fixed 2026-09-06
   - The 2026-09-06 launch deploy died at the `nginx -t` gate (→ `deploy.sh` rolled back) with: `open() "/etc/letsencrypt/le_http_01_cert_challenge.conf" failed (2: No such file or directory) in /etc/nginx/nginx.conf:12`.
   - Root cause: `nginx.conf` line 12 has `include /etc/letsencrypt/le_http_01_cert_challenge.conf;` (injected by Certbot's nginx installer). Certbot populates that file only during an active HTTP-01 renewal and empties it after; the file had gone missing entirely (likely a partial cleanup / tmp clearing), so the unconditional include failed and `nginx -t` failed for the **whole** config — our site config was fine (diffed identical to the repo conf).
