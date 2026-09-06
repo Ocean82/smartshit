@@ -3,7 +3,6 @@ import { fileURLToPath } from "url";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
-import { viteSingleFile } from "vite-plugin-singlefile";
 import wasm from "vite-plugin-wasm";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -11,22 +10,27 @@ const __dirname = path.dirname(__filename);
 
 // https://vite.dev/config/
 export default defineConfig({
+  // The app is served under /app/ (nginx: location /app/ → /var/www/smartsht/app/).
+  // Vite injects asset URLs relative to `base`; without this it emits /assets/...
+  // (domain root) which 404s under /app/. Must match the deploy path.
+  base: "/app/",
   plugins: [
     wasm(),
     react(),
     tailwindcss(),
-    viteSingleFile({
-      // Inline main JS/CSS into index.html, but don't base64-encode large WASM binaries.
-      deleteInlinedFiles: true,
-      // Override the plugin's default assetsInlineLimit to prevent 70MB WASM
-      // binary from being inlined into worker JS chunks.
-      overrideConfig: {
-        build: {
-          assetsInlineLimit: 100_000, // Only inline assets < 100KB
-        },
-      },
-    }),
   ],
+  build: {
+    // Standard multi-file build: index.html + hashed chunks under assets/.
+    //
+    // We deliberately do NOT use vite-plugin-singlefile. It inlined the entry
+    // into index.html and DELETED the emitted chunk files (deleteInlinedFiles),
+    // which broke this app's code-splitting: every lazy import() (dialogs,
+    // TemplateGallery, ONNX intentEmbeddings, VersionHistoryPanel, …) and the
+    // wasm-bindgen `new URL(..., import.meta.url)` resolved against the document
+    // at /app/ instead of /app/assets/ and 404'd in production. A normal build
+    // emits correct /app/assets/ URLs and lazy chunks load on demand.
+    assetsInlineLimit: 4096, // Vite default: inline tiny assets, keep chunks/wasm external.
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "src"),
