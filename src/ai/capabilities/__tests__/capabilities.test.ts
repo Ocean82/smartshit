@@ -61,10 +61,12 @@ describe('scoreCapabilities', () => {
       { capabilityId: 'bold_headers', embedding: unitVec(20), phrases: [] },
     ])
 
-    const { best, secondScore } = scoreCapabilities(nearVec(0))
+    const { best, secondScore, topCapabilities } = scoreCapabilities(nearVec(0))
     expect(best?.capabilityId).toBe('sort_column')
     expect(best!.score).toBeGreaterThan(0.9)
     expect(best!.score).toBeGreaterThan(secondScore)
+    expect(topCapabilities[0]?.capabilityId).toBe('sort_column')
+    expect(topCapabilities.length).toBeGreaterThanOrEqual(2)
   })
 
   it('returns null best when not bootstrapped', () => {

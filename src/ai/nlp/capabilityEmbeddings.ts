@@ -71,40 +71,48 @@ export function cosineSimilarity(a: Float32Array, b: Float32Array): number {
   return dot
 }
 
+export interface CapabilityScore {
+  capabilityId: string
+  score: number
+  capability: CapabilityDef
+}
+
+export interface CapabilityScoreResult {
+  /** Ranked candidates (highest score first), up to `limit`. */
+  topCapabilities: CapabilityScore[]
+  best: CapabilityScore | null
+  secondScore: number
+}
+
 /**
  * Score a query embedding against all capability reference vectors.
- * Returns best and second-best for ambiguity checks.
+ * Returns top-N candidates for ambiguity clarify + miss telemetry.
  */
-export function scoreCapabilities(queryEmbedding: Float32Array): {
-  best: { capabilityId: string; score: number; capability: CapabilityDef } | null
-  secondScore: number
-} {
+export function scoreCapabilities(
+  queryEmbedding: Float32Array,
+  limit = 3,
+): CapabilityScoreResult {
   if (!_bootstrapped || CAPABILITY_EMBEDDINGS.length === 0) {
-    return { best: null, secondScore: 0 }
+    return { topCapabilities: [], best: null, secondScore: 0 }
   }
 
-  let bestId = ''
-  let bestScore = -1
-  let secondScore = -1
-
+  const scored: CapabilityScore[] = []
   for (const entry of CAPABILITY_EMBEDDINGS) {
-    const score = cosineSimilarity(queryEmbedding, entry.embedding)
-    if (score > bestScore) {
-      secondScore = bestScore
-      bestScore = score
-      bestId = entry.capabilityId
-    } else if (score > secondScore) {
-      secondScore = score
-    }
+    const capability = CAPABILITIES.find((c) => c.id === entry.capabilityId)
+    if (!capability) continue
+    scored.push({
+      capabilityId: entry.capabilityId,
+      score: cosineSimilarity(queryEmbedding, entry.embedding),
+      capability,
+    })
   }
 
-  const capability = CAPABILITIES.find((c) => c.id === bestId)
-  if (!capability || bestScore < 0) return { best: null, secondScore: Math.max(0, secondScore) }
+  scored.sort((a, b) => b.score - a.score)
+  const topCapabilities = scored.slice(0, Math.max(1, limit))
+  const best = topCapabilities[0] ?? null
+  const secondScore = topCapabilities[1]?.score ?? 0
 
-  return {
-    best: { capabilityId: bestId, score: bestScore, capability },
-    secondScore: Math.max(0, secondScore),
-  }
+  return { topCapabilities, best, secondScore }
 }
 
 export async function loadPrecomputedCapabilityEmbeddings(): Promise<boolean> {

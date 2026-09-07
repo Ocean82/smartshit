@@ -12,6 +12,7 @@
  * - Compound multi-clause requests defer to macro-planner
  * - Chat mode requires a higher confidence threshold than act mode
  * - Mutating tools return Apply/Reject actions instead of auto-executing
+ * - Close top-N scores → clarify chips (re-enter chat as NL), not winner-takes-all
  */
 
 import type { PipelineContext, PipelineStage, StageResult } from '../types'
@@ -24,19 +25,24 @@ import { getNLPEngine } from '@/ai/nlp/nlpEngine'
 import {
   isCapabilityBootstrapped,
   scoreCapabilities,
+  type CapabilityScore,
 } from '@/ai/nlp/capabilityEmbeddings'
 import { resolveCapabilityParams } from '@/ai/capabilities/resolveParams'
 import { executeGoal, matchGoal } from '@/ai/goals'
 import type { GoalId } from '@/ai/goals/types'
-import { recordTelemetry } from '@/ai/telemetry'
+import {
+  recordCapabilityRouterTelemetry,
+  type CapabilityRouterTelemetryPayload,
+} from '@/ai/telemetry'
+import type { CapabilityDef } from '@shared/capabilities.js'
 
-/** Minimum cosine similarity to claim in act mode. */
-export const CAPABILITY_THRESHOLD = 0.58
+/** Conservative claim bar for act mode (prefer false negatives over wrong mutations). */
+export const CAPABILITY_THRESHOLD = 0.75
 
-/** Chat-mode soft commands need a stronger match (less imperative signal). */
-export const CAPABILITY_CHAT_THRESHOLD = 0.64
+/** Chat-mode soft commands need a slightly stronger match. */
+export const CAPABILITY_CHAT_THRESHOLD = 0.78
 
-/** Best must beat second-best by this gap to avoid ambiguous claims. */
+/** Best must beat second-best by this gap; otherwise clarify among top candidates. */
 export const CAPABILITY_AMBIGUITY_GAP = 0.08
 
 /** Tools that reorder or rewrite data — never auto-fire from question framings. */
@@ -61,13 +67,43 @@ export interface SemanticCapabilityRouterDeps {
   pushHistory: (desc: string) => void
 }
 
+function top3Payload(top: CapabilityScore[]): CapabilityRouterTelemetryPayload['top3Capabilities'] {
+  return top.slice(0, 3).map((c) => ({ id: c.capabilityId, score: Number(c.score.toFixed(4)) }))
+}
+
 function logRoute(
-  outcome: 'claim' | 'pass' | 'clarify' | 'preview' | 'ambiguous',
-  detail: string,
+  payload: Omit<CapabilityRouterTelemetryPayload, 'routedTier'>,
 ): void {
-  recordTelemetry('capabilityRouterEvents', `${outcome}:${detail}`)
+  recordCapabilityRouterTelemetry({ ...payload, routedTier: 2 })
   if (import.meta.env.DEV) {
-    console.info(`[CapabilityRouter] ${outcome}: ${detail}`)
+    const ids = payload.top3Capabilities.map((c) => `${c.id}=${c.score}`).join(', ')
+    console.info(`[CapabilityRouter] ${payload.outcome}: ${ids || 'none'}`)
+  }
+}
+
+/** NL chip that re-enters the pipeline when the user sends it (option A). */
+export function capabilityClarifyChip(capability: CapabilityDef): string {
+  const example = capability.examples[0]?.trim()
+  if (example) return example.charAt(0).toUpperCase() + example.slice(1)
+  return capability.description
+}
+
+function buildAmbiguityClarification(
+  message: string,
+  top: CapabilityScore[],
+): { message: string; suggestions: string[] } {
+  const candidates = top.filter((c) => c.score > 0).slice(0, 3)
+  const suggestions = candidates.map((c) => capabilityClarifyChip(c.capability))
+  const bullets = candidates
+    .map((c) => `• ${capabilityClarifyChip(c.capability)}`)
+    .join('\n')
+  const quoted = message.trim().length > 80
+    ? `${message.trim().slice(0, 77)}…`
+    : message.trim()
+
+  return {
+    message: `When you say "${quoted}", do you want me to:\n${bullets}`,
+    suggestions,
   }
 }
 
@@ -93,22 +129,44 @@ export function createSemanticCapabilityRouterStage(
       if (!embedding) return null
 
       const threshold = mode === 'chat' ? CAPABILITY_CHAT_THRESHOLD : CAPABILITY_THRESHOLD
-      const { best, secondScore } = scoreCapabilities(embedding)
+      const { best, secondScore, topCapabilities } = scoreCapabilities(embedding)
+      const top3 = top3Payload(topCapabilities)
 
       if (!best || best.score < threshold) {
-        logRoute(
-          'pass',
-          `${best?.capabilityId ?? 'none'} score=${best?.score?.toFixed(3) ?? 'n/a'} need>=${threshold}`,
-        )
+        logRoute({
+          outcome: 'miss',
+          message: context.message,
+          top3Capabilities: top3,
+          score: best?.score ?? null,
+          mode,
+        })
         return null
       }
 
       if (best.score - secondScore < CAPABILITY_AMBIGUITY_GAP) {
-        logRoute(
-          'ambiguous',
-          `${best.capabilityId} (${best.score.toFixed(3)}) vs ${secondScore.toFixed(3)}`,
-        )
-        return null
+        const clarification = buildAmbiguityClarification(context.message, topCapabilities)
+        logRoute({
+          outcome: 'ambiguous_clarify',
+          message: context.message,
+          top3Capabilities: top3,
+          score: best.score,
+          mode,
+        })
+        return {
+          success: true,
+          message: clarification.message,
+          suggestions: clarification.suggestions,
+          stageName: 'semantic-capability-router',
+          metadata: {
+            toolUsed: 'clarify',
+            capabilityId: best.capabilityId,
+            score: best.score,
+            tier: 2,
+            claimed: false,
+            top3Capabilities: top3,
+            ambiguous: true,
+          },
+        }
       }
 
       const spreadsheetCtx = buildSpreadsheetContext(
@@ -121,10 +179,16 @@ export function createSemanticCapabilityRouterStage(
 
       if (best.capability.kind === 'goal' && best.capability.goalId) {
         if (isQuestionFraming(context.message)) {
-          logRoute('pass', `question-framing goal=${best.capabilityId}`)
+          logRoute({
+            outcome: 'pass_safety',
+            message: context.message,
+            top3Capabilities: top3,
+            score: best.score,
+            mode,
+          })
           return null
         }
-        return claimGoal(best.capability.goalId as GoalId, best.score, context, deps)
+        return claimGoal(best.capability.goalId as GoalId, best.score, top3, context, deps)
       }
 
       const resolved = resolveCapabilityParams(
@@ -135,7 +199,13 @@ export function createSemanticCapabilityRouterStage(
       )
 
       if (isClarification(resolved)) {
-        logRoute('clarify', `${best.capabilityId} score=${best.score.toFixed(3)}`)
+        logRoute({
+          outcome: 'clarify',
+          message: context.message,
+          top3Capabilities: top3,
+          score: best.score,
+          mode,
+        })
         return {
           success: true,
           message: resolved.clarification,
@@ -146,6 +216,7 @@ export function createSemanticCapabilityRouterStage(
             score: best.score,
             tier: 2,
             claimed: false,
+            top3Capabilities: top3,
           },
         }
       }
@@ -155,7 +226,13 @@ export function createSemanticCapabilityRouterStage(
         isQuestionFraming(context.message)
         && (DESTRUCTIVE_TOOLS.has(resolved.tool) || /\?\s*$/.test(context.message.trim()))
       ) {
-        logRoute('pass', `question-framing tool=${resolved.tool}`)
+        logRoute({
+          outcome: 'pass_safety',
+          message: context.message,
+          top3Capabilities: top3,
+          score: best.score,
+          mode,
+        })
         return null
       }
 
@@ -164,10 +241,13 @@ export function createSemanticCapabilityRouterStage(
 
       // Soft semantic matches → Apply preview for mutations (safer than auto-exec).
       if (isMutation) {
-        logRoute(
-          'preview',
-          `${best.capabilityId} (${best.score.toFixed(3)}) → ${resolved.tool}`,
-        )
+        logRoute({
+          outcome: 'preview',
+          message: context.message,
+          top3Capabilities: top3,
+          score: best.score,
+          mode,
+        })
         return {
           success: true,
           message: `I will **${resolved.description}**. Review, then choose Apply or Reject.`,
@@ -184,12 +264,19 @@ export function createSemanticCapabilityRouterStage(
             tier: 2,
             claimed: true,
             preview: true,
+            top3Capabilities: top3,
           },
         }
       }
 
-      logRoute('claim', `${best.capabilityId} (${best.score.toFixed(3)}) → ${resolved.tool}`)
-      return executeCapabilityTool(resolved, best.capabilityId, best.score, deps)
+      logRoute({
+        outcome: 'claim',
+        message: context.message,
+        top3Capabilities: top3,
+        score: best.score,
+        mode,
+      })
+      return executeCapabilityTool(resolved, best.capabilityId, best.score, top3, deps)
     },
   }
 }
@@ -208,6 +295,7 @@ function isClarification(
 async function claimGoal(
   goalId: GoalId,
   score: number,
+  top3: CapabilityRouterTelemetryPayload['top3Capabilities'],
   context: PipelineContext,
   deps: SemanticCapabilityRouterDeps,
 ): Promise<StageResult | null> {
@@ -238,23 +326,49 @@ async function claimGoal(
   }
 
   if (match.status === 'unmatched' || match.goal?.id !== goalId) {
-    logRoute('clarify', `goal=${goalId} unmatched`)
+    logRoute({
+      outcome: 'clarify',
+      message: context.message,
+      top3Capabilities: top3,
+      score,
+      mode: context.mode,
+    })
     return {
       success: true,
       message: match.explain || `I need the right columns to run ${goalId.replace(/_/g, ' ')}.`,
       stageName: 'semantic-capability-router',
-      metadata: { capabilityId: goalId, score, tier: 2, toolUsed: 'clarify', claimed: false },
+      metadata: {
+        capabilityId: goalId,
+        score,
+        tier: 2,
+        toolUsed: 'clarify',
+        claimed: false,
+        top3Capabilities: top3,
+      },
     }
   }
 
   if (match.status === 'ambiguous') {
-    logRoute('clarify', `goal=${goalId} ambiguous`)
+    logRoute({
+      outcome: 'clarify',
+      message: context.message,
+      top3Capabilities: top3,
+      score,
+      mode: context.mode,
+    })
     return {
       success: true,
       message: match.question ?? match.explain,
       suggestions: match.chips,
       stageName: 'semantic-capability-router',
-      metadata: { capabilityId: goalId, score, tier: 2, toolUsed: 'clarify', claimed: false },
+      metadata: {
+        capabilityId: goalId,
+        score,
+        tier: 2,
+        toolUsed: 'clarify',
+        claimed: false,
+        top3Capabilities: top3,
+      },
     }
   }
 
@@ -264,12 +378,25 @@ async function claimGoal(
   })
 
   if (execution.actions.length === 0) {
-    logRoute('claim', `goal=${goalId} summary-only`)
+    logRoute({
+      outcome: 'claim',
+      message: context.message,
+      top3Capabilities: top3,
+      score,
+      mode: context.mode,
+    })
     return {
       success: true,
       message: execution.message,
       stageName: 'semantic-capability-router',
-      metadata: { capabilityId: goalId, score, tier: 2, toolUsed: 'goal', claimed: true },
+      metadata: {
+        capabilityId: goalId,
+        score,
+        tier: 2,
+        toolUsed: 'goal',
+        claimed: true,
+        top3Capabilities: top3,
+      },
     }
   }
 
@@ -280,7 +407,13 @@ async function claimGoal(
   })
 
   if (hasMutation) {
-    logRoute('preview', `goal=${goalId} actions=${execution.actions.length}`)
+    logRoute({
+      outcome: 'preview',
+      message: context.message,
+      top3Capabilities: top3,
+      score,
+      mode: context.mode,
+    })
     return {
       success: true,
       message: `${execution.message}\n\nReview, then choose Apply or Reject.`,
@@ -297,6 +430,7 @@ async function claimGoal(
         toolUsed: execution.actions.map((a) => a.tool).join(', '),
         claimed: true,
         preview: true,
+        top3Capabilities: top3,
       },
     }
   }
@@ -313,7 +447,13 @@ async function claimGoal(
   }
 
   const allSuccess = results.every((r) => r.success)
-  logRoute('claim', `goal=${goalId} executed`)
+  logRoute({
+    outcome: 'claim',
+    message: context.message,
+    top3Capabilities: top3,
+    score,
+    mode: context.mode,
+  })
   return {
     success: allSuccess,
     message: allSuccess
@@ -326,6 +466,7 @@ async function claimGoal(
       tier: 2,
       toolUsed: execution.actions.map((a) => a.tool).join(', '),
       claimed: true,
+      top3Capabilities: top3,
     },
   }
 }
@@ -334,6 +475,7 @@ async function executeCapabilityTool(
   call: { tool: string; params: Record<string, unknown>; description: string },
   capabilityId: string,
   score: number,
+  top3: CapabilityRouterTelemetryPayload['top3Capabilities'],
   deps: SemanticCapabilityRouterDeps,
 ): Promise<StageResult> {
   const execCtx = deps.buildExecContext({ suppressHistory: true })
@@ -352,6 +494,7 @@ async function executeCapabilityTool(
       tier: 2,
       modified: result.modified,
       claimed: true,
+      top3Capabilities: top3,
     },
   }
 }

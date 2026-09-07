@@ -111,6 +111,37 @@ export function recordTelemetry(
   return snapshot
 }
 
+/** Structured Tier-2 routing event for miss analysis / capability discovery. */
+export interface CapabilityRouterTelemetryPayload {
+  outcome:
+    | 'miss'
+    | 'ambiguous_clarify'
+    | 'clarify'
+    | 'preview'
+    | 'claim'
+    | 'pass_safety'
+  message: string
+  top3Capabilities: Array<{ id: string; score: number }>
+  score: number | null
+  routedTier: 2
+  mode?: string
+}
+
+const MAX_ROUTE_MESSAGE_CHARS = 200
+
+export function recordCapabilityRouterTelemetry(
+  payload: CapabilityRouterTelemetryPayload,
+): TelemetrySnapshot {
+  const trimmed = payload.message.trim()
+  const message = trimmed.length > MAX_ROUTE_MESSAGE_CHARS
+    ? `${trimmed.slice(0, MAX_ROUTE_MESSAGE_CHARS)}…`
+    : trimmed
+  return recordTelemetry(
+    'capabilityRouterEvents',
+    JSON.stringify({ ...payload, message }),
+  )
+}
+
 export function resetTelemetrySnapshot(): TelemetrySnapshot {
   const snapshot = {
     counters: emptyCounters(),

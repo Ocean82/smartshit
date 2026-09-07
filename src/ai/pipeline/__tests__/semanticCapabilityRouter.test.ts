@@ -3,12 +3,15 @@ import {
   setCapabilityEmbeddingsForTests,
   resetCapabilityEmbeddingsForTests,
   EMBEDDING_DIM,
+  scoreCapabilities,
 } from '@/ai/nlp/capabilityEmbeddings'
 import { makeContext, makeDeps } from './helpers'
 import {
   CAPABILITY_THRESHOLD,
   CAPABILITY_CHAT_THRESHOLD,
+  capabilityClarifyChip,
 } from '../stages/semanticCapabilityRouter'
+import { getCapability } from '@shared/capabilities.js'
 
 vi.mock('@/ai/nlp/nlpEngine', () => ({
   getNLPEngine: vi.fn(),
@@ -54,15 +57,29 @@ vi.mock('@/agent', () => ({
 
 vi.mock('@/ai/telemetry', () => ({
   recordTelemetry: vi.fn(),
+  recordCapabilityRouterTelemetry: vi.fn(),
 }))
 
 import { getNLPEngine } from '@/ai/nlp/nlpEngine'
 import { executeToolAsync } from '@/agent'
+import { recordCapabilityRouterTelemetry } from '@/ai/telemetry'
 import { createSemanticCapabilityRouterStage } from '../stages/semanticCapabilityRouter'
 
 function unitVec(seed: number): Float32Array {
   const v = new Float32Array(EMBEDDING_DIM)
   v[seed % EMBEDDING_DIM] = 1
+  return v
+}
+
+/** Near-unit vector so cosine stays above the conservative claim threshold. */
+function nearUnit(seed: number, secondary = 0.1): Float32Array {
+  const v = new Float32Array(EMBEDDING_DIM)
+  v[seed % EMBEDDING_DIM] = 1
+  v[(seed + 1) % EMBEDDING_DIM] = secondary
+  let n = 0
+  for (let i = 0; i < v.length; i++) n += v[i] * v[i]
+  n = Math.sqrt(n)
+  for (let i = 0; i < v.length; i++) v[i] /= n
   return v
 }
 
@@ -74,6 +91,7 @@ describe('semanticCapabilityRouter', () => {
       embed: vi.fn(async () => unitVec(0)),
     } as never)
     vi.mocked(executeToolAsync).mockClear()
+    vi.mocked(recordCapabilityRouterTelemetry).mockClear()
   })
 
   it('passes when capability embeddings are not bootstrapped', async () => {
@@ -133,6 +151,68 @@ describe('semanticCapabilityRouter', () => {
     expect(executeToolAsync).not.toHaveBeenCalled()
   })
 
+  it('clarifies with NL chips when top capabilities are close', async () => {
+    const shared = unitVec(0)
+    setCapabilityEmbeddingsForTests([
+      { capabilityId: 'format_as_table', embedding: shared, phrases: [] },
+      { capabilityId: 'bold_headers', embedding: shared, phrases: [] },
+      { capabilityId: 'format_currency', embedding: shared, phrases: [] },
+    ])
+
+    const stage = createSemanticCapabilityRouterStage(makeDeps())
+    const ctx = makeContext('make this look nicer')
+    ctx.mode = 'act'
+    const result = await stage.process(ctx)
+
+    expect(result).not.toBeNull()
+    expect(result!.metadata?.ambiguous).toBe(true)
+    expect(result!.message).toMatch(/do you want me to/i)
+    expect(result!.suggestions?.length).toBeGreaterThanOrEqual(2)
+    expect(result!.suggestions?.[0]).toBe(
+      capabilityClarifyChip(getCapability('format_as_table')!),
+    )
+    expect(executeToolAsync).not.toHaveBeenCalled()
+    expect(recordCapabilityRouterTelemetry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        outcome: 'ambiguous_clarify',
+        routedTier: 2,
+        message: 'make this look nicer',
+        top3Capabilities: expect.arrayContaining([
+          expect.objectContaining({ id: 'format_as_table', score: 1 }),
+        ]),
+      }),
+    )
+  })
+
+  it('records miss telemetry with top3 when below claim threshold', async () => {
+    setCapabilityEmbeddingsForTests([
+      { capabilityId: 'sort_column', embedding: nearUnit(0, 0.9), phrases: [] },
+      { capabilityId: 'format_as_table', embedding: unitVec(50), phrases: [] },
+    ])
+
+    // Query is near sort_column but noise keeps score below 0.75 in some setups —
+    // use an orthogonal query so best score is low.
+    vi.mocked(getNLPEngine).mockReturnValue({
+      isReady: true,
+      embed: vi.fn(async () => unitVec(100)),
+    } as never)
+
+    const stage = createSemanticCapabilityRouterStage(makeDeps())
+    const ctx = makeContext('freeze the top row')
+    ctx.mode = 'act'
+    const result = await stage.process(ctx)
+
+    expect(result).toBeNull()
+    expect(recordCapabilityRouterTelemetry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        outcome: 'miss',
+        routedTier: 2,
+        message: 'freeze the top row',
+        top3Capabilities: expect.any(Array),
+      }),
+    )
+  })
+
   it('passes question framings for destructive tools', async () => {
     setCapabilityEmbeddingsForTests([
       { capabilityId: 'sort_column', embedding: unitVec(0), phrases: [] },
@@ -145,6 +225,9 @@ describe('semanticCapabilityRouter', () => {
 
     expect(result).toBeNull()
     expect(executeToolAsync).not.toHaveBeenCalled()
+    expect(recordCapabilityRouterTelemetry).toHaveBeenCalledWith(
+      expect.objectContaining({ outcome: 'pass_safety' }),
+    )
   })
 
   it('passes compound multi-clause requests to macro planner', async () => {
@@ -171,18 +254,27 @@ describe('semanticCapabilityRouter', () => {
     expect(result).toBeNull()
     expect(executeToolAsync).not.toHaveBeenCalled()
   })
+})
 
-  it('passes when scores are ambiguous', async () => {
-    const shared = unitVec(0)
+describe('scoreCapabilities top-N', () => {
+  beforeEach(() => {
+    resetCapabilityEmbeddingsForTests()
+  })
+
+  it('returns ranked topCapabilities', () => {
     setCapabilityEmbeddingsForTests([
-      { capabilityId: 'sort_column', embedding: shared, phrases: [] },
-      { capabilityId: 'format_as_table', embedding: shared, phrases: [] },
+      { capabilityId: 'sort_column', embedding: unitVec(0), phrases: [] },
+      { capabilityId: 'format_as_table', embedding: unitVec(10), phrases: [] },
+      { capabilityId: 'bold_headers', embedding: unitVec(20), phrases: [] },
     ])
 
-    const stage = createSemanticCapabilityRouterStage(makeDeps())
-    const ctx = makeContext('do something with the sheet')
-    ctx.mode = 'act'
-    const result = await stage.process(ctx)
-    expect(result).toBeNull()
+    const { topCapabilities, best, secondScore } = scoreCapabilities(unitVec(0))
+    expect(best?.capabilityId).toBe('sort_column')
+    expect(topCapabilities.map((c) => c.capabilityId)).toEqual([
+      'sort_column',
+      'format_as_table',
+      'bold_headers',
+    ])
+    expect(secondScore).toBe(topCapabilities[1].score)
   })
 })
