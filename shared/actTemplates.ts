@@ -1,6 +1,12 @@
 import type { ActTemplateResult } from './intentTypes.js'
 import { FONT_COLOR_HEX, HIGHLIGHT_BG_HEX } from './colorMaps.js'
 import { extractCellContainsValue } from './formatContains.js'
+import {
+  parseFilterPhrase,
+  parseFormatAsTablePhrase,
+  parseMultiSortPhrase,
+  parseNumberFormatPhrase,
+} from './spreadsheetPhrases.js'
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -92,7 +98,8 @@ function resolveFormattingTemplate(lower: string, colorWord: string | undefined)
 interface TemplateRule {
   id: string
   match: (lower: string) => boolean
-  resolve: (lower: string) => ActTemplateResult
+  /** `original` preserves user casing for headers/values; `lower` is for legacy matchers. */
+  resolve: (lower: string, original: string) => ActTemplateResult
 }
 
 const RULES: TemplateRule[] = [
@@ -181,6 +188,76 @@ const RULES: TemplateRule[] = [
       return {
         message: `I will create a ${chartType} chart from your sheet data.`,
         actions: [{ tool: 'create_chart', params: { type: chartType }, description: `Create ${chartType} chart` }],
+      }
+    },
+  },
+
+  // Format as table (before generic formatting)
+  {
+    id: 'format_as_table',
+    match: (l) => parseFormatAsTablePhrase(l) != null,
+    resolve: (_l, original) => {
+      const phrase = parseFormatAsTablePhrase(original)!
+      return {
+        message: `I will format the data as a ${phrase.theme} table. Click Apply to confirm.`,
+        actions: [{ tool: 'format_as_table', params: { theme: phrase.theme }, description: `Format as table (${phrase.theme})` }],
+      }
+    },
+  },
+
+  // Number format: currency / percent / date
+  {
+    id: 'number_format',
+    match: (l) => parseNumberFormatPhrase(l) != null,
+    resolve: (_l, original) => {
+      const phrase = parseNumberFormatPhrase(original)!
+      const params: Record<string, unknown> = { numberFormat: phrase.numberFormat }
+      if (phrase.range) params.range = phrase.range
+      return {
+        message: phrase.range
+          ? `I will format ${phrase.range} as ${phrase.numberFormat}. Click Apply to confirm.`
+          : `I will format the selection as ${phrase.numberFormat}. Click Apply to confirm.`,
+        actions: [{
+          tool: 'format_cells',
+          params,
+          description: phrase.range
+            ? `Format ${phrase.range} as ${phrase.numberFormat}`
+            : `Format as ${phrase.numberFormat}`,
+        }],
+      }
+    },
+  },
+
+  // Filter rows
+  {
+    id: 'filter',
+    match: (l) => parseFilterPhrase(l) != null,
+    resolve: (_l, original) => {
+      const phrase = parseFilterPhrase(original)!
+      return {
+        message: `I will filter rows where ${phrase.column} ${phrase.condition} ${phrase.value}. Click Apply to confirm.`,
+        actions: [{
+          tool: 'filter',
+          params: { column: phrase.column, condition: phrase.condition, value: phrase.value },
+          description: `Filter ${phrase.column} ${phrase.condition} ${phrase.value}`,
+        }],
+      }
+    },
+  },
+
+  // Multi-column sort
+  {
+    id: 'multi_sort',
+    match: (l) => parseMultiSortPhrase(l) != null,
+    resolve: (_l, original) => {
+      const phrase = parseMultiSortPhrase(original)!
+      return {
+        message: `I will sort by ${phrase.rules.map((r) => r.column).join(' then ')}. Click Apply to confirm.`,
+        actions: [{
+          tool: 'multi_sort',
+          params: { rules: phrase.rules },
+          description: `Sort by ${phrase.rules.map((r) => r.column).join(' then ')}`,
+        }],
       }
     },
   },
@@ -301,10 +378,11 @@ const RULES: TemplateRule[] = [
 // ─── Public API ──────────────────────────────────────────────────────────────
 
 export function resolveActTemplates(message: string): ActTemplateResult {
-  const lower = message.toLowerCase().trim()
+  const original = message.trim()
+  const lower = original.toLowerCase()
 
   for (const rule of RULES) {
-    if (rule.match(lower)) return rule.resolve(lower)
+    if (rule.match(lower)) return rule.resolve(lower, original)
   }
 
   return { message: '', actions: [] }

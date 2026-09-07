@@ -18,8 +18,14 @@ export {
   createAgentParserStage,
   createTemplateResolverStage,
   createIntentClassifierStage,
+  createSemanticCapabilityRouterStage,
   createMacroPlannerStage,
   createDeterministicDispatcherStage,
   createLLMGatewayStage,
 } from './stages'
-export type { AgentParserDeps, GoalRouterDeps, TemplateResolverDeps } from './stages'
+export type {
+  AgentParserDeps,
+  GoalRouterDeps,
+  TemplateResolverDeps,
+  SemanticCapabilityRouterDeps,
+} from './stages'

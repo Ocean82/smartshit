@@ -13,6 +13,9 @@ export type { TemplateResolverDeps } from './templateResolver'
 
 export { createIntentClassifierStage } from './intentClassifier'
 
+export { createSemanticCapabilityRouterStage } from './semanticCapabilityRouter'
+export type { SemanticCapabilityRouterDeps } from './semanticCapabilityRouter'
+
 export { createMacroPlannerStage } from './macroPlanner'
 
 export { createDeterministicDispatcherStage } from './deterministicDispatcher'

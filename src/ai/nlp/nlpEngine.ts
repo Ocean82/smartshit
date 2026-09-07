@@ -16,6 +16,11 @@ import type { IntentType } from '@shared/intentTypes'
 import type { ClassificationResult, NLPEngineState, WorkbookContext } from './types'
 import { NLPWorkerBridge, type NLPBridgeOptions } from './nlpBridge'
 import { INTENT_EMBEDDINGS, bootstrapIntentEmbeddings, isBootstrapped, loadPrecomputedEmbeddings } from './intentEmbeddings'
+import {
+  bootstrapCapabilityEmbeddings,
+  isCapabilityBootstrapped,
+  loadPrecomputedCapabilityEmbeddings,
+} from './capabilityEmbeddings'
 import { classifyIntent as classifyIntentKeyword } from './intentClassifier'
 import { extractEntities } from './entityExtractor'
 import { getCachedEmbedding, setCachedEmbedding, getCachedBootstrap, setCachedBootstrap } from './embeddingCache'
@@ -165,11 +170,18 @@ export class NLPEngine {
     // Fast path: try loading pre-computed embeddings (no worker needed for this)
     loadPrecomputedEmbeddings().then((loaded) => {
       if (loaded) {
-        // Pre-computed vectors loaded — still init the worker for user query embeddings
         console.info('[NLP] Pre-computed intent vectors loaded (instant bootstrap)')
       }
     }).catch(() => {
       // Non-fatal — will fall back to runtime bootstrap
+    })
+
+    loadPrecomputedCapabilityEmbeddings().then((loaded) => {
+      if (loaded) {
+        console.info('[NLP] Pre-computed capability vectors loaded (instant bootstrap)')
+      }
+    }).catch(() => {
+      // Non-fatal
     })
 
     this.bridge = new NLPWorkerBridge(this.bridgeOptions)
@@ -188,30 +200,58 @@ export class NLPEngine {
    * Caches the result in IndexedDB for instant load next session.
    */
   private async runBootstrap(): Promise<void> {
-    if (isBootstrapped() || !this.bridge?.isReady) return
+    if (!this.bridge?.isReady) return
 
-    // Try loading from IndexedDB cache (faster than runtime computation)
-    const cached = await getCachedBootstrap('minilm-v1')
-    if (cached && cached.length > 0) {
-      const { bootstrapFromCache } = await import('./intentEmbeddings')
-      bootstrapFromCache(cached)
-      return
+    const embedFn = async (text: string) => {
+      const result = await this.bridge!.embed(text)
+      return result.rawEmbedding ?? null
     }
 
-    try {
-      await bootstrapIntentEmbeddings(async (text: string) => {
-        const result = await this.bridge!.embed(text)
-        return result.rawEmbedding ?? null
-      })
-
-      // Cache the computed vectors in IndexedDB for next session
-      const { INTENT_EMBEDDINGS: embeddings } = await import('./intentEmbeddings')
-      const toCache = embeddings.map((e) => ({ name: e.intentType, embedding: e.embedding }))
-      setCachedBootstrap('minilm-v1', toCache)
-    } catch {
-      // Bootstrap failure is non-fatal — engine stays in 'ready' state
-      // but classify will fall back to keyword since isBootstrapped() = false
+    if (!isBootstrapped()) {
+      const cached = await getCachedBootstrap('minilm-v1')
+      if (cached && cached.length > 0) {
+        const { bootstrapFromCache } = await import('./intentEmbeddings')
+        bootstrapFromCache(cached)
+      } else {
+        await bootstrapIntentEmbeddings(embedFn)
+        const { INTENT_EMBEDDINGS: embeddings } = await import('./intentEmbeddings')
+        const toCache = embeddings.map((e) => ({ name: e.intentType, embedding: e.embedding }))
+        setCachedBootstrap('minilm-v1', toCache)
+      }
     }
+
+    if (!isCapabilityBootstrapped()) {
+      await bootstrapCapabilityEmbeddings(embedFn)
+    }
+  }
+
+  /**
+   * Embed arbitrary text with MiniLM. Returns null when the engine is unavailable.
+   * Used by the Tier-2 semantic capability router.
+   */
+  async embed(text: string): Promise<Float32Array | null> {
+    if (!this.isReady || !this.bridge) return null
+    const normalizedText = text.toLowerCase().trim()
+    if (!normalizedText) return null
+
+    let embedding = this.cache.get(normalizedText)
+    if (!embedding) {
+      embedding = await getCachedEmbedding(normalizedText)
+      if (embedding) this.cache.set(normalizedText, embedding)
+    }
+    if (!embedding) {
+      try {
+        const result = await this.bridge.embed(text)
+        embedding = result.rawEmbedding ?? null
+        if (embedding) {
+          this.cache.set(normalizedText, embedding)
+          setCachedEmbedding(normalizedText, embedding)
+        }
+      } catch {
+        return null
+      }
+    }
+    return embedding
   }
 
   /**

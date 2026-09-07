@@ -174,6 +174,7 @@ import { createGoalRouterStage } from '../stages/goalRouter'
 import { createAgentParserStage } from '../stages/agentParser'
 import { createTemplateResolverStage } from '../stages/templateResolver'
 import { createIntentClassifierStage } from '../stages/intentClassifier'
+import { createSemanticCapabilityRouterStage } from '../stages/semanticCapabilityRouter'
 import { createDeterministicDispatcherStage } from '../stages/deterministicDispatcher'
 import { createLLMGatewayStage } from '../stages/llmGateway'
 
@@ -188,6 +189,7 @@ function buildPipeline() {
     createAgentParserStage(deps),
     createTemplateResolverStage(deps),
     createIntentClassifierStage(),
+    createSemanticCapabilityRouterStage(deps),
     createDeterministicDispatcherStage(),
     createLLMGatewayStage(),
   ])

@@ -184,10 +184,15 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
     ],
     examples: [
       'highlight cells containing 4',
+      'highlight cells that have a 4',
       'change the text to red',
       'bold the headers',
+      'make headers stand out',
       'highlight negative values in red',
+      'highlight weird values',
       'format column B as currency',
+      'show money properly',
+      'make this look like dollars',
       'show column C as percentages',
     ],
   },
@@ -309,7 +314,14 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
       { name: 'column', type: 'string', description: 'Column letter to sort by', required: true },
       { name: 'direction', type: 'string', description: '"asc" or "desc"' },
     ],
-    examples: ['sort by amount highest first', 'sort column A alphabetically'],
+    examples: [
+      'sort by amount highest first',
+      'sort column A alphabetically',
+      'put biggest expenses first',
+      'put the largest expenses first',
+      'rank highest to lowest',
+      'order from largest to smallest',
+    ],
   },
   {
     name: 'multi_sort',
@@ -330,7 +342,14 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
       { name: 'value', type: 'string', description: 'Comparison value (not needed for isEmpty/isNotEmpty)' },
       { name: 'value2', type: 'string', description: 'Second value for between/notBetween conditions' },
     ],
-    examples: ['filter rows where amount > 100', 'show only rows containing Rent', 'filter between 50 and 200'],
+    examples: [
+      'filter rows where amount > 100',
+      'show only rows containing Rent',
+      'filter between 50 and 200',
+      'show only Paid',
+      'filter where status is Paid',
+      'hide everything under 100',
+    ],
   },
   {
     name: 'format_as_table',
@@ -339,7 +358,14 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
     params: [
       { name: 'theme', type: 'string', description: 'Table theme: blue, green, purple, orange, slate, minimal (default: blue)' },
     ],
-    examples: ['format this as a table', 'make it look like a proper table', 'apply table formatting with green theme'],
+    examples: [
+      'format this as a table',
+      'make it look like a proper table',
+      'apply table formatting with green theme',
+      'make this easier to read',
+      'clean up the formatting',
+      'tidy up the sheet layout',
+    ],
   },
   {
     name: 'add_note',

@@ -28,6 +28,7 @@ import { fileURLToPath } from 'node:url'
 // Intent phrases — single source of truth (shared/intentPhrases.js). Imported
 // so the precomputed vectors can never drift from the runtime phrase set.
 import { INTENT_PHRASES, intentPhrasesHash } from '../shared/intentPhrases.js'
+import { capabilityExamplesMap, capabilityPhrasesHash } from '../shared/capabilities.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(__dirname, '..')
@@ -143,13 +144,92 @@ function l2Normalize(vec) {
 
 // ─── Main ───────────────────────────────────────────────────────────────────
 
+function writeVectorsBin(outputPath, results, phrasesHash, label) {
+  const VERSION = 2
+  const HIDDEN_SIZE = 384
+  const numEntries = results.length
+  const headerSize = 16 + numEntries * 36
+  const embeddingsSize = numEntries * HIDDEN_SIZE * 4
+  const totalSize = headerSize + embeddingsSize
+
+  const buffer = Buffer.alloc(totalSize)
+  let offset = 0
+
+  buffer.writeUInt32LE(VERSION, offset); offset += 4
+  buffer.writeUInt32LE(numEntries, offset); offset += 4
+  buffer.writeUInt32LE(HIDDEN_SIZE, offset); offset += 4
+  buffer.writeUInt32LE(phrasesHash, offset); offset += 4
+
+  for (const { name, numPhrases } of results) {
+    const nameBytes = Buffer.alloc(32)
+    nameBytes.write(name, 'utf8')
+    nameBytes.copy(buffer, offset); offset += 32
+    buffer.writeUInt32LE(numPhrases, offset); offset += 4
+  }
+
+  for (const { embedding } of results) {
+    for (let d = 0; d < HIDDEN_SIZE; d++) {
+      buffer.writeFloatLE(embedding[d], offset); offset += 4
+    }
+  }
+
+  fs.mkdirSync(path.dirname(outputPath), { recursive: true })
+  fs.writeFileSync(outputPath, buffer)
+  console.log(`\nWritten: ${outputPath} (${totalSize} bytes, ${numEntries} ${label} × ${HIDDEN_SIZE} dims)`)
+  console.log(`  format v${VERSION}, phrasesHash 0x${phrasesHash.toString(16).padStart(8, '0')}`)
+}
+
+function isBinUpToDate(outputPath, currentHash) {
+  if (!fs.existsSync(outputPath)) return false
+  const existing = fs.readFileSync(outputPath)
+  if (existing.length < 16) return false
+  const version = existing.readUInt32LE(0)
+  const embeddedHash = existing.readUInt32LE(12)
+  return version === 2 && embeddedHash === currentHash
+}
+
+async function embedPhraseSet(session, ort, tokenizer, phraseMap, skipKeys = new Set()) {
+  const HIDDEN_SIZE = 384
+  const names = Object.keys(phraseMap).filter((k) => !skipKeys.has(k) && (phraseMap[k]?.length ?? 0) > 0)
+  const results = []
+
+  for (const name of names) {
+    const phrases = phraseMap[name]
+    const phraseEmbeddings = []
+
+    for (const phrase of phrases) {
+      const encoded = tokenizer.encode(phrase)
+      const output = await session.run({
+        input_ids: new ort.Tensor('int64', encoded.inputIds, [1, 128]),
+        attention_mask: new ort.Tensor('int64', encoded.attentionMask, [1, 128]),
+        token_type_ids: new ort.Tensor('int64', encoded.tokenTypeIds, [1, 128]),
+      })
+      const outputData = output[session.outputNames[0]].data
+      const embedding = meanPool(outputData, encoded.attentionMask, 128, HIDDEN_SIZE)
+      l2Normalize(embedding)
+      phraseEmbeddings.push(embedding)
+    }
+
+    const meanEmb = new Float32Array(HIDDEN_SIZE)
+    for (const emb of phraseEmbeddings) {
+      for (let d = 0; d < HIDDEN_SIZE; d++) meanEmb[d] += emb[d]
+    }
+    for (let d = 0; d < HIDDEN_SIZE; d++) meanEmb[d] /= phraseEmbeddings.length
+    l2Normalize(meanEmb)
+
+    results.push({ name, embedding: meanEmb, numPhrases: phrases.length })
+    console.log(`  ✓ ${name} (${phrases.length} phrases)`)
+  }
+
+  return results
+}
+
 async function main() {
   // Resolve onnxruntime-node
   let ort
   try {
     ort = await import('onnxruntime-node')
   } catch {
-    // Try from server/node_modules (entry is CJS dist/index.js for onnxruntime-node)
     const candidates = [
       path.join(repoRoot, 'server/node_modules/onnxruntime-node/dist/index.js'),
       path.join(repoRoot, 'server/node_modules/onnxruntime-node/dist/index.mjs'),
@@ -163,7 +243,6 @@ async function main() {
     }
   }
 
-  // Resolve model path (prefer server/models/minilm for full quality)
   const modelPath = path.join(repoRoot, 'server/models/minilm/model.onnx')
   const tokenizerPath = path.join(repoRoot, 'server/models/minilm/tokenizer.json')
 
@@ -173,22 +252,17 @@ async function main() {
     process.exit(1)
   }
 
-  // ─── Fast hash check: skip regeneration if the existing binary is current ──
   const outputDir = path.join(repoRoot, 'public/models/minilm')
-  const outputPath = path.join(outputDir, 'intent-vectors.bin')
-  const currentHash = intentPhrasesHash(INTENT_PHRASES)
+  const intentPath = path.join(outputDir, 'intent-vectors.bin')
+  const capabilityPath = path.join(outputDir, 'capability-vectors.bin')
+  const intentHash = intentPhrasesHash(INTENT_PHRASES)
+  const capabilityHash = capabilityPhrasesHash()
+  const intentFresh = isBinUpToDate(intentPath, intentHash)
+  const capabilityFresh = isBinUpToDate(capabilityPath, capabilityHash)
 
-  if (fs.existsSync(outputPath)) {
-    const existing = fs.readFileSync(outputPath)
-    if (existing.length >= 16) {
-      const version = existing.readUInt32LE(0)
-      const embeddedHash = existing.readUInt32LE(12)
-      if (version === 2 && embeddedHash === currentHash) {
-        console.log(`intent-vectors.bin is up to date (hash 0x${currentHash.toString(16).padStart(8, '0')}). Skipping.`)
-        return
-      }
-      console.log(`Stale intent-vectors.bin (version ${version}, hash 0x${existing.readUInt32LE(12).toString(16).padStart(8, '0')} vs current 0x${currentHash.toString(16).padStart(8, '0')}). Regenerating.`)
-    }
+  if (intentFresh && capabilityFresh) {
+    console.log('intent-vectors.bin and capability-vectors.bin are up to date. Skipping.')
+    return
   }
 
   console.log(`Loading model: ${modelPath}`)
@@ -197,97 +271,27 @@ async function main() {
   })
   console.log(`Model loaded. Inputs: ${session.inputNames.join(', ')}`)
 
-  // Load tokenizer vocab
   const tokenizerJson = JSON.parse(fs.readFileSync(tokenizerPath, 'utf8'))
   const vocabMap = new Map(Object.entries(tokenizerJson.model.vocab))
   const tokenizer = new WordPieceTokenizer(vocabMap)
-
   console.log(`Tokenizer loaded (${vocabMap.size} tokens)`)
 
-  // Process each intent
-  const intentNames = Object.keys(INTENT_PHRASES).filter(k => k !== 'unknown' && INTENT_PHRASES[k].length > 0)
-  const HIDDEN_SIZE = 384
-  const results = []
-
-  for (const intentName of intentNames) {
-    const phrases = INTENT_PHRASES[intentName]
-    const phraseEmbeddings = []
-
-    for (const phrase of phrases) {
-      const encoded = tokenizer.encode(phrase)
-
-      const inputIdsTensor = new ort.Tensor('int64', encoded.inputIds, [1, 128])
-      const attentionMaskTensor = new ort.Tensor('int64', encoded.attentionMask, [1, 128])
-      const tokenTypeIdsTensor = new ort.Tensor('int64', encoded.tokenTypeIds, [1, 128])
-
-      const output = await session.run({
-        input_ids: inputIdsTensor,
-        attention_mask: attentionMaskTensor,
-        token_type_ids: tokenTypeIdsTensor,
-      })
-
-      const outputData = output[session.outputNames[0]].data
-      const embedding = meanPool(outputData, encoded.attentionMask, 128, HIDDEN_SIZE)
-      l2Normalize(embedding)
-      phraseEmbeddings.push(embedding)
-    }
-
-    // Mean-pool all phrase embeddings for this intent
-    const meanEmb = new Float32Array(HIDDEN_SIZE)
-    for (const emb of phraseEmbeddings) {
-      for (let d = 0; d < HIDDEN_SIZE; d++) meanEmb[d] += emb[d]
-    }
-    for (let d = 0; d < HIDDEN_SIZE; d++) meanEmb[d] /= phraseEmbeddings.length
-    l2Normalize(meanEmb)
-
-    results.push({ name: intentName, embedding: meanEmb, numPhrases: phrases.length })
-    console.log(`  ✓ ${intentName} (${phrases.length} phrases)`)
+  if (!intentFresh) {
+    console.log('Computing intent embeddings…')
+    const intentResults = await embedPhraseSet(session, ort, tokenizer, INTENT_PHRASES, new Set(['unknown']))
+    writeVectorsBin(intentPath, intentResults, intentHash, 'intents')
+  } else {
+    console.log('intent-vectors.bin is up to date. Skipping intents.')
   }
 
-  // Write binary file
-  // Format (v2): version(u32) + numIntents(u32) + dim(u32) + phrasesHash(u32)
-  //              + [name(32 bytes) + numPhrases(u32)] × N + [float32 × dim] × N
-  //
-  // phrasesHash: FNV-1a of the phrase set from shared/intentPhrases.js. The
-  // client validates this against its own hash so stale vectors from a previous
-  // phrase set are rejected and the runtime bootstrap kicks in instead.
-  const VERSION = 2
-  const PHRASES_HASH = intentPhrasesHash(INTENT_PHRASES)
-  const numIntents = results.length
-  const headerSize = 16 + numIntents * 36 // 16 bytes global + 36 per intent (32 name + 4 numPhrases)
-  const embeddingsSize = numIntents * HIDDEN_SIZE * 4
-  const totalSize = headerSize + embeddingsSize
-
-  const buffer = Buffer.alloc(totalSize)
-  let offset = 0
-
-  // Global header
-  buffer.writeUInt32LE(VERSION, offset); offset += 4
-  buffer.writeUInt32LE(numIntents, offset); offset += 4
-  buffer.writeUInt32LE(HIDDEN_SIZE, offset); offset += 4
-  buffer.writeUInt32LE(PHRASES_HASH, offset); offset += 4
-
-  // Per-intent headers
-  for (const { name, numPhrases } of results) {
-    const nameBytes = Buffer.alloc(32)
-    nameBytes.write(name, 'utf8')
-    nameBytes.copy(buffer, offset); offset += 32
-    buffer.writeUInt32LE(numPhrases, offset); offset += 4
+  if (!capabilityFresh) {
+    console.log('Computing capability embeddings…')
+    const capabilityResults = await embedPhraseSet(session, ort, tokenizer, capabilityExamplesMap())
+    writeVectorsBin(capabilityPath, capabilityResults, capabilityHash, 'capabilities')
+  } else {
+    console.log('capability-vectors.bin is up to date. Skipping capabilities.')
   }
 
-  // Embeddings (float32 little-endian)
-  for (const { embedding } of results) {
-    for (let d = 0; d < HIDDEN_SIZE; d++) {
-      buffer.writeFloatLE(embedding[d], offset); offset += 4
-    }
-  }
-
-  // Write output
-  fs.mkdirSync(outputDir, { recursive: true })
-  fs.writeFileSync(outputPath, buffer)
-
-  console.log(`\nWritten: ${outputPath} (${totalSize} bytes, ${numIntents} intents × ${HIDDEN_SIZE} dims)`)
-  console.log(`  format v${VERSION}, phrasesHash 0x${PHRASES_HASH.toString(16).padStart(8, '0')}`)
   console.log('This file should be served alongside model.onnx for instant bootstrap.')
 }
 

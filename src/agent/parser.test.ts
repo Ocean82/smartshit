@@ -40,6 +40,57 @@ describe('parseMessage — format/color intents', () => {
     expect(result.calls[0].params.condition).toEqual({ operator: 'contains', value: '4' })
   })
 
+  it('parses "highlight cells that have a 4"', () => {
+    const result = parseMessage('highlight cells that have a 4')
+    expect(result.understood).toBe(true)
+    expect(result.calls[0].params.condition).toEqual({ operator: 'contains', value: '4' })
+  })
+
+  it('parses number format phrases', () => {
+    expect(parseMessage('format column B as currency').calls[0]).toMatchObject({
+      tool: 'format_cells',
+      params: { range: 'B', numberFormat: 'currency' },
+    })
+    expect(parseMessage('apply currency formatting to column C').calls[0]).toMatchObject({
+      tool: 'format_cells',
+      params: { range: 'C', numberFormat: 'currency' },
+    })
+  })
+
+  it('parses filter phrases', () => {
+    expect(parseMessage('filter where Status is Paid').calls[0]).toMatchObject({
+      tool: 'filter',
+      params: { column: 'Status', condition: 'equals', value: 'Paid' },
+    })
+    expect(parseMessage('filter Amount > 100').calls[0]).toMatchObject({
+      tool: 'filter',
+      params: { column: 'Amount', condition: 'gt', value: '100' },
+    })
+  })
+
+  it('parses multi-sort phrases', () => {
+    expect(parseMessage('sort by Category then Amount').calls[0]).toMatchObject({
+      tool: 'multi_sort',
+      params: {
+        rules: [
+          { column: 'Category', direction: 'asc' },
+          { column: 'Amount', direction: 'asc' },
+        ],
+      },
+    })
+    expect(parseMessage('sort by A and then by B descending').calls[0]).toMatchObject({
+      tool: 'multi_sort',
+    })
+  })
+
+  it('parses format-as-table phrases', () => {
+    expect(parseMessage('format this as a table').calls[0]).toMatchObject({
+      tool: 'format_as_table',
+      params: { theme: 'blue' },
+    })
+    expect(parseMessage('make it a table').calls[0]?.tool).toBe('format_as_table')
+  })
+
   it('parses polite "can you highlight all cells that contain a 4"', () => {
     const result = parseMessage('can you highlight all cells that contain a 4')
     expect(result.understood).toBe(true)

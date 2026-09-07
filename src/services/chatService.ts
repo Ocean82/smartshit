@@ -6,10 +6,11 @@
  * 2. GoalRouter — Total / By Category / By Month
  * 3. AgentParser — instant regex tool calls
  * 4. TemplateResolver — gallery template matching
- * 4. IntentClassifier — enriches context (never claims)
- * 5. MacroPlanner — multi-clause → pending execute_macro
- * 6. DeterministicDispatcher — local skills (clean/report/budget/query)
- * 7. LLMGateway — server-side LLM terminal stage
+ * 5. IntentClassifier — enriches context (never claims)
+ * 6. SemanticCapabilityRouter — MiniLM capability scoring (Tier 2)
+ * 7. MacroPlanner — multi-clause → pending execute_macro
+ * 8. DeterministicDispatcher — local skills (clean/report/budget/query)
+ * 9. LLMGateway — server-side LLM terminal stage
  *
  * The service receives thin callbacks for state mutations rather than
  * depending on the store directly. This allows tests to verify behavior
@@ -29,6 +30,7 @@ import {
   createAgentParserStage,
   createTemplateResolverStage,
   createIntentClassifierStage,
+  createSemanticCapabilityRouterStage,
   createMacroPlannerStage,
   createDeterministicDispatcherStage,
   createLLMGatewayStage,
@@ -154,6 +156,7 @@ export async function processChatMessage(
       createAgentParserStage({ buildExecContext, pushHistory }),
       createTemplateResolverStage({ buildExecContext, pushHistory }),
       createIntentClassifierStage(),
+      createSemanticCapabilityRouterStage({ buildExecContext, pushHistory }),
       createMacroPlannerStage(),
       createDeterministicDispatcherStage(),
       createLLMGatewayStage(),

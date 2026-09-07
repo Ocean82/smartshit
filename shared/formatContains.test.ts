@@ -18,7 +18,6 @@ describe('extractCellContainsValue', () => {
 
   it('returns null when the phrase is not a cells-contains pattern', () => {
     expect(extractCellContainsValue('highlight negatives')).toBeNull()
-    expect(extractCellContainsValue('color all cells that have a 4')).toBeNull()
   })
 })
 

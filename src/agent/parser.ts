@@ -5,6 +5,13 @@
 
 import { FONT_COLOR_HEX, HIGHLIGHT_BG_HEX } from '../../shared/colorMaps'
 import { extractCellContainsValue } from '../../shared/formatContains'
+import {
+  isMultiSortPhrase,
+  parseFilterPhrase,
+  parseFormatAsTablePhrase,
+  parseMultiSortPhrase,
+  parseNumberFormatPhrase,
+} from '../../shared/spreadsheetPhrases'
 import type { ColumnProfile } from '@/ai/types'
 import { parseAdvancedFormula } from './formulaPatterns'
 import { escapeRegex, letterToCol } from '@/lib'
@@ -58,7 +65,7 @@ const QUESTION_PREFIXES_RE = /^(?:can\s+(?:i|you|we)|should\s+(?:i|we|the)|would
  * and handed to the LLM instead. Read-only tools are intentionally excluded.
  */
 const DESTRUCTIVE_TOOLS = new Set([
-  'delete_row', 'clear_sheet', 'modify_column', 'sort_sheet', 'find_and_replace',
+  'delete_row', 'clear_sheet', 'modify_column', 'sort_sheet', 'multi_sort', 'find_and_replace',
 ])
 
 /**
@@ -173,7 +180,8 @@ export function parseMessage(message: string, sheetContext?: SheetContext): Pars
   // "sort by date and then bold the header" must not be half-parsed into a
   // single sort with a garbage column. Defer to the macro-planner, which
   // segments clauses and parses each one via this same function.
-  if (COMPOUND_CONNECTOR_RE.test(message)) {
+  // Exception: multi-column sorts ("sort by Category then Amount") are one intent.
+  if (COMPOUND_CONNECTOR_RE.test(message) && !isMultiSortPhrase(message)) {
     return { calls: [], understood: false }
   }
 
@@ -220,6 +228,83 @@ export function parseMessage(message: string, sheetContext?: SheetContext): Pars
 function parseMessageInternal(message: string, sheetContext?: SheetContext): ParseResult {
   const lower = message.toLowerCase().trim()
   const calls: ParsedToolCall[] = []
+
+  // ─── Format as table ────────────────────────────────────────────────────────
+  const tablePhrase = parseFormatAsTablePhrase(message)
+  if (tablePhrase) {
+    calls.push({
+      tool: 'format_as_table',
+      params: { theme: tablePhrase.theme },
+      description: `Format as table (${tablePhrase.theme})`,
+    })
+    return { calls, understood: true, explanation: `Formatting the data range as a ${tablePhrase.theme} table.` }
+  }
+
+  // ─── Number format (currency / percent / date) ──────────────────────────────
+  const numberFormatPhrase = parseNumberFormatPhrase(message)
+  if (numberFormatPhrase) {
+    const range = numberFormatPhrase.range
+      ? (sheetContext?.headers?.find((h) => h.toLowerCase() === numberFormatPhrase.range!.toLowerCase())
+        ?? numberFormatPhrase.range)
+      : undefined
+    const params: Record<string, unknown> = { numberFormat: numberFormatPhrase.numberFormat }
+    if (range) params.range = range
+    calls.push({
+      tool: 'format_cells',
+      params,
+      description: range
+        ? `Format ${range} as ${numberFormatPhrase.numberFormat}`
+        : `Format as ${numberFormatPhrase.numberFormat}`,
+    })
+    return {
+      calls,
+      understood: true,
+      explanation: range
+        ? `Formatting ${range} as ${numberFormatPhrase.numberFormat}.`
+        : `Formatting the selection as ${numberFormatPhrase.numberFormat}.`,
+    }
+  }
+
+  // ─── Filter rows ────────────────────────────────────────────────────────────
+  const filterPhrase = parseFilterPhrase(message)
+  if (filterPhrase) {
+    const column = sheetContext?.headers?.find((h) => h.toLowerCase() === filterPhrase.column.toLowerCase())
+      ?? filterPhrase.column
+    calls.push({
+      tool: 'filter',
+      params: {
+        column,
+        condition: filterPhrase.condition,
+        value: filterPhrase.value,
+      },
+      description: `Filter ${column} ${filterPhrase.condition} ${filterPhrase.value}`,
+    })
+    return {
+      calls,
+      understood: true,
+      explanation: `Filtering rows where ${column} ${filterPhrase.condition} ${filterPhrase.value}.`,
+    }
+  }
+
+  // ─── Multi-column sort ──────────────────────────────────────────────────────
+  const multiSortPhrase = parseMultiSortPhrase(message)
+  if (multiSortPhrase) {
+    const rules = multiSortPhrase.rules.map((rule) => {
+      const column = sheetContext?.headers?.find((h) => h.toLowerCase() === rule.column.toLowerCase())
+        ?? rule.column
+      return { column, direction: rule.direction }
+    })
+    calls.push({
+      tool: 'multi_sort',
+      params: { rules },
+      description: `Sort by ${rules.map((r) => r.column).join(' then ')}`,
+    })
+    return {
+      calls,
+      understood: true,
+      explanation: `Sorting by ${rules.map((r) => `${r.column} (${r.direction})`).join(', then ')}.`,
+    }
+  }
 
   // ─── Multi-step compound requests ───────────────────────────────────────────
   // "clear and build a budget" → clear_sheet + create_budget_template
