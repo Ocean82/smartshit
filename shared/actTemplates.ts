@@ -1,5 +1,6 @@
 import type { ActTemplateResult } from './intentTypes.js'
 import { FONT_COLOR_HEX, HIGHLIGHT_BG_HEX } from './colorMaps.js'
+import { extractCellContainsValue } from './formatContains.js'
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -52,13 +53,12 @@ function resolveFormattingTemplate(lower: string, colorWord: string | undefined)
     }
   }
 
-  // Highlight cells containing a value
-  const containsMatch = lower.match(/(?:contain(?:ing|s)?|with|having)\s+(?:the\s+)?(?:number\s+|value\s+|text\s+)?["']?([\w.$-]+)["']?/)
-  if (containsMatch) {
-    const value = containsMatch[1]
+  // Highlight cells containing a value (shared article/noun stripper with client parser)
+  const containsValue = extractCellContainsValue(lower)
+  if (containsValue) {
     return {
-      message: `I will highlight cells containing "${value}". Click Apply to confirm.`,
-      actions: [{ tool: 'format_cells', params: { condition: { operator: 'contains', value }, bgColor }, description: `Highlight cells containing ${value}` }],
+      message: `I will highlight cells containing "${containsValue}". Click Apply to confirm.`,
+      actions: [{ tool: 'format_cells', params: { condition: { operator: 'contains', value: containsValue }, bgColor }, description: `Highlight cells containing ${containsValue}` }],
     }
   }
 

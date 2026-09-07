@@ -170,6 +170,24 @@ function buildClarificationMessage(intent: UserIntent): string {
   return `I'm not quite sure what you'd like to do. Did you mean to ${label}? Could you rephrase or give me a bit more detail?`
 }
 
+/**
+ * Low-confidence keyword intent should ask for clarification — unless an act
+ * template already produced concrete actions (e.g. "find and highlight cells
+ * containing 4" scores ~0.5 across find+format but templates understand it).
+ */
+function shouldClarifyLowConfidence(
+  userIntent: UserIntent,
+  mode: ReturnType<typeof classifyMode>,
+  templateActionCount: number,
+): boolean {
+  return (
+    userIntent.confidence < config.intentConfidenceThreshold
+    && !isLlmOnlyMode(mode)
+    && mode !== 'help'
+    && templateActionCount === 0
+  )
+}
+
 function sendSseComplete(
   res: express.Response,
   payload: ChatResponseBody & { errors?: string[] },
@@ -648,12 +666,11 @@ app.post('/api/chat/stream', requireAuth, chatRateLimiter, validateBody(chatStre
   } : undefined
   const suggestions = getContextualServerSuggestions(userMessage, sheetCtx)
 
-  // Low-confidence intent — clarify only for action requests (avoid blocking explain/advise Q&A)
-  if (
-    userIntent.confidence < config.intentConfidenceThreshold
-    && !isLlmOnlyMode(mode)
-    && mode !== 'help'
-  ) {
+  const intent = resolveIntent(userMessage)
+  const llmOnly = isLlmOnlyMode(mode) || body.forceLlm
+
+  // Low-confidence intent — clarify only when no template already resolved it
+  if (shouldClarifyLowConfidence(userIntent, mode, intent.actions.length)) {
     res.setHeader('Content-Type', 'text/event-stream')
     res.setHeader('Cache-Control', 'no-cache')
     res.setHeader('Connection', 'keep-alive')
@@ -666,9 +683,6 @@ app.post('/api/chat/stream', requireAuth, chatRateLimiter, validateBody(chatStre
     })
     return
   }
-
-  const intent = resolveIntent(userMessage)
-  const llmOnly = isLlmOnlyMode(mode) || body.forceLlm
 
   res.setHeader('Content-Type', 'text/event-stream')
   res.setHeader('Cache-Control', 'no-cache')
@@ -823,12 +837,11 @@ app.post('/api/chat', requireAuth, chatRateLimiter, validateBody(chatBodySchema)
   } : undefined
   const suggestions = getContextualServerSuggestions(userMessage, sheetCtx)
 
-  // Low-confidence intent — clarify only for action requests (avoid blocking explain/advise Q&A)
-  if (
-    userIntent.confidence < config.intentConfidenceThreshold
-    && !isLlmOnlyMode(mode)
-    && mode !== 'help'
-  ) {
+  const intent = resolveIntent(userMessage)
+  const llmOnly = isLlmOnlyMode(mode) || body.forceLlm
+
+  // Low-confidence intent — clarify only when no template already resolved it
+  if (shouldClarifyLowConfidence(userIntent, mode, intent.actions.length)) {
     res.json({
       message: buildClarificationMessage(userIntent),
       actions: [],
@@ -837,9 +850,6 @@ app.post('/api/chat', requireAuth, chatRateLimiter, validateBody(chatBodySchema)
     })
     return
   }
-
-  const intent = resolveIntent(userMessage)
-  const llmOnly = isLlmOnlyMode(mode) || body.forceLlm
 
   if (mode === 'help' && !body.forceLlm) {
     res.json({ message: intent.message, actions: [], source: 'template', suggestions })

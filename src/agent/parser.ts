@@ -4,6 +4,7 @@
  */
 
 import { FONT_COLOR_HEX, HIGHLIGHT_BG_HEX } from '../../shared/colorMaps'
+import { extractCellContainsValue } from '../../shared/formatContains'
 import type { ColumnProfile } from '@/ai/types'
 import { parseAdvancedFormula } from './formulaPatterns'
 import { escapeRegex, letterToCol } from '@/lib'
@@ -162,9 +163,10 @@ function describeColumnChoices(sheetContext?: SheetContext): string {
  * This is a thin safety wrapper around parseMessageInternal():
  *  1. Compound multi-clause requests are deferred to the macro-planner stage
  *     so each clause is parsed independently instead of half-matched here.
- *  2. Question-framed messages that resolve to a destructive tool are vetoed
- *     and handed to the LLM, backstopping the prefix guard for phrasings that
- *     don't start with a known interrogative stem.
+ *  2. Polite question prefixes ("can you…") are stripped; clear non-destructive
+ *     commands (e.g. highlight/format) still execute, while destructive tools
+ *     remain deferred to the LLM.
+ *  3. Trailing-`?` messages that resolve to a destructive tool are vetoed.
  */
 export function parseMessage(message: string, sheetContext?: SheetContext): ParseResult {
   // ─── Compound-request guard ─────────────────────────────────────────────────
@@ -175,13 +177,40 @@ export function parseMessage(message: string, sheetContext?: SheetContext): Pars
     return { calls: [], understood: false }
   }
 
-  const result = parseMessageInternal(message, sheetContext)
+  const trimmed = message.trim()
+  const lowerTrimmed = trimmed.toLowerCase()
+  const hasQuestionPrefix = QUESTION_PREFIXES_RE.test(lowerTrimmed)
+
+  // Polite framings ("can you highlight…") are often real commands. Strip the
+  // interrogative stem and parse the remainder. Destructive tools still defer
+  // to the LLM so "can you delete…" never auto-mutates.
+  let messageToParse = message
+  if (hasQuestionPrefix) {
+    messageToParse = trimmed
+      .replace(QUESTION_PREFIXES_RE, '')
+      .replace(/^[\s,]+/, '')
+      .replace(/\?+\s*$/, '')
+      .trim()
+    if (!messageToParse) return { calls: [], understood: false }
+  }
+
+  const result = parseMessageInternal(messageToParse, sheetContext)
+
+  if (hasQuestionPrefix) {
+    if (!result.understood || result.calls.length === 0) {
+      return { calls: [], understood: false }
+    }
+    if (result.calls.some((call) => DESTRUCTIVE_TOOLS.has(call.tool))) {
+      return { calls: [], understood: false }
+    }
+    return result
+  }
 
   // ─── Destructive-question veto ──────────────────────────────────────────────
   // A trailing `?` signals a question/hypothetical. If the parse resolved to a
   // destructive mutation, don't act on it — let the LLM clarify. This catches
   // interrogatives the prefix guard misses (e.g. "…remove the SUM?").
-  if (/\?\s*$/.test(message.trim()) && result.understood && result.calls.some((call) => DESTRUCTIVE_TOOLS.has(call.tool))) {
+  if (/\?\s*$/.test(trimmed) && result.understood && result.calls.some((call) => DESTRUCTIVE_TOOLS.has(call.tool))) {
     return { calls: [], understood: false }
   }
 
@@ -191,13 +220,6 @@ export function parseMessage(message: string, sheetContext?: SheetContext): Pars
 function parseMessageInternal(message: string, sheetContext?: SheetContext): ParseResult {
   const lower = message.toLowerCase().trim()
   const calls: ParsedToolCall[] = []
-
-  // ─── Question / hypothetical guard ──────────────────────────────────────────
-  // Sentences framed as questions should never produce immediate mutations.
-  // Let the LLM handle clarification and explanation.
-  if (QUESTION_PREFIXES_RE.test(lower)) {
-    return { calls: [], understood: false }
-  }
 
   // ─── Multi-step compound requests ───────────────────────────────────────────
   // "clear and build a budget" → clear_sheet + create_budget_template
@@ -619,22 +641,17 @@ function parseMessageInternal(message: string, sheetContext?: SheetContext): Par
   }
 
   // "highlight cells containing 4" / "identify cells that contain 4 and highlight" → contains condition.
-  // The optional filler group strips leading articles ("a", "an", "the") and
-  // descriptor nouns ("number", "value", "text", "digit", "letter", "character")
-  // so "contain a 4" / "contain the number 4" capture "4", not the article/noun.
-  const containsMatch = lower.match(
-    /cells?\s+(?:that\s+)?(?:contain(?:ing|s)?|with|having)\s+(?:(?:a|an|the|any|some|each|every|number|numbers|value|values|text|digit|digits|letter|letters|char|character|characters)\s+)*["']?([\w.$-]+)["']?/,
-  )
-  if (containsMatch && lower.match(/highlight|colou?r|mark|shade/)) {
-    const value = containsMatch[1]
+  // Article/noun stripping lives in shared/formatContains so server templates stay aligned.
+  const containsValue = extractCellContainsValue(lower)
+  if (containsValue && /highlight|colou?r|mark|shade/.test(lower)) {
     const colorWord = lower.match(COLOR_WORD_RE)?.[1]
-    const bgColor = (colorWord && colorWord !== value && HIGHLIGHT_BG_HEX[colorWord]) || '#FFF9C4'
+    const bgColor = (colorWord && colorWord !== containsValue && HIGHLIGHT_BG_HEX[colorWord]) || '#FFF9C4'
     calls.push({
       tool: 'format_cells',
-      params: { condition: { operator: 'contains', value }, bgColor },
-      description: `Highlight cells containing ${value}`,
+      params: { condition: { operator: 'contains', value: containsValue }, bgColor },
+      description: `Highlight cells containing ${containsValue}`,
     })
-    return { calls, understood: true, explanation: `Highlighting cells containing "${value}".` }
+    return { calls, understood: true, explanation: `Highlighting cells containing "${containsValue}".` }
   }
 
   // "highlight cells equal to 4" → numeric eq condition

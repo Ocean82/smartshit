@@ -32,4 +32,14 @@ describe('resolveIntent with mode gating', () => {
     const result = resolveIntent('Analyze my sheet')
     expect(result.actions.every((a) => a.tool !== 'analyze_data')).toBe(true)
   })
+
+  it('captures contains value 4, not the article "a"', () => {
+    const result = resolveIntent('highlight all cells that contain a 4')
+    expect(classifyMode('highlight all cells that contain a 4')).toBe('act')
+    expect(result.actions).toHaveLength(1)
+    expect(result.actions[0]?.tool).toBe('format_cells')
+    expect(result.actions[0]?.params).toMatchObject({
+      condition: { operator: 'contains', value: '4' },
+    })
+  })
 })

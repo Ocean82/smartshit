@@ -40,6 +40,19 @@ describe('parseMessage — format/color intents', () => {
     expect(result.calls[0].params.condition).toEqual({ operator: 'contains', value: '4' })
   })
 
+  it('parses polite "can you highlight all cells that contain a 4"', () => {
+    const result = parseMessage('can you highlight all cells that contain a 4')
+    expect(result.understood).toBe(true)
+    expect(result.calls[0].tool).toBe('format_cells')
+    expect(result.calls[0].params.condition).toEqual({ operator: 'contains', value: '4' })
+  })
+
+  it('still defers destructive "can you delete…" questions to the LLM', () => {
+    const result = parseMessage('can you delete the Netflix row?')
+    expect(result.understood).toBe(false)
+    expect(result.calls).toHaveLength(0)
+  })
+
   it('parses "highlight cells containing an X" — captures X, not the article "an"', () => {
     const result = parseMessage('highlight cells containing an X')
     expect(result.understood).toBe(true)
