@@ -114,9 +114,18 @@ describe('resolveCapabilityParams', () => {
     })
   })
 
+  it('resolves sort_column ascending from lowest-first phrasing', () => {
+    const cap = getCapability('sort_column')!
+    const result = resolveCapabilityParams(cap, 'put the smallest amounts first', ctx, columns)
+    expect(result).toMatchObject({
+      tool: 'sort_sheet',
+      params: { column: 'B', direction: 'asc' },
+    })
+  })
+
   it('resolves format_as_table with blue theme', () => {
     const cap = getCapability('format_as_table')!
-    const result = resolveCapabilityParams(cap, 'make this easier to read', ctx, columns)
+    const result = resolveCapabilityParams(cap, 'format this as a table', ctx, columns)
     expect(result).toMatchObject({
       tool: 'format_as_table',
       params: { theme: 'blue' },

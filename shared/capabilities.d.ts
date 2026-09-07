@@ -6,6 +6,7 @@ export type CapabilityKind = 'tool' | 'goal' | 'recipe'
 
 export type ParamStrategy =
   | 'none'
+  | 'amount_column_sort'
   | 'amount_column_desc'
   | 'header_row_bold'
   | 'currency_selection'

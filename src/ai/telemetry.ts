@@ -10,6 +10,7 @@ type TelemetryCounterKey =
   | 'sandboxExecutions'
   | 'sandboxErrors'
   | 'macroExecution'
+  | 'capabilityRouterEvents'
 
 export interface TelemetryCounters {
   importTruncationEvents: number
@@ -23,6 +24,7 @@ export interface TelemetryCounters {
   sandboxExecutions: number
   sandboxErrors: number
   macroExecution: number
+  capabilityRouterEvents: number
 }
 
 export interface TelemetrySnapshot {
@@ -52,6 +54,7 @@ function emptyCounters(): TelemetryCounters {
     sandboxExecutions: 0,
     sandboxErrors: 0,
     macroExecution: 0,
+    capabilityRouterEvents: 0,
   }
 }
 

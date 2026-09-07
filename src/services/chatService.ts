@@ -252,9 +252,13 @@ function stageResultToChatMessage(
     })
   }
 
-  // Agent parser / macro planner with actions need toolResultToChatMessage
+  // Agent parser / macro / Tier-2 capability router with actions → Apply UI
   if (
-    (result.stageName === 'agent-parser' || result.stageName === 'macro-planner')
+    (
+      result.stageName === 'agent-parser'
+      || result.stageName === 'macro-planner'
+      || result.stageName === 'semantic-capability-router'
+    )
     && result.actions?.length
   ) {
     const toolResult = {

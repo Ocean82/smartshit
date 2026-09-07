@@ -13,7 +13,7 @@
  */
 
 /**
- * @typedef {'none' | 'amount_column_desc' | 'header_row_bold' | 'currency_selection' | 'contains_value' | 'filter_predicate' | 'negatives' | 'goal_by_category'} ParamStrategy
+ * @typedef {'none' | 'amount_column_sort' | 'amount_column_desc' | 'header_row_bold' | 'currency_selection' | 'contains_value' | 'filter_predicate' | 'negatives' | 'goal_by_category'} ParamStrategy
  */
 
 /**
@@ -54,10 +54,13 @@ export const CAPABILITIES = [
       'put the largest expenses first',
       'sort by amount descending',
       'order from largest to smallest',
+      'sort by amount ascending',
+      'put the smallest amounts first',
+      'order from lowest to highest',
     ],
     tool: 'sort_sheet',
     requiresParams: ['column'],
-    paramStrategy: 'amount_column_desc',
+    paramStrategy: 'amount_column_sort',
   },
   {
     id: 'filter_rows',
@@ -92,11 +95,11 @@ export const CAPABILITIES = [
     kind: 'tool',
     description: 'Format the data range as a styled table with headers and banded rows.',
     examples: [
-      'make this easier to read',
-      'clean up the formatting',
       'format this as a table',
       'make it look like a proper table',
-      'tidy up the sheet layout',
+      'convert to a table with banded rows',
+      'apply table formatting',
+      'format the range as a table',
     ],
     tool: 'format_as_table',
     staticParams: { theme: 'blue' },
@@ -124,8 +127,8 @@ export const CAPABILITIES = [
       'highlight weird negative values',
       'highlight negatives',
       'mark negative numbers in red',
-      'highlight weird values',
       'flag negative amounts',
+      'highlight cells with negative numbers',
     ],
     tool: 'format_cells',
     staticParams: {

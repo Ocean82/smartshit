@@ -36,6 +36,19 @@ function describeColumns(columns: ColumnProfile[] | undefined): string {
   return list.length ? ` Available columns: ${list.join(', ')}.` : ''
 }
 
+/** Infer ascending vs descending from soft NL; default desc for amount sorts. */
+export function inferSortDirection(message: string): 'asc' | 'desc' {
+  const text = message.toLowerCase()
+  const wantsAsc = /\b(?:asc(?:ending)?|lowest|smallest|a\s*[- ]?\s*to\s*[- ]?\s*z|from\s+(?:low|small)\s+to\s+(?:high|large))\b/.test(text)
+  const wantsDesc = /\b(?:desc(?:ending)?|highest|biggest|largest|z\s*[- ]?\s*to\s*[- ]?\s*a|from\s+(?:high|large)\s+to\s+(?:low|small))\b/.test(text)
+
+  if (wantsAsc && !wantsDesc) return 'asc'
+  if (wantsDesc && !wantsAsc) return 'desc'
+  if (/\basc(?:ending)?\b/.test(text)) return 'asc'
+  if (/\bdesc(?:ending)?\b/.test(text)) return 'desc'
+  return 'desc'
+}
+
 /**
  * Build an executable tool call (or clarification) for a capability.
  * Goal capabilities return clarification to let GoalRouter / caller handle — or
@@ -59,17 +72,19 @@ export function resolveCapabilityParams(
       }
     }
 
+    case 'amount_column_sort':
     case 'amount_column_desc': {
       const column = amountColumn(columns)
       if (!column) {
         return {
-          clarification: `Which column should I sort by (highest first)?${describeColumns(columns)}`,
+          clarification: `Which column should I sort by?${describeColumns(columns)}`,
         }
       }
+      const direction = inferSortDirection(message)
       return {
         tool: 'sort_sheet',
-        params: { column, direction: 'desc' },
-        description: `Sort by ${column} descending`,
+        params: { column, direction },
+        description: `Sort by ${column} ${direction === 'asc' ? 'ascending' : 'descending'}`,
       }
     }
 

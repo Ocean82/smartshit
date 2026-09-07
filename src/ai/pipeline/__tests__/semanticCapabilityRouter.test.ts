@@ -5,7 +5,10 @@ import {
   EMBEDDING_DIM,
 } from '@/ai/nlp/capabilityEmbeddings'
 import { makeContext, makeDeps } from './helpers'
-import { CAPABILITY_THRESHOLD } from '../stages/semanticCapabilityRouter'
+import {
+  CAPABILITY_THRESHOLD,
+  CAPABILITY_CHAT_THRESHOLD,
+} from '../stages/semanticCapabilityRouter'
 
 vi.mock('@/ai/nlp/nlpEngine', () => ({
   getNLPEngine: vi.fn(),
@@ -49,6 +52,10 @@ vi.mock('@/agent', () => ({
   })),
 }))
 
+vi.mock('@/ai/telemetry', () => ({
+  recordTelemetry: vi.fn(),
+}))
+
 import { getNLPEngine } from '@/ai/nlp/nlpEngine'
 import { executeToolAsync } from '@/agent'
 import { createSemanticCapabilityRouterStage } from '../stages/semanticCapabilityRouter'
@@ -77,10 +84,10 @@ describe('semanticCapabilityRouter', () => {
     expect(result).toBeNull()
   })
 
-  it('claims sort_column and executes sort_sheet without LLM', async () => {
+  it('claims sort_column via Apply preview without auto-executing', async () => {
     setCapabilityEmbeddingsForTests([
       { capabilityId: 'sort_column', embedding: unitVec(0), phrases: ['put biggest expenses first'] },
-      { capabilityId: 'format_as_table', embedding: unitVec(50), phrases: ['make this easier to read'] },
+      { capabilityId: 'format_as_table', embedding: unitVec(50), phrases: ['format this as a table'] },
     ])
 
     const stage = createSemanticCapabilityRouterStage(makeDeps())
@@ -92,18 +99,19 @@ describe('semanticCapabilityRouter', () => {
     expect(result!.stageName).toBe('semantic-capability-router')
     expect(result!.metadata?.capabilityId).toBe('sort_column')
     expect(result!.metadata?.tier).toBe(2)
+    expect(result!.metadata?.preview).toBe(true)
     expect((result!.metadata?.score as number)).toBeGreaterThanOrEqual(CAPABILITY_THRESHOLD)
-    expect(executeToolAsync).toHaveBeenCalledWith(
+    expect(result!.actions).toEqual([
       expect.objectContaining({
         tool: 'sort_sheet',
         params: expect.objectContaining({ column: 'B', direction: 'desc' }),
       }),
-      expect.anything(),
-    )
-    expect(result!.message).toMatch(/^✓/)
+    ])
+    expect(executeToolAsync).not.toHaveBeenCalled()
+    expect(result!.message).toMatch(/Apply or Reject/i)
   })
 
-  it('claims format_as_table for soft readability phrasing', async () => {
+  it('claims format_as_table with Apply preview in chat mode', async () => {
     vi.mocked(getNLPEngine).mockReturnValue({
       isReady: true,
       embed: vi.fn(async () => unitVec(50)),
@@ -111,19 +119,45 @@ describe('semanticCapabilityRouter', () => {
 
     setCapabilityEmbeddingsForTests([
       { capabilityId: 'sort_column', embedding: unitVec(0), phrases: [] },
-      { capabilityId: 'format_as_table', embedding: unitVec(50), phrases: ['make this easier to read'] },
+      { capabilityId: 'format_as_table', embedding: unitVec(50), phrases: ['format this as a table'] },
     ])
 
     const stage = createSemanticCapabilityRouterStage(makeDeps())
-    const ctx = makeContext('make this easier to read')
+    const ctx = makeContext('format this as a table')
     ctx.mode = 'chat'
     const result = await stage.process(ctx)
 
     expect(result?.metadata?.capabilityId).toBe('format_as_table')
-    expect(executeToolAsync).toHaveBeenCalledWith(
-      expect.objectContaining({ tool: 'format_as_table' }),
-      expect.anything(),
-    )
+    expect((result!.metadata?.score as number)).toBeGreaterThanOrEqual(CAPABILITY_CHAT_THRESHOLD)
+    expect(result!.actions?.[0]?.tool).toBe('format_as_table')
+    expect(executeToolAsync).not.toHaveBeenCalled()
+  })
+
+  it('passes question framings for destructive tools', async () => {
+    setCapabilityEmbeddingsForTests([
+      { capabilityId: 'sort_column', embedding: unitVec(0), phrases: [] },
+    ])
+
+    const stage = createSemanticCapabilityRouterStage(makeDeps())
+    const ctx = makeContext('should I put biggest expenses first?')
+    ctx.mode = 'act'
+    const result = await stage.process(ctx)
+
+    expect(result).toBeNull()
+    expect(executeToolAsync).not.toHaveBeenCalled()
+  })
+
+  it('passes compound multi-clause requests to macro planner', async () => {
+    setCapabilityEmbeddingsForTests([
+      { capabilityId: 'sort_column', embedding: unitVec(0), phrases: [] },
+    ])
+
+    const stage = createSemanticCapabilityRouterStage(makeDeps())
+    const ctx = makeContext('sort by amount and then format as currency')
+    ctx.mode = 'act'
+    const result = await stage.process(ctx)
+
+    expect(result).toBeNull()
   })
 
   it('passes explain-mode messages to the LLM', async () => {
