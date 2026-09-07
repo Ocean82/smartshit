@@ -618,9 +618,12 @@ function parseMessageInternal(message: string, sheetContext?: SheetContext): Par
     return { calls, understood: true, explanation: `Changing the text color to ${colorWord}.` }
   }
 
-  // "highlight cells containing 4" / "identify cells that contain 4 and highlight" → contains condition
+  // "highlight cells containing 4" / "identify cells that contain 4 and highlight" → contains condition.
+  // The optional filler group strips leading articles ("a", "an", "the") and
+  // descriptor nouns ("number", "value", "text", "digit", "letter", "character")
+  // so "contain a 4" / "contain the number 4" capture "4", not the article/noun.
   const containsMatch = lower.match(
-    /cells?\s+(?:that\s+)?(?:contain(?:ing|s)?|with|having)\s+(?:the\s+)?(?:number\s+|value\s+|text\s+)?["']?([\w.$-]+)["']?/,
+    /cells?\s+(?:that\s+)?(?:contain(?:ing|s)?|with|having)\s+(?:(?:a|an|the|any|some|each|every|number|numbers|value|values|text|digit|digits|letter|letters|char|character|characters)\s+)*["']?([\w.$-]+)["']?/,
   )
   if (containsMatch && lower.match(/highlight|colou?r|mark|shade/)) {
     const value = containsMatch[1]

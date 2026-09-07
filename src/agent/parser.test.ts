@@ -31,6 +31,21 @@ describe('parseMessage — format/color intents', () => {
     expect(result.calls[0].params.condition).toEqual({ operator: 'contains', value: '4' })
   })
 
+  // Regression: the article "a"/"an" before the value was captured as the value
+  // itself ("contain a 4" → contains "a"), highlighting nearly every cell.
+  it('parses "highlight cells that contain a 4" — captures 4, not the article "a"', () => {
+    const result = parseMessage('highlight cells that contain a 4')
+    expect(result.understood).toBe(true)
+    expect(result.calls[0].tool).toBe('format_cells')
+    expect(result.calls[0].params.condition).toEqual({ operator: 'contains', value: '4' })
+  })
+
+  it('parses "highlight cells containing an X" — captures X, not the article "an"', () => {
+    const result = parseMessage('highlight cells containing an X')
+    expect(result.understood).toBe(true)
+    expect(result.calls[0].params.condition).toEqual({ operator: 'contains', value: 'x' })
+  })
+
   it('uses the requested highlight color: "highlight cells with 4 in red"', () => {
     const result = parseMessage('highlight cells with 4 in red')
     expect(result.calls[0].tool).toBe('format_cells')
