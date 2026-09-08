@@ -33,7 +33,6 @@ export default tseslint.config(
       'landing/**',
       'public/sw.js',
       'models/**',
-      'scripts/**',
       'temp/**',
       'server/ecosystem.config.cjs',
       '**/*.cjs',
@@ -45,7 +44,7 @@ export default tseslint.config(
 
   // ─── Browser / React sources ───────────────────────────────────────────────
   {
-    files: ['src/**/*.{ts,tsx}', 'shared/**/*.ts'],
+    files: ['src/**/*.{ts,tsx}', 'shared/**/*.{ts,js}'],
     plugins: { 'react-hooks': reactHooks },
     languageOptions: {
       parserOptions: { ecmaFeatures: { jsx: true } },
@@ -144,6 +143,10 @@ export default tseslint.config(
         fetch: 'readonly',
         setTimeout: 'readonly',
         __dirname: 'readonly',
+        TextEncoder: 'readonly',
+        TextDecoder: 'readonly',
+        performance: 'readonly',
+        structuredClone: 'readonly',
       },
     },
     rules: {

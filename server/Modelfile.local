@@ -1,6 +1,7 @@
 # SmartSht primary model — Spreadsheet-RL-4B (local Windows dev)
 # Run: ollama create smartshit -f server/Modelfile.local
-FROM D:/spreadsheet/smartsht/models/Spreadsheet-RL-4B.Q4_K_M.gguf
+# FROM is relative to this file (server/), matching models/ convention.
+FROM ../models/Spreadsheet-RL-4B.Q4_K_M.gguf
 
 TEMPLATE """{{- if .System }}<|im_start|>system
 {{ .System }}<|im_end|>

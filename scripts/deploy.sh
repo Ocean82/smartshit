@@ -145,12 +145,14 @@ if [ "$DEPLOY_FRONTEND" = true ] && [ ! -f public/models/minilm/model.onnx ]; th
   run_model_step npm run model:copy-deploy -- --public-only
 fi
 
-# Always attempt precompute when the model is present: the script self-skips
-# (cheap header read) if intent-vectors.bin already matches the current phrase
-# set, and regenerates when shared/intentPhrases.js has changed. Gating on file
-# absence alone would ship stale vectors after a phrase edit.
+# Always attempt precompute when the server MiniLM weights are present: the
+# script reads server/models/minilm/model.onnx and writes
+# public/models/minilm/intent-vectors.bin. It self-skips (cheap header read) if
+# the binary already matches the current phrase set, and regenerates when
+# shared/intentPhrases.js has changed. Gating on output absence alone would
+# ship stale vectors after a phrase edit.
 if [ "$DEPLOY_SERVER" = true ] && [ -f server/models/minilm/model.onnx ]; then
-  log "Ensuring intent vectors are current (public/models/minilm/intent-vectors.bin)..."
+  log "Ensuring intent vectors are current (from server MiniLM → public/models/minilm/intent-vectors.bin)..."
   run_model_step npm run model:precompute
 fi
 
@@ -201,9 +203,26 @@ if [ "$DEPLOY_FRONTEND" = true ]; then
   FRONTEND_MIRRORED=true
 fi
 
-# ─── Landing statics (index/terms/privacy/404/og-image/llms/robots/sitemap) ───
-# Rsync the landing webroot WITHOUT --delete: /var/www/smartsht also holds app/
-# and the nginx conf copy, and must never be pruned from the landing folder.
+# ─── Landing statics (index/terms/privacy/404/screenshot + brand assets) ───
+# The landing webroot (/var/www/smartsht) is the domain root. Landing-specific
+# files ship from landing/. Shared root assets (favicons, og-image, logo,
+# robots/sitemap/llms, security.txt) are maintained in public/ as the single
+# source of truth — Vite copies them into /app/ automatically, and this step
+# mirrors the same set to the domain root so the two copies cannot drift.
+# Rsync WITHOUT --delete: /var/www/smartsht also holds app/ and the nginx conf
+# copy, and must never be pruned from the landing folder.
+BRAND_FILES="apple-touch-icon.png favicon-16x16.png favicon-32x32.png favicon-48x48.png favicon.svg llms.txt logo.png og-image.png robots.txt sitemap.xml smart-favicon.png"
+
+sync_brand_assets() {
+  for f in $BRAND_FILES; do
+    [ -f "$APP_DIR/public/$f" ] || die "Missing brand asset (must be tracked in public/): $f"
+    sudo cp -f "$APP_DIR/public/$f" "/var/www/smartsht/$f"
+  done
+  # RFC 9116 security.txt — nested under .well-known/, not covered by $BRAND_FILES
+  [ -f "$APP_DIR/public/.well-known/security.txt" ] || die "Missing brand asset: public/.well-known/security.txt"
+  sudo install -D -m 644 "$APP_DIR/public/.well-known/security.txt" "/var/www/smartsht/.well-known/security.txt"
+}
+
 if [ -d "$APP_DIR/landing" ]; then
   log "Syncing landing statics to /var/www/smartsht..."
   if command -v rsync >/dev/null 2>&1; then
@@ -211,13 +230,14 @@ if [ -d "$APP_DIR/landing" ]; then
       --exclude 'smartsht.nginx.conf' \
       "$APP_DIR/landing/" /var/www/smartsht/
   else
-    for f in index.html terms.html privacy.html 404.html og-image.png llms.txt robots.txt sitemap.xml apple-touch-icon.png favicon.svg favicon-16x16.png favicon-32x32.png favicon-48x48.png logo.png smart-favicon.png smart-logo.png screenshot.png; do
+    for f in index.html terms.html privacy.html 404.html screenshot.png smart-logo.png; do
       if [ -f "$APP_DIR/landing/$f" ]; then
         sudo cp "$APP_DIR/landing/$f" "/var/www/smartsht/$f"
       fi
     done
     echo "  (rsync not found — copied landing files individually)"
   fi
+  sync_brand_assets
   sudo chown -R www-data:www-data /var/www/smartsht
   log "Landing statics synced ✓"
 fi

@@ -19,6 +19,7 @@ These documents are historical — they describe plans that have been executed, 
 | `review.md` | Aug 3, 2026 | Full project review. Release-blocking bugs fixed. |
 | `smartsht-review.md` | Jul 2026 | Earlier architecture review. |
 | `repo-assessment-2026-07-24.md` | Jul 24, 2026 | Initial assessment. |
+| `release-audit-2026-07-25.md` | Jul 25, 2026 | Point-in-time pre-launch audit. Env var names and test counts are stale — see ENV.md and the README. |
 | `ai-model-audit.md` | Aug 5, 2026 | AI model layer audit. Status header added noting fixes. |
 | `engine-review.md` | Jul 2026 | Formula engine review. |
 | `agent-engine-code-review.md` | Jul 2026 | Agent system review. |

@@ -52,11 +52,12 @@ server/ecosystem.config.cjs
 coverage/
 *.tsbuildinfo
 .vite/
-# Dev debug/test scripts (created during debugging, never ship)
-*.sh
-# Exception: deploy scripts are committed and run on the server
-!scripts/deploy.sh
-!scripts/deploy-remote.sh
+# Dev debug/test scratch scripts at repo root (never ship).
+# Scoped prefixes instead of a blanket *.sh, which silently ignored any new
+# helper under scripts/ and broke deploys that `git reset --hard` on the server.
+/debug-*.sh
+/test-*.sh
+/tmp-*.sh
 
 # Git worktrees (superpowers isolation)
 .worktrees/

@@ -25,7 +25,7 @@ Architecture	3+ competing intent systems (agent regex, shared intentParser, NLP 
 Security	Sandbox relies on regex denylist around QuickJS — bypass-prone as a security boundary	src/sandbox/validate.ts	Treat as capability sandbox only; allowlist APIs, never denylist
 Cost	Each AI.* cell hit = full chat completion; fill-down can blow free tier and Groq limits	aiFunctionDefinitions.ts, aiFunction.ts	Batch, cache aggressively, gate PREDICT/SCORE, show cost preview
 ONNX	User-upload ONNX Path A built; Path B missing onnxruntime-node; product audience does not bring .onnx files	src/onnx/*, server/src/onnx/*	Bundle MiniLM for intent OR defer ONNX to power-user only
-Docs	RELEASE_AUDIT_FINDINGS and older reviews overclaim readiness; July P0s mostly fixed but stubs remain	RELEASE_AUDIT_FINDINGS.md, docs/*-review.md	Treat docs as historical; trust code
+Docs	Older reviews overclaim readiness; July P0s mostly fixed but stubs remain	docs/release-audit-2026-07-25.md, docs/*-review.md	Treat docs as historical; trust code
 AI models — right job?
 Primary Groq 70B chat is appropriate. Failover and formula-cell prediction are not. Intent is mostly heuristics (fine); the NLP/ONNX theater is not earning its complexity.
 

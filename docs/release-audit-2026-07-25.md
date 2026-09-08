@@ -1,5 +1,11 @@
 # smartsh!t — Pre-Launch Code Audit & Release Readiness Report
 
+> **Historical.** Point-in-time pre-launch audit from 2026-07-25, kept for
+> reference. Env var names and test counts below are stale — the code has moved
+> on. Current values: `S3_REGION` (not `AWS_REGION`) in `server/src/config.ts`,
+> `STRIPE_PRICE_ID` / `STRIPE_PRICE_ID_ANNUAL` (not `STRIPE_PRO_PRICE_ID`), and
+> the README + `docs/ENV.md` for current test counts and settings.
+
 **Date:** July 25, 2026  
 **Repository:** `Ocean82/smartshit`  
 **Branch:** `arena/019f98e3-smartshit`  
@@ -88,7 +94,7 @@ The following items cannot be configured inside this local development environme
 - **Description:** Cloud workbook saving, version history, and user authentication require PostgreSQL and S3 (or Cloudflare R2 / AWS S3).
 - **Action Required:**
   - Set `DATABASE_URL` in `server/.env` and execute migrations (`node server/scripts/run-migration.mjs`).
-  - Set `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, and `S3_BUCKET` in `server/.env`.
+  - Set `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `S3_REGION`, and `S3_BUCKET` in `server/.env`.
 
 ### 4. Authentication (Clerk)
 - **Description:** Clerk authentication JWT verification requires Clerk credentials.
@@ -98,7 +104,7 @@ The following items cannot be configured inside this local development environme
 ### 5. Stripe Billing Integration
 - **Description:** Pro tier upgrades and checkout sessions require Stripe setup.
 - **Action Required:**
-  - Set `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, and `STRIPE_PRO_PRICE_ID` in `server/.env`.
+  - Set `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, and `STRIPE_PRICE_ID` in `server/.env`.
 
 ### 6. Licensing Resolution (Formualizer)
 - **Description:** The formula engine has been migrated from HyperFormula (GPLv3) to `@ocean8219/formualizer`, a permissively-licensed fork. The GPLv3 conflict is resolved.

@@ -10,7 +10,8 @@ Thanks for your interest in helping build an AI spreadsheet that normal people c
 
 ```bash
 npm install
-npm install --prefix server
+# Skip onnxruntime-node CUDA download (CPU runtime is enough locally)
+ONNXRUNTIME_NODE_INSTALL=skip npm install --prefix server
 npm run model:setup   # creates the Ollama dev model (Qwen2.5-Coder-1.5B)
 ```
 

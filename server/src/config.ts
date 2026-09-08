@@ -51,7 +51,10 @@ const validatedProviderOrder = rawProviderOrder.filter((p): p is AllowedProvider
 
 // ─── Validate Groq model ────────────────────────────────────────────────────
 
-const groqModel = process.env.GROQ_MODEL ?? 'openai/gpt-oss-120b'
+/** Must match GROQ_MODEL in server/.env.example, .env.example, and the README. */
+export const DEFAULT_GROQ_MODEL = 'qwen/qwen3.6-27b'
+
+const groqModel = process.env.GROQ_MODEL ?? DEFAULT_GROQ_MODEL
 if (groqModel && !KNOWN_GROQ_MODELS.has(groqModel)) {
   console.warn(
     `[config] GROQ_MODEL="${groqModel}" is not in the known models list. ` +

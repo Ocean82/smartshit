@@ -2,6 +2,7 @@
  * Config resolution tests — see docs/repo-assessment-2026-07-24.md (P0-2, P1-3).
  */
 
+import fs from 'node:fs'
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 
 // Mock loadEnv so dotenv doesn't override our test env vars (the real .env
@@ -22,6 +23,7 @@ beforeEach(() => {
   delete process.env.CORS_ORIGIN
   delete process.env.APP_URL
   delete process.env.CLERK_AUTHORIZED_PARTIES
+  delete process.env.GROQ_MODEL
 })
 
 afterEach(() => {
@@ -103,6 +105,21 @@ describe('clerkAuthorizedParties', () => {
     const parties = (await loadConfig()).clerkAuthorizedParties
     expect(parties).toContain('https://www.smartsht.com')
     expect(parties).toContain('https://smartsht.com')
+  })
+})
+
+describe('groqModel', () => {
+  it('defaults GROQ_MODEL to the value documented in server/.env.example', async () => {
+    delete process.env.GROQ_MODEL
+    const example = fs.readFileSync(new URL('../.env.example', import.meta.url), 'utf8')
+    const documented = example.match(/^GROQ_MODEL=(.+)$/m)?.[1]?.trim()
+    expect(documented).toBeTruthy()
+    expect((await loadConfig()).groqModel).toBe(documented)
+  })
+
+  it('honours an explicit GROQ_MODEL override', async () => {
+    process.env.GROQ_MODEL = 'openai/gpt-oss-120b'
+    expect((await loadConfig()).groqModel).toBe('openai/gpt-oss-120b')
   })
 })
 

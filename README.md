@@ -59,8 +59,11 @@ Import a budget → the auditor flags a formula that skips a cell → the AI exp
 git clone https://github.com/Ocean82/smartshit.git
 cd smartshit
 npm install
-npm install --prefix server
+# onnxruntime-node's postinstall fetches CUDA binaries; skip that for CPU-only local/CI installs
+ONNXRUNTIME_NODE_INSTALL=skip npm install --prefix server
 ```
+
+> Windows PowerShell: `$env:ONNXRUNTIME_NODE_INSTALL="skip"; npm install --prefix server`
 
 ### 2. Configure AI (pick one)
 

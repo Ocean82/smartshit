@@ -11,6 +11,9 @@ Large model files are **not** committed to this repository.
   (`ollama create smartshit -f server/Modelfile.spreadsheet-rl` if re-registering).
 - **Local (optional):** place the GGUF under `models/` and run `npm run model:setup`,
   or `npm run model:copy-deploy -- --with-spreadsheet-rl` if you have a local source.
+  `model:setup` resolves the GGUF from `SMARTSHT_GGUF_SRC`, `models/`, or the
+  production host path `/home/ubuntu/` and rewrites the Modelfile `FROM` line
+  to that absolute path — do not hardcode machine paths in the Modelfiles.
 
 Dev may use a smaller coder GGUF for speed; AI quality will differ from prod.
 

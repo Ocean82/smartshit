@@ -30,6 +30,34 @@ export default defineConfig({
     // at /app/ instead of /app/assets/ and 404'd in production. A normal build
     // emits correct /app/assets/ URLs and lazy chunks load on demand.
     assetsInlineLimit: 4096, // Vite default: inline tiny assets, keep chunks/wasm external.
+    // Vendor splitting: React and xlsx are stable dependencies, so they get
+    // their own hashed chunks and cache independently across deploys — a patch
+    // to app code does not re-download the (largest) libraries. xlsx is the
+    // biggest single dependency (~492 kB) and is statically imported by the app
+    // shell, so it stays eager but isolated for caching.
+    //
+    // Function form (not the object form): React 19's `react-dom/index.js` is a
+    // CJS re-export wrapper, so `manualChunks: { react: ['react', 'react-dom'] }`
+    // only captured the ~11 kB `react` core and left `react-dom/client` in the
+    // entry chunk. Matching module ids directly is deterministic.
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules/xlsx')) return 'xlsx'
+          if (
+            id.includes('node_modules/react-dom') ||
+            id.includes('node_modules/react/') ||
+            id.includes('node_modules/scheduler')
+          ) {
+            return 'react'
+          }
+          return undefined
+        },
+      },
+    },
+    // The xlsx + React + engine core still exceeds Vite's 500 kB default
+    // warning; 700 kB is the honest ceiling for this entry chunk.
+    chunkSizeWarningLimit: 700,
   },
   resolve: {
     alias: {
