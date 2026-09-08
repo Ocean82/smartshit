@@ -71,6 +71,10 @@ export interface ChatServiceDeps {
   setProcessing: (v: boolean) => void
   /** Fallback handler for when LLM fails */
   processLocalFallback: (input: string) => ChatMessage
+  /** Skip Tier-2 capability router (user chose "Something else…") */
+  skipCapabilityRouter?: boolean
+  /** User clarified to this capability — Tier 2 short-circuits (no re-clarify). */
+  resolvedCapabilityId?: string
 }
 
 // ─── Service ─────────────────────────────────────────────────────────────────
@@ -108,6 +112,8 @@ export async function processChatMessage(
     finalizeMessage,
     setProcessing,
     processLocalFallback,
+    skipCapabilityRouter = false,
+    resolvedCapabilityId,
   } = deps
 
   try {
@@ -148,6 +154,9 @@ export async function processChatMessage(
       priorInsights: priorInsights ?? null,
       history,
       onToken: (token) => appendToken(streamingMsgId, token),
+      skipCapabilityRouter,
+      resolvedCapabilityId,
+      clarificationSource: resolvedCapabilityId ? 'clarification_chip' : undefined,
     }
 
     // ─── Create and run pipeline ─────────────────────────────────────────

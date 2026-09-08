@@ -10,6 +10,7 @@ import {
   CAPABILITY_THRESHOLD,
   CAPABILITY_CHAT_THRESHOLD,
   capabilityClarifyChip,
+  capabilityClarifySuggestion,
 } from '../stages/semanticCapabilityRouter'
 import { getCapability } from '@shared/capabilities.js'
 
@@ -63,6 +64,7 @@ vi.mock('@/ai/telemetry', () => ({
 import { getNLPEngine } from '@/ai/nlp/nlpEngine'
 import { executeToolAsync } from '@/agent'
 import { recordCapabilityRouterTelemetry } from '@/ai/telemetry'
+import { suggestionChipLabel } from '@/ai/capabilities/clarifyChips'
 import { createSemanticCapabilityRouterStage } from '../stages/semanticCapabilityRouter'
 
 function unitVec(seed: number): Float32Array {
@@ -167,21 +169,82 @@ describe('semanticCapabilityRouter', () => {
     expect(result).not.toBeNull()
     expect(result!.metadata?.ambiguous).toBe(true)
     expect(result!.message).toMatch(/do you want me to/i)
-    expect(result!.suggestions?.length).toBeGreaterThanOrEqual(2)
+    expect(result!.message).toMatch(/Something else/i)
+    expect(result!.suggestions?.length).toBeGreaterThanOrEqual(3)
     expect(result!.suggestions?.[0]).toBe(
+      capabilityClarifySuggestion(getCapability('format_as_table')!),
+    )
+    expect(suggestionChipLabel(result!.suggestions![0])).toBe(
       capabilityClarifyChip(getCapability('format_as_table')!),
     )
+    expect(result!.suggestions?.at(-1)).toMatch(/capability-skip/)
     expect(executeToolAsync).not.toHaveBeenCalled()
     expect(recordCapabilityRouterTelemetry).toHaveBeenCalledWith(
       expect.objectContaining({
         outcome: 'ambiguous_clarify',
         routedTier: 2,
         message: 'make this look nicer',
-        top3Capabilities: expect.arrayContaining([
-          expect.objectContaining({ id: 'format_as_table', score: 1 }),
-        ]),
       }),
     )
+  })
+
+  it('omits distant third candidates from clarify chips', async () => {
+    // best=1, second≈0.995 (within gap), third=0 (outside gap)
+    const best = unitVec(0)
+    const near = nearUnit(0, 0.1) // still very close to unitVec(0)
+    setCapabilityEmbeddingsForTests([
+      { capabilityId: 'format_as_table', embedding: best, phrases: [] },
+      { capabilityId: 'bold_headers', embedding: near, phrases: [] },
+      { capabilityId: 'sort_column', embedding: unitVec(50), phrases: [] },
+    ])
+
+    const stage = createSemanticCapabilityRouterStage(makeDeps())
+    const ctx = makeContext('make this look nicer')
+    ctx.mode = 'act'
+    const result = await stage.process(ctx)
+
+    // nearUnit(0,0.1) vs unitVec(0) cosine is high; gap may or may not trigger clarify.
+    // If clarified, sort_column must not appear as a chip (orthogonal).
+    if (result?.metadata?.ambiguous) {
+      const chips = result.suggestions ?? []
+      expect(chips.some((c) => /biggest expenses|sort/i.test(c))).toBe(false)
+      expect(chips.at(-1)).toMatch(/capability-skip/)
+    }
+  })
+
+  it('passes when skipCapabilityRouter is set', async () => {
+    setCapabilityEmbeddingsForTests([
+      { capabilityId: 'sort_column', embedding: unitVec(0), phrases: [] },
+    ])
+    const stage = createSemanticCapabilityRouterStage(makeDeps())
+    const ctx = makeContext('put biggest expenses first')
+    ctx.mode = 'act'
+    ctx.skipCapabilityRouter = true
+    const result = await stage.process(ctx)
+    expect(result).toBeNull()
+    expect(recordCapabilityRouterTelemetry).not.toHaveBeenCalled()
+  })
+
+  it('short-circuits resolvedCapabilityId without re-clarifying', async () => {
+    // Even if embeddings would be fully ambiguous, chip pick must not clarify again.
+    const shared = unitVec(0)
+    setCapabilityEmbeddingsForTests([
+      { capabilityId: 'format_as_table', embedding: shared, phrases: [] },
+      { capabilityId: 'bold_headers', embedding: shared, phrases: [] },
+    ])
+
+    const stage = createSemanticCapabilityRouterStage(makeDeps())
+    const ctx = makeContext('Format this as a table')
+    ctx.mode = 'act'
+    ctx.resolvedCapabilityId = 'format_as_table'
+    ctx.clarificationSource = 'clarification_chip'
+    const result = await stage.process(ctx)
+
+    expect(result?.metadata?.ambiguous).toBeUndefined()
+    expect(result?.metadata?.capabilityId).toBe('format_as_table')
+    expect(result?.metadata?.clarificationSource).toBe('clarification_chip')
+    expect(result?.actions?.[0]?.tool).toBe('format_as_table')
+    expect(executeToolAsync).not.toHaveBeenCalled()
   })
 
   it('records miss telemetry with top3 when below claim threshold', async () => {

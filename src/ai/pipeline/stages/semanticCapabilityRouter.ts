@@ -35,6 +35,12 @@ import {
   type CapabilityRouterTelemetryPayload,
 } from '@/ai/telemetry'
 import type { CapabilityDef } from '@shared/capabilities.js'
+import { getCapability } from '@shared/capabilities.js'
+import {
+  capabilitySkipMessage,
+  capabilityPickMessage,
+  CAPABILITY_SOMETHING_ELSE_LABEL,
+} from '@/ai/capabilities/clarifyChips'
 
 /** Conservative claim bar for act mode (prefer false negatives over wrong mutations). */
 export const CAPABILITY_THRESHOLD = 0.75
@@ -81,19 +87,31 @@ function logRoute(
   }
 }
 
-/** NL chip that re-enters the pipeline when the user sends it (option A). */
+/** NL label for clarify UI (never send raw capability ids as chips). */
 export function capabilityClarifyChip(capability: CapabilityDef): string {
   const example = capability.examples[0]?.trim()
   if (example) return example.charAt(0).toUpperCase() + example.slice(1)
   return capability.description
 }
 
+/** Chip value: NL label + invisible capability id for re-entry short-circuit. */
+export function capabilityClarifySuggestion(capability: CapabilityDef): string {
+  return capabilityPickMessage(capability.id, capabilityClarifyChip(capability))
+}
+
 function buildAmbiguityClarification(
   message: string,
   top: CapabilityScore[],
 ): { message: string; suggestions: string[] } {
-  const candidates = top.filter((c) => c.score > 0).slice(0, 3)
-  const suggestions = candidates.map((c) => capabilityClarifyChip(c.capability))
+  const bestScore = top[0]?.score ?? 0
+  // Only offer candidates that are genuinely close to the winner — not a distant 3rd.
+  const candidates = top
+    .filter((c) => bestScore - c.score <= CAPABILITY_AMBIGUITY_GAP)
+    .slice(0, 3)
+  const suggestions = [
+    ...candidates.map((c) => capabilityClarifySuggestion(c.capability)),
+    capabilitySkipMessage(message),
+  ]
   const bullets = candidates
     .map((c) => `• ${capabilityClarifyChip(c.capability)}`)
     .join('\n')
@@ -102,7 +120,7 @@ function buildAmbiguityClarification(
     : message.trim()
 
   return {
-    message: `When you say "${quoted}", do you want me to:\n${bullets}`,
+    message: `When you say "${quoted}", do you want me to:\n${bullets}\n• ${CAPABILITY_SOMETHING_ELSE_LABEL}`,
     suggestions,
   }
 }
@@ -114,11 +132,24 @@ export function createSemanticCapabilityRouterStage(
     name: 'semantic-capability-router',
 
     async process(context: PipelineContext): Promise<StageResult | null> {
+      if (context.skipCapabilityRouter) return null
+
       const mode = context.mode ?? classifyMode(context.message)
       if (mode === 'explain' || mode === 'advise' || mode === 'help') return null
 
       // Compound requests belong to the macro planner, not a single capability.
-      if (COMPOUND_CONNECTOR_RE.test(context.message)) return null
+      // Clarification chips are always single-capability — allow them through.
+      if (
+        !context.resolvedCapabilityId
+        && COMPOUND_CONNECTOR_RE.test(context.message)
+      ) {
+        return null
+      }
+
+      // User already picked a capability chip — fulfill without re-scoring / re-clarify.
+      if (context.resolvedCapabilityId) {
+        return fulfillResolvedCapability(context.resolvedCapabilityId, context, deps)
+      }
 
       if (!isCapabilityBootstrapped()) return null
 
@@ -169,116 +200,166 @@ export function createSemanticCapabilityRouterStage(
         }
       }
 
-      const spreadsheetCtx = buildSpreadsheetContext(
-        context.workbook,
-        context.sheet,
-        context.selection,
-        context.getComputedValue,
-      )
-      const columns = spreadsheetCtx.profile?.columns
+      return fulfillCapabilityScore(best, top3, context, deps)
+    },
+  }
+}
 
-      if (best.capability.kind === 'goal' && best.capability.goalId) {
-        if (isQuestionFraming(context.message)) {
-          logRoute({
-            outcome: 'pass_safety',
-            message: context.message,
-            top3Capabilities: top3,
-            score: best.score,
-            mode,
-          })
-          return null
-        }
-        return claimGoal(best.capability.goalId as GoalId, best.score, top3, context, deps)
-      }
+/**
+ * Short-circuit after clarification chip: never re-enter ambiguous clarify.
+ * Labels stay NL in the bubble; capability id arrives via context.resolvedCapabilityId.
+ */
+async function fulfillResolvedCapability(
+  capabilityId: string,
+  context: PipelineContext,
+  deps: SemanticCapabilityRouterDeps,
+): Promise<StageResult | null> {
+  const capability = getCapability(capabilityId)
+  if (!capability) {
+    logRoute({
+      outcome: 'miss',
+      message: context.message,
+      top3Capabilities: [{ id: capabilityId, score: 1 }],
+      score: null,
+      mode: context.mode,
+    })
+    return null
+  }
 
-      const resolved = resolveCapabilityParams(
-        best.capability,
-        context.message,
-        context,
-        columns,
-      )
+  const top3 = [{ id: capabilityId, score: 1 }]
+  const scored: CapabilityScore = {
+    capabilityId,
+    score: 1,
+    capability,
+  }
 
-      if (isClarification(resolved)) {
-        logRoute({
-          outcome: 'clarify',
-          message: context.message,
-          top3Capabilities: top3,
-          score: best.score,
-          mode,
-        })
-        return {
-          success: true,
-          message: resolved.clarification,
-          stageName: 'semantic-capability-router',
-          metadata: {
-            toolUsed: 'clarify',
-            capabilityId: best.capabilityId,
-            score: best.score,
-            tier: 2,
-            claimed: false,
-            top3Capabilities: top3,
-          },
-        }
-      }
+  return fulfillCapabilityScore(scored, top3, context, deps, {
+    fromClarificationChip: true,
+  })
+}
 
-      // Question framings must not auto-mutate; destructive tools always defer.
-      if (
-        isQuestionFraming(context.message)
-        && (DESTRUCTIVE_TOOLS.has(resolved.tool) || /\?\s*$/.test(context.message.trim()))
-      ) {
-        logRoute({
-          outcome: 'pass_safety',
-          message: context.message,
-          top3Capabilities: top3,
-          score: best.score,
-          mode,
-        })
-        return null
-      }
+async function fulfillCapabilityScore(
+  best: CapabilityScore,
+  top3: CapabilityRouterTelemetryPayload['top3Capabilities'],
+  context: PipelineContext,
+  deps: SemanticCapabilityRouterDeps,
+  opts?: { fromClarificationChip?: boolean },
+): Promise<StageResult | null> {
+  const mode = context.mode ?? classifyMode(context.message)
+  const fromChip = opts?.fromClarificationChip === true
+    || context.clarificationSource === 'clarification_chip'
 
-      const category = getToolDefinition(resolved.tool)?.category
-      const isMutation = category === 'mutate' || category === 'template'
+  const spreadsheetCtx = buildSpreadsheetContext(
+    context.workbook,
+    context.sheet,
+    context.selection,
+    context.getComputedValue,
+  )
+  const columns = spreadsheetCtx.profile?.columns
 
-      // Soft semantic matches → Apply preview for mutations (safer than auto-exec).
-      if (isMutation) {
-        logRoute({
-          outcome: 'preview',
-          message: context.message,
-          top3Capabilities: top3,
-          score: best.score,
-          mode,
-        })
-        return {
-          success: true,
-          message: `I will **${resolved.description}**. Review, then choose Apply or Reject.`,
-          actions: [{
-            tool: resolved.tool,
-            params: resolved.params,
-            description: resolved.description,
-          }],
-          stageName: 'semantic-capability-router',
-          metadata: {
-            toolUsed: resolved.tool,
-            capabilityId: best.capabilityId,
-            score: best.score,
-            tier: 2,
-            claimed: true,
-            preview: true,
-            top3Capabilities: top3,
-          },
-        }
-      }
-
+  if (best.capability.kind === 'goal' && best.capability.goalId) {
+    if (!fromChip && isQuestionFraming(context.message)) {
       logRoute({
-        outcome: 'claim',
+        outcome: 'pass_safety',
         message: context.message,
         top3Capabilities: top3,
         score: best.score,
         mode,
       })
-      return executeCapabilityTool(resolved, best.capabilityId, best.score, top3, deps)
-    },
+      return null
+    }
+    return claimGoal(best.capability.goalId as GoalId, best.score, top3, context, deps)
   }
+
+  const resolved = resolveCapabilityParams(
+    best.capability,
+    context.message,
+    context,
+    columns,
+  )
+
+  if (isClarification(resolved)) {
+    // Chip-resolved still needs a missing param (e.g. which column) — ask, don't loop capabilities.
+    logRoute({
+      outcome: 'clarify',
+      message: context.message,
+      top3Capabilities: top3,
+      score: best.score,
+      mode,
+    })
+    return {
+      success: true,
+      message: resolved.clarification,
+      stageName: 'semantic-capability-router',
+      metadata: {
+        toolUsed: 'clarify',
+        capabilityId: best.capabilityId,
+        score: best.score,
+        tier: 2,
+        claimed: false,
+        top3Capabilities: top3,
+        clarificationSource: fromChip ? 'clarification_chip' : undefined,
+      },
+    }
+  }
+
+  // Question framings must not auto-mutate — unless user explicitly picked a chip.
+  if (
+    !fromChip
+    && isQuestionFraming(context.message)
+    && (DESTRUCTIVE_TOOLS.has(resolved.tool) || /\?\s*$/.test(context.message.trim()))
+  ) {
+    logRoute({
+      outcome: 'pass_safety',
+      message: context.message,
+      top3Capabilities: top3,
+      score: best.score,
+      mode,
+    })
+    return null
+  }
+
+  const category = getToolDefinition(resolved.tool)?.category
+  const isMutation = category === 'mutate' || category === 'template'
+
+  if (isMutation) {
+    logRoute({
+      outcome: 'preview',
+      message: context.message,
+      top3Capabilities: top3,
+      score: best.score,
+      mode,
+    })
+    return {
+      success: true,
+      message: `I will **${resolved.description}**. Review, then choose Apply or Reject.`,
+      actions: [{
+        tool: resolved.tool,
+        params: resolved.params,
+        description: resolved.description,
+      }],
+      stageName: 'semantic-capability-router',
+      metadata: {
+        toolUsed: resolved.tool,
+        capabilityId: best.capabilityId,
+        score: best.score,
+        tier: 2,
+        claimed: true,
+        preview: true,
+        top3Capabilities: top3,
+        clarificationSource: fromChip ? 'clarification_chip' : undefined,
+      },
+    }
+  }
+
+  logRoute({
+    outcome: 'claim',
+    message: context.message,
+    top3Capabilities: top3,
+    score: best.score,
+    mode,
+  })
+  return executeCapabilityTool(resolved, best.capabilityId, best.score, top3, deps)
 }
 
 function isQuestionFraming(message: string): boolean {

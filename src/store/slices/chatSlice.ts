@@ -9,6 +9,11 @@ import { refToCell } from '@/engine/spreadsheet'
 import { executeTemplateTool } from '@/templates'
 import { buildFilePreview } from '@/ai/filePreview'
 import { recordTelemetry } from '@/ai/telemetry'
+import {
+  isCapabilitySkipMessage,
+  stripCapabilitySkipPrefix,
+  parseCapabilityPickMessage,
+} from '@/ai/capabilities/clarifyChips'
 import { AI_ANALYSIS_CONFIG } from '@/ai/config'
 import type { ExecutionResult } from '@/agent'
 import { buildScriptPreview } from '@/lib/scriptPreview'
@@ -105,8 +110,23 @@ export function createChatActions(
     getPinnedMessages: () => get().messages.filter((m) => m.pinned),
 
     sendMessage: () => {
-      const input = get().chatInput.trim()
+      let input = get().chatInput.trim()
       if (!input) return
+
+      let skipCapabilityRouter = false
+      let resolvedCapabilityId: string | undefined
+      // Strip capability-skip / pick encoding so the bubble shows NL only.
+      if (isCapabilitySkipMessage(input)) {
+        skipCapabilityRouter = true
+        input = stripCapabilitySkipPrefix(input).trim()
+        if (!input) return
+      } else {
+        const pick = parseCapabilityPickMessage(input)
+        if (pick) {
+          resolvedCapabilityId = pick.capabilityId
+          input = pick.label
+        }
+      }
 
       // Lazy-init NLP engine on first message (downloads 22MB model in background).
       // Respects data-saver mode — skips if user has requested reduced data usage.
@@ -178,6 +198,8 @@ export function createChatActions(
           },
           setProcessing: (v) => set((s) => { s.isAiProcessing = v }),
           processLocalFallback: (fallbackInput) => processAICommand(fallbackInput, get as never),
+          skipCapabilityRouter,
+          resolvedCapabilityId,
         })
       })
     },

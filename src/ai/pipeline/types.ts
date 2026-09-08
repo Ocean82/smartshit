@@ -36,6 +36,18 @@ export interface PipelineContext {
   history?: Array<{ role: 'user' | 'assistant'; content: string }>
   /** Streaming token callback */
   onToken?: (token: string) => void
+  /**
+   * When true, SemanticCapabilityRouter must pass (LLM escape after ambiguous clarify).
+   * Set when the user picks "Something else…".
+   */
+  skipCapabilityRouter?: boolean
+  /**
+   * User picked a clarification chip for this capability id.
+   * Tier 2 must fulfill it without re-entering ambiguity clarify.
+   */
+  resolvedCapabilityId?: string
+  /** Provenance for telemetry / short-circuit paths. */
+  clarificationSource?: 'clarification_chip'
 
   // ─── Enriched by IntentClassifier stage ─────────────────────────────────
   /** Classified intent (set by IntentClassifier stage) */

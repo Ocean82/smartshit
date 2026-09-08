@@ -8,6 +8,7 @@ import {
 } from 'lucide-react'
 import type { AgentAction, ChatMessage as ChatMessageType } from '@/types'
 import { getFeedbackForMessage, recordChatFeedback, type ChatFeedbackRating } from '@/ai/chatFeedback'
+import { suggestionChipLabel } from '@/ai/capabilities/clarifyChips'
 import { exportChatAsReport } from '@/lib/exportChat'
 import { useUsage, UpgradePrompt } from '@/auth'
 import { ApiKeySettings } from './ApiKeySettings'
@@ -214,6 +215,12 @@ export function ChatPanel({ isMobileOpen, onCloseMobile, embedded }: ChatPanelPr
     requestAnimationFrame(() => handleSend())
   }
 
+  const handleSuggestionClick = (suggestion: string) => {
+    if (!canAsk || isAiProcessing) return
+    setChatInput(suggestion)
+    requestAnimationFrame(() => handleSend())
+  }
+
   // ─── Render ─────────────────────────────────────────────────────────────────
 
   const pinnedMessages = messages.filter((m) => m.pinned)
@@ -253,7 +260,7 @@ export function ChatPanel({ isMobileOpen, onCloseMobile, embedded }: ChatPanelPr
             feedback={feedbackById[msg.id]}
             onFeedback={handleFeedback}
             onPin={togglePinMessage}
-            onSuggestionClick={setChatInput}
+            onSuggestionClick={handleSuggestionClick}
             onApplyAction={applyAction}
             onRejectAction={rejectAction}
           />
@@ -494,7 +501,7 @@ function SuggestionChips({ suggestions, onClick }: { suggestions: string[]; onCl
           onClick={() => onClick(suggestion)}
         >
           <Sparkles size={10} className="inline mr-1 text-blue-400" />
-          {suggestion}
+          {suggestionChipLabel(suggestion)}
         </button>
       ))}
     </div>
