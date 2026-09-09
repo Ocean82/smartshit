@@ -209,7 +209,7 @@ export function useSelectionManager(config: SelectionManagerConfig) {
             case 'y': e.preventDefault(); useStore.getState().redo(); break;
             case 'c': e.preventDefault(); useStore.getState().copy(); break;
             case 'x': e.preventDefault(); useStore.getState().cut(); break;
-            case 'v': e.preventDefault(); useStore.getState().paste(); break;
+            case 'v': e.preventDefault(); void useStore.getState().pasteFromClipboard(); break;
             case 'a': e.preventDefault(); setSelection({ startRow: 0, startCol: 0, endRow: TOTAL_ROWS - 1, endCol: TOTAL_COLS - 1 }); break;
             case 'f':
             case 'h': e.preventDefault(); setShowFindReplace(true); break;

@@ -29,7 +29,38 @@ import { validateCell } from '@/lib/validation'
 import type { HistoryEntry } from '@/lib/historyDiff'
 import { mergeChartLayout } from '@/lib/chartLayout'
 import { toMergeRange, parseMergeRange, rangesOverlap } from '@/lib/merge'
+import { encodeCellBlock, parseGridClipboard } from '@/lib/clipboardCodec'
 import { MAX_UNDO_STACK } from '../storeTypes'
+
+/** Convert raw clipboard text into a typed value suitable for setCellValue. */
+function coerceValue(raw: string): string | number | boolean | null {
+  const trimmed = raw.trim()
+  if (trimmed === '') return null
+  if (trimmed.toLowerCase() === 'true') return true
+  if (trimmed.toLowerCase() === 'false') return false
+  if (/^-?\d+(\.\d+)?$/.test(trimmed)) return Number(trimmed)
+  return raw
+}
+
+/** Best-effort write of a cell block to the OS clipboard. Never throws. */
+async function writeToOsClipboard(
+  cells: Record<string, CellData>,
+  selection: Selection,
+): Promise<void> {
+  try {
+    if (typeof navigator === 'undefined' || !navigator.clipboard || typeof ClipboardItem === 'undefined') return
+    const { tsv, csv, text } = encodeCellBlock(cells, selection)
+    await navigator.clipboard.write([
+      new ClipboardItem({
+        'text/tab-separated-values': new Blob([tsv], { type: 'text/tab-separated-values' }),
+        'text/csv': new Blob([csv], { type: 'text/csv' }),
+        'text/plain': new Blob([text], { type: 'text/plain' }),
+      }),
+    ])
+  } catch {
+    // Clipboard unavailable, not in a user gesture, or permission denied — non-fatal.
+  }
+}
 
 export interface WorkbookSliceState {
   workbook: WorkbookData
@@ -53,6 +84,7 @@ export interface WorkbookSliceState {
   copy: () => void
   cut: () => void
   paste: () => void
+  pasteFromClipboard: () => Promise<void>
   insertRow: (afterRow: number) => void
   deleteRow: (row: number) => void
   renameSheet: (sheetId: string, name: string) => void
@@ -83,6 +115,7 @@ export interface WorkbookActions {
   copy: () => void
   cut: () => void
   paste: () => void
+  pasteFromClipboard: () => Promise<void>
   addChart: (chart: ChartConfig) => void
   removeChart: (chartId: string) => void
   updateChartPosition: (chartId: string, x: number, y: number, size?: { width: number; height: number }) => void
@@ -386,6 +419,7 @@ export function createWorkbookActions(
           }
         }
         set((s) => { s.clipboard = { cells, selection: sel }; s.copiedRange = sel; });
+        void writeToOsClipboard(cells, sel);
       },
 
       cut: () => {
@@ -413,6 +447,41 @@ export function createWorkbookActions(
           }
         }
         set((s) => { s.copiedRange = null; });
+      },
+
+      pasteFromClipboard: async () => {
+        const { selection } = get();
+        if (!selection) return;
+
+        let text: string | null = null;
+        if (typeof navigator !== 'undefined' && navigator.clipboard) {
+          try {
+            text = await navigator.clipboard.readText();
+          } catch {
+            text = null;
+          }
+        }
+
+        if (text) {
+          const format = text.includes('\t') ? 'tsv' : text.includes(',') ? 'csv' : 'text'
+          const parsed = parseGridClipboard(text, format);
+          if (parsed && parsed.cellRefs.length > 0) {
+            const { selection: sel } = get();
+            if (!sel) return;
+            get().pushHistory('Paste');
+            const dstR = Math.min(sel.startRow, sel.endRow);
+            const dstC = Math.min(sel.startCol, sel.endCol);
+            for (const [cellId, raw] of Object.entries(parsed.valuesByRef)) {
+              const ref = cellToRef(cellId);
+              const newCellId = refToCell(ref.row + dstR, ref.col + dstC);
+              get().setCellValue(newCellId, coerceValue(raw));
+            }
+            set((s) => { s.copiedRange = null; });
+            return;
+          }
+        }
+
+        get().paste();
       },
 
       addChart: (chart) => {

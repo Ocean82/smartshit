@@ -103,6 +103,7 @@ export interface AppState extends UIState, UIActions, FileActions, ChatActions {
   copy: () => void
   cut: () => void
   paste: () => void
+  pasteFromClipboard: () => Promise<void>
 
   // Data operations
   addChart: (chart: ChartConfig) => void

@@ -382,6 +382,11 @@ export function usePaste() {
   return useStore((s) => s.paste);
 }
 
+/** Paste from OS clipboard (falls back to in-app clipboard) */
+export function usePasteFromClipboard() {
+  return useStore((s) => s.pasteFromClipboard);
+}
+
 // ─── File Actions ──────────────────────────────────────────────────────────────
 
 /** Create file */
