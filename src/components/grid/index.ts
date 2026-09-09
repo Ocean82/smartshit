@@ -1,4 +1,5 @@
 export { GridCell, type GridCellProps, type PendingCellChange } from './GridCell';
+export { FillHandle } from './FillHandle';
 export { useGridViewport } from './GridViewport';
 export { useEditingController } from './EditingController';
 export { useSelectionManager } from './SelectionManager';

@@ -322,11 +322,6 @@ export const GridCell = memo(function GridCell({
       {cellData?.validation?.type === 'list' && !isEditing && (
         <div className="absolute right-1 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 pointer-events-none">▾</div>
       )}
-
-      {/* Active cell fill handle */}
-      {isActive && !isEditing && (
-        <div className="absolute bottom-0 right-0 w-2 h-2 bg-blue-500 cursor-crosshair z-20" />
-      )}
     </div>
   )
 })

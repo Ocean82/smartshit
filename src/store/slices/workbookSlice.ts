@@ -30,6 +30,7 @@ import type { HistoryEntry } from '@/lib/historyDiff'
 import { mergeChartLayout } from '@/lib/chartLayout'
 import { toMergeRange, parseMergeRange, rangesOverlap } from '@/lib/merge'
 import { encodeCellBlock, parseGridClipboard } from '@/lib/clipboardCodec'
+import { buildFillPattern, adjustFormulaRefs, fillCellAt, type FilledCell } from '@/lib/autofill'
 import { MAX_UNDO_STACK } from '../storeTypes'
 
 /** Convert raw clipboard text into a typed value suitable for setCellValue. */
@@ -85,6 +86,7 @@ export interface WorkbookSliceState {
   cut: () => void
   paste: () => void
   pasteFromClipboard: () => Promise<void>
+  autofillTo: (endRow: number, endCol: number) => void
   insertRow: (afterRow: number) => void
   deleteRow: (row: number) => void
   renameSheet: (sheetId: string, name: string) => void
@@ -116,6 +118,7 @@ export interface WorkbookActions {
   cut: () => void
   paste: () => void
   pasteFromClipboard: () => Promise<void>
+  autofillTo: (endRow: number, endCol: number) => void
   addChart: (chart: ChartConfig) => void
   removeChart: (chartId: string) => void
   updateChartPosition: (chartId: string, x: number, y: number, size?: { width: number; height: number }) => void
@@ -482,6 +485,72 @@ export function createWorkbookActions(
         }
 
         get().paste();
+      },
+
+      autofillTo: (dragRow, dragCol) => {
+        const state = get();
+        const sel = state.selection;
+        if (!sel || state.editingCell) return;
+
+        const sr0 = Math.min(sel.startRow, sel.endRow);
+        const sr1 = Math.max(sel.startRow, sel.endRow);
+        const sc0 = Math.min(sel.startCol, sel.endCol);
+        const sc1 = Math.max(sel.startCol, sel.endCol);
+        const endRow = Math.max(sr1, dragRow);
+        const endCol = Math.max(sc1, dragCol);
+        if (endRow <= sr1 && endCol <= sc1) return;
+
+        const sheet = get().getActiveSheet();
+        // Excel disables the fill handle when the destination touches a merge.
+        if ((sheet.mergedCells?.length ?? 0) > 0) {
+          const dest = { startRow: sr0, startCol: sc0, endRow, endCol };
+          for (const ref of sheet.mergedCells ?? []) {
+            const range = parseMergeRange(ref);
+            if (range && rangesOverlap(range, dest)) return;
+          }
+        }
+
+        get().pushHistory('Autofill');
+
+        const read = (r: number, c: number): CellData | undefined =>
+          get().getActiveSheet().cells[refToCell(r, c)];
+
+        const applyCell = (r: number, c: number, filled: FilledCell, dr: number, dc: number) => {
+          const id = refToCell(r, c);
+          let formula = filled.formula;
+          if (formula && (dr !== 0 || dc !== 0) && !get().engine.isAIFormula(formula)) {
+            formula = adjustFormulaRefs(formula, dr, dc);
+          }
+          if (formula) get().setCellValue(id, filled.value ?? null, formula);
+          else if (filled.value !== null) get().setCellValue(id, filled.value);
+          if (filled.format) get().setCellFormat(id, filled.format);
+        };
+
+        // 1. Fill right: extend each source row across the new columns.
+        for (let r = sr0; r <= sr1; r++) {
+          const strip: Array<CellData | undefined> = [];
+          for (let c = sc0; c <= sc1; c++) strip.push(read(r, c));
+          const pattern = buildFillPattern(strip);
+          for (let c = sc1 + 1; c <= endCol; c++) {
+            const filled = fillCellAt(pattern, c - sc1);
+            if (!filled) continue;
+            applyCell(r, c, filled, 0, c - (sc0 + filled.sourceStripIndex));
+          }
+        }
+
+        // 2. Fill down: extend each column (source, then freshly filled) downward.
+        for (let c = sc0; c <= endCol; c++) {
+          const strip: Array<CellData | undefined> = [];
+          for (let r = sr0; r <= sr1; r++) strip.push(read(r, c));
+          const pattern = buildFillPattern(strip);
+          for (let r = sr1 + 1; r <= endRow; r++) {
+            const filled = fillCellAt(pattern, r - sr1);
+            if (!filled) continue;
+            applyCell(r, c, filled, r - (sr0 + filled.sourceStripIndex), 0);
+          }
+        }
+
+        set((s) => { s.selection = { startRow: sr0, startCol: sc0, endRow, endCol }; s.additionalSelections = []; });
       },
 
       addChart: (chart) => {

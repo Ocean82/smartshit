@@ -13,7 +13,8 @@ import { getRowHeight } from '@/lib/rowLayout';
 import { useTouch } from '@/hooks/useTouch';
 import { getCellNotesService } from '@/lib/cellNotes';
 import { buildMergeIndex, isMergeAnchor, type MergeRange } from '@/lib/merge';
-import { GridCell } from './grid';
+import { pointToCell } from '@/lib/autofill';
+import { GridCell, FillHandle } from './grid';
 import { useGridViewport } from './grid/GridViewport';
 import { useEditingController } from './grid/EditingController';
 import { useSelectionManager } from './grid/SelectionManager';
@@ -417,6 +418,47 @@ export function SpreadsheetGrid() {
     else if (cellLeft < scrollLeft) gridEl.scrollLeft = cellLeft;
   }, [viewport.gridRef, resolvedGetColWidth, sheet.rowHeights]);
 
+  // Cumulative pixel offsets for point→cell mapping (fill drag).
+  const rowOffsets = useMemo(() => {
+    const offs = new Array<number>(viewport.TOTAL_ROWS + 1);
+    let acc = 0;
+    for (let r = 0; r < viewport.TOTAL_ROWS; r++) {
+      offs[r] = acc;
+      acc += getRowHeight(sheet.rowHeights, r);
+    }
+    offs[viewport.TOTAL_ROWS] = acc;
+    return offs;
+  }, [viewport.TOTAL_ROWS, sheet.rowHeights]);
+
+  const colOffsets = useMemo(() => {
+    const offs = new Array<number>(viewport.TOTAL_COLS + 1);
+    let acc = 0;
+    for (let c = 0; c < viewport.TOTAL_COLS; c++) {
+      offs[c] = acc;
+      acc += resolvedGetColWidth(c);
+    }
+    offs[viewport.TOTAL_COLS] = acc;
+    return offs;
+  }, [viewport.TOTAL_COLS, resolvedGetColWidth]);
+
+  const pointToCellInViewport = useCallback((clientX: number, clientY: number) => {
+    const gridEl = viewport.gridRef.current;
+    if (!gridEl) return { row: 0, col: 0 };
+    const rect = gridEl.getBoundingClientRect();
+    return pointToCell(clientX, clientY, {
+      gridLeft: rect.left,
+      gridTop: rect.top,
+      scrollLeft: gridEl.scrollLeft,
+      scrollTop: gridEl.scrollTop,
+      rowHeaderWidth: ROW_HEADER_WIDTH,
+      colHeaderHeight: COL_HEADER_HEIGHT,
+      rowOffsets,
+      colOffsets,
+      totalRows: viewport.TOTAL_ROWS,
+      totalCols: viewport.TOTAL_COLS,
+    });
+  }, [viewport.gridRef, viewport.TOTAL_ROWS, viewport.TOTAL_COLS, rowOffsets, colOffsets]);
+
   const onEditStartRef = useRef<() => void>(() => {});
 
   const selectionManager = useSelectionManager({
@@ -427,6 +469,7 @@ export function SpreadsheetGrid() {
     findLastDataRow,
     scrollCellIntoView,
     onEditStart: () => onEditStartRef.current(),
+    pointToCellInViewport,
   });
 
   const editingController = useEditingController({
@@ -456,6 +499,41 @@ export function SpreadsheetGrid() {
     };
     requestAnimationFrame(retry);
   };
+
+  // Fill-handle position (bottom-right corner of the selection) + live preview rect.
+  const fillHandlePos = useMemo(() => {
+    const sel = selectionManager.selection;
+    if (!sel || editingController.editingCell) return null;
+    const maxRow = Math.max(sel.startRow, sel.endRow);
+    const maxCol = Math.max(sel.startCol, sel.endCol);
+    let top = COL_HEADER_HEIGHT;
+    for (let r = 0; r <= maxRow; r++) top += getRowHeight(sheet.rowHeights, r);
+    let left = ROW_HEADER_WIDTH;
+    for (let c = 0; c <= maxCol; c++) left += resolvedGetColWidth(c);
+    return { top: top - 5, left: left - 5 };
+  }, [selectionManager.selection, editingController.editingCell, sheet.rowHeights, resolvedGetColWidth]);
+
+  const fillPreviewRect = useMemo(() => {
+    const sel = selectionManager.selection;
+    const target = selectionManager.fillTarget;
+    if (!sel || !target) return null;
+    const sr0 = Math.min(sel.startRow, sel.endRow);
+    const sr1 = Math.max(sel.startRow, sel.endRow);
+    const sc0 = Math.min(sel.startCol, sel.endCol);
+    const sc1 = Math.max(sel.startCol, sel.endCol);
+    const endRow = Math.max(sr1, target.row);
+    const endCol = Math.max(sc1, target.col);
+    if (endRow <= sr1 && endCol <= sc1) return null;
+    let top = COL_HEADER_HEIGHT;
+    for (let r = 0; r < sr0; r++) top += getRowHeight(sheet.rowHeights, r);
+    let left = ROW_HEADER_WIDTH;
+    for (let c = 0; c < sc0; c++) left += resolvedGetColWidth(c);
+    let height = 0;
+    for (let r = sr0; r <= endRow; r++) height += getRowHeight(sheet.rowHeights, r);
+    let width = 0;
+    for (let c = sc0; c <= endCol; c++) width += resolvedGetColWidth(c);
+    return { top, left, width, height };
+  }, [selectionManager.selection, selectionManager.fillTarget, sheet.rowHeights, resolvedGetColWidth]);
 
   // Touch support
   const touch = useGridTouch({
@@ -681,6 +759,24 @@ export function SpreadsheetGrid() {
           rowHeaderWidth={ROW_HEADER_WIDTH}
           colHeaderHeight={COL_HEADER_HEIGHT}
         />
+
+        {fillHandlePos && (
+          <FillHandle top={fillHandlePos.top} left={fillHandlePos.left} onPointerDown={selectionManager.handleFillPointerDown} />
+        )}
+
+        {fillPreviewRect && (
+          <div
+            className="absolute pointer-events-none z-[6]"
+            style={{
+              top: fillPreviewRect.top,
+              left: fillPreviewRect.left,
+              width: fillPreviewRect.width,
+              height: fillPreviewRect.height,
+              border: '2px dashed rgba(59, 130, 246, 0.8)',
+              boxSizing: 'border-box',
+            }}
+          />
+        )}
 
         <FreezePaneIndicators frozenRows={sheet.frozenRows} frozenCols={sheet.frozenCols} getColWidth={resolvedGetColWidth} rowHeights={sheet.rowHeights} />
       </div>

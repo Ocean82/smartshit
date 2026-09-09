@@ -3,8 +3,8 @@
  * Extracted from SpreadsheetGrid to isolate selection logic.
  */
 
-import { useCallback, useEffect, useMemo, useRef } from 'react';
-import type { KeyboardEvent, MouseEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { KeyboardEvent, MouseEvent, PointerEvent } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useStore } from '@/store/useStore';
 import { cellToRef, refToCell, colToLetter } from '@/engine/spreadsheet';
@@ -23,6 +23,8 @@ interface SelectionManagerConfig {
    * editor input while still inside the user gesture (iOS suppresses the keyboard
    * for programmatic focus that lands outside the gesture window). */
   onEditStart?: () => void;
+  /** Map a viewport client point to a cell (supplied by SpreadsheetGrid for the fill drag). */
+  pointToCellInViewport?: (clientX: number, clientY: number) => { row: number; col: number };
 }
 
 export function useSelectionManager(config: SelectionManagerConfig) {
@@ -34,6 +36,7 @@ export function useSelectionManager(config: SelectionManagerConfig) {
     findLastDataRow,
     scrollCellIntoView,
     onEditStart,
+    pointToCellInViewport,
   } = config;
 
   const {
@@ -54,6 +57,12 @@ export function useSelectionManager(config: SelectionManagerConfig) {
   const isDragging = useRef(false);
   /** Removes document/window listeners registered for the active drag. */
   const stopDragCleanupRef = useRef<(() => void) | null>(null);
+
+  const isFillDragging = useRef(false);
+  const fillTargetRef = useRef<{ row: number; col: number } | null>(null);
+  const [fillTarget, setFillTarget] = useState<{ row: number; col: number } | null>(null);
+  /** Removes document/window listeners registered for the active fill drag. */
+  const fillCleanupRef = useRef<(() => void) | null>(null);
 
   const mergeIndex = useMemo(() => buildMergeIndex(sheet.mergedCells), [sheet.mergedCells]);
 
@@ -310,6 +319,58 @@ export function useSelectionManager(config: SelectionManagerConfig) {
     useStore.getState().setContextMenu({ x: e.clientX, y: e.clientY, cell: refToCell(row, col) });
   }, []);
 
+  const updateFillTarget = useCallback((clientX: number, clientY: number) => {
+    if (!pointToCellInViewport) return;
+    const t = pointToCellInViewport(clientX, clientY);
+    fillTargetRef.current = t;
+    setFillTarget(t);
+  }, [pointToCellInViewport]);
+
+  const endFillDrag = useCallback((commit: boolean) => {
+    const cleanup = fillCleanupRef.current;
+    fillCleanupRef.current = null;
+    if (cleanup) cleanup();
+    isFillDragging.current = false;
+    const target = fillTargetRef.current;
+    fillTargetRef.current = null;
+    setFillTarget(null);
+    if (commit && target) useStore.getState().autofillTo(target.row, target.col);
+  }, []);
+
+  const handleFillPointerDown = useCallback((e: PointerEvent<HTMLElement>) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    endDrag();          // drop any selection drag state
+    endFillDrag(false); // drop a prior unfinished fill drag
+    isFillDragging.current = true;
+
+    const onPointerMove = (ev: globalThis.PointerEvent) => updateFillTarget(ev.clientX, ev.clientY);
+    const onPointerUp = () => endFillDrag(true);
+    const onBlur = () => endFillDrag(false);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') endFillDrag(false);
+    };
+    const onPointerCancel = () => endFillDrag(false);
+
+    document.addEventListener('pointermove', onPointerMove);
+    document.addEventListener('pointerup', onPointerUp);
+    window.addEventListener('blur', onBlur);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    document.addEventListener('pointercancel', onPointerCancel);
+
+    fillCleanupRef.current = () => {
+      document.removeEventListener('pointermove', onPointerMove);
+      document.removeEventListener('pointerup', onPointerUp);
+      window.removeEventListener('blur', onBlur);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      document.removeEventListener('pointercancel', onPointerCancel);
+    };
+  }, [endDrag, endFillDrag, updateFillTarget]);
+
+  // Clean up a dangling fill drag on unmount.
+  useEffect(() => () => { endFillDrag(false); }, [endFillDrag]);
+
   const getSelectionInfo = useMemo(() => {
     if (!selection) return null;
     const { startRow, startCol, endRow, endCol } = selection;
@@ -345,6 +406,8 @@ export function useSelectionManager(config: SelectionManagerConfig) {
     handleMouseMove,
     handleMouseUp,
     handleContextMenu,
+    handleFillPointerDown,
+    fillTarget,
     getSelectionInfo,
     handleColSelect: (col: number) => setSelection({ startRow: 0, startCol: col, endRow: TOTAL_ROWS - 1, endCol: col }),
     handleRowSelect: (row: number) => setSelection({ startRow: row, startCol: 0, endRow: row, endCol: TOTAL_COLS - 1 }),
