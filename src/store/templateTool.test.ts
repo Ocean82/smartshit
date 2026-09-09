@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { useStore } from './useStore'
 import { createEmptyWorkbook } from '@/engine/spreadsheet'
 import type { ChatMessage } from '@/types'
@@ -79,12 +79,9 @@ describe('template execution through the real store', () => {
 
   it('sendMessage builds a niche template from a gallery prompt without the LLM', async () => {
     useStore.setState({ chatInput: 'Create a wedding budget tracker', isAiProcessing: false })
-    useStore.getState().sendMessage()
+    await useStore.getState().sendMessage()
 
-    // sendMessage kicks off an async IIFE — wait for it to finish
-    await vi.waitFor(() => {
-      expect(useStore.getState().isAiProcessing).toBe(false)
-    })
+    expect(useStore.getState().isAiProcessing).toBe(false)
 
     const sheet = useStore.getState().getActiveSheet()
     expect(sheet.cells['A1']?.value).toBe('Wedding Budget')

@@ -75,7 +75,7 @@ export interface ChatStoreAccess extends ChatState {
 export interface ChatActions {
   setChatInput: (val: string) => void
   addMessage: (msg: ChatMessage) => void
-  sendMessage: () => void
+  sendMessage: () => Promise<void>
   clearChat: () => void
   togglePinMessage: (messageId: string) => void
   getPinnedMessages: () => ChatMessage[]
@@ -111,7 +111,7 @@ export function createChatActions(
 
     sendMessage: () => {
       let input = get().chatInput.trim()
-      if (!input) return
+      if (!input) return Promise.resolve()
 
       let skipCapabilityRouter = false
       let resolvedCapabilityId: string | undefined
@@ -119,7 +119,7 @@ export function createChatActions(
       if (isCapabilitySkipMessage(input)) {
         skipCapabilityRouter = true
         input = stripCapabilitySkipPrefix(input).trim()
-        if (!input) return
+        if (!input) return Promise.resolve()
       } else {
         const pick = parseCapabilityPickMessage(input)
         if (pick) {
@@ -163,8 +163,8 @@ export function createChatActions(
       })
       get().setActivePanel('chat')
 
-      void import('@/services/chatService').then(({ processChatMessage }) => {
-        void processChatMessage(input, streamingMsgId, {
+      return import('@/services/chatService').then(({ processChatMessage }) =>
+        processChatMessage(input, streamingMsgId, {
           getWorkbook: () => get().workbook,
           getActiveSheet: () => get().getActiveSheet(),
           getComputedValue: (row, col) => get().getComputedValue(row, col),
@@ -201,7 +201,7 @@ export function createChatActions(
           skipCapabilityRouter,
           resolvedCapabilityId,
         })
-      })
+      )
     },
 
     runTemplateTool: (tool) => {
