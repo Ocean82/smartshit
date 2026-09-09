@@ -105,6 +105,7 @@ export interface AppState extends UIState, UIActions, FileActions, ChatActions {
   paste: () => void
   pasteFromClipboard: () => Promise<void>
   autofillTo: (endRow: number, endCol: number) => void
+  setRowHeight: (row: number, height: number) => void
 
   // Data operations
   addChart: (chart: ChartConfig) => void

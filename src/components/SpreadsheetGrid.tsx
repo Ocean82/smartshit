@@ -9,7 +9,7 @@ import { getCheckboxToggleValue } from '@/lib/checkbox';
 import { findLastDataRow } from '@/lib/sheetSort';
 import { columnDataBarPeerValues, columnColorScalePeerValues, columnIconSetPeerValues } from '@/lib/conditionalFormat';
 import { findActivePendingPreview } from '@/lib/pendingActionPreview';
-import { getRowHeight } from '@/lib/rowLayout';
+import { getRowHeight, clampRowHeight } from '@/lib/rowLayout';
 import { useTouch } from '@/hooks/useTouch';
 import { getCellNotesService } from '@/lib/cellNotes';
 import { buildMergeIndex, isMergeAnchor, type MergeRange } from '@/lib/merge';
@@ -162,6 +162,61 @@ function useColumnResize(getColWidth: (col: number) => number, getActiveSheet: (
   }, [getComputedValue, getActiveSheet]);
 
   return { columnWidths, handleResizeStart, handleResizeMove, handleResizeEnd, handleAutoFitColumn };
+}
+
+// ─── Row Resize Hook ──────────────────────────────────────────────────────────
+
+function useRowResize(getRowHeightFor: (row: number) => number, onCommit: (row: number, height: number) => void) {
+  const [rowHeights, setRowHeights] = useState<Record<number, number>>({});
+  const resizeStartRef = useRef<{ row: number; startY: number; startHeight: number } | null>(null);
+
+  const workbookId = useStore((s) => s.workbook.id);
+  useEffect(() => { setRowHeights({}); }, [workbookId]);
+
+  useEffect(() => () => {
+    resizeStartRef.current = null;
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+  }, []);
+
+  const handleResizeEnd = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    const start = resizeStartRef.current;
+    resizeStartRef.current = null;
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+    if (!start) return;
+    const finalHeight = clampRowHeight(start.startHeight + (e.clientY - start.startY));
+    setRowHeights((prev) => {
+      const next = { ...prev };
+      delete next[start.row];
+      return next;
+    });
+    if (finalHeight !== start.startHeight) onCommit(start.row, finalHeight);
+  }, [onCommit]);
+
+  const handleResizeMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    const start = resizeStartRef.current;
+    if (!start) return;
+    if ((e.buttons & 1) === 0) { handleResizeEnd(e); return; }
+    setRowHeights((prev) => ({
+      ...prev,
+      [start.row]: clampRowHeight(start.startHeight + (e.clientY - start.startY)),
+    }));
+  }, [handleResizeEnd]);
+
+  const handleResizeStart = useCallback((row: number, e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    resizeStartRef.current = { row, startY: e.clientY, startHeight: getRowHeightFor(row) };
+    document.body.style.cursor = 'row-resize';
+    document.body.style.userSelect = 'none';
+  }, [getRowHeightFor]);
+
+  return { rowHeights, handleResizeStart, handleResizeMove, handleResizeEnd };
 }
 
 // ─── Touch Adapter Hook ───────────────────────────────────────────────────────
@@ -318,6 +373,43 @@ function ColumnHeader({ col, width, isSelected, sortDirection, isFiltered, onSel
   );
 }
 
+// ─── Row Header ───────────────────────────────────────────────────────────────
+
+interface RowHeaderProps {
+  row: number;
+  height: number;
+  isSelected: boolean;
+  onSelect: (row: number) => void;
+  onResizeStart: (row: number, e: React.PointerEvent<HTMLDivElement>) => void;
+  onResizeMove: (e: React.PointerEvent<HTMLDivElement>) => void;
+  onResizeEnd: (e: React.PointerEvent<HTMLDivElement>) => void;
+}
+
+function RowHeader({ row, height, isSelected, onSelect, onResizeStart, onResizeMove, onResizeEnd }: RowHeaderProps) {
+  return (
+    <div
+      role="rowheader"
+      aria-colindex={1}
+      className={`relative group shrink-0 border-b border-r border-gray-300 flex items-center justify-center text-[11px] font-medium cursor-pointer transition-colors ${
+        isSelected
+          ? 'bg-blue-100 text-blue-700 border-blue-300'
+          : 'bg-gradient-to-r from-gray-50 to-gray-100 text-gray-500 hover:bg-gray-200'
+      }`}
+      style={{ width: ROW_HEADER_WIDTH, height }}
+      onClick={() => onSelect(row)}
+    >
+      {row + 1}
+      <div
+        className="row-resize-handle absolute bottom-0 left-0 right-0 h-1.5 cursor-row-resize hover:bg-blue-400 opacity-0 group-hover:opacity-100 z-10 touch-none"
+        onPointerDown={(e) => onResizeStart(row, e)}
+        onPointerMove={onResizeMove}
+        onPointerUp={onResizeEnd}
+        onPointerCancel={onResizeEnd}
+      />
+    </div>
+  );
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export function SpreadsheetGrid() {
@@ -355,6 +447,25 @@ export function SpreadsheetGrid() {
     return resizeState.columnWidths[col] || sheet.columnWidths[col] || DEFAULT_CELL_WIDTH;
   }, [resizeState.columnWidths, sheet.columnWidths]);
 
+  // Row resize: local overrides give live feedback during the drag, then a
+  // single store commit writes the final height (undoable) on pointerup.
+  const committedGetRowHeight = useCallback((row: number) => getRowHeight(sheet.rowHeights, row), [sheet.rowHeights]);
+
+  const rowResize = useRowResize(
+    committedGetRowHeight,
+    useCallback((row: number, h: number) => { useStore.getState().setRowHeight(row, h); }, []),
+  );
+
+  const resolvedRowHeights = useMemo(() => {
+    if (Object.keys(rowResize.rowHeights).length === 0) return sheet.rowHeights;
+    return { ...sheet.rowHeights, ...rowResize.rowHeights };
+  }, [sheet.rowHeights, rowResize.rowHeights]);
+
+  const viewportSheet = useMemo(() => {
+    if (Object.keys(rowResize.rowHeights).length === 0) return sheet;
+    return { ...sheet, rowHeights: resolvedRowHeights };
+  }, [sheet, resolvedRowHeights, rowResize.rowHeights]);
+
   // Merged-cell index for the active sheet
   const mergeIndex = useMemo(() => buildMergeIndex(sheet.mergedCells), [sheet.mergedCells]);
 
@@ -390,7 +501,7 @@ export function SpreadsheetGrid() {
 
   // Viewport (virtualization)
   const viewport = useGridViewport({
-    sheet,
+    sheet: viewportSheet,
     getComputedValue,
     activeFilters,
     getColWidth: resolvedGetColWidth,

@@ -14,6 +14,10 @@ import {
   rowHeightsArray,
   rowCumulativeOffsets,
   rowIndexAtY,
+  MIN_ROW_HEIGHT,
+  MAX_ROW_HEIGHT,
+  clampRowHeight,
+  setRowAt,
 } from './rowLayout'
 
 describe('getRowHeight', () => {
@@ -68,5 +72,41 @@ describe('rowIndexAtY', () => {
   it('clamps to the last row for offsets beyond the total height', () => {
     const offsets = rowCumulativeOffsets([28, 40, 28, 56])
     expect(rowIndexAtY(offsets, 500)).toBe(3)
+  })
+})
+
+describe('clampRowHeight', () => {
+  it('clamps below the minimum', () => {
+    expect(clampRowHeight(5)).toBe(MIN_ROW_HEIGHT)
+  })
+
+  it('clamps above the maximum', () => {
+    expect(clampRowHeight(99999)).toBe(MAX_ROW_HEIGHT)
+  })
+
+  it('rounds fractional heights', () => {
+    expect(clampRowHeight(33.6)).toBe(34)
+  })
+
+  it('returns DEFAULT_ROW_HEIGHT for non-finite input', () => {
+    expect(clampRowHeight(Number.NaN)).toBe(DEFAULT_ROW_HEIGHT)
+  })
+
+  it('passes in-range values through unchanged', () => {
+    expect(clampRowHeight(64)).toBe(64)
+  })
+})
+
+describe('setRowAt', () => {
+  it('sets a clamped height for the row without mutating the input', () => {
+    const base = { 1: 40 }
+    const next = setRowAt(base, 3, 56.4)
+    expect(next).toEqual({ 1: 40, 3: 56 })
+    expect(base).toEqual({ 1: 40 })
+  })
+
+  it('clamps out-of-range heights to the bounds', () => {
+    expect(setRowAt({}, 0, -5)).toEqual({ 0: MIN_ROW_HEIGHT })
+    expect(setRowAt({}, 0, 5000)).toEqual({ 0: MAX_ROW_HEIGHT })
   })
 })

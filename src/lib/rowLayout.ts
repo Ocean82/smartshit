@@ -59,3 +59,28 @@ export function rowIndexAtY(offsets: number[], pixelY: number): number {
   }
   return lo
 }
+
+/** Minimum pixel height a row can be resized to. */
+export const MIN_ROW_HEIGHT = 20
+
+/** Maximum pixel height a row can be resized to. */
+export const MAX_ROW_HEIGHT = 400
+
+/**
+ * Clamp a proposed pixel height into [MIN_ROW_HEIGHT, MAX_ROW_HEIGHT],
+ * rounding to a whole pixel. Non-finite input falls back to the default.
+ */
+export function clampRowHeight(height: number): number {
+  if (!Number.isFinite(height)) return DEFAULT_ROW_HEIGHT
+  return Math.min(MAX_ROW_HEIGHT, Math.max(MIN_ROW_HEIGHT, Math.round(height)))
+}
+
+/**
+ * Return a new rowHeights map with `row` set to the clamped height.
+ * The input map is not mutated.
+ */
+export function setRowAt(rowHeights: Record<number, number>, row: number, height: number): Record<number, number> {
+  const next = { ...rowHeights }
+  next[row] = clampRowHeight(height)
+  return next
+}

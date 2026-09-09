@@ -31,6 +31,7 @@ import { mergeChartLayout } from '@/lib/chartLayout'
 import { toMergeRange, parseMergeRange, rangesOverlap } from '@/lib/merge'
 import { encodeCellBlock, parseGridClipboard } from '@/lib/clipboardCodec'
 import { buildFillPattern, adjustFormulaRefs, fillCellAt, type FilledCell } from '@/lib/autofill'
+import { clampRowHeight, getRowHeight, setRowAt } from '@/lib/rowLayout'
 import { MAX_UNDO_STACK } from '../storeTypes'
 
 /** Convert raw clipboard text into a typed value suitable for setCellValue. */
@@ -87,6 +88,7 @@ export interface WorkbookSliceState {
   paste: () => void
   pasteFromClipboard: () => Promise<void>
   autofillTo: (endRow: number, endCol: number) => void
+  setRowHeight: (row: number, height: number) => void
   insertRow: (afterRow: number) => void
   deleteRow: (row: number) => void
   renameSheet: (sheetId: string, name: string) => void
@@ -119,6 +121,7 @@ export interface WorkbookActions {
   paste: () => void
   pasteFromClipboard: () => Promise<void>
   autofillTo: (endRow: number, endCol: number) => void
+  setRowHeight: (row: number, height: number) => void
   addChart: (chart: ChartConfig) => void
   removeChart: (chartId: string) => void
   updateChartPosition: (chartId: string, x: number, y: number, size?: { width: number; height: number }) => void
@@ -368,6 +371,20 @@ export function createWorkbookActions(
             if (!parsed) return false;
             return !rangesOverlap(parsed, selRange);
           });
+          s.workbook.updatedAt = Date.now();
+        });
+      },
+      setRowHeight: (row, height) => {
+        if (row < 0) return;
+        const sheet = get().getActiveSheet();
+        const current = getRowHeight(sheet.rowHeights, row);
+        const clamped = clampRowHeight(height);
+        if (clamped === current) return;
+        get().pushHistory('Row height');
+        set((s) => {
+          const sh = s.workbook.sheets.find((x) => x.id === s.activeSheetId);
+          if (!sh) return;
+          sh.rowHeights = setRowAt(sh.rowHeights, row, clamped);
           s.workbook.updatedAt = Date.now();
         });
       },
