@@ -17,6 +17,14 @@ export interface CellFormat {
   bold?: boolean;
   italic?: boolean;
   underline?: boolean;
+  /** Strikethrough text decoration (independent of underline; both can be set). */
+  strikethrough?: boolean;
+  /** Font family name, e.g. "Arial", "Times New Roman", "Courier New". */
+  fontFamily?: string;
+  /** Vertical alignment of cell content. Only applies when explicitly set. */
+  verticalAlign?: 'top' | 'middle' | 'bottom';
+  /** When true, long text wraps within the cell instead of truncating. */
+  textWrap?: boolean;
   fontSize?: number;
   fontColor?: string;
   bgColor?: string;

@@ -8,7 +8,8 @@
 
 import { describe, it, expect, afterEach } from 'vitest'
 import * as XLSX from 'xlsx'
-import { importWorkbookFromFileWithMeta } from './xlsx'
+import { importWorkbookFromFileWithMeta, buildXlsxWorkbook } from './xlsx'
+import { createEmptyWorkbook } from '@/engine/spreadsheet'
 
 /** Minimal File shim: the importer only needs `name` and `arrayBuffer()`. */
 function fakeFile(name: string, buffer: ArrayBuffer): File {
@@ -74,7 +75,7 @@ describe('workbook import', () => {
     expect(Array.isArray(meta.warnings)).toBe(true)
   })
 
-  it('preserves merged cell regions as anchor refs', async () => {
+  it('preserves merged cell regions as canonical range refs', async () => {
     const book = XLSX.utils.book_new()
     const ws = XLSX.utils.aoa_to_sheet([['Header', 'B', 'C'], [1, 2, 3]])
     // Merge A1:C1 (a header spanning three columns) and B2:C2.
@@ -88,6 +89,21 @@ describe('workbook import', () => {
     const { workbook } = await importWorkbookFromFileWithMeta(fakeFile('merged.xlsx', buffer))
     const sheet = workbook.sheets[0]
 
-    expect(sheet.mergedCells).toEqual(['A1', 'B2'])
+    expect(sheet.mergedCells).toEqual(['A1:C1', 'B2:C2'])
+  })
+
+  it('export write→read round-trips merged ranges', async () => {
+    const wb = createEmptyWorkbook('Export Merge')
+    const sheet = wb.sheets[0]
+    sheet.cells['A1'] = { value: 'Head' }
+    sheet.cells['B2'] = { value: 7 }
+    sheet.mergedCells = ['A1:C1', 'E5:F6']
+
+    const book = buildXlsxWorkbook(wb)
+    const buffer = XLSX.write(book, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer
+    const { workbook } = await importWorkbookFromFileWithMeta(fakeFile('roundtrip.xlsx', buffer))
+    const imported = workbook.sheets[0]
+
+    expect(imported.mergedCells).toEqual(['A1:C1', 'E5:F6'])
   })
 })

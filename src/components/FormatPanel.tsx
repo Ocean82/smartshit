@@ -16,6 +16,8 @@ const BORDER_STYLES = [
 
 const FONT_SIZES = [10, 11, 12, 13, 14, 16, 18, 20, 24, 28, 32, 36];
 
+const FONT_FAMILIES = ['System', 'Arial', 'Calibri', 'Times New Roman', 'Georgia', 'Courier New', 'Verdana', 'Tahoma', 'Trebuchet MS', 'Comic Sans MS'];
+
 export function FormatPanel() {
   const { showFormatPanel, setShowFormatPanel, selection, getActiveSheet, setRangeFormat, applyOuterBorders } = useStore();
   const sheet = getActiveSheet();
@@ -82,7 +84,7 @@ export function FormatPanel() {
     );
   }
 
-  function toggleStyle(key: 'bold' | 'italic' | 'underline') {
+  function toggleStyle(key: 'bold' | 'italic' | 'underline' | 'strikethrough' | 'textWrap') {
     if (!hasSelection) return;
     setRangeFormat({ [key]: !cellFormat?.[key] } as Partial<CellFormat>);
   }
@@ -115,6 +117,17 @@ export function FormatPanel() {
         <div className={`space-y-2 ${!hasSelection ? 'opacity-50 pointer-events-none' : ''}`}>
           <div className="flex gap-2">
             <select
+              value={cellFormat?.fontFamily || 'System'}
+              onChange={(e) => setRangeFormat({ fontFamily: e.target.value === 'System' ? '' : e.target.value })}
+              className="border border-gray-200 rounded px-2 py-1 text-xs flex-1"
+              aria-label="Font family"
+              disabled={!hasSelection}
+            >
+              {FONT_FAMILIES.map((f) => (
+                <option key={f} value={f}>{f}</option>
+              ))}
+            </select>
+            <select
               value={cellFormat?.fontSize || 13}
               onChange={(e) => setRangeFormat({ fontSize: parseInt(e.target.value, 10) })}
               className="border border-gray-200 rounded px-2 py-1 text-xs flex-1"
@@ -131,6 +144,7 @@ export function FormatPanel() {
               ['bold', 'B'],
               ['italic', 'I'],
               ['underline', 'U'],
+              ['strikethrough', 'S'],
             ] as const).map(([key, label]) => (
               <button
                 key={key}
@@ -164,6 +178,39 @@ export function FormatPanel() {
                 {align === 'left' ? '⫷' : align === 'center' ? '☰' : '⫸'}
               </button>
             ))}
+          </div>
+          <div className="flex gap-1">
+            {(['top', 'middle', 'bottom'] as const).map((v) => (
+              <button
+                key={v}
+                type="button"
+                disabled={!hasSelection}
+                onClick={() =>
+                  setRangeFormat({ verticalAlign: cellFormat?.verticalAlign === v ? undefined : v })
+                }
+                className={`flex-1 h-7 rounded border text-[10px] ${
+                  cellFormat?.verticalAlign === v
+                    ? 'bg-blue-100 border-blue-300 text-blue-700'
+                    : controlClass
+                }`}
+                title={`Align ${v}`}
+              >
+                {v}
+              </button>
+            ))}
+            <button
+              type="button"
+              disabled={!hasSelection}
+              onClick={() => toggleStyle('textWrap')}
+              className={`flex-1 h-7 rounded border text-[10px] ${
+                cellFormat?.textWrap
+                  ? 'bg-blue-100 border-blue-300 text-blue-700'
+                  : controlClass
+              }`}
+              title="Wrap text"
+            >
+              Wrap
+            </button>
           </div>
           <div className="flex gap-2">
             <div>

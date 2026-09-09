@@ -9,6 +9,8 @@ import {
   cellToRef,
 } from '@/engine/spreadsheet'
 import { cellScalar } from '@/lib/formatUtils'
+import { mapExcelVerticalAlign } from '@/io/xlsxFormat'
+import { parseMergeRange } from '@/lib/merge'
 
 export interface WorkbookImportMeta {
   appliedMaxRows: number
@@ -331,6 +333,12 @@ export async function importWorkbookFromFileWithMeta(file: File): Promise<Workbo
             if (style.font?.bold) format.bold = true
             if (style.font?.italic) format.italic = true
 
+            // Strikethrough (font.strike)
+            if (style.font?.strike) format.strikethrough = true
+
+            // Font family (font.name)
+            if (style.font?.name) format.fontFamily = style.font.name
+
             // Borders
             if (style.border) {
               const borders: Record<string, string> = {}
@@ -348,6 +356,13 @@ export async function importWorkbookFromFileWithMeta(file: File): Promise<Workbo
                 format.textAlign = align
               }
             }
+
+            // Vertical alignment (top/center/bottom -> top/middle/bottom)
+            const verticalAlign = mapExcelVerticalAlign(style.alignment?.vertical)
+            if (verticalAlign) format.verticalAlign = verticalAlign
+
+            // Text wrap
+            if (style.alignment?.wrapText === true) format.textWrap = true
 
             // Apply format to cell
             if (Object.keys(format).length > 0) {
@@ -414,17 +429,24 @@ export async function importWorkbookFromFileWithMeta(file: File): Promise<Workbo
       }
     }
 
-    // Extract merged cell regions — anchor (top-left) ref for each merge
+    // Extract merged cell regions — canonical range refs (e.g. "A1:C1")
     if (ws && (ws as Record<string, unknown>)['!merges']) {
-      const merges = (ws as Record<string, unknown>)['!merges'] as Array<{ s: { r: number; c: number } }>
+      const merges = (ws as Record<string, unknown>)['!merges'] as Array<{ s: { r: number; c: number }; e?: { r: number; c: number } }>
       const refs: string[] = []
       for (const merge of merges) {
         if (!merge?.s) continue
         const { r, c } = merge.s
         if (r >= maxRows || c >= maxCols) continue
-        refs.push(refToCell(r, c))
+        if (merge.e) {
+          const er = Math.min(merge.e.r, maxRows - 1)
+          const ec = Math.min(merge.e.c, maxCols - 1)
+          if (er < r || ec < c) continue
+          refs.push(`${refToCell(r, c)}:${refToCell(er, ec)}`)
+        } else {
+          refs.push(refToCell(r, c))
+        }
       }
-      if (refs.length > 0) sheet.mergedCells = refs
+      if (refs.length > 0) sheet.mergedCells = refs.sort()
     }
 
     return sheet
@@ -469,15 +491,30 @@ export async function importWorkbookFromFile(file: File): Promise<WorkbookData> 
   return result.workbook
 }
 
-export function exportWorkbookToXlsx(workbook: WorkbookData, filename?: string): void {
+export function buildXlsxWorkbook(workbook: WorkbookData): XLSX.WorkBook {
   const book = XLSX.utils.book_new()
   for (const sheet of workbook.sheets) {
-    XLSX.utils.book_append_sheet(
-      book,
-      XLSX.utils.aoa_to_sheet(sheetToMatrix(sheet)),
-      sheet.name.slice(0, 31),
-    )
+    const ws = XLSX.utils.aoa_to_sheet(sheetToMatrix(sheet))
+    if (sheet.mergedCells && sheet.mergedCells.length > 0) {
+      const merges: Array<{ s: { r: number; c: number }; e: { r: number; c: number } }> = []
+      for (const ref of sheet.mergedCells) {
+        const parsed = parseMergeRange(ref)
+        if (parsed) {
+          merges.push({
+            s: { r: parsed.startRow, c: parsed.startCol },
+            e: { r: parsed.endRow, c: parsed.endCol },
+          })
+        }
+      }
+      if (merges.length > 0) ws['!merges'] = merges
+    }
+    XLSX.utils.book_append_sheet(book, ws, sheet.name.slice(0, 31))
   }
+  return book
+}
+
+export function exportWorkbookToXlsx(workbook: WorkbookData, filename?: string): void {
+  const book = buildXlsxWorkbook(workbook)
   const safeName = (filename ?? workbook.name).replace(/[^\w\s-]/g, '').trim() || 'workbook'
   XLSX.writeFile(book, `${safeName}.xlsx`)
 }

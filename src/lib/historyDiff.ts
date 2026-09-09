@@ -29,6 +29,10 @@ export interface SheetPatch {
   nameAfter?: string
   colWidthsBefore?: Record<number, number>
   colWidthsAfter?: Record<number, number>
+  mergedCellsBefore?: string[]
+  mergedCellsAfter?: string[]
+  rowHeightsBefore?: Record<number, number>
+  rowHeightsAfter?: Record<number, number>
 }
 
 export interface WorkbookPatch {
@@ -79,7 +83,7 @@ export function diffWorkbooks(before: WorkbookData, after: WorkbookData): Workbo
     const afterSheet = after.sheets[i]
     const sheetPatch = diffSheet(beforeSheet, afterSheet)
 
-    if (sheetPatch.cells.length > 0 || sheetPatch.nameBefore !== undefined || sheetPatch.colWidthsBefore !== undefined) {
+    if (sheetPatch.cells.length > 0 || sheetPatch.nameBefore !== undefined || sheetPatch.colWidthsBefore !== undefined || sheetPatch.mergedCellsBefore !== undefined || sheetPatch.rowHeightsBefore !== undefined) {
       patch.sheets.push(sheetPatch)
     }
   }
@@ -105,6 +109,22 @@ function diffSheet(before: SheetData, after: SheetData): SheetPatch {
   if (JSON.stringify(bw) !== JSON.stringify(aw)) {
     patch.colWidthsBefore = bw as Record<number, number>
     patch.colWidthsAfter = aw as Record<number, number>
+  }
+
+  // Merged cells change
+  const bm = before.mergedCells || []
+  const am = after.mergedCells || []
+  if (JSON.stringify(bm) !== JSON.stringify(am)) {
+    patch.mergedCellsBefore = bm
+    patch.mergedCellsAfter = am
+  }
+
+  // Row heights change
+  const br = before.rowHeights || {}
+  const ar = after.rowHeights || {}
+  if (JSON.stringify(br) !== JSON.stringify(ar)) {
+    patch.rowHeightsBefore = br as Record<number, number>
+    patch.rowHeightsAfter = ar as Record<number, number>
   }
 
   // Cell-level diff
@@ -157,6 +177,13 @@ export function applyUndo(current: WorkbookData, entry: HistoryEntry): WorkbookD
     if (sheetPatch.colWidthsBefore !== undefined) {
       sheet.columnWidths = sheetPatch.colWidthsBefore
     }
+    if (sheetPatch.mergedCellsBefore !== undefined) {
+      if (sheetPatch.mergedCellsBefore.length === 0) delete sheet.mergedCells
+      else sheet.mergedCells = sheetPatch.mergedCellsBefore
+    }
+    if (sheetPatch.rowHeightsBefore !== undefined) {
+      sheet.rowHeights = sheetPatch.rowHeightsBefore
+    }
 
     for (const cellPatch of sheetPatch.cells) {
       if (cellPatch.before === null) {
@@ -194,6 +221,13 @@ export function applyRedo(current: WorkbookData, entry: HistoryEntry): WorkbookD
     }
     if (sheetPatch.colWidthsAfter !== undefined) {
       sheet.columnWidths = sheetPatch.colWidthsAfter
+    }
+    if (sheetPatch.mergedCellsAfter !== undefined) {
+      if (sheetPatch.mergedCellsAfter.length === 0) delete sheet.mergedCells
+      else sheet.mergedCells = sheetPatch.mergedCellsAfter
+    }
+    if (sheetPatch.rowHeightsAfter !== undefined) {
+      sheet.rowHeights = sheetPatch.rowHeightsAfter
     }
 
     for (const cellPatch of sheetPatch.cells) {

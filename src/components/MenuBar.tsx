@@ -354,6 +354,8 @@ export function MenuBar() {
         { label: 'Bold', shortcut: 'Ctrl+B', action: () => { useStore.getState().setRangeFormat({ bold: true }); setOpenMenu(null) } },
         { label: 'Italic', shortcut: 'Ctrl+I', action: () => { useStore.getState().setRangeFormat({ italic: true }); setOpenMenu(null) } },
         { label: 'Underline', shortcut: 'Ctrl+U', action: () => { useStore.getState().setRangeFormat({ underline: true }); setOpenMenu(null) }, dividerAfter: true },
+        { label: 'Merge Cells', action: () => { pushHistory('Merge cells'); useStore.getState().mergeSelection(); setOpenMenu(null) }, disabled: !selection },
+        { label: 'Unmerge Cells', action: () => { pushHistory('Unmerge cells'); useStore.getState().unmergeSelection(); setOpenMenu(null) }, disabled: !selection, dividerAfter: true },
         { label: 'Conditional Formatting...', action: () => { setShowConditionalFormatDialog(true); setOpenMenu(null) } },
         { label: 'Number Format Panel', action: () => { setShowFormatPanel(true); setOpenMenu(null) } },
       ],

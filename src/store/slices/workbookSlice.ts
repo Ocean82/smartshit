@@ -28,6 +28,7 @@ import { getActionRecorder } from '@/lib/actionRecorder'
 import { validateCell } from '@/lib/validation'
 import type { HistoryEntry } from '@/lib/historyDiff'
 import { mergeChartLayout } from '@/lib/chartLayout'
+import { toMergeRange, parseMergeRange, rangesOverlap } from '@/lib/merge'
 import { MAX_UNDO_STACK } from '../storeTypes'
 
 export interface WorkbookSliceState {
@@ -73,6 +74,8 @@ export interface WorkbookActions {
   setRangeFormat: (format: Partial<CellFormat>) => void
   setSelection: (sel: Selection | null) => void
   addSelection: (sel: Selection) => void
+  mergeSelection: (desc?: string) => void
+  unmergeSelection: (desc?: string) => void
   setEditingCell: (cellId: string | null) => void
   setEditValue: (val: string) => void
   setCellValidation: (cellId: string, validation: DataValidation | null) => void
@@ -284,6 +287,54 @@ export function createWorkbookActions(
         }
         s.selection = sel;
       }),
+      mergeSelection: (desc) => {
+        const sel = get().selection;
+        if (!sel) return;
+        const minR = Math.min(sel.startRow, sel.endRow);
+        const maxR = Math.max(sel.startRow, sel.endRow);
+        const minC = Math.min(sel.startCol, sel.endCol);
+        const maxC = Math.max(sel.startCol, sel.endCol);
+        const newRange = toMergeRange(minR, minC, maxR, maxC);
+        if (!newRange) return;
+        get().pushHistory(desc ?? 'Merge cells');
+        set((s) => {
+          const sheet = s.workbook.sheets.find((sh) => sh.id === s.activeSheetId);
+          if (!sheet) return;
+          const parsedNew = parseMergeRange(newRange);
+          if (!parsedNew) return;
+          const existing = sheet.mergedCells ? [...sheet.mergedCells] : [];
+          const remaining = existing.filter((ref) => {
+            const parsed = parseMergeRange(ref);
+            if (!parsed) return false;
+            return !rangesOverlap(parsed, parsedNew);
+          });
+          remaining.push(newRange);
+          sheet.mergedCells = remaining.sort();
+          s.workbook.updatedAt = Date.now();
+        });
+      },
+
+      unmergeSelection: (desc) => {
+        const sel = get().selection;
+        if (!sel) return;
+        const minR = Math.min(sel.startRow, sel.endRow);
+        const maxR = Math.max(sel.startRow, sel.endRow);
+        const minC = Math.min(sel.startCol, sel.endCol);
+        const maxC = Math.max(sel.startCol, sel.endCol);
+        const selRange = { startRow: minR, startCol: minC, endRow: maxR, endCol: maxC };
+        get().pushHistory(desc ?? 'Unmerge cells');
+        set((s) => {
+          const sheet = s.workbook.sheets.find((sh) => sh.id === s.activeSheetId);
+          if (!sheet) return;
+          const existing = sheet.mergedCells ? [...sheet.mergedCells] : [];
+          sheet.mergedCells = existing.filter((ref) => {
+            const parsed = parseMergeRange(ref);
+            if (!parsed) return false;
+            return !rangesOverlap(parsed, selRange);
+          });
+          s.workbook.updatedAt = Date.now();
+        });
+      },
       setEditingCell: (cellId) => set((s) => { s.editingCell = cellId; }),
       setEditValue: (val) => set((s) => { s.editValue = val; }),
 

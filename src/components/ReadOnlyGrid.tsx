@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import type { CSSProperties } from 'react'
 import type { SheetData } from '@/types'
 import { refToCell, cellToRef } from '@/engine/spreadsheet'
+import { textDecorationStyle, isWrapEnabled } from '@/lib/cellFormat'
 
 /** Convert a zero-based column index to a spreadsheet label (A, B, ..., Z, AA, AB). */
 export function columnLabel(index: number): string {
@@ -88,7 +89,11 @@ export function ReadOnlyGrid({ sheet }: { sheet: SheetData }) {
               const style: CSSProperties = {
                 fontWeight: fmt?.bold ? 'bold' : undefined,
                 fontStyle: fmt?.italic ? 'italic' : undefined,
-                textDecoration: fmt?.underline ? 'underline' : undefined,
+                textDecoration: textDecorationStyle(fmt) || undefined,
+                fontFamily: fmt?.fontFamily ?? undefined,
+                verticalAlign: fmt?.verticalAlign ?? undefined,
+                whiteSpace: isWrapEnabled(fmt) ? 'normal' : undefined,
+                overflowWrap: isWrapEnabled(fmt) ? 'break-word' : undefined,
                 color: fmt?.fontColor ?? undefined,
                 backgroundColor: fmt?.bgColor ?? undefined,
                 textAlign: fmt?.textAlign ?? 'left',

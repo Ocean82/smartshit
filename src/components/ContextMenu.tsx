@@ -7,7 +7,8 @@ import { getCellNotesService } from '@/lib/cellNotes'
 import { AnchoredPanel } from '@/components/AnchoredPanel'
 import {
   Copy, Scissors, ClipboardPaste, Trash2, Plus,
-  ArrowDown, ArrowRight, Bold, Italic, Shield, StickyNote, X, Check,
+  ArrowDown, ArrowRight, Bold, Italic, Strikethrough, WrapText, Shield, StickyNote, X, Check,
+  TableCellsMerge, TableCellsSplit,
 } from 'lucide-react'
 
 interface ContextAction {
@@ -31,6 +32,9 @@ export function ContextMenu() {
     deleteColumn,
     setRangeFormat,
     setCellValue,
+    mergeSelection,
+    unmergeSelection,
+    selection,
     activeSheetId,
   } = useStore(useShallow((s) => ({
     contextMenu: s.contextMenu,
@@ -45,6 +49,9 @@ export function ContextMenu() {
     deleteColumn: s.deleteColumn,
     setRangeFormat: s.setRangeFormat,
     setCellValue: s.setCellValue,
+    mergeSelection: s.mergeSelection,
+    unmergeSelection: s.unmergeSelection,
+    selection: s.selection,
     activeSheetId: s.activeSheetId,
   })))
 
@@ -143,12 +150,36 @@ export function ContextMenu() {
       shortcut: 'Ctrl+I',
       action: () => runAndClose(() => setRangeFormat({ italic: true })),
     },
+    {
+      icon: <Strikethrough size={13} />,
+      label: 'Strikethrough',
+      shortcut: 'Ctrl+5',
+      action: () => runAndClose(() => setRangeFormat({ strikethrough: true })),
+    },
+    {
+      icon: <WrapText size={13} />,
+      label: 'Wrap Text',
+      action: () => runAndClose(() => setRangeFormat({ textWrap: true })),
+    },
     null,
     {
       icon: <Trash2 size={13} />,
       label: 'Clear Cell',
       action: () => runAndClose(() => { pushHistory('Clear'); setCellValue(contextMenu.cell, null) }),
     },
+    ...(selection ? [
+      null,
+      {
+        icon: <TableCellsMerge size={13} />,
+        label: 'Merge Cells',
+        action: () => runAndClose(() => { pushHistory('Merge cells'); mergeSelection() }),
+      },
+      {
+        icon: <TableCellsSplit size={13} />,
+        label: 'Unmerge Cells',
+        action: () => runAndClose(() => { pushHistory('Unmerge cells'); unmergeSelection() }),
+      },
+    ] : []),
     null,
     {
       icon: <Shield size={13} />,

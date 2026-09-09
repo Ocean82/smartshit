@@ -1,5 +1,6 @@
 import type { WorkbookData, SheetData } from '@/types'
 import { createEmptyWorkbook } from '@/engine/spreadsheet'
+import { normalizeMergeRange } from '@/lib/merge'
 
 const PACKAGE_TYPE = 'smartsht-workbook' as const
 
@@ -85,6 +86,11 @@ export function normalizeImportedWorkbook(workbook: WorkbookData): WorkbookData 
     columnWidths: sheet.columnWidths ?? {},
     rowHeights: sheet.rowHeights ?? {},
     charts: sheet.charts ?? [],
+    // Canonicalize merges (legacy workbooks stored bare anchors) and drop
+    // malformed entries before the engine loads them.
+    mergedCells: (sheet.mergedCells ?? [])
+      .map((ref) => normalizeMergeRange(ref))
+      .filter((ref): ref is string => ref != null),
   }))
   const validSheets = sheets.length > 0 ? sheets : fallback.sheets
   const activeSheetId = validSheets.some((s) => s.id === workbook.activeSheetId)

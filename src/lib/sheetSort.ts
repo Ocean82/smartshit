@@ -8,6 +8,7 @@
 import { cellToRef, refToCell } from '@/engine/spreadsheet'
 import type { CellData, SheetData, SortRule } from '@/types'
 import { findSummaryRowIndexes } from '@/lib/sheetRows'
+import { parseMergeRange } from '@/lib/merge'
 
 export function findLastDataRow(sheet: SheetData): number {
   let max = 0
@@ -180,11 +181,11 @@ export function isSortSafe(sheet: SheetData, startRow: number, endRow: number): 
   if (!sheet.mergedCells?.length) return true
 
   for (const mergeId of sheet.mergedCells) {
-    const ref = cellToRef(mergeId)
-    // If a merged cell's anchor is within the sort range, check if it spans rows
-    if (ref.row >= startRow && ref.row <= endRow) {
-      // For now, we consider any merge in the sort range as potentially unsafe
-      // A more sophisticated check would parse the merge extent
+    const range = parseMergeRange(mergeId)
+    if (!range) continue
+    // Any merge intersecting the sort row span is treated as unsafe: sorting
+    // would reshape the merged region in ways Excel refuses to do.
+    if (range.startRow <= endRow && range.endRow >= startRow) {
       return false
     }
   }

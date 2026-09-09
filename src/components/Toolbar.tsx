@@ -6,7 +6,9 @@ import { recordTelemetry } from '@/ai/telemetry';
 import { isBankCSV, parseBankCSV } from '@/lib/bankImport';
 import { workbookHasContent } from '@/lib/workbookGuard';
 import {
-  Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight,
+  Bold, Italic, Underline, Strikethrough, WrapText,
+  AlignLeft, AlignCenter, AlignRight,
+  AlignVerticalJustifyStart, AlignVerticalJustifyCenter, AlignVerticalJustifyEnd,
   Undo2, Redo2, Paintbrush, Type, Grid3x3, BarChart3,
   Download, Upload, ChevronDown,
   Filter, SortAsc,
@@ -17,6 +19,8 @@ import type { ChangeEvent, ReactNode } from 'react';
 import { v4 as uuid } from 'uuid';
 import { AnchoredPanel } from '@/components/AnchoredPanel';
 import './Toolbar.css';
+
+const FONT_FAMILIES = ['System', 'Arial', 'Calibri', 'Times New Roman', 'Georgia', 'Courier New', 'Verdana', 'Tahoma', 'Trebuchet MS', 'Comic Sans MS'];
 
 export function Toolbar() {
   const {
@@ -254,11 +258,38 @@ export function Toolbar() {
             active={selectedCellData?.format?.underline}
             onClick={() => setRangeFormat({ underline: !selectedCellData?.format?.underline })}
           />
+          <ToolButton
+            icon={<Strikethrough size={15} />}
+            title="Strikethrough (Ctrl+5)"
+            active={selectedCellData?.format?.strikethrough}
+            onClick={() => setRangeFormat({ strikethrough: !selectedCellData?.format?.strikethrough })}
+          />
+          <ToolButton
+            icon={<WrapText size={15} />}
+            title="Wrap text"
+            active={selectedCellData?.format?.textWrap}
+            onClick={() => setRangeFormat({ textWrap: !selectedCellData?.format?.textWrap })}
+          />
         </div>
 
         <Divider />
 
-        {/* ─── Font size (compact) ─── */}
+        {/* ─── Font family + size (compact) ─── */}
+        <div className="relative">
+          <Type size={12} className="absolute left-1.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--neutral-400)' }} />
+          <select
+            className="toolbar-font-size"
+            value={selectedCellData?.format?.fontFamily || 'System'}
+            onChange={(e) => setRangeFormat({ fontFamily: e.target.value === 'System' ? '' : e.target.value })}
+            title="Font family"
+            aria-label="Font family"
+          >
+            {FONT_FAMILIES.map((f) => (
+              <option key={f} value={f}>{f}</option>
+            ))}
+          </select>
+        </div>
+
         <div className="relative">
           <Type size={12} className="absolute left-1.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--neutral-400)' }} />
           <select
@@ -290,6 +321,28 @@ export function Toolbar() {
             icon={<AlignRight size={15} />}
             title="Align Right"
             onClick={() => setRangeFormat({ textAlign: 'right' })}
+          />
+        </div>
+
+        {/* ─── Vertical alignment ─── */}
+        <div className="toolbar-group">
+          <ToolButton
+            icon={<AlignVerticalJustifyStart size={15} />}
+            title="Align Top"
+            active={selectedCellData?.format?.verticalAlign === 'top'}
+            onClick={() => setRangeFormat({ verticalAlign: selectedCellData?.format?.verticalAlign === 'top' ? undefined : 'top' })}
+          />
+          <ToolButton
+            icon={<AlignVerticalJustifyCenter size={15} />}
+            title="Align Middle"
+            active={selectedCellData?.format?.verticalAlign === 'middle'}
+            onClick={() => setRangeFormat({ verticalAlign: selectedCellData?.format?.verticalAlign === 'middle' ? undefined : 'middle' })}
+          />
+          <ToolButton
+            icon={<AlignVerticalJustifyEnd size={15} />}
+            title="Align Bottom"
+            active={selectedCellData?.format?.verticalAlign === 'bottom'}
+            onClick={() => setRangeFormat({ verticalAlign: selectedCellData?.format?.verticalAlign === 'bottom' ? undefined : 'bottom' })}
           />
         </div>
 

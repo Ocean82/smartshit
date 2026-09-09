@@ -9,6 +9,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { useStore } from '@/store/useStore';
 import { cellToRef, refToCell, colToLetter } from '@/engine/spreadsheet';
 import { isInMultiSelection } from '@/lib/selection';
+import { buildMergeIndex, isMergeAnchor, type MergeRange } from '@/lib/merge';
 import type { SheetData } from '@/types';
 
 interface SelectionManagerConfig {
@@ -54,6 +55,22 @@ export function useSelectionManager(config: SelectionManagerConfig) {
   /** Removes document/window listeners registered for the active drag. */
   const stopDragCleanupRef = useRef<(() => void) | null>(null);
 
+  const mergeIndex = useMemo(() => buildMergeIndex(sheet.mergedCells), [sheet.mergedCells]);
+
+  /** Resolve the merge covering (row, col); returns its bounds or null. */
+  const getMergeAtCell = useCallback((row: number, col: number): MergeRange | null => {
+    return mergeIndex.byCell.get(refToCell(row, col)) ?? null;
+  }, [mergeIndex]);
+
+  /** Map a (possibly covered) cell to the active cell Excel would use for it. */
+  const anchorFor = useCallback((row: number, col: number): { row: number; col: number; merge: MergeRange | null } => {
+    const merge = getMergeAtCell(row, col);
+    if (merge && !isMergeAnchor(mergeIndex, row, col)) {
+      return { row: merge.startRow, col: merge.startCol, merge };
+    }
+    return { row, col, merge };
+  }, [getMergeAtCell, mergeIndex]);
+
   const endDrag = useCallback(() => {
     isDragging.current = false;
     const cleanup = stopDragCleanupRef.current;
@@ -79,24 +96,31 @@ export function useSelectionManager(config: SelectionManagerConfig) {
   }, [selection, isActiveCell, isSelected]);
 
   const handleCellClick = useCallback((row: number, col: number, e: MouseEvent) => {
+    const merge = getMergeAtCell(row, col);
+    const sel = merge
+      ? { startRow: merge.startRow, startCol: merge.startCol, endRow: merge.endRow, endCol: merge.endCol }
+      : { startRow: row, startCol: col, endRow: row, endCol: col };
     if (e.shiftKey && selection) {
+      // Shift+click: extend the anchor corner to the merge's far bounds.
+      const er = merge ? merge.endRow : row;
+      const ec = merge ? merge.endCol : col;
       setSelection({
         startRow: selection.startRow,
         startCol: selection.startCol,
-        endRow: row,
-        endCol: col,
+        endRow: er,
+        endCol: ec,
       });
     } else if ((e.ctrlKey || e.metaKey) && selection) {
-      // Ctrl+click: add a new disjoint range
+      // Ctrl+click: add a new disjoint range (whole merge if one is under the cursor)
       const state = useStore.getState();
-      state.addSelection({ startRow: row, startCol: col, endRow: row, endCol: col });
+      state.addSelection(sel);
     } else {
-      setSelection({ startRow: row, startCol: col, endRow: row, endCol: col });
+      setSelection(sel);
     }
     // Don't clear editingCell here — let the input's onBlur handler (commitEdit)
     // handle the commit and cleanup. This prevents a race condition where
     // editingCell is nulled before onBlur fires, causing the edit to be lost.
-  }, [selection, setSelection]);
+  }, [selection, setSelection, getMergeAtCell]);
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (useStore.getState().editingCell) {
@@ -122,7 +146,17 @@ export function useSelectionManager(config: SelectionManagerConfig) {
       return;
     }
 
-    const navigate = (nr: number, nc: number, shift: boolean) => {
+    const navigate = (nr: number, nc: number, shift: boolean, dir: 'up' | 'down' | 'left' | 'right') => {
+      // Skip over whole merged regions when the landing cell is part of one.
+      const merge = getMergeAtCell(nr, nc);
+      if (merge) {
+        switch (dir) {
+          case 'right': nc = Math.min(TOTAL_COLS - 1, merge.endCol + 1); break;
+          case 'left': nc = Math.max(0, merge.startCol - 1); break;
+          case 'down': nr = Math.min(TOTAL_ROWS - 1, merge.endRow + 1); break;
+          case 'up': nr = Math.max(0, merge.startRow - 1); break;
+        }
+      }
       if (shift) {
         setSelection({ ...selection, endRow: nr, endCol: nc });
       } else {
@@ -131,40 +165,43 @@ export function useSelectionManager(config: SelectionManagerConfig) {
       scrollCellIntoView?.(nr, nc);
     };
 
+    const startEditing = (initialValue?: string) => {
+      e.preventDefault();
+      const { row: ar, col: ac, merge } = anchorFor(r, c);
+      const cellId = refToCell(ar, ac);
+      const cellData = useStore.getState().getActiveSheet().cells[cellId];
+      setEditingCell(cellId);
+      setEditValue(initialValue ?? (cellData?.formula || String(cellData?.value ?? '')));
+      setSelection(merge
+        ? { startRow: merge.startRow, startCol: merge.startCol, endRow: merge.endRow, endCol: merge.endCol }
+        : { startRow: r, startCol: c, endRow: r, endCol: c });
+    };
+
     switch (e.key) {
       case 'ArrowUp':
         e.preventDefault();
-        navigate(e.shiftKey ? selection.endRow - 1 : Math.max(0, r - 1), e.shiftKey ? selection.endCol : c, e.shiftKey);
+        navigate(e.shiftKey ? selection.endRow - 1 : Math.max(0, r - 1), e.shiftKey ? selection.endCol : c, e.shiftKey, 'up');
         break;
       case 'ArrowDown':
         e.preventDefault();
-        navigate(e.shiftKey ? selection.endRow + 1 : r + 1, e.shiftKey ? selection.endCol : c, e.shiftKey);
+        navigate(e.shiftKey ? selection.endRow + 1 : r + 1, e.shiftKey ? selection.endCol : c, e.shiftKey, 'down');
         break;
       case 'ArrowLeft':
         e.preventDefault();
-        navigate(e.shiftKey ? selection.endRow : r, e.shiftKey ? Math.max(0, selection.endCol - 1) : Math.max(0, c - 1), e.shiftKey);
+        navigate(e.shiftKey ? selection.endRow : r, e.shiftKey ? Math.max(0, selection.endCol - 1) : Math.max(0, c - 1), e.shiftKey, 'left');
         break;
       case 'ArrowRight':
         e.preventDefault();
-        navigate(e.shiftKey ? selection.endRow : r, e.shiftKey ? selection.endCol + 1 : c + 1, e.shiftKey);
+        navigate(e.shiftKey ? selection.endRow : r, e.shiftKey ? selection.endCol + 1 : c + 1, e.shiftKey, 'right');
         break;
       case 'Enter':
       case 'F2': {
-        e.preventDefault();
-        const cellId = refToCell(r, c);
-        const cellData = useStore.getState().getActiveSheet().cells[cellId];
-        setEditingCell(cellId);
-        setEditValue(cellData?.formula || String(cellData?.value ?? ''));
-        setSelection({ startRow: r, startCol: c, endRow: r, endCol: c });
+        startEditing();
         break;
       }
       default:
         if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
-          e.preventDefault();
-          const cellId = refToCell(r, c);
-          setEditingCell(cellId);
-          setEditValue(e.key);
-          setSelection({ startRow: r, startCol: c, endRow: r, endCol: c });
+          startEditing(e.key);
         }
         if (e.ctrlKey || e.metaKey) {
           switch (e.key) {
@@ -205,10 +242,17 @@ export function useSelectionManager(config: SelectionManagerConfig) {
               useStore.getState().setRangeFormat({ italic: !currentItalic });
               break;
             }
+            case '5': {
+              e.preventDefault();
+              const cellId = refToCell(r, c);
+              const currentStrike = sheet.cells[cellId]?.format?.strikethrough ?? false;
+              useStore.getState().setRangeFormat({ strikethrough: !currentStrike });
+              break;
+            }
           }
         }
     }
-  }, [selection, sheet, TOTAL_ROWS, TOTAL_COLS, findLastDataRow, pushHistory, setSelection, setShowFindReplace, scrollCellIntoView, setEditingCell, setEditValue]);
+  }, [selection, sheet, TOTAL_ROWS, TOTAL_COLS, findLastDataRow, pushHistory, setSelection, setShowFindReplace, scrollCellIntoView, setEditingCell, setEditValue, getMergeAtCell, anchorFor]);
 
   const handleMouseDown = useCallback((row: number, col: number, e: MouseEvent) => {
     if (e.button !== 0) return;
@@ -286,11 +330,14 @@ export function useSelectionManager(config: SelectionManagerConfig) {
     isCrosshair,
     handleCellClick,
     handleCellDoubleClick: (row: number, col: number) => {
-      const cellId = refToCell(row, col);
+      const { row: ar, col: ac, merge } = anchorFor(row, col);
+      const cellId = refToCell(ar, ac);
       const cellData = sheet.cells[cellId];
       setEditingCell(cellId);
       setEditValue(cellData?.formula || String(cellData?.value ?? ''));
-      setSelection({ startRow: row, startCol: col, endRow: row, endCol: col });
+      setSelection(merge
+        ? { startRow: merge.startRow, startCol: merge.startCol, endRow: merge.endRow, endCol: merge.endCol }
+        : { startRow: ar, startCol: ac, endRow: ar, endCol: ac });
       onEditStart?.();
     },
     handleKeyDown,

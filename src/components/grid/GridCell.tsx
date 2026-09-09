@@ -19,6 +19,7 @@ import { formatCellValue } from '@/lib/formatUtils'
 import { resolveCellFormat, getDataBarRule, getDataBarInfo, getColorScaleRule, computeColorScaleBg, getIconSetRule, computeIconForCell } from '@/lib/conditionalFormat'
 import { getBorderCSS, isNegativeRedFormat } from '@/lib/formatUtils'
 import { isCellChecked } from '@/lib/checkbox'
+import { textDecorationStyle, verticalAlignToCSS, isWrapEnabled } from '@/lib/cellFormat'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -41,6 +42,8 @@ export interface GridCellProps {
   isActive: boolean
   isSelected: boolean
   isCrosshair: boolean
+  /** Anchor of a multi-row merge — bg/border drawn by the merge box overlay */
+  mergeBoxed?: boolean
   editValue: string
   hasNote: boolean
   noteText: string
@@ -72,7 +75,8 @@ function getCellStyle(
   const style: CSSProperties = {
     fontWeight: format.bold ? 700 : undefined,
     fontStyle: format.italic ? 'italic' : undefined,
-    textDecoration: format.underline ? 'underline' : undefined,
+    textDecoration: textDecorationStyle(format) || undefined,
+    fontFamily: format.fontFamily || undefined,
     fontSize: format.fontSize ? `${format.fontSize}px` : undefined,
     color: format.fontColor || undefined,
     backgroundColor: format.bgColor || undefined,
@@ -100,6 +104,7 @@ export const GridCell = memo(function GridCell({
   isActive,
   isSelected,
   isCrosshair,
+  mergeBoxed,
   editValue,
   hasNote,
   noteText,
@@ -119,6 +124,8 @@ export const GridCell = memo(function GridCell({
 }: GridCellProps) {
   const rawValue = (computed || cellData?.value) ?? null
   const hasFormula = !!cellData?.formula
+  const resolvedFormat = resolveCellFormat(cellData?.format, computed)
+  const wrapEnabled = isWrapEnabled(resolvedFormat)
 
   // Conditional formatting
   const dataBarRule = getDataBarRule(cellData?.format, computed)
@@ -155,7 +162,8 @@ export const GridCell = memo(function GridCell({
         height: cellHeight,
         flexShrink: 0,
         position: 'relative',
-        ...getCellStyle(resolveCellFormat(cellData?.format, computed), rawValue),
+        ...getCellStyle(resolvedFormat, rawValue),
+        ...(mergeBoxed ? { backgroundColor: 'transparent', borderWidth: 0, overflow: 'hidden' } : {}),
         ...(colorScaleBg && !pendingChange ? { backgroundColor: colorScaleBg } : {}),
         ...(pendingChange ? { backgroundColor: undefined } : {}),
       }}
@@ -221,9 +229,14 @@ export const GridCell = memo(function GridCell({
           onBlur={onEditBlur}
         />
       ) : (
-        <div className="flex items-center h-full">
+        <div
+          className="flex items-center h-full overflow-hidden"
+          style={{
+            alignItems: verticalAlignToCSS(resolvedFormat?.verticalAlign),
+          }}
+        >
           <div
-            className="px-1.5 truncate w-full"
+            className={wrapEnabled ? 'px-1.5 w-full whitespace-normal break-words leading-[18px]' : 'px-1.5 truncate w-full'}
             style={{
               fontSize: cellData?.format?.fontSize ? `${cellData.format.fontSize}px` : '13px',
               textAlign: cellData?.format?.textAlign

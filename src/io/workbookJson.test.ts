@@ -42,6 +42,26 @@ describe('workbookJson', () => {
     expect(normalized.sheets[0].charts).toEqual([])
   })
 
+  it('canonicalizes legacy bare-anchor merges and drops malformed ones', () => {
+    const wb = createEmptyWorkbook('Merge')
+    const raw = {
+      ...wb,
+      sheets: [{
+        ...wb.sheets[0],
+        cells: { A1: { value: 1 } },
+        mergedCells: ['A1', 'B2:C3', 'not-a-ref', ''],
+      }],
+    }
+    const normalized = normalizeImportedWorkbook(raw as unknown as typeof wb)
+    expect(normalized.sheets[0].mergedCells).toEqual(['A1:A1', 'B2:C3'])
+  })
+
+  it('leaves sheets without merges untouched', () => {
+    const wb = createEmptyWorkbook('NoMerge')
+    const normalized = normalizeImportedWorkbook(wb)
+    expect(normalized.sheets[0].mergedCells).toEqual([])
+  })
+
   it('rejects invalid JSON payloads', () => {
     expect(() => parseWorkbookJson('{not json')).toThrow()
     expect(() => parseWorkbookJson('{"foo":1}')).toThrow(/not a smartsht workbook/)

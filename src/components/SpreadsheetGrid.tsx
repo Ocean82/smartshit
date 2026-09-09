@@ -12,6 +12,7 @@ import { findActivePendingPreview } from '@/lib/pendingActionPreview';
 import { getRowHeight } from '@/lib/rowLayout';
 import { useTouch } from '@/hooks/useTouch';
 import { getCellNotesService } from '@/lib/cellNotes';
+import { buildMergeIndex, isMergeAnchor, type MergeRange } from '@/lib/merge';
 import { GridCell } from './grid';
 import { useGridViewport } from './grid/GridViewport';
 import { useEditingController } from './grid/EditingController';
@@ -353,6 +354,39 @@ export function SpreadsheetGrid() {
     return resizeState.columnWidths[col] || sheet.columnWidths[col] || DEFAULT_CELL_WIDTH;
   }, [resizeState.columnWidths, sheet.columnWidths]);
 
+  // Merged-cell index for the active sheet
+  const mergeIndex = useMemo(() => buildMergeIndex(sheet.mergedCells), [sheet.mergedCells]);
+
+  const mergeSpanWidth = useCallback((m: MergeRange) => {
+    let w = 0;
+    for (let c = m.startCol; c <= m.endCol; c++) w += resolvedGetColWidth(c);
+    return w;
+  }, [resolvedGetColWidth]);
+
+  // Pixel boxes for multi-row merges, drawn behind the cells so the anchor's
+  // text/format stay visible while the box unifies the covered region.
+  const multiRowMergeBoxes = useMemo(() => {
+    const boxes: Array<{ top: number; left: number; width: number; height: number; bg: string; borderColor: string }> = [];
+    for (const range of mergeIndex.anchors.values()) {
+      if (range.startRow === range.endRow) continue;
+      let top = 0;
+      for (let r = 0; r < range.startRow; r++) top += getRowHeight(sheet.rowHeights, r);
+      let height = 0;
+      for (let r = range.startRow; r <= range.endRow; r++) height += getRowHeight(sheet.rowHeights, r);
+      let left = 0;
+      for (let c = 0; c < range.startCol; c++) left += resolvedGetColWidth(c);
+      let width = 0;
+      for (let c = range.startCol; c <= range.endCol; c++) width += resolvedGetColWidth(c);
+      const anchorCell = sheet.cells[refToCell(range.startRow, range.startCol)];
+      const bg = anchorCell?.format?.bgColor || '#ffffff';
+      const bottomBorder = anchorCell?.format?.borders?.bottom;
+      const match = /solid|dashed|dotted\s+(.+)$/.exec(String(bottomBorder ?? ''));
+      const borderColor = match?.[1]?.trim() || '#b0b0b0';
+      boxes.push({ top, left, width, height, bg, borderColor });
+    }
+    return boxes;
+  }, [mergeIndex, sheet.cells, sheet.rowHeights, resolvedGetColWidth]);
+
   // Viewport (virtualization)
   const viewport = useGridViewport({
     sheet,
@@ -476,7 +510,7 @@ export function SpreadsheetGrid() {
       onTouchCancel={touch.onTouchCancel}
       style={{ outline: 'none', userSelect: 'none', WebkitOverflowScrolling: 'touch' }}
     >
-      <div style={{ width: ROW_HEADER_WIDTH + viewport.totalWidth, height: COL_HEADER_HEIGHT + viewport.totalHeight, position: 'relative' }}>
+      <div style={{ width: ROW_HEADER_WIDTH + viewport.totalWidth, height: COL_HEADER_HEIGHT + viewport.totalHeight, position: 'relative', isolation: 'isolate' }}>
 
         {/* ── Sticky column header row ─────────────────────────────────────── */}
         <div
@@ -549,6 +583,32 @@ export function SpreadsheetGrid() {
               {Array.from({ length: viewport.visibleRange.endCol - viewport.visibleRange.startCol + 1 }, (_, j) => {
                 const col = viewport.visibleRange.startCol + j;
                 const cellId = refToCell(row, col);
+                const merge = mergeIndex.byCell.get(cellId);
+                const isMergeCell = merge != null;
+                const isMergeHead = isMergeCell && isMergeAnchor(mergeIndex, row, col);
+                const singleRowMerge = isMergeCell && merge.startRow === merge.endRow;
+
+                // A covered cell in the anchor's own row of a single-row merge is
+                // consumed by the anchor's spanned width — skip it entirely.
+                if (isMergeCell && !isMergeHead && singleRowMerge && row === merge.startRow) return null;
+
+                const colWidth = isMergeHead && singleRowMerge
+                  ? mergeSpanWidth(merge)
+                  : resolvedGetColWidth(col);
+
+                // Covered cells in multi-row merges (and their anchor rows) render
+                // as invisible spacers so later columns keep their x-position.
+                if (isMergeCell && !isMergeHead) {
+                  return (
+                    <div
+                      key={col}
+                      className="shrink-0"
+                      style={{ width: colWidth, height: getRowHeight(sheet.rowHeights, row) }}
+                      aria-hidden="true"
+                    />
+                  );
+                }
+
                 const selected = selectionManager.isSelected(row, col);
                 const active = selectionManager.isActiveCell(row, col);
                 const crosshair = !active && !selected && selectionManager.selection != null &&
@@ -562,12 +622,13 @@ export function SpreadsheetGrid() {
                     cellId={cellId}
                     cellData={sheet.cells[cellId]}
                     computed={getComputedValue(row, col)}
-                    colWidth={resolvedGetColWidth(col)}
+                    colWidth={colWidth}
                     cellHeight={getRowHeight(sheet.rowHeights, row)}
                     isEditing={editingController.editingCell === cellId}
                     isActive={active}
                     isSelected={selected}
                     isCrosshair={crosshair}
+                    mergeBoxed={isMergeCell && isMergeHead && merge.endRow > merge.startRow}
                     editValue={editingController.editValue}
                     hasNote={notesService.hasNote(sheet.id, cellId)}
                     noteText={notesService.getNote(sheet.id, cellId)?.text ?? ''}
@@ -593,6 +654,25 @@ export function SpreadsheetGrid() {
             </div>
           );
         })}
+
+        {/* Multi-row merge boxes — drawn behind cell content so anchor text stays visible */}
+        {multiRowMergeBoxes.map((box, idx) => (
+          <div
+            key={idx}
+            className="pointer-events-none"
+            style={{
+              position: 'absolute',
+              zIndex: -1,
+              top: box.top + COL_HEADER_HEIGHT,
+              left: box.left + ROW_HEADER_WIDTH,
+              width: box.width,
+              height: box.height,
+              backgroundColor: box.bg,
+              border: `1px solid ${box.borderColor}`,
+              boxSizing: 'border-box',
+            }}
+          />
+        ))}
 
         <SelectionOverlay
           getColWidth={resolvedGetColWidth}
