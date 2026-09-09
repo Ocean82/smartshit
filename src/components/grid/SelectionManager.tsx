@@ -18,6 +18,10 @@ interface SelectionManagerConfig {
   setShowFindReplace: (show: boolean) => void;
   findLastDataRow: (sheet: SheetData) => number;
   scrollCellIntoView?: (row: number, col: number) => void;
+  /** Called after editing starts from a cell activation so callers can focus the
+   * editor input while still inside the user gesture (iOS suppresses the keyboard
+   * for programmatic focus that lands outside the gesture window). */
+  onEditStart?: () => void;
 }
 
 export function useSelectionManager(config: SelectionManagerConfig) {
@@ -28,6 +32,7 @@ export function useSelectionManager(config: SelectionManagerConfig) {
     setShowFindReplace,
     findLastDataRow,
     scrollCellIntoView,
+    onEditStart,
   } = config;
 
   const {
@@ -286,6 +291,7 @@ export function useSelectionManager(config: SelectionManagerConfig) {
       setEditingCell(cellId);
       setEditValue(cellData?.formula || String(cellData?.value ?? ''));
       setSelection({ startRow: row, startCol: col, endRow: row, endCol: col });
+      onEditStart?.();
     },
     handleKeyDown,
     handleMouseDown,

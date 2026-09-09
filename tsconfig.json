@@ -14,6 +14,10 @@
     "noEmit": true,
     "jsx": "react-jsx",
 
+    /* Type-check the plain-JS modules in shared/ (capabilities.js, intentPhrases.js) */
+    "allowJs": true,
+    "checkJs": true,
+
     /* Path mapping */
     "baseUrl": ".",
     "paths": {

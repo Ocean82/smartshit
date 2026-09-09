@@ -200,7 +200,7 @@ export const config = {
 
   // Cloud Storage (RDS + S3)
   databaseUrl: process.env.DATABASE_URL ?? '',
-  s3Bucket: process.env.S3_BUCKET ?? 'burntbeatz2-storage',
+  s3Bucket: process.env.S3_BUCKET ?? '',
   s3Region: process.env.S3_REGION ?? 'us-east-1',
   s3Prefix: process.env.S3_SMARTSHT_PREFIX ?? 'smartsht',
   awsAccessKeyId: process.env.AWS_ACCESS_KEY_ID ?? '',

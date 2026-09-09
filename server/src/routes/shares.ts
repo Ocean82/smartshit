@@ -212,11 +212,11 @@ sharesRouter.get('/shared/:token', async (req, res) => {
     }
 
     // Get sharer's display name
-    const user = await query<{ display_name: string | null; email: string | null }>(
-      `SELECT display_name, email FROM smartsht.users WHERE id = $1`,
+    const user = await query<{ display_name: string | null }>(
+      `SELECT display_name FROM smartsht.users WHERE id = $1`,
       [share.shared_by],
     )
-    const sharedByName = user.rows[0]?.display_name || user.rows[0]?.email || 'Someone'
+    const sharedByName = user.rows[0]?.display_name || 'Someone'
 
     // Download the workbook data from S3
     const data = await downloadObject(workbook.rows[0].s3_key)

@@ -383,6 +383,8 @@ export function SpreadsheetGrid() {
     else if (cellLeft < scrollLeft) gridEl.scrollLeft = cellLeft;
   }, [viewport.gridRef, resolvedGetColWidth, sheet.rowHeights]);
 
+  const onEditStartRef = useRef<() => void>(() => {});
+
   const selectionManager = useSelectionManager({
     TOTAL_ROWS: viewport.TOTAL_ROWS,
     TOTAL_COLS: viewport.TOTAL_COLS,
@@ -390,6 +392,7 @@ export function SpreadsheetGrid() {
     setShowFindReplace,
     findLastDataRow,
     scrollCellIntoView,
+    onEditStart: () => onEditStartRef.current(),
   });
 
   const editingController = useEditingController({
@@ -401,6 +404,24 @@ export function SpreadsheetGrid() {
     setSelection: selectionManager.setSelection,
     focusGrid: () => viewport.gridRef.current?.focus({ preventScroll: true }),
   });
+
+  onEditStartRef.current = () => {
+    const focusEditorInput = () => {
+      const input = editingController.inputRef.current;
+      if (!input) return false;
+      input.focus();
+      input.setSelectionRange(input.value.length, input.value.length);
+      return true;
+    };
+    // The editor input commits asynchronously after the store update; focus it on
+    // the first frame where it exists so iOS still treats it as gesture-initiated.
+    if (focusEditorInput()) return;
+    let attempts = 0;
+    const retry = () => {
+      if (!focusEditorInput() && ++attempts < 3) requestAnimationFrame(retry);
+    };
+    requestAnimationFrame(retry);
+  };
 
   // Touch support
   const touch = useGridTouch({
