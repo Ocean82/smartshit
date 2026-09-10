@@ -84,3 +84,30 @@ export function setRowAt(rowHeights: Record<number, number>, row: number, height
   next[row] = clampRowHeight(height)
   return next
 }
+
+/**
+ * Shift height overrides down by one when a row is inserted after `afterRow`.
+ * The input map is not mutated. The newly inserted row has no override.
+ */
+export function shiftRowHeightsOnInsert(rowHeights: Record<number, number>, afterRow: number): Record<number, number> {
+  const next: Record<number, number> = {}
+  for (const [key, height] of Object.entries(rowHeights)) {
+    const r = Number(key)
+    next[r > afterRow ? r + 1 : r] = height
+  }
+  return next
+}
+
+/**
+ * Drop the override at `row` and shift later overrides up by one.
+ * The input map is not mutated.
+ */
+export function shiftRowHeightsOnDelete(rowHeights: Record<number, number>, row: number): Record<number, number> {
+  const next: Record<number, number> = {}
+  for (const [key, height] of Object.entries(rowHeights)) {
+    const r = Number(key)
+    if (r === row) continue
+    next[r > row ? r - 1 : r] = height
+  }
+  return next
+}

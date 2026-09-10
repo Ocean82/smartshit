@@ -18,6 +18,8 @@ import {
   MAX_ROW_HEIGHT,
   clampRowHeight,
   setRowAt,
+  shiftRowHeightsOnInsert,
+  shiftRowHeightsOnDelete,
 } from './rowLayout'
 
 describe('getRowHeight', () => {
@@ -90,6 +92,7 @@ describe('clampRowHeight', () => {
 
   it('returns DEFAULT_ROW_HEIGHT for non-finite input', () => {
     expect(clampRowHeight(Number.NaN)).toBe(DEFAULT_ROW_HEIGHT)
+    expect(clampRowHeight(Number.POSITIVE_INFINITY)).toBe(DEFAULT_ROW_HEIGHT)
   })
 
   it('passes in-range values through unchanged', () => {
@@ -108,5 +111,31 @@ describe('setRowAt', () => {
   it('clamps out-of-range heights to the bounds', () => {
     expect(setRowAt({}, 0, -5)).toEqual({ 0: MIN_ROW_HEIGHT })
     expect(setRowAt({}, 0, 5000)).toEqual({ 0: MAX_ROW_HEIGHT })
+  })
+})
+
+describe('shiftRowHeightsOnInsert', () => {
+  it('shifts overrides below the insert point down by one', () => {
+    const base = { 1: 40, 3: 56 }
+    const next = shiftRowHeightsOnInsert(base, 1)
+    expect(next).toEqual({ 1: 40, 4: 56 })
+    expect(base).toEqual({ 1: 40, 3: 56 })
+  })
+
+  it('leaves overrides at or above the insert point in place', () => {
+    expect(shiftRowHeightsOnInsert({ 0: 44, 2: 50 }, 2)).toEqual({ 0: 44, 2: 50 })
+  })
+})
+
+describe('shiftRowHeightsOnDelete', () => {
+  it('drops the deleted row and shifts later overrides up', () => {
+    const base = { 1: 40, 3: 56, 5: 90 }
+    const next = shiftRowHeightsOnDelete(base, 3)
+    expect(next).toEqual({ 1: 40, 4: 90 })
+    expect(base).toEqual({ 1: 40, 3: 56, 5: 90 })
+  })
+
+  it('leaves earlier overrides unchanged when deleting a later row', () => {
+    expect(shiftRowHeightsOnDelete({ 1: 40, 3: 56 }, 5)).toEqual({ 1: 40, 3: 56 })
   })
 })

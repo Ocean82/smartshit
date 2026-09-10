@@ -31,7 +31,7 @@ import { mergeChartLayout } from '@/lib/chartLayout'
 import { toMergeRange, parseMergeRange, rangesOverlap } from '@/lib/merge'
 import { encodeCellBlock, parseGridClipboard } from '@/lib/clipboardCodec'
 import { buildFillPattern, adjustFormulaRefs, fillCellAt, type FilledCell } from '@/lib/autofill'
-import { clampRowHeight, getRowHeight, setRowAt } from '@/lib/rowLayout'
+import { clampRowHeight, getRowHeight, setRowAt, shiftRowHeightsOnDelete, shiftRowHeightsOnInsert } from '@/lib/rowLayout'
 import { MAX_UNDO_STACK } from '../storeTypes'
 
 /** Convert raw clipboard text into a typed value suitable for setCellValue. */
@@ -740,6 +740,7 @@ export function createWorkbookActions(
             }
           }
           sheet.cells = newCells;
+          sheet.rowHeights = shiftRowHeightsOnInsert(sheet.rowHeights, afterRow);
         });
         get().engine.loadWorkbook(get().workbook);
       },
@@ -777,6 +778,7 @@ export function createWorkbookActions(
             }
           }
           sheet.cells = newCells;
+          sheet.rowHeights = shiftRowHeightsOnDelete(sheet.rowHeights, row);
         });
         get().engine.loadWorkbook(get().workbook);
       },

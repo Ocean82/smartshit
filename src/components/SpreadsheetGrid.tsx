@@ -171,7 +171,8 @@ function useRowResize(getRowHeightFor: (row: number) => number, onCommit: (row: 
   const resizeStartRef = useRef<{ row: number; startY: number; startHeight: number } | null>(null);
 
   const workbookId = useStore((s) => s.workbook.id);
-  useEffect(() => { setRowHeights({}); }, [workbookId]);
+  const activeSheetId = useStore((s) => s.activeSheetId);
+  useEffect(() => { setRowHeights({}); }, [workbookId, activeSheetId]);
 
   useEffect(() => () => {
     resizeStartRef.current = null;
@@ -189,12 +190,14 @@ function useRowResize(getRowHeightFor: (row: number) => number, onCommit: (row: 
     document.body.style.userSelect = '';
     if (!start) return;
     const finalHeight = clampRowHeight(start.startHeight + (e.clientY - start.startY));
+    // Commit first so the store update and the local-overlay clear land in the
+    // same paint. Clearing first would flash the old committed height for a frame.
+    if (finalHeight !== start.startHeight) onCommit(start.row, finalHeight);
     setRowHeights((prev) => {
       const next = { ...prev };
       delete next[start.row];
       return next;
     });
-    if (finalHeight !== start.startHeight) onCommit(start.row, finalHeight);
   }, [onCommit]);
 
   const handleResizeMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
@@ -210,7 +213,11 @@ function useRowResize(getRowHeightFor: (row: number) => number, onCommit: (row: 
   const handleResizeStart = useCallback((row: number, e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
-    e.currentTarget.setPointerCapture(e.pointerId);
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      // Capture can fail for synthetic/untrusted events; move/up still land on the handle.
+    }
     resizeStartRef.current = { row, startY: e.clientY, startHeight: getRowHeightFor(row) };
     document.body.style.cursor = 'row-resize';
     document.body.style.userSelect = 'none';
@@ -390,7 +397,7 @@ function RowHeader({ row, height, isSelected, onSelect, onResizeStart, onResizeM
     <div
       role="rowheader"
       aria-colindex={1}
-      className={`relative group shrink-0 border-b border-r border-gray-300 flex items-center justify-center text-[11px] font-medium cursor-pointer transition-colors ${
+      className={`relative group shrink-0 border-b border-r border-gray-300 flex items-center justify-center text-[11px] font-medium cursor-pointer transition-colors sticky left-0 z-10 ${
         isSelected
           ? 'bg-blue-100 text-blue-700 border-blue-300'
           : 'bg-gradient-to-r from-gray-50 to-gray-100 text-gray-500 hover:bg-gray-200'
@@ -401,10 +408,14 @@ function RowHeader({ row, height, isSelected, onSelect, onResizeStart, onResizeM
       {row + 1}
       <div
         className="row-resize-handle absolute bottom-0 left-0 right-0 h-1.5 cursor-row-resize hover:bg-blue-400 opacity-0 group-hover:opacity-100 z-10 touch-none"
+        role="separator"
+        aria-orientation="horizontal"
+        aria-label={`Resize row ${row + 1}`}
         onPointerDown={(e) => onResizeStart(row, e)}
         onPointerMove={onResizeMove}
         onPointerUp={onResizeEnd}
         onPointerCancel={onResizeEnd}
+        onClick={(e) => e.stopPropagation()}
       />
     </div>
   );
@@ -451,15 +462,21 @@ export function SpreadsheetGrid() {
   // single store commit writes the final height (undoable) on pointerup.
   const committedGetRowHeight = useCallback((row: number) => getRowHeight(sheet.rowHeights, row), [sheet.rowHeights]);
 
-  const rowResize = useRowResize(
-    committedGetRowHeight,
-    useCallback((row: number, h: number) => { useStore.getState().setRowHeight(row, h); }, []),
-  );
+  const commitRowHeight = useCallback((row: number, h: number) => {
+    useStore.getState().setRowHeight(row, h);
+  }, []);
+
+  const rowResize = useRowResize(committedGetRowHeight, commitRowHeight);
 
   const resolvedRowHeights = useMemo(() => {
     if (Object.keys(rowResize.rowHeights).length === 0) return sheet.rowHeights;
     return { ...sheet.rowHeights, ...rowResize.rowHeights };
   }, [sheet.rowHeights, rowResize.rowHeights]);
+
+  const resolvedGetRowHeight = useCallback(
+    (row: number) => getRowHeight(resolvedRowHeights, row),
+    [resolvedRowHeights],
+  );
 
   const viewportSheet = useMemo(() => {
     if (Object.keys(rowResize.rowHeights).length === 0) return sheet;
@@ -482,9 +499,9 @@ export function SpreadsheetGrid() {
     for (const range of mergeIndex.anchors.values()) {
       if (range.startRow === range.endRow) continue;
       let top = 0;
-      for (let r = 0; r < range.startRow; r++) top += getRowHeight(sheet.rowHeights, r);
+      for (let r = 0; r < range.startRow; r++) top += resolvedGetRowHeight(r);
       let height = 0;
-      for (let r = range.startRow; r <= range.endRow; r++) height += getRowHeight(sheet.rowHeights, r);
+      for (let r = range.startRow; r <= range.endRow; r++) height += resolvedGetRowHeight(r);
       let left = 0;
       for (let c = 0; c < range.startCol; c++) left += resolvedGetColWidth(c);
       let width = 0;
@@ -497,7 +514,7 @@ export function SpreadsheetGrid() {
       boxes.push({ top, left, width, height, bg, borderColor });
     }
     return boxes;
-  }, [mergeIndex, sheet.cells, sheet.rowHeights, resolvedGetColWidth]);
+  }, [mergeIndex, sheet.cells, resolvedGetRowHeight, resolvedGetColWidth]);
 
   // Viewport (virtualization)
   const viewport = useGridViewport({
@@ -513,8 +530,8 @@ export function SpreadsheetGrid() {
     if (!gridEl) return;
     // Vertical position of an actual row = sum of heights of preceding rows.
     let cellTop = 0;
-    for (let r = 0; r < row; r++) cellTop += getRowHeight(sheet.rowHeights, r);
-    const cellBottom = cellTop + getRowHeight(sheet.rowHeights, row);
+    for (let r = 0; r < row; r++) cellTop += resolvedGetRowHeight(r);
+    const cellBottom = cellTop + resolvedGetRowHeight(row);
     const { scrollTop, clientHeight } = gridEl;
 
     if (cellBottom > scrollTop + clientHeight) gridEl.scrollTop = cellBottom - clientHeight;
@@ -527,7 +544,7 @@ export function SpreadsheetGrid() {
 
     if (cellRight > scrollLeft + clientWidth) gridEl.scrollLeft = cellRight - clientWidth;
     else if (cellLeft < scrollLeft) gridEl.scrollLeft = cellLeft;
-  }, [viewport.gridRef, resolvedGetColWidth, sheet.rowHeights]);
+  }, [viewport.gridRef, resolvedGetColWidth, resolvedGetRowHeight]);
 
   // Cumulative pixel offsets for point→cell mapping (fill drag).
   const rowOffsets = useMemo(() => {
@@ -535,11 +552,11 @@ export function SpreadsheetGrid() {
     let acc = 0;
     for (let r = 0; r < viewport.TOTAL_ROWS; r++) {
       offs[r] = acc;
-      acc += getRowHeight(sheet.rowHeights, r);
+      acc += resolvedGetRowHeight(r);
     }
     offs[viewport.TOTAL_ROWS] = acc;
     return offs;
-  }, [viewport.TOTAL_ROWS, sheet.rowHeights]);
+  }, [viewport.TOTAL_ROWS, resolvedGetRowHeight]);
 
   const colOffsets = useMemo(() => {
     const offs = new Array<number>(viewport.TOTAL_COLS + 1);
@@ -618,11 +635,11 @@ export function SpreadsheetGrid() {
     const maxRow = Math.max(sel.startRow, sel.endRow);
     const maxCol = Math.max(sel.startCol, sel.endCol);
     let top = COL_HEADER_HEIGHT;
-    for (let r = 0; r <= maxRow; r++) top += getRowHeight(sheet.rowHeights, r);
+    for (let r = 0; r <= maxRow; r++) top += resolvedGetRowHeight(r);
     let left = ROW_HEADER_WIDTH;
     for (let c = 0; c <= maxCol; c++) left += resolvedGetColWidth(c);
     return { top: top - 5, left: left - 5 };
-  }, [selectionManager.selection, editingController.editingCell, sheet.rowHeights, resolvedGetColWidth]);
+  }, [selectionManager.selection, editingController.editingCell, resolvedGetRowHeight, resolvedGetColWidth]);
 
   const fillPreviewRect = useMemo(() => {
     const sel = selectionManager.selection;
@@ -636,15 +653,15 @@ export function SpreadsheetGrid() {
     const endCol = Math.max(sc1, target.col);
     if (endRow <= sr1 && endCol <= sc1) return null;
     let top = COL_HEADER_HEIGHT;
-    for (let r = 0; r < sr0; r++) top += getRowHeight(sheet.rowHeights, r);
+    for (let r = 0; r < sr0; r++) top += resolvedGetRowHeight(r);
     let left = ROW_HEADER_WIDTH;
     for (let c = 0; c < sc0; c++) left += resolvedGetColWidth(c);
     let height = 0;
-    for (let r = sr0; r <= endRow; r++) height += getRowHeight(sheet.rowHeights, r);
+    for (let r = sr0; r <= endRow; r++) height += resolvedGetRowHeight(r);
     let width = 0;
     for (let c = sc0; c <= endCol; c++) width += resolvedGetColWidth(c);
     return { top, left, width, height };
-  }, [selectionManager.selection, selectionManager.fillTarget, sheet.rowHeights, resolvedGetColWidth]);
+  }, [selectionManager.selection, selectionManager.fillTarget, resolvedGetRowHeight, resolvedGetColWidth]);
 
   // Touch support
   const touch = useGridTouch({
@@ -748,25 +765,22 @@ export function SpreadsheetGrid() {
           const row = viewport.filteredRows ? viewport.filteredRows[displayIndex] : displayIndex;
           if (row == null) return null;
 
+          const rowHeight = resolvedGetRowHeight(row);
+
           return (
-            <div key={`${displayIndex}-${row}`} className="flex" role="row" aria-rowindex={row + 2} style={{ height: getRowHeight(sheet.rowHeights, row) }}>
-              {/* Sticky row-number gutter */}
-              <div
-                role="rowheader"
-                aria-colindex={1}
-                className={`shrink-0 border-b border-r border-gray-300 flex items-center justify-center text-[11px] font-medium cursor-pointer transition-colors sticky left-0 z-10 ${
-                  isRowSelected(row)
-                    ? 'bg-blue-100 text-blue-700 border-blue-300'
-                    : 'bg-gradient-to-r from-gray-50 to-gray-100 text-gray-500 hover:bg-gray-200'
-                }`}
-                style={{ width: ROW_HEADER_WIDTH, height: getRowHeight(sheet.rowHeights, row) }}
-                onClick={() => selectionManager.handleRowSelect(row)}
-              >
-                {row + 1}
-              </div>
+            <div key={`${displayIndex}-${row}`} className="flex" role="row" aria-rowindex={row + 2} style={{ height: rowHeight }}>
+              <RowHeader
+                row={row}
+                height={rowHeight}
+                isSelected={isRowSelected(row)}
+                onSelect={selectionManager.handleRowSelect}
+                onResizeStart={rowResize.handleResizeStart}
+                onResizeMove={rowResize.handleResizeMove}
+                onResizeEnd={rowResize.handleResizeEnd}
+              />
 
               {viewport.visibleColOffsets.baseOffset > 0 && (
-                <div style={{ width: viewport.visibleColOffsets.baseOffset, height: getRowHeight(sheet.rowHeights, row), flexShrink: 0 }} />
+                <div style={{ width: viewport.visibleColOffsets.baseOffset, height: rowHeight, flexShrink: 0 }} />
               )}
 
               {Array.from({ length: viewport.visibleRange.endCol - viewport.visibleRange.startCol + 1 }, (_, j) => {
@@ -792,7 +806,7 @@ export function SpreadsheetGrid() {
                     <div
                       key={col}
                       className="shrink-0"
-                      style={{ width: colWidth, height: getRowHeight(sheet.rowHeights, row) }}
+                      style={{ width: colWidth, height: rowHeight }}
                       aria-hidden="true"
                     />
                   );
@@ -812,7 +826,7 @@ export function SpreadsheetGrid() {
                     cellData={sheet.cells[cellId]}
                     computed={getComputedValue(row, col)}
                     colWidth={colWidth}
-                    cellHeight={getRowHeight(sheet.rowHeights, row)}
+                    cellHeight={rowHeight}
                     isEditing={editingController.editingCell === cellId}
                     isActive={active}
                     isSelected={selected}
@@ -866,7 +880,7 @@ export function SpreadsheetGrid() {
         <SelectionOverlay
           getColWidth={resolvedGetColWidth}
           totalCols={viewport.TOTAL_COLS}
-          rowHeights={sheet.rowHeights}
+          rowHeights={resolvedRowHeights}
           rowHeaderWidth={ROW_HEADER_WIDTH}
           colHeaderHeight={COL_HEADER_HEIGHT}
         />
@@ -889,7 +903,7 @@ export function SpreadsheetGrid() {
           />
         )}
 
-        <FreezePaneIndicators frozenRows={sheet.frozenRows} frozenCols={sheet.frozenCols} getColWidth={resolvedGetColWidth} rowHeights={sheet.rowHeights} />
+        <FreezePaneIndicators frozenRows={sheet.frozenRows} frozenCols={sheet.frozenCols} getColWidth={resolvedGetColWidth} rowHeights={resolvedRowHeights} />
       </div>
 
       <FormulaAutocomplete

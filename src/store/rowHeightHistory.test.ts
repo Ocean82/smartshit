@@ -1,14 +1,12 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { useStore } from './useStore'
 import { createEmptyWorkbook } from '@/engine/spreadsheet'
+import { MIN_ROW_HEIGHT, MAX_ROW_HEIGHT } from '@/lib/rowLayout'
 
 describe('row height resize with history', () => {
-  let sheetId: string
-
   beforeEach(() => {
     const wb = createEmptyWorkbook('Row Resize Test')
     const sheet = wb.sheets[0]
-    sheetId = sheet.id
     sheet.rowHeights = { 5: 50 }
 
     useStore.setState({
@@ -32,7 +30,12 @@ describe('row height resize with history', () => {
 
   it('clamps oversized heights', () => {
     useStore.getState().setRowHeight(5, 99999)
-    expect(useStore.getState().getActiveSheet().rowHeights).toEqual({ 5: 400 })
+    expect(useStore.getState().getActiveSheet().rowHeights).toEqual({ 5: MAX_ROW_HEIGHT })
+  })
+
+  it('clamps undersized heights', () => {
+    useStore.getState().setRowHeight(5, 1)
+    expect(useStore.getState().getActiveSheet().rowHeights).toEqual({ 5: MIN_ROW_HEIGHT })
   })
 
   it('ignores no-op changes (no history entry pushed)', () => {
@@ -52,5 +55,16 @@ describe('row height resize with history', () => {
 
     store.redo()
     expect(useStore.getState().getActiveSheet().rowHeights).toEqual({ 5: 90 })
+  })
+
+  it('shifts height overrides down when inserting a row above them', () => {
+    useStore.getState().insertRow(2)
+    expect(useStore.getState().getActiveSheet().rowHeights).toEqual({ 6: 50 })
+  })
+
+  it('drops the deleted row override and shifts later ones up', () => {
+    useStore.getState().setRowHeight(7, 80)
+    useStore.getState().deleteRow(5)
+    expect(useStore.getState().getActiveSheet().rowHeights).toEqual({ 6: 80 })
   })
 })
