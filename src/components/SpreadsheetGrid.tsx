@@ -11,6 +11,7 @@ import { columnDataBarPeerValues, columnColorScalePeerValues, columnIconSetPeerV
 import { findActivePendingPreview } from '@/lib/pendingActionPreview';
 import { getRowHeight, clampRowHeight } from '@/lib/rowLayout';
 import { frozenRowStickyTop, splitRectAcrossFreeze } from '@/lib/gridFreeze';
+import { visibleContentSpan } from '@/lib/rowColVisibility';
 import { useTouch } from '@/hooks/useTouch';
 import { getCellNotesService } from '@/lib/cellNotes';
 import { buildMergeIndex, isMergeAnchor, type MergeRange } from '@/lib/merge';
@@ -613,46 +614,41 @@ export function SpreadsheetGrid() {
     else if (cellLeft < scrollLeft + leftInset) gridEl.scrollLeft = Math.max(0, cellLeft - leftInset);
   }, [viewport.gridRef, viewport.frozenRows, viewport.frozenCols, viewport.displayRows, viewport.displayCols, viewport.rowOffsets, resolvedGetColWidth]);
 
-  // Cumulative pixel offsets for point→cell mapping (fill drag).
-  const rowOffsets = useMemo(() => {
-    const offs = new Array<number>(viewport.TOTAL_ROWS + 1);
+  // Cumulative pixel offsets in *display* space for point→cell mapping.
+  const displayColOffsets = useMemo(() => {
+    const count = viewport.displayColCount;
+    const offs = new Array<number>(count + 1);
     let acc = 0;
-    for (let r = 0; r < viewport.TOTAL_ROWS; r++) {
-      offs[r] = acc;
-      acc += resolvedGetRowHeight(r);
+    for (let d = 0; d < count; d++) {
+      offs[d] = acc;
+      const actual = viewport.displayCols ? viewport.displayCols[d] : d;
+      acc += resolvedGetColWidth(actual);
     }
-    offs[viewport.TOTAL_ROWS] = acc;
+    offs[count] = acc;
     return offs;
-  }, [viewport.TOTAL_ROWS, resolvedGetRowHeight]);
-
-  const colOffsets = useMemo(() => {
-    const offs = new Array<number>(viewport.TOTAL_COLS + 1);
-    let acc = 0;
-    for (let c = 0; c < viewport.TOTAL_COLS; c++) {
-      offs[c] = acc;
-      acc += resolvedGetColWidth(c);
-    }
-    offs[viewport.TOTAL_COLS] = acc;
-    return offs;
-  }, [viewport.TOTAL_COLS, resolvedGetColWidth]);
+  }, [viewport.displayColCount, viewport.displayCols, resolvedGetColWidth]);
 
   const pointToCellInViewport = useCallback((clientX: number, clientY: number) => {
     const gridEl = viewport.gridRef.current;
     if (!gridEl) return { row: 0, col: 0 };
     const rect = gridEl.getBoundingClientRect();
-    return pointToCell(clientX, clientY, {
+    const hit = pointToCell(clientX, clientY, {
       gridLeft: rect.left,
       gridTop: rect.top,
       scrollLeft: gridEl.scrollLeft,
       scrollTop: gridEl.scrollTop,
       rowHeaderWidth: ROW_HEADER_WIDTH,
       colHeaderHeight: COL_HEADER_HEIGHT,
-      rowOffsets,
-      colOffsets,
-      totalRows: viewport.TOTAL_ROWS,
-      totalCols: viewport.TOTAL_COLS,
+      rowOffsets: viewport.rowOffsets,
+      colOffsets: displayColOffsets,
+      totalRows: viewport.displayRowCount,
+      totalCols: viewport.displayColCount,
     });
-  }, [viewport.gridRef, viewport.TOTAL_ROWS, viewport.TOTAL_COLS, rowOffsets, colOffsets]);
+    return {
+      row: viewport.displayRows ? (viewport.displayRows[hit.row] ?? hit.row) : hit.row,
+      col: viewport.displayCols ? (viewport.displayCols[hit.col] ?? hit.col) : hit.col,
+    };
+  }, [viewport.gridRef, viewport.rowOffsets, viewport.displayRowCount, viewport.displayColCount, viewport.displayRows, viewport.displayCols, displayColOffsets]);
 
   const onEditStartRef = useRef<() => void>(() => {});
 
@@ -719,24 +715,33 @@ export function SpreadsheetGrid() {
   const fillHandlePos = useMemo(() => {
     const sel = selectionManager.selection;
     if (!sel || editingController.editingCell) return null;
-    const maxRow = Math.max(sel.startRow, sel.endRow);
-    const maxCol = Math.max(sel.startCol, sel.endCol);
-    let top = COL_HEADER_HEIGHT;
-    for (let r = 0; r <= maxRow; r++) top += resolvedGetRowHeight(r);
-    let left = ROW_HEADER_WIDTH;
-    for (let c = 0; c <= maxCol; c++) left += resolvedGetColWidth(c);
-    const contentTop = top - COL_HEADER_HEIGHT - 5;
-    const contentLeft = left - ROW_HEADER_WIDTH - 5;
+    const rowSpan = visibleContentSpan({
+      displayIndices: viewport.displayRows,
+      totalCount: viewport.TOTAL_ROWS,
+      start: sel.startRow,
+      end: sel.endRow,
+      getSize: resolvedGetRowHeight,
+    });
+    const colSpan = visibleContentSpan({
+      displayIndices: viewport.displayCols,
+      totalCount: viewport.TOTAL_COLS,
+      start: sel.startCol,
+      end: sel.endCol,
+      getSize: resolvedGetColWidth,
+    });
+    if (!rowSpan || !colSpan) return null;
+    const contentTop = rowSpan.offset + rowSpan.size - 5;
+    const contentLeft = colSpan.offset + colSpan.size - 5;
     const inFrozenRow = contentTop < freezeTopPx;
     const inFrozenCol = contentLeft < freezeLeftPx;
     return {
-      top: top - 5,
-      left: left - 5,
+      top: COL_HEADER_HEIGHT + contentTop,
+      left: ROW_HEADER_WIDTH + contentLeft,
       sticky: inFrozenRow || inFrozenCol,
       contentTop,
       contentLeft,
     };
-  }, [selectionManager.selection, editingController.editingCell, resolvedGetRowHeight, resolvedGetColWidth, freezeTopPx, freezeLeftPx]);
+  }, [selectionManager.selection, editingController.editingCell, resolvedGetRowHeight, resolvedGetColWidth, freezeTopPx, freezeLeftPx, viewport.displayRows, viewport.displayCols, viewport.TOTAL_ROWS, viewport.TOTAL_COLS]);
 
   const fillPreviewRect = useMemo(() => {
     const sel = selectionManager.selection;
@@ -749,16 +754,23 @@ export function SpreadsheetGrid() {
     const endRow = Math.max(sr1, target.row);
     const endCol = Math.max(sc1, target.col);
     if (endRow <= sr1 && endCol <= sc1) return null;
-    let top = 0;
-    for (let r = 0; r < sr0; r++) top += resolvedGetRowHeight(r);
-    let left = 0;
-    for (let c = 0; c < sc0; c++) left += resolvedGetColWidth(c);
-    let height = 0;
-    for (let r = sr0; r <= endRow; r++) height += resolvedGetRowHeight(r);
-    let width = 0;
-    for (let c = sc0; c <= endCol; c++) width += resolvedGetColWidth(c);
-    return { top, left, width, height };
-  }, [selectionManager.selection, selectionManager.fillTarget, resolvedGetRowHeight, resolvedGetColWidth]);
+    const rowSpan = visibleContentSpan({
+      displayIndices: viewport.displayRows,
+      totalCount: viewport.TOTAL_ROWS,
+      start: sr0,
+      end: endRow,
+      getSize: resolvedGetRowHeight,
+    });
+    const colSpan = visibleContentSpan({
+      displayIndices: viewport.displayCols,
+      totalCount: viewport.TOTAL_COLS,
+      start: sc0,
+      end: endCol,
+      getSize: resolvedGetColWidth,
+    });
+    if (!rowSpan || !colSpan) return null;
+    return { top: rowSpan.offset, left: colSpan.offset, width: colSpan.size, height: rowSpan.size };
+  }, [selectionManager.selection, selectionManager.fillTarget, resolvedGetRowHeight, resolvedGetColWidth, viewport.displayRows, viewport.displayCols, viewport.TOTAL_ROWS, viewport.TOTAL_COLS]);
 
 
   // Touch support
@@ -1087,6 +1099,9 @@ export function SpreadsheetGrid() {
         <SelectionOverlay
           getColWidth={resolvedGetColWidth}
           totalCols={viewport.TOTAL_COLS}
+          totalRows={viewport.TOTAL_ROWS}
+          displayRows={viewport.displayRows}
+          displayCols={viewport.displayCols}
           rowHeights={resolvedRowHeights}
           rowHeaderWidth={ROW_HEADER_WIDTH}
           colHeaderHeight={COL_HEADER_HEIGHT}

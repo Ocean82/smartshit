@@ -111,7 +111,7 @@ describe('workbook import', () => {
     const book = XLSX.utils.book_new()
     const ws = XLSX.utils.aoa_to_sheet([['A', 'B', 'C'], [1, 2, 3], [4, 5, 6]])
     ws['!cols'] = [{ wpx: 80 }, { hidden: true, wpx: 60 }, { wpx: 90 }]
-    ws['!rows'] = [{ hpx: 20 }, { hidden: true, hpx: 24 }, undefined]
+    ws['!rows'] = [{ hpx: 20 }, { hidden: true, hpx: 24 }]
     XLSX.utils.book_append_sheet(book, ws, 'Sheet1')
     const buffer = XLSX.write(book, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer
 

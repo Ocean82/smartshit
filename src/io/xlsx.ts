@@ -525,11 +525,12 @@ export function buildXlsxWorkbook(workbook: WorkbookData): XLSX.WorkBook {
     ])
     if (colKeys.size > 0) {
       const maxCol = Math.max(...colKeys)
-      const cols: Array<{ wpx?: number; hidden?: boolean } | undefined> = []
+      const cols: Array<{ wpx?: number; hidden?: boolean }> = []
       for (let c = 0; c <= maxCol; c++) {
         const wpx = sheet.columnWidths?.[c]
         const hidden = sheet.hiddenCols?.[c] === true
         if (wpx != null || hidden) cols[c] = { ...(wpx != null ? { wpx } : {}), ...(hidden ? { hidden: true } : {}) }
+        else cols[c] = {}
       }
       ws['!cols'] = cols
     }
@@ -540,11 +541,12 @@ export function buildXlsxWorkbook(workbook: WorkbookData): XLSX.WorkBook {
     ])
     if (rowKeys.size > 0) {
       const maxRow = Math.max(...rowKeys)
-      const rows: Array<{ hpx?: number; hidden?: boolean } | undefined> = []
+      const rows: Array<{ hpx?: number; hidden?: boolean }> = []
       for (let r = 0; r <= maxRow; r++) {
         const hpx = sheet.rowHeights?.[r]
         const hidden = sheet.hiddenRows?.[r] === true
         if (hpx != null || hidden) rows[r] = { ...(hpx != null ? { hpx } : {}), ...(hidden ? { hidden: true } : {}) }
+        else rows[r] = {}
       }
       ws['!rows'] = rows
     }

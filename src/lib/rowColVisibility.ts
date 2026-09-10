@@ -122,3 +122,38 @@ export function resolveUnhideIndices(
   for (const i of adjacentHiddenBlock(map, hi, 'after')) set.add(i)
   return [...set].sort((a, b) => a - b)
 }
+
+/**
+ * Content-space pixel span for a sheet-index range along a display axis
+ * (rows or cols after hide/filter). Skips indices not in `displayIndices`.
+ * Returns null when nothing in the range is visible.
+ */
+export function visibleContentSpan(args: {
+  displayIndices: number[] | null
+  totalCount: number
+  start: number
+  end: number
+  getSize: (sheetIndex: number) => number
+}): { offset: number; size: number; visibleCount: number } | null {
+  const lo = Math.min(args.start, args.end)
+  const hi = Math.max(args.start, args.end)
+  const count = args.displayIndices ? args.displayIndices.length : args.totalCount
+  let offset = 0
+  let size = 0
+  let visibleCount = 0
+
+  for (let d = 0; d < count; d++) {
+    const actual = args.displayIndices ? args.displayIndices[d]! : d
+    const sz = args.getSize(actual)
+    if (actual < lo) {
+      offset += sz
+      continue
+    }
+    if (actual > hi) break
+    size += sz
+    visibleCount += 1
+  }
+
+  if (visibleCount === 0) return null
+  return { offset, size, visibleCount }
+}

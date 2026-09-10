@@ -4,24 +4,33 @@
  * Supports multi-range selection (Ctrl+click) by rendering one rect per range.
  * Uses pointer-events: none so it never blocks grid interaction.
  * Shows:
- * - Blue translucent fill for each selected range (when > 1 cell)
+ * - Blue translucent fill for each selected range (when > 1 visible cell)
  * - Dashed border for copied/cut range (marching ants)
  *
  * Freeze: body quadrant stays content-absolute; freeze-band slices render inside
  * a sticky viewport shell so they stay pinned with frozen cells.
+ *
+ * Geometry uses display row/col indices so hidden/filtered axes do not inflate
+ * overlay position or size.
  */
 import { useMemo } from 'react';
 import { useStore } from '@/store/useStore';
 import type { Selection } from '@/types';
 import { getRowHeight } from '@/lib/rowLayout';
 import { splitRectAcrossFreeze, type ContentRect } from '@/lib/gridFreeze';
+import { visibleContentSpan } from '@/lib/rowColVisibility';
 
 interface SelectionOverlayProps {
   getColWidth: (col: number) => number;
   totalCols?: number;
+  totalRows?: number;
   rowHeights: Record<number, number>;
   rowHeaderWidth: number;
   colHeaderHeight: number;
+  /** Visible sheet row indices (filter + hide). Null = identity. */
+  displayRows?: number[] | null;
+  /** Visible sheet col indices (hide). Null = identity. */
+  displayCols?: number[] | null;
   frozenRowHeight?: number;
   frozenColWidth?: number;
   scrollTop?: number;
@@ -30,36 +39,45 @@ interface SelectionOverlayProps {
   viewportWidth?: number;
 }
 
-function rowSpanPx(rowHeights: Record<number, number>, minRow: number, maxRow: number): { top: number; height: number } {
-  let top = 0;
-  for (let r = 0; r < minRow; r++) top += getRowHeight(rowHeights, r);
-  let height = 0;
-  for (let r = minRow; r <= maxRow; r++) height += getRowHeight(rowHeights, r);
-  return { top, height };
-}
-
 function computeRect(
   sel: Selection,
   getColWidth: (col: number) => number,
   rowHeights: Record<number, number>,
+  displayRows: number[] | null,
+  displayCols: number[] | null,
+  totalRows: number,
+  totalCols: number,
+  opts?: { requireMultiCell?: boolean },
 ): ContentRect | null {
   const minRow = Math.min(sel.startRow, sel.endRow);
   const maxRow = Math.max(sel.startRow, sel.endRow);
   const minCol = Math.min(sel.startCol, sel.endCol);
   const maxCol = Math.max(sel.startCol, sel.endCol);
 
-  const cellCount = (maxRow - minRow + 1) * (maxCol - minCol + 1);
-  if (cellCount < 2) return null;
+  const rowSpan = visibleContentSpan({
+    displayIndices: displayRows,
+    totalCount: totalRows,
+    start: minRow,
+    end: maxRow,
+    getSize: (r) => getRowHeight(rowHeights, r),
+  });
+  const colSpan = visibleContentSpan({
+    displayIndices: displayCols,
+    totalCount: totalCols,
+    start: minCol,
+    end: maxCol,
+    getSize: getColWidth,
+  });
 
-  let left = 0;
-  for (let c = 0; c < minCol; c++) left += getColWidth(c);
+  if (!rowSpan || !colSpan) return null;
+  if (opts?.requireMultiCell !== false && rowSpan.visibleCount * colSpan.visibleCount < 2) return null;
 
-  let width = 0;
-  for (let c = minCol; c <= maxCol; c++) width += getColWidth(c);
-
-  const { top, height } = rowSpanPx(rowHeights, minRow, maxRow);
-
-  return { top, left, width, height };
+  return {
+    top: rowSpan.offset,
+    left: colSpan.offset,
+    width: colSpan.size,
+    height: rowSpan.size,
+  };
 }
 
 function frozenBandScreenPos(
@@ -89,6 +107,10 @@ export function SelectionOverlay({
   rowHeights,
   rowHeaderWidth,
   colHeaderHeight,
+  totalCols = 26,
+  totalRows = 100,
+  displayRows = null,
+  displayCols = null,
   frozenRowHeight = 0,
   frozenColWidth = 0,
   scrollTop = 0,
@@ -97,49 +119,49 @@ export function SelectionOverlay({
   viewportWidth = 800,
 }: SelectionOverlayProps) {
   const { selection, additionalSelections, copiedRange } = useStore();
-  const freeze = { topInset: frozenRowHeight, leftInset: frozenColWidth };
   const hasFreeze = frozenRowHeight > 0 || frozenColWidth > 0;
 
   const selectionRects = useMemo(() => {
     const rects: ContentRect[] = [];
     if (selection) {
-      const r = computeRect(selection, getColWidth, rowHeights);
+      const r = computeRect(selection, getColWidth, rowHeights, displayRows, displayCols, totalRows, totalCols);
       if (r) rects.push(r);
     }
     for (const sel of additionalSelections) {
-      const r = computeRect(sel, getColWidth, rowHeights);
+      const r = computeRect(sel, getColWidth, rowHeights, displayRows, displayCols, totalRows, totalCols);
       if (r) rects.push(r);
     }
     return rects;
-  }, [selection, additionalSelections, getColWidth, rowHeights]);
+  }, [selection, additionalSelections, getColWidth, rowHeights, displayRows, displayCols, totalRows, totalCols]);
 
   const copiedRect = useMemo(() => {
     if (!copiedRange) return null;
-    const { startRow, endRow, startCol, endCol } = copiedRange;
-    const minRow = Math.min(startRow, endRow);
-    const maxRow = Math.max(startRow, endRow);
-    const minCol = Math.min(startCol, endCol);
-    const maxCol = Math.max(startCol, endCol);
-
-    let left = 0;
-    for (let c = 0; c < minCol; c++) left += getColWidth(c);
-
-    let width = 0;
-    for (let c = minCol; c <= maxCol; c++) width += getColWidth(c);
-
-    const { top, height } = rowSpanPx(rowHeights, minRow, maxRow);
-
-    return { top, left, width, height } satisfies ContentRect;
-  }, [copiedRange, getColWidth, rowHeights]);
+    return computeRect(
+      copiedRange,
+      getColWidth,
+      rowHeights,
+      displayRows,
+      displayCols,
+      totalRows,
+      totalCols,
+      { requireMultiCell: false },
+    );
+  }, [copiedRange, getColWidth, rowHeights, displayRows, displayCols, totalRows, totalCols]);
 
   const splitSelections = useMemo(
-    () => selectionRects.map((rect) => (hasFreeze ? splitRectAcrossFreeze(rect, freeze) : { frozen: [] as ContentRect[], body: rect })),
+    () => selectionRects.map((rect) => (
+      hasFreeze
+        ? splitRectAcrossFreeze(rect, { topInset: frozenRowHeight, leftInset: frozenColWidth })
+        : { frozen: [] as ContentRect[], body: rect }
+    )),
     [selectionRects, hasFreeze, frozenRowHeight, frozenColWidth],
   );
 
   const splitCopied = useMemo(() => {
     if (!copiedRect) return null;
-    return hasFreeze ? splitRectAcrossFreeze(copiedRect, freeze) : { frozen: [] as ContentRect[], body: copiedRect };
+    return hasFreeze
+      ? splitRectAcrossFreeze(copiedRect, { topInset: frozenRowHeight, leftInset: frozenColWidth })
+      : { frozen: [] as ContentRect[], body: copiedRect };
   }, [copiedRect, hasFreeze, frozenRowHeight, frozenColWidth]);
 
   const freezeScreen = {

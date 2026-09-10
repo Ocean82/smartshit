@@ -8,6 +8,7 @@ import {
   setHidden,
   shiftHiddenOnDelete,
   shiftHiddenOnInsert,
+  visibleContentSpan,
 } from './rowColVisibility'
 
 describe('setHidden / isHidden', () => {
@@ -70,5 +71,42 @@ describe('resolveUnhideIndices', () => {
     const map = setHidden(undefined, [1, 2, 5, 6], true)
     expect(resolveUnhideIndices(map, 3, 4)).toEqual([1, 2, 5, 6])
     expect(resolveUnhideIndices(map, 5, 5)).toEqual([5, 6])
+  })
+})
+
+describe('visibleContentSpan', () => {
+  const heights = [10, 20, 30, 40]
+
+  it('skips hidden display gaps when summing', () => {
+    // display shows sheet rows 0,2,3 (1 hidden)
+    const span = visibleContentSpan({
+      displayIndices: [0, 2, 3],
+      totalCount: 4,
+      start: 0,
+      end: 3,
+      getSize: (i) => heights[i],
+    })
+    expect(span).toEqual({ offset: 0, size: 10 + 30 + 40, visibleCount: 3 })
+  })
+
+  it('offsets past rows before the selection', () => {
+    const span = visibleContentSpan({
+      displayIndices: [0, 2, 3],
+      totalCount: 4,
+      start: 2,
+      end: 3,
+      getSize: (i) => heights[i],
+    })
+    expect(span).toEqual({ offset: 10, size: 30 + 40, visibleCount: 2 })
+  })
+
+  it('returns null when the whole span is off-display', () => {
+    expect(visibleContentSpan({
+      displayIndices: [0, 2, 3],
+      totalCount: 4,
+      start: 1,
+      end: 1,
+      getSize: (i) => heights[i],
+    })).toBeNull()
   })
 })
