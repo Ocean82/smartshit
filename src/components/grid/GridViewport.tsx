@@ -9,6 +9,7 @@ import { cellToRef } from '@/engine/spreadsheet';
 import { findHeaderRow, findLastDataRow } from '@/lib/sheetSort';
 import { buildFilteredRowIndex } from '@/lib/rowFilter';
 import { getRowHeight, rowCumulativeOffsets, rowIndexAtY } from '@/lib/rowLayout';
+import { computeFreezeBodyWindow } from '@/lib/gridFreeze';
 import type { SheetData, FilterConfig } from '@/types';
 
 const BUFFER_ROWS = 5;
@@ -37,11 +38,15 @@ interface GridViewportReturn {
   TOTAL_ROWS: number;
   TOTAL_COLS: number;
   displayRowCount: number;
+  /** Body virtualization window (excludes frozen rows/cols — those render separately). */
   visibleRange: { startRow: number; endRow: number; startCol: number; endCol: number };
+  frozenRows: number;
+  frozenCols: number;
   filteredRows: number[] | null;
   rowOffsets: number[];
   totalWidth: number;
   totalHeight: number;
+  /** Spacer height between the frozen row block and the body window. */
   rowOffset: number;
   visibleColOffsets: { offsets: number[]; baseOffset: number };
   scrollState: ScrollState;
@@ -90,13 +95,13 @@ export function useGridViewport(config: GridViewportConfig): GridViewportReturn 
     return rowCumulativeOffsets(heights);
   }, [filteredRows, sheet.rowHeights, TOTAL_ROWS]);
 
-  // Calculate visible range
-  const visibleRange = useMemo(() => {
+  // Calculate visible range (body window starts after freeze line)
+  const { visibleRange, frozenRows, frozenCols } = useMemo(() => {
     const { scrollTop, scrollLeft, viewportHeight, viewportWidth } = scrollState;
     const lastRow = rowOffsets.length - 2;
-    const startRow = Math.max(0, rowIndexAtY(rowOffsets, scrollTop) - BUFFER_ROWS);
-    const endRow = Math.min(lastRow, rowIndexAtY(rowOffsets, scrollTop + viewportHeight) + BUFFER_ROWS);
-    
+    const naturalStartRow = Math.max(0, rowIndexAtY(rowOffsets, scrollTop) - BUFFER_ROWS);
+    const naturalEndRow = Math.min(lastRow, rowIndexAtY(rowOffsets, scrollTop + viewportHeight) + BUFFER_ROWS);
+
     let colStart = 0;
     let accWidth = 0;
     for (let i = 0; i < TOTAL_COLS; i++) {
@@ -106,7 +111,7 @@ export function useGridViewport(config: GridViewportConfig): GridViewportReturn 
       }
       accWidth += getColWidth(i);
     }
-    
+
     let colEnd = colStart;
     accWidth = 0;
     for (let i = colStart; i < TOTAL_COLS; i++) {
@@ -117,9 +122,29 @@ export function useGridViewport(config: GridViewportConfig): GridViewportReturn 
       }
       colEnd = i;
     }
-    
-    return { startRow, endRow, startCol: colStart, endCol: colEnd };
-  }, [scrollState, getColWidth, TOTAL_COLS, rowOffsets]);
+
+    const window = computeFreezeBodyWindow({
+      frozenRows: sheet.frozenRows,
+      frozenCols: sheet.frozenCols,
+      naturalStartRow,
+      naturalEndRow,
+      naturalStartCol: colStart,
+      naturalEndCol: colEnd,
+      displayRowCount: filteredRows ? filteredRows.length : TOTAL_ROWS,
+      totalCols: TOTAL_COLS,
+    });
+
+    return {
+      frozenRows: window.frozenRows,
+      frozenCols: window.frozenCols,
+      visibleRange: {
+        startRow: window.bodyStartRow,
+        endRow: window.bodyEndRow,
+        startCol: window.bodyStartCol,
+        endCol: window.bodyEndCol,
+      },
+    };
+  }, [scrollState, getColWidth, TOTAL_COLS, TOTAL_ROWS, rowOffsets, sheet.frozenRows, sheet.frozenCols, filteredRows]);
 
   // Total dimensions
   const totalWidth = useMemo(() => {
@@ -131,20 +156,23 @@ export function useGridViewport(config: GridViewportConfig): GridViewportReturn 
   }, [getColWidth, TOTAL_COLS]);
 
   const totalHeight = rowOffsets.length > 0 ? rowOffsets[rowOffsets.length - 1] : 0;
-  const rowOffset = rowOffsets.length > 0 ? rowOffsets[visibleRange.startRow] : 0;
+  // Spacer between frozen block and body: skip rows already rendered as frozen.
+  const rowOffset = rowOffsets.length > 0
+    ? Math.max(0, (rowOffsets[visibleRange.startRow] ?? 0) - (rowOffsets[frozenRows] ?? 0))
+    : 0;
 
-  // Column offsets for visible columns
+  // Column offsets for body columns (baseOffset skips frozen + offscreen body cols)
   const visibleColOffsets = useMemo(() => {
     const offsets: number[] = [0];
     let accWidth = 0;
-    for (let i = 0; i < visibleRange.startCol; i++) {
+    for (let i = frozenCols; i < visibleRange.startCol; i++) {
       accWidth += getColWidth(i);
     }
     for (let i = visibleRange.startCol; i <= visibleRange.endCol; i++) {
       offsets.push(offsets[offsets.length - 1] + getColWidth(i));
     }
     return { offsets, baseOffset: accWidth };
-  }, [visibleRange.startCol, visibleRange.endCol, getColWidth]);
+  }, [visibleRange.startCol, visibleRange.endCol, getColWidth, frozenCols]);
 
   const handleScroll = useCallback(() => {
     if (!gridRef.current) return;
@@ -167,6 +195,8 @@ export function useGridViewport(config: GridViewportConfig): GridViewportReturn 
     TOTAL_COLS,
     displayRowCount,
     visibleRange,
+    frozenRows,
+    frozenCols,
     filteredRows,
     rowOffsets,
     totalWidth,

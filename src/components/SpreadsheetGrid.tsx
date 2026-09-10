@@ -10,6 +10,7 @@ import { findLastDataRow } from '@/lib/sheetSort';
 import { columnDataBarPeerValues, columnColorScalePeerValues, columnIconSetPeerValues } from '@/lib/conditionalFormat';
 import { findActivePendingPreview } from '@/lib/pendingActionPreview';
 import { getRowHeight, clampRowHeight } from '@/lib/rowLayout';
+import { frozenColStickyLeft, frozenRowStickyTop } from '@/lib/gridFreeze';
 import { useTouch } from '@/hooks/useTouch';
 import { getCellNotesService } from '@/lib/cellNotes';
 import { buildMergeIndex, isMergeAnchor, type MergeRange } from '@/lib/merge';
@@ -280,27 +281,26 @@ function useGridTouch({ gridRef, selectionManager, getColWidth, visibleRange, vi
 
 // ─── Freeze Pane Indicator ────────────────────────────────────────────────────
 
-function FreezePaneIndicators({ frozenRows, frozenCols, getColWidth, rowHeights }: { frozenRows?: number | null; frozenCols?: number | null; getColWidth: (col: number) => number; rowHeights: Record<number, number> }) {
+function FreezePaneIndicators({ frozenRows, frozenCols, getColWidth, frozenRowHeight }: {
+  frozenRows: number;
+  frozenCols: number;
+  getColWidth: (col: number) => number;
+  /** Total height of the frozen row block in display-row pixels. */
+  frozenRowHeight: number;
+}) {
   const frozenColLeft = useMemo(() => {
-    if (!frozenCols || frozenCols <= 0) return 0;
+    if (frozenCols <= 0) return 0;
     let w = ROW_HEADER_WIDTH;
     for (let c = 0; c < frozenCols; c++) w += getColWidth(c);
     return w;
   }, [frozenCols, getColWidth]);
 
-  const frozenRowTop = useMemo(() => {
-    if (!frozenRows || frozenRows <= 0) return 0;
-    let h = 0;
-    for (let r = 0; r < frozenRows; r++) h += getRowHeight(rowHeights, r);
-    return h;
-  }, [frozenRows, rowHeights]);
-
   return (
     <>
-      {frozenRows != null && frozenRows > 0 && (
-        <div className="absolute pointer-events-none z-[8]" style={{ top: frozenRowTop + COL_HEADER_HEIGHT, left: 0, right: 0, height: 2, backgroundColor: '#3b82f6', opacity: 0.6 }} />
+      {frozenRows > 0 && (
+        <div className="absolute pointer-events-none z-[8]" style={{ top: frozenRowHeight + COL_HEADER_HEIGHT, left: 0, right: 0, height: 2, backgroundColor: '#3b82f6', opacity: 0.6 }} />
       )}
-      {frozenCols != null && frozenCols > 0 && (
+      {frozenCols > 0 && (
         <div className="absolute pointer-events-none z-[8]" style={{ top: 0, left: frozenColLeft, bottom: 0, width: 2, backgroundColor: '#3b82f6', opacity: 0.6 }} />
       )}
     </>
@@ -345,6 +345,8 @@ interface ColumnHeaderProps {
   isSelected: boolean;
   sortDirection?: 'asc' | 'desc' | null;
   isFiltered: boolean;
+  /** When set, pin this header under horizontal scroll (frozen columns). */
+  stickyLeft?: number;
   onSelect: (col: number) => void;
   onResizeStart: (col: number, e: React.PointerEvent<HTMLDivElement>) => void;
   onResizeMove: (e: React.PointerEvent<HTMLDivElement>) => void;
@@ -352,7 +354,7 @@ interface ColumnHeaderProps {
   onAutoFit: (col: number) => void;
 }
 
-function ColumnHeader({ col, width, isSelected, sortDirection, isFiltered, onSelect, onResizeStart, onResizeMove, onResizeEnd, onAutoFit }: ColumnHeaderProps) {
+function ColumnHeader({ col, width, isSelected, sortDirection, isFiltered, stickyLeft, onSelect, onResizeStart, onResizeMove, onResizeEnd, onAutoFit }: ColumnHeaderProps) {
   return (
     <div
       role="columnheader"
@@ -362,7 +364,13 @@ function ColumnHeader({ col, width, isSelected, sortDirection, isFiltered, onSel
           ? 'bg-blue-100 text-blue-700 border-blue-300'
           : 'bg-gradient-to-b from-gray-50 to-gray-100 text-gray-500 hover:bg-gray-200'
       }`}
-      style={{ width, height: COL_HEADER_HEIGHT }}
+      style={{
+        width,
+        height: COL_HEADER_HEIGHT,
+        ...(stickyLeft != null
+          ? { position: 'sticky', left: stickyLeft, zIndex: 25 }
+          : {}),
+      }}
       onClick={() => onSelect(col)}
     >
       {colToLetter(col)}
@@ -386,6 +394,8 @@ interface RowHeaderProps {
   row: number;
   height: number;
   isSelected: boolean;
+  /** Raise above frozen body cells when this header is in a sticky frozen row. */
+  stickyZIndex?: number;
   onSelect: (row: number) => void;
   onResizeStart: (row: number, e: React.PointerEvent<HTMLDivElement>) => void;
   onResizeMove: (e: React.PointerEvent<HTMLDivElement>) => void;
@@ -393,17 +403,17 @@ interface RowHeaderProps {
   onAutoFit: (row: number) => void;
 }
 
-function RowHeader({ row, height, isSelected, onSelect, onResizeStart, onResizeMove, onResizeEnd, onAutoFit }: RowHeaderProps) {
+function RowHeader({ row, height, isSelected, stickyZIndex = 10, onSelect, onResizeStart, onResizeMove, onResizeEnd, onAutoFit }: RowHeaderProps) {
   return (
     <div
       role="rowheader"
       aria-colindex={1}
-      className={`relative group shrink-0 border-b border-r border-gray-300 flex items-center justify-center text-[11px] font-medium cursor-pointer transition-colors sticky left-0 z-10 ${
+      className={`group shrink-0 border-b border-r border-gray-300 flex items-center justify-center text-[11px] font-medium cursor-pointer transition-colors sticky left-0 ${
         isSelected
           ? 'bg-blue-100 text-blue-700 border-blue-300'
           : 'bg-gradient-to-r from-gray-50 to-gray-100 text-gray-500 hover:bg-gray-200'
       }`}
-      style={{ width: ROW_HEADER_WIDTH, height }}
+      style={{ width: ROW_HEADER_WIDTH, height, zIndex: stickyZIndex, position: 'sticky' }}
       onClick={() => onSelect(row)}
     >
       {row + 1}
@@ -539,23 +549,33 @@ export function SpreadsheetGrid() {
   const scrollCellIntoView = useCallback((row: number, col: number) => {
     const gridEl = viewport.gridRef.current;
     if (!gridEl) return;
-    // Vertical position of an actual row = sum of heights of preceding rows.
-    let cellTop = 0;
-    for (let r = 0; r < row; r++) cellTop += resolvedGetRowHeight(r);
-    const cellBottom = cellTop + resolvedGetRowHeight(row);
+
+    const frozenRows = viewport.frozenRows;
+    const frozenCols = viewport.frozenCols;
+    const displayRow = viewport.filteredRows ? viewport.filteredRows.indexOf(row) : row;
+    if (displayRow < 0) return;
+
+    // Vertical: use display-row offsets so filter + freeze insets match what is pinned.
+    const cellTop = viewport.rowOffsets[displayRow] ?? 0;
+    const cellBottom = viewport.rowOffsets[displayRow + 1] ?? cellTop;
+    const freezeTop = viewport.rowOffsets[frozenRows] ?? 0;
     const { scrollTop, clientHeight } = gridEl;
+    const topInset = displayRow < frozenRows ? 0 : freezeTop;
 
     if (cellBottom > scrollTop + clientHeight) gridEl.scrollTop = cellBottom - clientHeight;
-    else if (cellTop < scrollTop) gridEl.scrollTop = cellTop;
+    else if (cellTop < scrollTop + topInset) gridEl.scrollTop = Math.max(0, cellTop - topInset);
 
     let cellLeft = 0;
     for (let i = 0; i < col; i++) cellLeft += resolvedGetColWidth(i);
     const cellRight = cellLeft + resolvedGetColWidth(col);
+    let freezeLeft = 0;
+    for (let i = 0; i < frozenCols; i++) freezeLeft += resolvedGetColWidth(i);
     const { scrollLeft, clientWidth } = gridEl;
+    const leftInset = col < frozenCols ? 0 : freezeLeft;
 
     if (cellRight > scrollLeft + clientWidth) gridEl.scrollLeft = cellRight - clientWidth;
-    else if (cellLeft < scrollLeft) gridEl.scrollLeft = cellLeft;
-  }, [viewport.gridRef, resolvedGetColWidth, resolvedGetRowHeight]);
+    else if (cellLeft < scrollLeft + leftInset) gridEl.scrollLeft = Math.max(0, cellLeft - leftInset);
+  }, [viewport.gridRef, viewport.frozenRows, viewport.frozenCols, viewport.filteredRows, viewport.rowOffsets, resolvedGetColWidth]);
 
   // Cumulative pixel offsets for point→cell mapping (fill drag).
   const rowOffsets = useMemo(() => {
@@ -707,6 +727,174 @@ export function SpreadsheetGrid() {
     selectionManager.handleKeyDown(e);
   }, [editingController, selectionManager]);
 
+  const { frozenRows, frozenCols } = viewport;
+
+  const renderDataCell = (row: number, col: number, rowHeight: number, stickyLeft: number | null, stickyZ: number) => {
+    const cellId = refToCell(row, col);
+    const merge = mergeIndex.byCell.get(cellId);
+    const isMergeCell = merge != null;
+    const isMergeHead = isMergeCell && isMergeAnchor(mergeIndex, row, col);
+    const singleRowMerge = isMergeCell && merge.startRow === merge.endRow;
+
+    if (isMergeCell && !isMergeHead && singleRowMerge && row === merge.startRow) return null;
+
+    const colWidth = isMergeHead && singleRowMerge
+      ? mergeSpanWidth(merge)
+      : resolvedGetColWidth(col);
+
+    if (isMergeCell && !isMergeHead) {
+      const spacer = (
+        <div
+          key={col}
+          className="shrink-0"
+          style={{ width: colWidth, height: rowHeight }}
+          aria-hidden="true"
+        />
+      );
+      if (stickyLeft == null) return spacer;
+      return (
+        <div
+          key={col}
+          className="shrink-0"
+          style={{
+            position: 'sticky',
+            left: stickyLeft,
+            zIndex: stickyZ,
+            width: colWidth,
+            height: rowHeight,
+            backgroundColor: '#fff',
+          }}
+          aria-hidden="true"
+        />
+      );
+    }
+
+    const selected = selectionManager.isSelected(row, col);
+    const active = selectionManager.isActiveCell(row, col);
+    const crosshair = !active && !selected && selectionManager.selection != null &&
+      (row === selectionManager.selection.startRow || col === selectionManager.selection.startCol);
+
+    const cell = (
+      <GridCell
+        key={stickyLeft == null ? col : undefined}
+        row={row}
+        col={col}
+        cellId={cellId}
+        cellData={sheet.cells[cellId]}
+        computed={getComputedValue(row, col)}
+        colWidth={colWidth}
+        cellHeight={rowHeight}
+        isEditing={editingController.editingCell === cellId}
+        isActive={active}
+        isSelected={selected}
+        isCrosshair={crosshair}
+        mergeBoxed={isMergeCell && isMergeHead && merge.endRow > merge.startRow}
+        editValue={editingController.editValue}
+        hasNote={notesService.hasNote(sheet.id, cellId)}
+        noteText={notesService.getNote(sheet.id, cellId)?.text ?? ''}
+        pendingChange={pendingPreview?.changeByCell.get(cellId) ?? null}
+        dataBarPeers={dataBarPeersByCol.get(col) ?? []}
+        colorScalePeers={colorScalePeersByCol.get(col) ?? []}
+        iconSetPeers={iconSetPeersByCol.get(col) ?? []}
+        editContainerRef={editingController.editContainerRef}
+        inputRef={editingController.inputRef}
+        onMouseDown={selectionManager.handleMouseDown}
+        onMouseMove={selectionManager.handleMouseMove}
+        onDoubleClick={selectionManager.handleCellDoubleClick}
+        onContextMenu={selectionManager.handleContextMenu}
+        onEditChange={editingController.setEditValue}
+        onEditBlur={editingController.commitEdit}
+        onCheckboxToggle={(cid, cd) => {
+          pushHistory('Toggle checkbox');
+          setCellValue(cid, getCheckboxToggleValue(cd));
+        }}
+      />
+    );
+
+    if (stickyLeft == null) return cell;
+    return (
+      <div
+        key={col}
+        className="shrink-0"
+        style={{
+          position: 'sticky',
+          left: stickyLeft,
+          zIndex: stickyZ,
+          backgroundColor: '#fff',
+        }}
+      >
+        {cell}
+      </div>
+    );
+  };
+
+  const renderRowColumns = (row: number, rowHeight: number, isFrozenRow: boolean) => {
+    const frozenZ = isFrozenRow ? 14 : 11;
+    return (
+      <>
+        {Array.from({ length: frozenCols }, (_, col) =>
+          renderDataCell(
+            row,
+            col,
+            rowHeight,
+            frozenColStickyLeft(ROW_HEADER_WIDTH, resolvedGetColWidth, col),
+            frozenZ,
+          ),
+        )}
+
+        {viewport.visibleColOffsets.baseOffset > 0 && (
+          <div style={{ width: viewport.visibleColOffsets.baseOffset, height: rowHeight, flexShrink: 0 }} />
+        )}
+
+        {Array.from({ length: Math.max(0, viewport.visibleRange.endCol - viewport.visibleRange.startCol + 1) }, (_, j) => {
+          const col = viewport.visibleRange.startCol + j;
+          return renderDataCell(row, col, rowHeight, null, 0);
+        })}
+      </>
+    );
+  };
+
+  const renderGridRow = (displayIndex: number, stickyTop: number | null) => {
+    const row = viewport.filteredRows ? viewport.filteredRows[displayIndex] : displayIndex;
+    if (row == null) return null;
+
+    const rowHeight = resolvedGetRowHeight(row);
+    const isFrozenRow = stickyTop != null;
+
+    return (
+      <div
+        key={`${displayIndex}-${row}`}
+        className="flex"
+        role="row"
+        aria-rowindex={row + 2}
+        style={{
+          height: rowHeight,
+          ...(isFrozenRow
+            ? {
+                position: 'sticky',
+                top: stickyTop,
+                zIndex: 12,
+                backgroundColor: '#fff',
+              }
+            : {}),
+        }}
+      >
+        <RowHeader
+          row={row}
+          height={rowHeight}
+          isSelected={isRowSelected(row)}
+          stickyZIndex={isFrozenRow ? 15 : 10}
+          onSelect={selectionManager.handleRowSelect}
+          onResizeStart={rowResize.handleResizeStart}
+          onResizeMove={rowResize.handleResizeMove}
+          onResizeEnd={rowResize.handleResizeEnd}
+          onAutoFit={autoFitRow}
+        />
+        {renderRowColumns(row, rowHeight, isFrozenRow)}
+      </div>
+    );
+  };
+
   // ─── Render ─────────────────────────────────────────────────────────────────
 
   return (
@@ -744,11 +932,28 @@ export function SpreadsheetGrid() {
             ▾
           </div>
 
+          {Array.from({ length: frozenCols }, (_, col) => (
+            <ColumnHeader
+              key={`fz-${col}`}
+              col={col}
+              width={resolvedGetColWidth(col)}
+              isSelected={isColSelected(col)}
+              sortDirection={activeSortConfig?.column === col ? activeSortConfig.direction : null}
+              isFiltered={activeFilters.some((f) => f.column === col)}
+              stickyLeft={frozenColStickyLeft(ROW_HEADER_WIDTH, resolvedGetColWidth, col)}
+              onSelect={selectionManager.handleColSelect}
+              onResizeStart={resizeState.handleResizeStart}
+              onResizeMove={resizeState.handleResizeMove}
+              onResizeEnd={resizeState.handleResizeEnd}
+              onAutoFit={resizeState.handleAutoFitColumn}
+            />
+          ))}
+
           {viewport.visibleColOffsets.baseOffset > 0 && (
             <div style={{ width: viewport.visibleColOffsets.baseOffset, height: COL_HEADER_HEIGHT, flexShrink: 0 }} />
           )}
 
-          {Array.from({ length: viewport.visibleRange.endCol - viewport.visibleRange.startCol + 1 }, (_, j) => {
+          {Array.from({ length: Math.max(0, viewport.visibleRange.endCol - viewport.visibleRange.startCol + 1) }, (_, j) => {
             const col = viewport.visibleRange.startCol + j;
             return (
               <ColumnHeader
@@ -768,106 +973,17 @@ export function SpreadsheetGrid() {
           })}
         </div>
 
-        {/* ── Virtualized data rows ────────────────────────────────────────── */}
+        {/* ── Frozen rows (always mounted, sticky under col header) ─────────── */}
+        {Array.from({ length: frozenRows }, (_, displayIndex) =>
+          renderGridRow(displayIndex, frozenRowStickyTop(COL_HEADER_HEIGHT, viewport.rowOffsets, displayIndex)),
+        )}
+
+        {/* ── Virtualized body rows ─────────────────────────────────────────── */}
         <div style={{ height: viewport.rowOffset }} aria-hidden="true" />
 
-        {Array.from({ length: viewport.visibleRange.endRow - viewport.visibleRange.startRow + 1 }, (_, i) => {
+        {Array.from({ length: Math.max(0, viewport.visibleRange.endRow - viewport.visibleRange.startRow + 1) }, (_, i) => {
           const displayIndex = viewport.visibleRange.startRow + i;
-          const row = viewport.filteredRows ? viewport.filteredRows[displayIndex] : displayIndex;
-          if (row == null) return null;
-
-          const rowHeight = resolvedGetRowHeight(row);
-
-          return (
-            <div key={`${displayIndex}-${row}`} className="flex" role="row" aria-rowindex={row + 2} style={{ height: rowHeight }}>
-              <RowHeader
-                row={row}
-                height={rowHeight}
-                isSelected={isRowSelected(row)}
-                onSelect={selectionManager.handleRowSelect}
-                onResizeStart={rowResize.handleResizeStart}
-                onResizeMove={rowResize.handleResizeMove}
-                onResizeEnd={rowResize.handleResizeEnd}
-                onAutoFit={autoFitRow}
-              />
-
-              {viewport.visibleColOffsets.baseOffset > 0 && (
-                <div style={{ width: viewport.visibleColOffsets.baseOffset, height: rowHeight, flexShrink: 0 }} />
-              )}
-
-              {Array.from({ length: viewport.visibleRange.endCol - viewport.visibleRange.startCol + 1 }, (_, j) => {
-                const col = viewport.visibleRange.startCol + j;
-                const cellId = refToCell(row, col);
-                const merge = mergeIndex.byCell.get(cellId);
-                const isMergeCell = merge != null;
-                const isMergeHead = isMergeCell && isMergeAnchor(mergeIndex, row, col);
-                const singleRowMerge = isMergeCell && merge.startRow === merge.endRow;
-
-                // A covered cell in the anchor's own row of a single-row merge is
-                // consumed by the anchor's spanned width — skip it entirely.
-                if (isMergeCell && !isMergeHead && singleRowMerge && row === merge.startRow) return null;
-
-                const colWidth = isMergeHead && singleRowMerge
-                  ? mergeSpanWidth(merge)
-                  : resolvedGetColWidth(col);
-
-                // Covered cells in multi-row merges (and their anchor rows) render
-                // as invisible spacers so later columns keep their x-position.
-                if (isMergeCell && !isMergeHead) {
-                  return (
-                    <div
-                      key={col}
-                      className="shrink-0"
-                      style={{ width: colWidth, height: rowHeight }}
-                      aria-hidden="true"
-                    />
-                  );
-                }
-
-                const selected = selectionManager.isSelected(row, col);
-                const active = selectionManager.isActiveCell(row, col);
-                const crosshair = !active && !selected && selectionManager.selection != null &&
-                  (row === selectionManager.selection.startRow || col === selectionManager.selection.startCol);
-
-                return (
-                  <GridCell
-                    key={col}
-                    row={row}
-                    col={col}
-                    cellId={cellId}
-                    cellData={sheet.cells[cellId]}
-                    computed={getComputedValue(row, col)}
-                    colWidth={colWidth}
-                    cellHeight={rowHeight}
-                    isEditing={editingController.editingCell === cellId}
-                    isActive={active}
-                    isSelected={selected}
-                    isCrosshair={crosshair}
-                    mergeBoxed={isMergeCell && isMergeHead && merge.endRow > merge.startRow}
-                    editValue={editingController.editValue}
-                    hasNote={notesService.hasNote(sheet.id, cellId)}
-                    noteText={notesService.getNote(sheet.id, cellId)?.text ?? ''}
-                    pendingChange={pendingPreview?.changeByCell.get(cellId) ?? null}
-                    dataBarPeers={dataBarPeersByCol.get(col) ?? []}
-                    colorScalePeers={colorScalePeersByCol.get(col) ?? []}
-                    iconSetPeers={iconSetPeersByCol.get(col) ?? []}
-                    editContainerRef={editingController.editContainerRef}
-                    inputRef={editingController.inputRef}
-                    onMouseDown={selectionManager.handleMouseDown}
-                    onMouseMove={selectionManager.handleMouseMove}
-                    onDoubleClick={selectionManager.handleCellDoubleClick}
-                    onContextMenu={selectionManager.handleContextMenu}
-                    onEditChange={editingController.setEditValue}
-                    onEditBlur={editingController.commitEdit}
-                    onCheckboxToggle={(cid, cd) => {
-                      pushHistory('Toggle checkbox');
-                      setCellValue(cid, getCheckboxToggleValue(cd));
-                    }}
-                  />
-                );
-              })}
-            </div>
-          );
+          return renderGridRow(displayIndex, null);
         })}
 
         {/* Multi-row merge boxes — drawn behind cell content so anchor text stays visible */}
@@ -915,7 +1031,12 @@ export function SpreadsheetGrid() {
           />
         )}
 
-        <FreezePaneIndicators frozenRows={sheet.frozenRows} frozenCols={sheet.frozenCols} getColWidth={resolvedGetColWidth} rowHeights={resolvedRowHeights} />
+        <FreezePaneIndicators
+          frozenRows={frozenRows}
+          frozenCols={frozenCols}
+          getColWidth={resolvedGetColWidth}
+          frozenRowHeight={viewport.rowOffsets[frozenRows] ?? 0}
+        />
       </div>
 
       <FormulaAutocomplete
