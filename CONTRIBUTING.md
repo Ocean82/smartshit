@@ -10,10 +10,13 @@ Thanks for your interest in helping build an AI spreadsheet that normal people c
 
 ```bash
 npm install
-# Skip onnxruntime-node CUDA download (CPU runtime is enough locally)
 ONNXRUNTIME_NODE_INSTALL=skip npm install --prefix server
 npm run model:setup   # creates the Ollama dev model (Qwen2.5-Coder-1.5B)
 ```
+
+> `ONNXRUNTIME_NODE_INSTALL=skip` avoids the onnxruntime-node CUDA download (CPU
+> runtime is enough locally; without it, nuget.org fetches often fail with ECONNRESET).
+> Windows PowerShell: `$env:ONNXRUNTIME_NODE_INSTALL="skip"; npm install --prefix server`
 
 > **Note:** Dev uses a 1.5B model for speed. Production uses Spreadsheet-RL-4B (see `server/Modelfile.spreadsheet-rl`). AI quality will differ between dev and prod.
 

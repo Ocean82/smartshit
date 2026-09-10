@@ -59,7 +59,7 @@ Import a budget → the auditor flags a formula that skips a cell → the AI exp
 git clone https://github.com/Ocean82/smartshit.git
 cd smartshit
 npm install
-# onnxruntime-node's postinstall fetches CUDA binaries; skip that for CPU-only local/CI installs
+# Skip onnxruntime-node CUDA download (CPU runtime is enough; avoids nuget ECONNRESET)
 ONNXRUNTIME_NODE_INSTALL=skip npm install --prefix server
 ```
 
