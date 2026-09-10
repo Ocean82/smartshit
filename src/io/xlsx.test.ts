@@ -106,4 +106,35 @@ describe('workbook import', () => {
 
     expect(imported.mergedCells).toEqual(['A1:C1', 'E5:F6'])
   })
+
+  it('imports hidden rows and columns from !rows / !cols', async () => {
+    const book = XLSX.utils.book_new()
+    const ws = XLSX.utils.aoa_to_sheet([['A', 'B', 'C'], [1, 2, 3], [4, 5, 6]])
+    ws['!cols'] = [{ wpx: 80 }, { hidden: true, wpx: 60 }, { wpx: 90 }]
+    ws['!rows'] = [{ hpx: 20 }, { hidden: true, hpx: 24 }, undefined]
+    XLSX.utils.book_append_sheet(book, ws, 'Sheet1')
+    const buffer = XLSX.write(book, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer
+
+    const { workbook } = await importWorkbookFromFileWithMeta(fakeFile('hidden.xlsx', buffer))
+    expect(workbook.sheets[0].hiddenCols).toEqual({ 1: true })
+    expect(workbook.sheets[0].hiddenRows).toEqual({ 1: true })
+  })
+
+  it('export write→read round-trips hidden rows and columns', async () => {
+    const wb = createEmptyWorkbook('Hide Roundtrip')
+    const sheet = wb.sheets[0]
+    sheet.cells['A1'] = { value: 'x' }
+    sheet.hiddenRows = { 2: true, 5: true }
+    sheet.hiddenCols = { 1: true }
+    sheet.rowHeights = { 2: 40 }
+    sheet.columnWidths = { 1: 120 }
+
+    const book = buildXlsxWorkbook(wb)
+    const buffer = XLSX.write(book, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer
+    const { workbook } = await importWorkbookFromFileWithMeta(fakeFile('hide-rt.xlsx', buffer))
+    const imported = workbook.sheets[0]
+
+    expect(imported.hiddenRows).toEqual({ 2: true, 5: true })
+    expect(imported.hiddenCols).toEqual({ 1: true })
+  })
 })

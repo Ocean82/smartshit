@@ -389,8 +389,9 @@ export async function importWorkbookFromFileWithMeta(file: File): Promise<Workbo
 
     // Extract column widths from Excel's !cols metadata
     if (ws && (ws as Record<string, unknown>)['!cols']) {
-      const cols = (ws as Record<string, unknown>)['!cols'] as Array<{ wpx?: number; wch?: number; width?: number } | undefined>
+      const cols = (ws as Record<string, unknown>)['!cols'] as Array<{ wpx?: number; wch?: number; width?: number; hidden?: boolean } | undefined>
       const columnWidths: Record<number, number> = {}
+      const hiddenCols: Record<number, true> = {}
       for (let i = 0; i < Math.min(cols.length, maxCols); i++) {
         const colDef = cols[i]
         if (!colDef) continue
@@ -403,16 +404,21 @@ export async function importWorkbookFromFileWithMeta(file: File): Promise<Workbo
         } else if (colDef.width && colDef.width > 0) {
           columnWidths[i] = Math.round(colDef.width * 7.5 + 5)
         }
+        if (colDef.hidden) hiddenCols[i] = true
       }
       if (Object.keys(columnWidths).length > 0) {
         sheet.columnWidths = columnWidths
+      }
+      if (Object.keys(hiddenCols).length > 0) {
+        sheet.hiddenCols = hiddenCols
       }
     }
 
     // Extract row heights from Excel's !rows metadata
     if (ws && (ws as Record<string, unknown>)['!rows']) {
-      const rows = (ws as Record<string, unknown>)['!rows'] as Array<{ hpx?: number; hpt?: number } | undefined>
+      const rows = (ws as Record<string, unknown>)['!rows'] as Array<{ hpx?: number; hpt?: number; hidden?: boolean } | undefined>
       const rowHeights: Record<number, number> = {}
+      const hiddenRows: Record<number, true> = {}
       for (let i = 0; i < Math.min(rows.length, maxRows); i++) {
         const rowDef = rows[i]
         if (!rowDef) continue
@@ -423,9 +429,13 @@ export async function importWorkbookFromFileWithMeta(file: File): Promise<Workbo
           // Convert points to pixels (1pt ≈ 1.333px)
           rowHeights[i] = Math.round(rowDef.hpt * 1.333)
         }
+        if (rowDef.hidden) hiddenRows[i] = true
       }
       if (Object.keys(rowHeights).length > 0) {
         sheet.rowHeights = rowHeights
+      }
+      if (Object.keys(hiddenRows).length > 0) {
+        sheet.hiddenRows = hiddenRows
       }
     }
 
@@ -508,6 +518,37 @@ export function buildXlsxWorkbook(workbook: WorkbookData): XLSX.WorkBook {
       }
       if (merges.length > 0) ws['!merges'] = merges
     }
+
+    const colKeys = new Set([
+      ...Object.keys(sheet.columnWidths || {}).map(Number),
+      ...Object.keys(sheet.hiddenCols || {}).map(Number),
+    ])
+    if (colKeys.size > 0) {
+      const maxCol = Math.max(...colKeys)
+      const cols: Array<{ wpx?: number; hidden?: boolean } | undefined> = []
+      for (let c = 0; c <= maxCol; c++) {
+        const wpx = sheet.columnWidths?.[c]
+        const hidden = sheet.hiddenCols?.[c] === true
+        if (wpx != null || hidden) cols[c] = { ...(wpx != null ? { wpx } : {}), ...(hidden ? { hidden: true } : {}) }
+      }
+      ws['!cols'] = cols
+    }
+
+    const rowKeys = new Set([
+      ...Object.keys(sheet.rowHeights || {}).map(Number),
+      ...Object.keys(sheet.hiddenRows || {}).map(Number),
+    ])
+    if (rowKeys.size > 0) {
+      const maxRow = Math.max(...rowKeys)
+      const rows: Array<{ hpx?: number; hidden?: boolean } | undefined> = []
+      for (let r = 0; r <= maxRow; r++) {
+        const hpx = sheet.rowHeights?.[r]
+        const hidden = sheet.hiddenRows?.[r] === true
+        if (hpx != null || hidden) rows[r] = { ...(hpx != null ? { hpx } : {}), ...(hidden ? { hidden: true } : {}) }
+      }
+      ws['!rows'] = rows
+    }
+
     XLSX.utils.book_append_sheet(book, ws, sheet.name.slice(0, 31))
   }
   return book
