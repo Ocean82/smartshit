@@ -116,6 +116,10 @@ export interface AppState extends UIState, UIActions, FileActions, ChatActions {
   removeChart: (chartId: string) => void
   updateChartPosition: (chartId: string, x: number, y: number, size?: { width: number; height: number }) => void
   setFreeze: (rows: number, cols: number) => void
+  hideRows: (rows: number[]) => void
+  hideCols: (cols: number[]) => void
+  unhideRows: (rows: number[]) => void
+  unhideCols: (cols: number[]) => void
   setSortConfig: (config: SortConfig | null) => void
   setFilters: (filters: FilterConfig[]) => void
   sortByColumn: (column: number, direction: 'asc' | 'desc') => void

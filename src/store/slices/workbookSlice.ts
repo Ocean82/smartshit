@@ -32,6 +32,7 @@ import { toMergeRange, parseMergeRange, rangesOverlap } from '@/lib/merge'
 import { encodeCellBlock, parseGridClipboard } from '@/lib/clipboardCodec'
 import { buildFillPattern, adjustFormulaRefs, fillCellAt, type FilledCell } from '@/lib/autofill'
 import { clampRowHeight, getRowHeight, setRowAt, shiftRowHeightsOnDelete, shiftRowHeightsOnInsert } from '@/lib/rowLayout'
+import { setHidden, shiftHiddenOnDelete, shiftHiddenOnInsert } from '@/lib/rowColVisibility'
 import { autoFitRowHeights, createCanvasTextMeasurer } from '@/lib/rowAutoFit'
 import { MAX_UNDO_STACK } from '../storeTypes'
 
@@ -132,6 +133,10 @@ export interface WorkbookActions {
   removeChart: (chartId: string) => void
   updateChartPosition: (chartId: string, x: number, y: number, size?: { width: number; height: number }) => void
   setFreeze: (rows: number, cols: number) => void
+  hideRows: (rows: number[]) => void
+  hideCols: (cols: number[]) => void
+  unhideRows: (rows: number[]) => void
+  unhideCols: (cols: number[]) => void
   setSortConfig: (config: SortConfig | null) => void
   setFilters: (filters: FilterConfig[]) => void
   sortByColumn: (column: number, direction: 'asc' | 'desc') => void
@@ -706,6 +711,46 @@ export function createWorkbookActions(
         });
       },
 
+      hideRows: (rows) => {
+        set((s) => {
+          const sheet = s.workbook.sheets.find((sh) => sh.id === s.activeSheetId);
+          if (!sheet || rows.length === 0) return;
+          const next = setHidden(sheet.hiddenRows, rows, true);
+          if (Object.keys(next).length === 0) delete sheet.hiddenRows;
+          else sheet.hiddenRows = next;
+        });
+      },
+
+      hideCols: (cols) => {
+        set((s) => {
+          const sheet = s.workbook.sheets.find((sh) => sh.id === s.activeSheetId);
+          if (!sheet || cols.length === 0) return;
+          const next = setHidden(sheet.hiddenCols, cols, true);
+          if (Object.keys(next).length === 0) delete sheet.hiddenCols;
+          else sheet.hiddenCols = next;
+        });
+      },
+
+      unhideRows: (rows) => {
+        set((s) => {
+          const sheet = s.workbook.sheets.find((sh) => sh.id === s.activeSheetId);
+          if (!sheet || rows.length === 0) return;
+          const next = setHidden(sheet.hiddenRows, rows, false);
+          if (Object.keys(next).length === 0) delete sheet.hiddenRows;
+          else sheet.hiddenRows = next;
+        });
+      },
+
+      unhideCols: (cols) => {
+        set((s) => {
+          const sheet = s.workbook.sheets.find((sh) => sh.id === s.activeSheetId);
+          if (!sheet || cols.length === 0) return;
+          const next = setHidden(sheet.hiddenCols, cols, false);
+          if (Object.keys(next).length === 0) delete sheet.hiddenCols;
+          else sheet.hiddenCols = next;
+        });
+      },
+
       setSortConfig: (config) => {
         set((s) => { s.activeSortConfig = config; });
       },
@@ -836,6 +881,7 @@ export function createWorkbookActions(
           }
           sheet.cells = newCells;
           sheet.rowHeights = shiftRowHeightsOnInsert(sheet.rowHeights, afterRow);
+          sheet.hiddenRows = shiftHiddenOnInsert(sheet.hiddenRows, afterRow);
         });
         get().engine.loadWorkbook(get().workbook);
       },
@@ -854,6 +900,7 @@ export function createWorkbookActions(
             }
           }
           sheet.cells = newCells;
+          sheet.hiddenCols = shiftHiddenOnInsert(sheet.hiddenCols, afterCol);
         });
         get().engine.loadWorkbook(get().workbook);
       },
@@ -874,6 +921,7 @@ export function createWorkbookActions(
           }
           sheet.cells = newCells;
           sheet.rowHeights = shiftRowHeightsOnDelete(sheet.rowHeights, row);
+          sheet.hiddenRows = shiftHiddenOnDelete(sheet.hiddenRows, row);
         });
         get().engine.loadWorkbook(get().workbook);
       },
@@ -893,6 +941,7 @@ export function createWorkbookActions(
             }
           }
           sheet.cells = newCells;
+          sheet.hiddenCols = shiftHiddenOnDelete(sheet.hiddenCols, col);
         });
         get().engine.loadWorkbook(get().workbook);
       },

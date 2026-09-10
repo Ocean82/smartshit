@@ -10,6 +10,7 @@ import { findHeaderRow, findLastDataRow } from '@/lib/sheetSort';
 import { buildFilteredRowIndex } from '@/lib/rowFilter';
 import { getRowHeight, rowCumulativeOffsets, rowIndexAtY } from '@/lib/rowLayout';
 import { computeFreezeBodyWindow } from '@/lib/gridFreeze';
+import { buildVisibleColIndices, buildVisibleRowIndices } from '@/lib/rowColVisibility';
 import type { SheetData, FilterConfig } from '@/types';
 
 const BUFFER_ROWS = 5;
@@ -38,10 +39,16 @@ interface GridViewportReturn {
   TOTAL_ROWS: number;
   TOTAL_COLS: number;
   displayRowCount: number;
+  displayColCount: number;
   /** Body virtualization window (excludes frozen rows/cols — those render separately). */
   visibleRange: { startRow: number; endRow: number; startCol: number; endCol: number };
   frozenRows: number;
   frozenCols: number;
+  /** Visible sheet row indices (filter + hide). Null = identity 0..TOTAL_ROWS-1. */
+  displayRows: number[] | null;
+  /** Visible sheet col indices (hide). Null = identity 0..TOTAL_COLS-1. */
+  displayCols: number[] | null;
+  /** @deprecated alias of displayRows for callers that still say filteredRows */
   filteredRows: number[] | null;
   rowOffsets: number[];
   totalWidth: number;
@@ -61,7 +68,6 @@ export function useGridViewport(config: GridViewportConfig): GridViewportReturn 
   const gridRef = useRef<HTMLDivElement>(null);
   const [scrollState, setScrollState] = useState<ScrollState>({ scrollTop: 0, scrollLeft: 0, viewportHeight: 600, viewportWidth: 800 });
 
-  // Dynamic grid bounds
   const { TOTAL_ROWS, TOTAL_COLS } = useMemo(() => {
     const lastDataRow = findLastDataRow(sheet);
     const lastDataCol = Object.keys(sheet.cells).reduce((max, cellId) => {
@@ -74,29 +80,42 @@ export function useGridViewport(config: GridViewportConfig): GridViewportReturn 
     };
   }, [sheet]);
 
-  // Filtered rows
   const filteredRows = useMemo(() => {
     if (!activeFilters.length) return null;
     const last = Math.max(findLastDataRow(sheet), findHeaderRow(sheet));
     return buildFilteredRowIndex(last + 1, activeFilters, getComputedValue, findHeaderRow(sheet));
   }, [activeFilters, getComputedValue, sheet]);
 
-  const displayRowCount = filteredRows ? filteredRows.length : TOTAL_ROWS;
+  const displayRows = useMemo(
+    () => buildVisibleRowIndices(TOTAL_ROWS, filteredRows, sheet.hiddenRows),
+    [TOTAL_ROWS, filteredRows, sheet.hiddenRows],
+  );
 
-  // Variable row heights: derive a height per displayed row (honoring imported
-  // `sheet.rowHeights` overrides) and the cumulative vertical offsets.
+  const displayCols = useMemo(
+    () => buildVisibleColIndices(TOTAL_COLS, sheet.hiddenCols),
+    [TOTAL_COLS, sheet.hiddenCols],
+  );
+
+  const displayRowCount = displayRows ? displayRows.length : TOTAL_ROWS;
+  const displayColCount = displayCols ? displayCols.length : TOTAL_COLS;
+
   const rowOffsets = useMemo(() => {
-    const count = filteredRows ? filteredRows.length : TOTAL_ROWS;
+    const count = displayRowCount;
     const heights = new Array<number>(count);
     for (let r = 0; r < count; r++) {
-      const actualRow = filteredRows ? filteredRows[r] : r;
+      const actualRow = displayRows ? displayRows[r] : r;
       heights[r] = getRowHeight(sheet.rowHeights, actualRow);
     }
     return rowCumulativeOffsets(heights);
-  }, [filteredRows, sheet.rowHeights, TOTAL_ROWS]);
+  }, [displayRows, displayRowCount, sheet.rowHeights]);
+
+  const displayColWidth = useCallback((displayCol: number) => {
+    const actual = displayCols ? displayCols[displayCol] : displayCol;
+    return getColWidth(actual);
+  }, [displayCols, getColWidth]);
 
   // Body window starts after freeze. frozenRows/frozenCols count the first N
-  // *display* indices (post-filter), matching what stays pinned in the UI.
+  // *display* indices (post-filter / post-hide), matching what stays pinned.
   const { visibleRange, frozenRows, frozenCols } = useMemo(() => {
     const { scrollTop, scrollLeft, viewportHeight, viewportWidth } = scrollState;
     const lastRow = rowOffsets.length - 2;
@@ -105,20 +124,20 @@ export function useGridViewport(config: GridViewportConfig): GridViewportReturn 
 
     let colStart = 0;
     let accWidth = 0;
-    for (let i = 0; i < TOTAL_COLS; i++) {
-      if (accWidth + getColWidth(i) >= scrollLeft) {
+    for (let i = 0; i < displayColCount; i++) {
+      if (accWidth + displayColWidth(i) >= scrollLeft) {
         colStart = Math.max(0, i - BUFFER_COLS);
         break;
       }
-      accWidth += getColWidth(i);
+      accWidth += displayColWidth(i);
     }
 
     let colEnd = colStart;
     accWidth = 0;
-    for (let i = colStart; i < TOTAL_COLS; i++) {
-      accWidth += getColWidth(i);
+    for (let i = colStart; i < displayColCount; i++) {
+      accWidth += displayColWidth(i);
       if (accWidth > viewportWidth) {
-        colEnd = Math.min(TOTAL_COLS - 1, i + BUFFER_COLS);
+        colEnd = Math.min(displayColCount - 1, i + BUFFER_COLS);
         break;
       }
       colEnd = i;
@@ -131,8 +150,8 @@ export function useGridViewport(config: GridViewportConfig): GridViewportReturn 
       naturalEndRow,
       naturalStartCol: colStart,
       naturalEndCol: colEnd,
-      displayRowCount: filteredRows ? filteredRows.length : TOTAL_ROWS,
-      totalCols: TOTAL_COLS,
+      displayRowCount,
+      totalCols: displayColCount,
     });
 
     return {
@@ -145,35 +164,30 @@ export function useGridViewport(config: GridViewportConfig): GridViewportReturn 
         endCol: window.bodyEndCol,
       },
     };
-  }, [scrollState, getColWidth, TOTAL_COLS, TOTAL_ROWS, rowOffsets, sheet.frozenRows, sheet.frozenCols, filteredRows]);
+  }, [scrollState, displayColWidth, displayColCount, displayRowCount, rowOffsets, sheet.frozenRows, sheet.frozenCols]);
 
-  // Total dimensions
   const totalWidth = useMemo(() => {
     let width = 0;
-    for (let i = 0; i < TOTAL_COLS; i++) {
-      width += getColWidth(i);
-    }
+    for (let i = 0; i < displayColCount; i++) width += displayColWidth(i);
     return width;
-  }, [getColWidth, TOTAL_COLS]);
+  }, [displayColWidth, displayColCount]);
 
   const totalHeight = rowOffsets.length > 0 ? rowOffsets[rowOffsets.length - 1] : 0;
-  // Spacer between frozen block and body: skip rows already rendered as frozen.
   const rowOffset = rowOffsets.length > 0
     ? Math.max(0, (rowOffsets[visibleRange.startRow] ?? 0) - (rowOffsets[frozenRows] ?? 0))
     : 0;
 
-  // Column offsets for body columns (baseOffset skips frozen + offscreen body cols)
   const visibleColOffsets = useMemo(() => {
     const offsets: number[] = [0];
     let accWidth = 0;
     for (let i = frozenCols; i < visibleRange.startCol; i++) {
-      accWidth += getColWidth(i);
+      accWidth += displayColWidth(i);
     }
     for (let i = visibleRange.startCol; i <= visibleRange.endCol; i++) {
-      offsets.push(offsets[offsets.length - 1] + getColWidth(i));
+      offsets.push(offsets[offsets.length - 1] + displayColWidth(i));
     }
     return { offsets, baseOffset: accWidth };
-  }, [visibleRange.startCol, visibleRange.endCol, getColWidth, frozenCols]);
+  }, [visibleRange.startCol, visibleRange.endCol, displayColWidth, frozenCols]);
 
   const handleScroll = useCallback(() => {
     if (!gridRef.current) return;
@@ -181,7 +195,6 @@ export function useGridViewport(config: GridViewportConfig): GridViewportReturn 
     setScrollState({ scrollTop, scrollLeft, viewportHeight: clientHeight, viewportWidth: clientWidth });
   }, []);
 
-  // Attach scroll listener
   useEffect(() => {
     const el = gridRef.current;
     if (!el) return;
@@ -195,10 +208,13 @@ export function useGridViewport(config: GridViewportConfig): GridViewportReturn 
     TOTAL_ROWS,
     TOTAL_COLS,
     displayRowCount,
+    displayColCount,
     visibleRange,
     frozenRows,
     frozenCols,
-    filteredRows,
+    displayRows,
+    displayCols,
+    filteredRows: displayRows,
     rowOffsets,
     totalWidth,
     totalHeight,

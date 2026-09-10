@@ -61,6 +61,8 @@ export function createHistoryActions(
               cells: structuredClone(s.cells),
               columnWidths: { ...s.columnWidths },
               rowHeights: s.rowHeights ? { ...s.rowHeights } : {},
+              hiddenRows: s.hiddenRows ? { ...s.hiddenRows } : undefined,
+              hiddenCols: s.hiddenCols ? { ...s.hiddenCols } : undefined,
               mergedCells: s.mergedCells ? [...s.mergedCells] : [],
               charts: s.charts ? [...s.charts] : [],
             }

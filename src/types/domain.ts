@@ -213,6 +213,10 @@ export interface SheetData {
   cells: Record<string, CellData>;
   columnWidths: Record<number, number>;
   rowHeights: Record<number, number>;
+  /** Sheet rows omitted from the grid display (keys are 0-based row indices). */
+  hiddenRows?: Record<number, true>;
+  /** Sheet columns omitted from the grid display (keys are 0-based col indices). */
+  hiddenCols?: Record<number, true>;
   frozenRows?: number;
   frozenCols?: number;
   filters?: FilterConfig[];

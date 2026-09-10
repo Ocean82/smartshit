@@ -10,7 +10,7 @@ import { findLastDataRow } from '@/lib/sheetSort';
 import { columnDataBarPeerValues, columnColorScalePeerValues, columnIconSetPeerValues } from '@/lib/conditionalFormat';
 import { findActivePendingPreview } from '@/lib/pendingActionPreview';
 import { getRowHeight, clampRowHeight } from '@/lib/rowLayout';
-import { frozenColStickyLeft, frozenRowStickyTop, splitRectAcrossFreeze } from '@/lib/gridFreeze';
+import { frozenRowStickyTop, splitRectAcrossFreeze } from '@/lib/gridFreeze';
 import { useTouch } from '@/hooks/useTouch';
 import { getCellNotesService } from '@/lib/cellNotes';
 import { buildMergeIndex, isMergeAnchor, type MergeRange } from '@/lib/merge';
@@ -281,20 +281,14 @@ function useGridTouch({ gridRef, selectionManager, getColWidth, visibleRange, vi
 
 // ─── Freeze Pane Indicator ────────────────────────────────────────────────────
 
-function FreezePaneIndicators({ frozenRows, frozenCols, getColWidth, frozenRowHeight }: {
+function FreezePaneIndicators({ frozenRows, frozenCols, frozenRowHeight, frozenColLeft }: {
   frozenRows: number;
   frozenCols: number;
-  getColWidth: (col: number) => number;
   /** Total height of the frozen row block in display-row pixels. */
   frozenRowHeight: number;
+  /** Total width of the frozen col block (incl. row header offset already applied by caller? no — full left edge). */
+  frozenColLeft: number;
 }) {
-  const frozenColLeft = useMemo(() => {
-    if (frozenCols <= 0) return 0;
-    let w = ROW_HEADER_WIDTH;
-    for (let c = 0; c < frozenCols; c++) w += getColWidth(c);
-    return w;
-  }, [frozenCols, getColWidth]);
-
   return (
     <>
       {frozenRows > 0 && (
@@ -552,10 +546,11 @@ export function SpreadsheetGrid() {
 
     const frozenRows = viewport.frozenRows;
     const frozenCols = viewport.frozenCols;
-    const displayRow = viewport.filteredRows ? viewport.filteredRows.indexOf(row) : row;
+    const displayRow = viewport.displayRows ? viewport.displayRows.indexOf(row) : row;
     if (displayRow < 0) return;
+    const displayCol = viewport.displayCols ? viewport.displayCols.indexOf(col) : col;
+    if (displayCol < 0) return;
 
-    // Vertical: use display-row offsets so filter + freeze insets match what is pinned.
     const cellTop = viewport.rowOffsets[displayRow] ?? 0;
     const cellBottom = viewport.rowOffsets[displayRow + 1] ?? cellTop;
     const freezeTop = viewport.rowOffsets[frozenRows] ?? 0;
@@ -566,16 +561,22 @@ export function SpreadsheetGrid() {
     else if (cellTop < scrollTop + topInset) gridEl.scrollTop = Math.max(0, cellTop - topInset);
 
     let cellLeft = 0;
-    for (let i = 0; i < col; i++) cellLeft += resolvedGetColWidth(i);
+    for (let d = 0; d < displayCol; d++) {
+      const actual = viewport.displayCols ? viewport.displayCols[d] : d;
+      cellLeft += resolvedGetColWidth(actual);
+    }
     const cellRight = cellLeft + resolvedGetColWidth(col);
     let freezeLeft = 0;
-    for (let i = 0; i < frozenCols; i++) freezeLeft += resolvedGetColWidth(i);
+    for (let d = 0; d < frozenCols; d++) {
+      const actual = viewport.displayCols ? viewport.displayCols[d] : d;
+      freezeLeft += resolvedGetColWidth(actual);
+    }
     const { scrollLeft, clientWidth } = gridEl;
-    const leftInset = col < frozenCols ? 0 : freezeLeft;
+    const leftInset = displayCol < frozenCols ? 0 : freezeLeft;
 
     if (cellRight > scrollLeft + clientWidth) gridEl.scrollLeft = cellRight - clientWidth;
     else if (cellLeft < scrollLeft + leftInset) gridEl.scrollLeft = Math.max(0, cellLeft - leftInset);
-  }, [viewport.gridRef, viewport.frozenRows, viewport.frozenCols, viewport.filteredRows, viewport.rowOffsets, resolvedGetColWidth]);
+  }, [viewport.gridRef, viewport.frozenRows, viewport.frozenCols, viewport.displayRows, viewport.displayCols, viewport.rowOffsets, resolvedGetColWidth]);
 
   // Cumulative pixel offsets for point→cell mapping (fill drag).
   const rowOffsets = useMemo(() => {
@@ -663,9 +664,22 @@ export function SpreadsheetGrid() {
   const freezeTopPx = viewport.rowOffsets[viewport.frozenRows] ?? 0;
   const freezeLeftPx = useMemo(() => {
     let w = 0;
-    for (let c = 0; c < viewport.frozenCols; c++) w += resolvedGetColWidth(c);
+    for (let d = 0; d < viewport.frozenCols; d++) {
+      const actual = viewport.displayCols ? viewport.displayCols[d] : d;
+      w += resolvedGetColWidth(actual);
+    }
     return w;
-  }, [viewport.frozenCols, resolvedGetColWidth]);
+  }, [viewport.frozenCols, viewport.displayCols, resolvedGetColWidth]);
+
+  const actualColAt = useCallback((displayCol: number) => (
+    viewport.displayCols ? viewport.displayCols[displayCol] : displayCol
+  ), [viewport.displayCols]);
+
+  const displayColStickyLeft = useCallback((displayCol: number) => {
+    let left = ROW_HEADER_WIDTH;
+    for (let d = 0; d < displayCol; d++) left += resolvedGetColWidth(actualColAt(d));
+    return left;
+  }, [actualColAt, resolvedGetColWidth]);
 
   const fillHandlePos = useMemo(() => {
     const sel = selectionManager.selection;
@@ -826,12 +840,12 @@ export function SpreadsheetGrid() {
     const frozenZ = isFrozenRow ? 14 : 11;
     return (
       <>
-        {Array.from({ length: frozenCols }, (_, col) =>
+        {Array.from({ length: frozenCols }, (_, displayCol) =>
           renderDataCell(
             row,
-            col,
+            actualColAt(displayCol),
             rowHeight,
-            frozenColStickyLeft(ROW_HEADER_WIDTH, resolvedGetColWidth, col),
+            displayColStickyLeft(displayCol),
             frozenZ,
           ),
         )}
@@ -841,15 +855,15 @@ export function SpreadsheetGrid() {
         )}
 
         {Array.from({ length: Math.max(0, viewport.visibleRange.endCol - viewport.visibleRange.startCol + 1) }, (_, j) => {
-          const col = viewport.visibleRange.startCol + j;
-          return renderDataCell(row, col, rowHeight, null, 0);
+          const displayCol = viewport.visibleRange.startCol + j;
+          return renderDataCell(row, actualColAt(displayCol), rowHeight, null, 0);
         })}
       </>
     );
   };
 
   const renderGridRow = (displayIndex: number, stickyTop: number | null) => {
-    const row = viewport.filteredRows ? viewport.filteredRows[displayIndex] : displayIndex;
+    const row = viewport.displayRows ? viewport.displayRows[displayIndex] : displayIndex;
     if (row == null) return null;
 
     const rowHeight = resolvedGetRowHeight(row);
@@ -925,29 +939,32 @@ export function SpreadsheetGrid() {
             ▾
           </div>
 
-          {Array.from({ length: frozenCols }, (_, col) => (
-            <ColumnHeader
-              key={`fz-${col}`}
-              col={col}
-              width={resolvedGetColWidth(col)}
-              isSelected={isColSelected(col)}
-              sortDirection={activeSortConfig?.column === col ? activeSortConfig.direction : null}
-              isFiltered={activeFilters.some((f) => f.column === col)}
-              stickyLeft={frozenColStickyLeft(ROW_HEADER_WIDTH, resolvedGetColWidth, col)}
-              onSelect={selectionManager.handleColSelect}
-              onResizeStart={resizeState.handleResizeStart}
-              onResizeMove={resizeState.handleResizeMove}
-              onResizeEnd={resizeState.handleResizeEnd}
-              onAutoFit={resizeState.handleAutoFitColumn}
-            />
-          ))}
+          {Array.from({ length: frozenCols }, (_, displayCol) => {
+            const col = actualColAt(displayCol);
+            return (
+              <ColumnHeader
+                key={`fz-${col}`}
+                col={col}
+                width={resolvedGetColWidth(col)}
+                isSelected={isColSelected(col)}
+                sortDirection={activeSortConfig?.column === col ? activeSortConfig.direction : null}
+                isFiltered={activeFilters.some((f) => f.column === col)}
+                stickyLeft={displayColStickyLeft(displayCol)}
+                onSelect={selectionManager.handleColSelect}
+                onResizeStart={resizeState.handleResizeStart}
+                onResizeMove={resizeState.handleResizeMove}
+                onResizeEnd={resizeState.handleResizeEnd}
+                onAutoFit={resizeState.handleAutoFitColumn}
+              />
+            );
+          })}
 
           {viewport.visibleColOffsets.baseOffset > 0 && (
             <div style={{ width: viewport.visibleColOffsets.baseOffset, height: COL_HEADER_HEIGHT, flexShrink: 0 }} />
           )}
 
           {Array.from({ length: Math.max(0, viewport.visibleRange.endCol - viewport.visibleRange.startCol + 1) }, (_, j) => {
-            const col = viewport.visibleRange.startCol + j;
+            const col = actualColAt(viewport.visibleRange.startCol + j);
             return (
               <ColumnHeader
                 key={col}
@@ -1108,8 +1125,8 @@ export function SpreadsheetGrid() {
         <FreezePaneIndicators
           frozenRows={frozenRows}
           frozenCols={frozenCols}
-          getColWidth={resolvedGetColWidth}
           frozenRowHeight={viewport.rowOffsets[frozenRows] ?? 0}
+          frozenColLeft={ROW_HEADER_WIDTH + freezeLeftPx}
         />
       </div>
 

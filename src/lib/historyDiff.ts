@@ -33,6 +33,10 @@ export interface SheetPatch {
   mergedCellsAfter?: string[]
   rowHeightsBefore?: Record<number, number>
   rowHeightsAfter?: Record<number, number>
+  hiddenRowsBefore?: Record<number, true>
+  hiddenRowsAfter?: Record<number, true>
+  hiddenColsBefore?: Record<number, true>
+  hiddenColsAfter?: Record<number, true>
 }
 
 export interface WorkbookPatch {
@@ -83,7 +87,7 @@ export function diffWorkbooks(before: WorkbookData, after: WorkbookData): Workbo
     const afterSheet = after.sheets[i]
     const sheetPatch = diffSheet(beforeSheet, afterSheet)
 
-    if (sheetPatch.cells.length > 0 || sheetPatch.nameBefore !== undefined || sheetPatch.colWidthsBefore !== undefined || sheetPatch.mergedCellsBefore !== undefined || sheetPatch.rowHeightsBefore !== undefined) {
+    if (sheetPatch.cells.length > 0 || sheetPatch.nameBefore !== undefined || sheetPatch.colWidthsBefore !== undefined || sheetPatch.mergedCellsBefore !== undefined || sheetPatch.rowHeightsBefore !== undefined || sheetPatch.hiddenRowsBefore !== undefined || sheetPatch.hiddenColsBefore !== undefined) {
       patch.sheets.push(sheetPatch)
     }
   }
@@ -125,6 +129,20 @@ function diffSheet(before: SheetData, after: SheetData): SheetPatch {
   if (JSON.stringify(br) !== JSON.stringify(ar)) {
     patch.rowHeightsBefore = br as Record<number, number>
     patch.rowHeightsAfter = ar as Record<number, number>
+  }
+
+  const bhr = before.hiddenRows || {}
+  const ahr = after.hiddenRows || {}
+  if (JSON.stringify(bhr) !== JSON.stringify(ahr)) {
+    patch.hiddenRowsBefore = bhr as Record<number, true>
+    patch.hiddenRowsAfter = ahr as Record<number, true>
+  }
+
+  const bhc = before.hiddenCols || {}
+  const ahc = after.hiddenCols || {}
+  if (JSON.stringify(bhc) !== JSON.stringify(ahc)) {
+    patch.hiddenColsBefore = bhc as Record<number, true>
+    patch.hiddenColsAfter = ahc as Record<number, true>
   }
 
   // Cell-level diff
@@ -184,6 +202,14 @@ export function applyUndo(current: WorkbookData, entry: HistoryEntry): WorkbookD
     if (sheetPatch.rowHeightsBefore !== undefined) {
       sheet.rowHeights = sheetPatch.rowHeightsBefore
     }
+    if (sheetPatch.hiddenRowsBefore !== undefined) {
+      if (Object.keys(sheetPatch.hiddenRowsBefore).length === 0) delete sheet.hiddenRows
+      else sheet.hiddenRows = sheetPatch.hiddenRowsBefore
+    }
+    if (sheetPatch.hiddenColsBefore !== undefined) {
+      if (Object.keys(sheetPatch.hiddenColsBefore).length === 0) delete sheet.hiddenCols
+      else sheet.hiddenCols = sheetPatch.hiddenColsBefore
+    }
 
     for (const cellPatch of sheetPatch.cells) {
       if (cellPatch.before === null) {
@@ -228,6 +254,14 @@ export function applyRedo(current: WorkbookData, entry: HistoryEntry): WorkbookD
     }
     if (sheetPatch.rowHeightsAfter !== undefined) {
       sheet.rowHeights = sheetPatch.rowHeightsAfter
+    }
+    if (sheetPatch.hiddenRowsAfter !== undefined) {
+      if (Object.keys(sheetPatch.hiddenRowsAfter).length === 0) delete sheet.hiddenRows
+      else sheet.hiddenRows = sheetPatch.hiddenRowsAfter
+    }
+    if (sheetPatch.hiddenColsAfter !== undefined) {
+      if (Object.keys(sheetPatch.hiddenColsAfter).length === 0) delete sheet.hiddenCols
+      else sheet.hiddenCols = sheetPatch.hiddenColsAfter
     }
 
     for (const cellPatch of sheetPatch.cells) {
