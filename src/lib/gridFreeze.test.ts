@@ -68,6 +68,40 @@ describe('computeFreezeBodyWindow', () => {
     expect(w.bodyStartRow).toBe(5)
     expect(w.bodyStartCol).toBe(2)
   })
+
+  it('clamps freeze when filtered displayRowCount is smaller than requested freeze', () => {
+    const w = computeFreezeBodyWindow({
+      frozenRows: 10,
+      frozenCols: 5,
+      naturalStartRow: 0,
+      naturalEndRow: 3,
+      naturalStartCol: 0,
+      naturalEndCol: 2,
+      displayRowCount: 4,
+      totalCols: 3,
+    })
+    expect(w.frozenRows).toBe(4)
+    expect(w.frozenCols).toBe(3)
+    expect(w.bodyStartRow).toBe(4)
+    expect(w.bodyEndRow).toBe(3)
+    expect(w.bodyStartCol).toBe(3)
+    expect(w.bodyEndCol).toBe(2)
+  })
+
+  it('never puts display indices below the freeze line into the body window', () => {
+    const w = computeFreezeBodyWindow({
+      frozenRows: 2,
+      frozenCols: 1,
+      naturalStartRow: 0,
+      naturalEndRow: 8,
+      naturalStartCol: 0,
+      naturalEndCol: 5,
+      displayRowCount: 20,
+      totalCols: 10,
+    })
+    expect(w.bodyStartRow).toBeGreaterThanOrEqual(w.frozenRows)
+    expect(w.bodyStartCol).toBeGreaterThanOrEqual(w.frozenCols)
+  })
 })
 
 describe('sticky offsets', () => {

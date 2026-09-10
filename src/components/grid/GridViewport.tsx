@@ -95,7 +95,8 @@ export function useGridViewport(config: GridViewportConfig): GridViewportReturn 
     return rowCumulativeOffsets(heights);
   }, [filteredRows, sheet.rowHeights, TOTAL_ROWS]);
 
-  // Calculate visible range (body window starts after freeze line)
+  // Body window starts after freeze. frozenRows/frozenCols count the first N
+  // *display* indices (post-filter), matching what stays pinned in the UI.
   const { visibleRange, frozenRows, frozenCols } = useMemo(() => {
     const { scrollTop, scrollLeft, viewportHeight, viewportWidth } = scrollState;
     const lastRow = rowOffsets.length - 2;

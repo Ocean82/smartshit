@@ -695,6 +695,7 @@ export function createWorkbookActions(
         });
       },
 
+      // Counts of leading display rows/cols to pin (post-filter indices in the grid UI).
       setFreeze: (rows, cols) => {
         set((s) => {
           const sheet = s.workbook.sheets.find((sh) => sh.id === s.activeSheetId);

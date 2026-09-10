@@ -24,6 +24,7 @@ export interface FreezeBodyWindow {
 /**
  * Build the body virtualization window given a natural (scroll-derived) range
  * and freeze counts. Body start is never before the freeze line.
+ * `frozenRows` / `frozenCols` are display-index counts (after row filter).
  */
 export function computeFreezeBodyWindow(args: {
   frozenRows?: number | null
