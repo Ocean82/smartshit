@@ -93,3 +93,32 @@ export function shiftHiddenOnDelete(map: HiddenMap | undefined, index: number): 
   }
   return Object.keys(next).length > 0 ? next : undefined
 }
+
+/** Inclusive sheet indices in a selection span. */
+export function indicesInSpan(start: number, end: number): number[] {
+  const lo = Math.min(start, end)
+  const hi = Math.max(start, end)
+  const out: number[] = []
+  for (let i = lo; i <= hi; i++) out.push(i)
+  return out
+}
+
+/**
+ * Rows to unhide for a selection: hidden indices inside the span plus
+ * contiguous hidden blocks immediately before/after (Excel-like).
+ */
+export function resolveUnhideIndices(
+  map: HiddenMap | undefined,
+  start: number,
+  end: number,
+): number[] {
+  const lo = Math.min(start, end)
+  const hi = Math.max(start, end)
+  const set = new Set<number>()
+  for (let i = lo; i <= hi; i++) {
+    if (isHidden(map, i)) set.add(i)
+  }
+  for (const i of adjacentHiddenBlock(map, lo, 'before')) set.add(i)
+  for (const i of adjacentHiddenBlock(map, hi, 'after')) set.add(i)
+  return [...set].sort((a, b) => a - b)
+}

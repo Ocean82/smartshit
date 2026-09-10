@@ -12,6 +12,7 @@ import { workbookHasContent } from '@/lib/workbookGuard'
 import { v4 as uuid } from 'uuid'
 import { AnchoredPanel } from '@/components/AnchoredPanel'
 import { RenameWorkbookDialog } from '@/components/RenameWorkbookDialog'
+import { indicesInSpan, resolveUnhideIndices } from '@/lib/rowColVisibility'
 
 type MenuId = 'file' | 'edit' | 'view' | 'insert' | 'format' | 'data'
 
@@ -357,6 +358,36 @@ export function MenuBar() {
         { label: 'Merge Cells', action: () => { pushHistory('Merge cells'); useStore.getState().mergeSelection(); setOpenMenu(null) }, disabled: !selection },
         { label: 'Unmerge Cells', action: () => { pushHistory('Unmerge cells'); useStore.getState().unmergeSelection(); setOpenMenu(null) }, disabled: !selection, dividerAfter: true },
         { label: 'Clear Formatting', action: () => { useStore.getState().clearRangeFormat(); setOpenMenu(null) }, disabled: !selection, dividerAfter: true },
+        { label: 'Hide Rows', action: () => {
+          if (!selection) return
+          pushHistory('Hide rows')
+          useStore.getState().hideRows(indicesInSpan(selection.startRow, selection.endRow))
+          setOpenMenu(null)
+        }, disabled: !selection },
+        { label: 'Unhide Rows', action: () => {
+          if (!selection) return
+          const sheet = useStore.getState().getActiveSheet()
+          const rows = resolveUnhideIndices(sheet.hiddenRows, selection.startRow, selection.endRow)
+          if (rows.length === 0) { setOpenMenu(null); return }
+          pushHistory('Unhide rows')
+          useStore.getState().unhideRows(rows)
+          setOpenMenu(null)
+        }, disabled: !selection },
+        { label: 'Hide Columns', action: () => {
+          if (!selection) return
+          pushHistory('Hide columns')
+          useStore.getState().hideCols(indicesInSpan(selection.startCol, selection.endCol))
+          setOpenMenu(null)
+        }, disabled: !selection },
+        { label: 'Unhide Columns', action: () => {
+          if (!selection) return
+          const sheet = useStore.getState().getActiveSheet()
+          const cols = resolveUnhideIndices(sheet.hiddenCols, selection.startCol, selection.endCol)
+          if (cols.length === 0) { setOpenMenu(null); return }
+          pushHistory('Unhide columns')
+          useStore.getState().unhideCols(cols)
+          setOpenMenu(null)
+        }, disabled: !selection, dividerAfter: true },
         { label: 'Conditional Formatting...', action: () => { setShowConditionalFormatDialog(true); setOpenMenu(null) } },
         { label: 'Number Format Panel', action: () => { setShowFormatPanel(true); setOpenMenu(null) } },
       ],

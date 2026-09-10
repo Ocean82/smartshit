@@ -341,6 +341,8 @@ interface ColumnHeaderProps {
   isFiltered: boolean;
   /** When set, pin this header under horizontal scroll (frozen columns). */
   stickyLeft?: number;
+  unhideCols?: number[];
+  onUnhideCols?: (cols: number[]) => void;
   onSelect: (col: number) => void;
   onResizeStart: (col: number, e: React.PointerEvent<HTMLDivElement>) => void;
   onResizeMove: (e: React.PointerEvent<HTMLDivElement>) => void;
@@ -348,7 +350,7 @@ interface ColumnHeaderProps {
   onAutoFit: (col: number) => void;
 }
 
-function ColumnHeader({ col, width, isSelected, sortDirection, isFiltered, stickyLeft, onSelect, onResizeStart, onResizeMove, onResizeEnd, onAutoFit }: ColumnHeaderProps) {
+function ColumnHeader({ col, width, isSelected, sortDirection, isFiltered, stickyLeft, unhideCols, onUnhideCols, onSelect, onResizeStart, onResizeMove, onResizeEnd, onAutoFit }: ColumnHeaderProps) {
   return (
     <div
       role="columnheader"
@@ -370,6 +372,20 @@ function ColumnHeader({ col, width, isSelected, sortDirection, isFiltered, stick
       {colToLetter(col)}
       {sortDirection && <span className="ml-0.5 text-blue-500 text-[9px]">{sortDirection === 'asc' ? '▲' : '▼'}</span>}
       {isFiltered && <span className="ml-0.5 text-amber-500 text-[9px]">⏷</span>}
+      {unhideCols && unhideCols.length > 0 && onUnhideCols && (
+        <button
+          type="button"
+          title={`Unhide columns ${colToLetter(unhideCols[0])}–${colToLetter(unhideCols[unhideCols.length - 1])}`}
+          aria-label={`Unhide columns ${colToLetter(unhideCols[0])} to ${colToLetter(unhideCols[unhideCols.length - 1])}`}
+          className="absolute -right-1.5 top-1/2 -translate-y-1/2 z-20 w-3 h-3 rounded-sm bg-blue-500 text-white text-[8px] leading-none flex items-center justify-center hover:bg-blue-600"
+          onClick={(e) => {
+            e.stopPropagation();
+            onUnhideCols(unhideCols);
+          }}
+        >
+          +
+        </button>
+      )}
       <div
         className="col-resize-handle absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-400 opacity-0 group-hover:opacity-100 z-10 touch-none"
         onPointerDown={(e) => onResizeStart(col, e)}
@@ -390,6 +406,9 @@ interface RowHeaderProps {
   isSelected: boolean;
   /** Raise above frozen body cells when this header is in a sticky frozen row. */
   stickyZIndex?: number;
+  /** Hidden sheet rows between this row and the next displayed row. */
+  unhideRows?: number[];
+  onUnhideRows?: (rows: number[]) => void;
   onSelect: (row: number) => void;
   onResizeStart: (row: number, e: React.PointerEvent<HTMLDivElement>) => void;
   onResizeMove: (e: React.PointerEvent<HTMLDivElement>) => void;
@@ -397,7 +416,7 @@ interface RowHeaderProps {
   onAutoFit: (row: number) => void;
 }
 
-function RowHeader({ row, height, isSelected, stickyZIndex = 10, onSelect, onResizeStart, onResizeMove, onResizeEnd, onAutoFit }: RowHeaderProps) {
+function RowHeader({ row, height, isSelected, stickyZIndex = 10, unhideRows, onUnhideRows, onSelect, onResizeStart, onResizeMove, onResizeEnd, onAutoFit }: RowHeaderProps) {
   return (
     <div
       role="rowheader"
@@ -411,6 +430,20 @@ function RowHeader({ row, height, isSelected, stickyZIndex = 10, onSelect, onRes
       onClick={() => onSelect(row)}
     >
       {row + 1}
+      {unhideRows && unhideRows.length > 0 && onUnhideRows && (
+        <button
+          type="button"
+          title={`Unhide rows ${unhideRows[0] + 1}–${unhideRows[unhideRows.length - 1] + 1}`}
+          aria-label={`Unhide rows ${unhideRows[0] + 1} to ${unhideRows[unhideRows.length - 1] + 1}`}
+          className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 z-20 w-3 h-3 rounded-sm bg-blue-500 text-white text-[8px] leading-none flex items-center justify-center hover:bg-blue-600"
+          onClick={(e) => {
+            e.stopPropagation();
+            onUnhideRows(unhideRows);
+          }}
+        >
+          +
+        </button>
+      )}
       <div
         className="row-resize-handle absolute bottom-0 left-0 right-0 h-1.5 cursor-row-resize hover:bg-blue-400 opacity-0 group-hover:opacity-100 z-10 touch-none"
         role="separator"
@@ -447,6 +480,8 @@ export function SpreadsheetGrid() {
     rejectAction,
     showFindReplace,
     setShowFindReplace,
+    unhideRows,
+    unhideCols,
   } = useStore();
 
   const sheet = getActiveSheet();
@@ -862,12 +897,33 @@ export function SpreadsheetGrid() {
     );
   };
 
+  const gapAfter = useCallback((actual: number, nextActual: number | undefined) => {
+    if (nextActual == null || nextActual <= actual + 1) return undefined;
+    const gap: number[] = [];
+    for (let i = actual + 1; i < nextActual; i++) gap.push(i);
+    return gap;
+  }, []);
+
+  const handleUnhideRows = useCallback((rows: number[]) => {
+    pushHistory('Unhide rows');
+    unhideRows(rows);
+  }, [pushHistory, unhideRows]);
+
+  const handleUnhideCols = useCallback((cols: number[]) => {
+    pushHistory('Unhide columns');
+    unhideCols(cols);
+  }, [pushHistory, unhideCols]);
+
   const renderGridRow = (displayIndex: number, stickyTop: number | null) => {
     const row = viewport.displayRows ? viewport.displayRows[displayIndex] : displayIndex;
     if (row == null) return null;
 
     const rowHeight = resolvedGetRowHeight(row);
     const isFrozenRow = stickyTop != null;
+    const nextRow = viewport.displayRows
+      ? viewport.displayRows[displayIndex + 1]
+      : displayIndex + 1 < viewport.displayRowCount ? displayIndex + 1 : undefined;
+    const unhideGap = gapAfter(row, nextRow);
 
     return (
       <div
@@ -891,6 +947,8 @@ export function SpreadsheetGrid() {
           height={rowHeight}
           isSelected={isRowSelected(row)}
           stickyZIndex={isFrozenRow ? 15 : 10}
+          unhideRows={unhideGap}
+          onUnhideRows={handleUnhideRows}
           onSelect={selectionManager.handleRowSelect}
           onResizeStart={rowResize.handleResizeStart}
           onResizeMove={rowResize.handleResizeMove}
@@ -941,6 +999,9 @@ export function SpreadsheetGrid() {
 
           {Array.from({ length: frozenCols }, (_, displayCol) => {
             const col = actualColAt(displayCol);
+            const nextDisplayActual = displayCol + 1 < viewport.displayColCount
+              ? actualColAt(displayCol + 1)
+              : undefined;
             return (
               <ColumnHeader
                 key={`fz-${col}`}
@@ -950,6 +1011,8 @@ export function SpreadsheetGrid() {
                 sortDirection={activeSortConfig?.column === col ? activeSortConfig.direction : null}
                 isFiltered={activeFilters.some((f) => f.column === col)}
                 stickyLeft={displayColStickyLeft(displayCol)}
+                unhideCols={gapAfter(col, nextDisplayActual)}
+                onUnhideCols={handleUnhideCols}
                 onSelect={selectionManager.handleColSelect}
                 onResizeStart={resizeState.handleResizeStart}
                 onResizeMove={resizeState.handleResizeMove}
@@ -964,7 +1027,11 @@ export function SpreadsheetGrid() {
           )}
 
           {Array.from({ length: Math.max(0, viewport.visibleRange.endCol - viewport.visibleRange.startCol + 1) }, (_, j) => {
-            const col = actualColAt(viewport.visibleRange.startCol + j);
+            const displayCol = viewport.visibleRange.startCol + j;
+            const col = actualColAt(displayCol);
+            const nextDisplayActual = displayCol + 1 < viewport.displayColCount
+              ? actualColAt(displayCol + 1)
+              : undefined;
             return (
               <ColumnHeader
                 key={col}
@@ -973,6 +1040,8 @@ export function SpreadsheetGrid() {
                 isSelected={isColSelected(col)}
                 sortDirection={activeSortConfig?.column === col ? activeSortConfig.direction : null}
                 isFiltered={activeFilters.some((f) => f.column === col)}
+                unhideCols={gapAfter(col, nextDisplayActual)}
+                onUnhideCols={handleUnhideCols}
                 onSelect={selectionManager.handleColSelect}
                 onResizeStart={resizeState.handleResizeStart}
                 onResizeMove={resizeState.handleResizeMove}

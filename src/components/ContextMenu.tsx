@@ -8,8 +8,9 @@ import { AnchoredPanel } from '@/components/AnchoredPanel'
 import {
   Copy, Scissors, ClipboardPaste, Trash2, Plus,
   ArrowDown, ArrowRight, Bold, Italic, Strikethrough, WrapText, Shield, StickyNote, X, Check,
-  TableCellsMerge, TableCellsSplit, Eraser,
+  TableCellsMerge, TableCellsSplit, Eraser, EyeOff, Eye,
 } from 'lucide-react'
+import { indicesInSpan, resolveUnhideIndices } from '@/lib/rowColVisibility'
 
 interface ContextAction {
   icon: ReactNode
@@ -38,6 +39,11 @@ export function ContextMenu() {
     setSelection,
     selection,
     activeSheetId,
+    hideRows,
+    hideCols,
+    unhideRows,
+    unhideCols,
+    getActiveSheet,
   } = useStore(useShallow((s) => ({
     contextMenu: s.contextMenu,
     setContextMenu: s.setContextMenu,
@@ -57,6 +63,11 @@ export function ContextMenu() {
     setSelection: s.setSelection,
     selection: s.selection,
     activeSheetId: s.activeSheetId,
+    hideRows: s.hideRows,
+    hideCols: s.hideCols,
+    unhideRows: s.unhideRows,
+    unhideCols: s.unhideCols,
+    getActiveSheet: s.getActiveSheet,
   })))
 
   const [noteMode, setNoteMode] = useState<'idle' | 'editing'>('idle')
@@ -140,6 +151,47 @@ export function ContextMenu() {
       icon: <ArrowRight size={13} />,
       label: 'Delete Column',
       action: () => runAndClose(() => { pushHistory('Delete column'); deleteColumn(ref.col) }),
+    },
+    null,
+    {
+      icon: <EyeOff size={13} />,
+      label: 'Hide Rows',
+      action: () => runAndClose(() => {
+        const sel = selection ?? { startRow: ref.row, startCol: ref.col, endRow: ref.row, endCol: ref.col }
+        pushHistory('Hide rows')
+        hideRows(indicesInSpan(sel.startRow, sel.endRow))
+      }),
+    },
+    {
+      icon: <Eye size={13} />,
+      label: 'Unhide Rows',
+      action: () => runAndClose(() => {
+        const sel = selection ?? { startRow: ref.row, startCol: ref.col, endRow: ref.row, endCol: ref.col }
+        const rows = resolveUnhideIndices(getActiveSheet().hiddenRows, sel.startRow, sel.endRow)
+        if (rows.length === 0) return
+        pushHistory('Unhide rows')
+        unhideRows(rows)
+      }),
+    },
+    {
+      icon: <EyeOff size={13} />,
+      label: 'Hide Columns',
+      action: () => runAndClose(() => {
+        const sel = selection ?? { startRow: ref.row, startCol: ref.col, endRow: ref.row, endCol: ref.col }
+        pushHistory('Hide columns')
+        hideCols(indicesInSpan(sel.startCol, sel.endCol))
+      }),
+    },
+    {
+      icon: <Eye size={13} />,
+      label: 'Unhide Columns',
+      action: () => runAndClose(() => {
+        const sel = selection ?? { startRow: ref.row, startCol: ref.col, endRow: ref.row, endCol: ref.col }
+        const cols = resolveUnhideIndices(getActiveSheet().hiddenCols, sel.startCol, sel.endCol)
+        if (cols.length === 0) return
+        pushHistory('Unhide columns')
+        unhideCols(cols)
+      }),
     },
     null,
     {

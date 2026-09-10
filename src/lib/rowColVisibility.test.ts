@@ -4,6 +4,7 @@ import {
   buildVisibleColIndices,
   buildVisibleRowIndices,
   isHidden,
+  resolveUnhideIndices,
   setHidden,
   shiftHiddenOnDelete,
   shiftHiddenOnInsert,
@@ -61,5 +62,13 @@ describe('shiftHiddenOnInsert/Delete', () => {
     const map = setHidden(undefined, [1, 4], true)
     expect(shiftHiddenOnInsert(map, 1)).toEqual({ 1: true, 5: true })
     expect(shiftHiddenOnDelete(map, 1)).toEqual({ 3: true })
+  })
+})
+
+describe('resolveUnhideIndices', () => {
+  it('includes span and adjacent hidden blocks', () => {
+    const map = setHidden(undefined, [1, 2, 5, 6], true)
+    expect(resolveUnhideIndices(map, 3, 4)).toEqual([1, 2, 5, 6])
+    expect(resolveUnhideIndices(map, 5, 5)).toEqual([5, 6])
   })
 })
