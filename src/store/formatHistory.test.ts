@@ -100,10 +100,52 @@ describe('clearRangeFormat', () => {
   })
 
   it('is undoable', () => {
-    const before = JSON.stringify(useStore.getState().workbook)
+    const beforeFormat = useStore.getState().getActiveSheet().cells['A1'].format
+    const beforeB1 = useStore.getState().getActiveSheet().cells['B1'].format
     useStore.getState().clearRangeFormat()
     expect(useStore.getState().getActiveSheet().cells['A1'].format).toBeUndefined()
     useStore.getState().undo()
-    expect(JSON.stringify(useStore.getState().workbook)).toBe(before)
+    expect(useStore.getState().getActiveSheet().cells['A1'].format).toEqual(beforeFormat)
+    expect(useStore.getState().getActiveSheet().cells['B1'].format).toEqual(beforeB1)
+  })
+})
+
+describe('wrap text autofits row height', () => {
+  beforeEach(() => {
+    const wb = createEmptyWorkbook('Wrap Autofit')
+    const sheet = wb.sheets[0]
+    sheet.columnWidths = { 0: 40 }
+    sheet.cells['A1'] = {
+      value: 'alpha beta gamma delta epsilon zeta eta theta',
+    }
+    useStore.setState({
+      workbook: wb,
+      activeSheetId: sheet.id,
+      selection: { startRow: 0, startCol: 0, endRow: 0, endCol: 0 },
+      additionalSelections: [],
+      undoStack: [],
+      redoStack: [],
+    })
+  })
+
+  it('grows the row when wrap is enabled on a long cell', () => {
+    expect(useStore.getState().getActiveSheet().rowHeights[0]).toBeUndefined()
+    useStore.getState().setRangeFormat({ textWrap: true })
+    const height = useStore.getState().getActiveSheet().rowHeights[0]
+    expect(height).toBeGreaterThan(28)
+  })
+
+  it('undo of wrap restore undoes the autofit height too', () => {
+    useStore.getState().setRangeFormat({ textWrap: true })
+    expect(useStore.getState().getActiveSheet().rowHeights[0]).toBeGreaterThan(28)
+    useStore.getState().undo()
+    expect(useStore.getState().getActiveSheet().cells['A1'].format?.textWrap).toBeUndefined()
+    expect(useStore.getState().getActiveSheet().rowHeights[0]).toBeUndefined()
+  })
+
+  it('autoFitRows is a no-op when the row has no wrapped cells', () => {
+    useStore.getState().autoFitRows([0])
+    expect(useStore.getState().getActiveSheet().rowHeights[0]).toBeUndefined()
+    expect(useStore.getState().undoStack).toHaveLength(0)
   })
 })

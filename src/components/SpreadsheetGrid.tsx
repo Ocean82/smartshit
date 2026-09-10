@@ -390,9 +390,10 @@ interface RowHeaderProps {
   onResizeStart: (row: number, e: React.PointerEvent<HTMLDivElement>) => void;
   onResizeMove: (e: React.PointerEvent<HTMLDivElement>) => void;
   onResizeEnd: (e: React.PointerEvent<HTMLDivElement>) => void;
+  onAutoFit: (row: number) => void;
 }
 
-function RowHeader({ row, height, isSelected, onSelect, onResizeStart, onResizeMove, onResizeEnd }: RowHeaderProps) {
+function RowHeader({ row, height, isSelected, onSelect, onResizeStart, onResizeMove, onResizeEnd, onAutoFit }: RowHeaderProps) {
   return (
     <div
       role="rowheader"
@@ -411,10 +412,16 @@ function RowHeader({ row, height, isSelected, onSelect, onResizeStart, onResizeM
         role="separator"
         aria-orientation="horizontal"
         aria-label={`Resize row ${row + 1}`}
+        title="Drag to resize · double-click to autofit wrapped text"
         onPointerDown={(e) => onResizeStart(row, e)}
         onPointerMove={onResizeMove}
         onPointerUp={onResizeEnd}
         onPointerCancel={onResizeEnd}
+        onDoubleClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onAutoFit(row);
+        }}
         onClick={(e) => e.stopPropagation()}
       />
     </div>
@@ -464,6 +471,10 @@ export function SpreadsheetGrid() {
 
   const commitRowHeight = useCallback((row: number, h: number) => {
     useStore.getState().setRowHeight(row, h);
+  }, []);
+
+  const autoFitRow = useCallback((row: number) => {
+    useStore.getState().autoFitRows([row]);
   }, []);
 
   const rowResize = useRowResize(committedGetRowHeight, commitRowHeight);
@@ -777,6 +788,7 @@ export function SpreadsheetGrid() {
                 onResizeStart={rowResize.handleResizeStart}
                 onResizeMove={rowResize.handleResizeMove}
                 onResizeEnd={rowResize.handleResizeEnd}
+                onAutoFit={autoFitRow}
               />
 
               {viewport.visibleColOffsets.baseOffset > 0 && (

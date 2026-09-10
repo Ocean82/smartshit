@@ -32,6 +32,7 @@ import { toMergeRange, parseMergeRange, rangesOverlap } from '@/lib/merge'
 import { encodeCellBlock, parseGridClipboard } from '@/lib/clipboardCodec'
 import { buildFillPattern, adjustFormulaRefs, fillCellAt, type FilledCell } from '@/lib/autofill'
 import { clampRowHeight, getRowHeight, setRowAt, shiftRowHeightsOnDelete, shiftRowHeightsOnInsert } from '@/lib/rowLayout'
+import { autoFitRowHeights, createCanvasTextMeasurer } from '@/lib/rowAutoFit'
 import { MAX_UNDO_STACK } from '../storeTypes'
 
 /** Convert raw clipboard text into a typed value suitable for setCellValue. */
@@ -89,6 +90,8 @@ export interface WorkbookSliceState {
   pasteFromClipboard: () => Promise<void>
   autofillTo: (endRow: number, endCol: number) => void
   setRowHeight: (row: number, height: number) => void
+  /** Autofit one or more rows to wrapped cell content (undoable). */
+  autoFitRows: (rows: number[]) => void
   insertRow: (afterRow: number) => void
   deleteRow: (row: number) => void
   renameSheet: (sheetId: string, name: string) => void
@@ -124,6 +127,7 @@ export interface WorkbookActions {
   pasteFromClipboard: () => Promise<void>
   autofillTo: (endRow: number, endCol: number) => void
   setRowHeight: (row: number, height: number) => void
+  autoFitRows: (rows: number[]) => void
   addChart: (chart: ChartConfig) => void
   removeChart: (chartId: string) => void
   updateChartPosition: (chartId: string, x: number, y: number, size?: { width: number; height: number }) => void
@@ -157,6 +161,24 @@ export function createWorkbookActions(
   set: (fn: (s: WorkbookSliceState) => void) => void,
   get: () => WorkbookSliceState,
 ): WorkbookActions {
+  const measureWidth = createCanvasTextMeasurer()
+
+  function fitWrappedRows(sheet: SheetData, rows: Iterable<number>) {
+    const next = autoFitRowHeights(
+      sheet,
+      rows,
+      (row, col) => {
+        const computed = get().getComputedValue(row, col)
+        if (computed) return computed
+        const cell = sheet.cells[refToCell(row, col)]
+        if (cell?.value == null) return ''
+        return String(cell.value)
+      },
+      measureWidth,
+    )
+    sheet.rowHeights = next
+  }
+
   return {
       initWorkbook: (name = 'Untitled Workbook') => {
         const wb = createEmptyWorkbook(name);
@@ -252,6 +274,11 @@ export function createWorkbookActions(
               sheet.cells[cellId].displayValue = undefined;
             }
           }
+          // Grow/shrink wrapped rows with content (no extra history — undo
+          // restores the pre-edit workbook snapshot including rowHeights).
+          if (sheet.cells[cellId]?.format?.textWrap) {
+            fitWrappedRows(sheet, [ref.row]);
+          }
           s.workbook.updatedAt = Date.now();
         });
         // Trigger AI formula execution after state update
@@ -284,6 +311,9 @@ export function createWorkbookActions(
               ? { ...existing?.borders, ...format.borders }
               : existing?.borders,
           };
+          if (sheet.cells[cellId].format?.textWrap) {
+            fitWrappedRows(sheet, [cellToRef(cellId).row]);
+          }
         });
       },
 
@@ -294,6 +324,7 @@ export function createWorkbookActions(
         set((s) => {
           const sheet = s.workbook.sheets.find((sh) => sh.id === s.activeSheetId);
           if (!sheet) return;
+          const affectedRows = new Set<number>();
           // Apply to primary selection + any additional Ctrl+click ranges
           const allRanges = [sel, ...s.additionalSelections];
           for (const range of allRanges) {
@@ -302,6 +333,7 @@ export function createWorkbookActions(
             const minC = Math.min(range.startCol, range.endCol);
             const maxC = Math.max(range.startCol, range.endCol);
             for (let r = minR; r <= maxR; r++) {
+              affectedRows.add(r);
               for (let c = minC; c <= maxC; c++) {
                 const cid = refToCell(r, c);
                 if (!sheet.cells[cid]) {
@@ -317,6 +349,17 @@ export function createWorkbookActions(
                 };
               }
             }
+          }
+          // Enabling wrap (or changing size while wrap is on) autofits row heights.
+          if (format.textWrap === true || format.fontSize !== undefined) {
+            const rowsToFit = [...affectedRows].filter((r) => {
+              // Any wrapped cell on the row is enough to trigger a fit pass.
+              for (const [cid, cell] of Object.entries(sheet.cells)) {
+                if (cellToRef(cid).row === r && cell.format?.textWrap) return true;
+              }
+              return false;
+            });
+            if (rowsToFit.length > 0) fitWrappedRows(sheet, rowsToFit);
           }
         });
       },
@@ -416,6 +459,29 @@ export function createWorkbookActions(
           s.workbook.updatedAt = Date.now();
         });
       },
+
+      autoFitRows: (rows) => {
+        const unique = [...new Set(rows.filter((r) => r >= 0 && Number.isFinite(r)))];
+        if (unique.length === 0) return;
+        const sheet = get().getActiveSheet();
+        const next = autoFitRowHeights(sheet, unique, (row, col) => {
+          const computed = get().getComputedValue(row, col);
+          if (computed) return computed;
+          const cell = sheet.cells[refToCell(row, col)];
+          if (cell?.value == null) return '';
+          return String(cell.value);
+        }, measureWidth);
+        const meaningful = unique.some((r) => getRowHeight(next, r) !== getRowHeight(sheet.rowHeights, r));
+        if (!meaningful) return;
+        get().pushHistory(unique.length === 1 ? 'Autofit row height' : 'Autofit row heights');
+        set((s) => {
+          const sh = s.workbook.sheets.find((x) => x.id === s.activeSheetId);
+          if (!sh) return;
+          sh.rowHeights = next;
+          s.workbook.updatedAt = Date.now();
+        });
+      },
+
       setEditingCell: (cellId) => set((s) => { s.editingCell = cellId; }),
       setEditValue: (val) => set((s) => { s.editValue = val; }),
 
