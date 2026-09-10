@@ -83,6 +83,8 @@ export interface AppState extends UIState, UIActions, FileActions, ChatActions {
   setCellValue: (cellId: string, value: string | number | boolean | null, formula?: string) => void
   setCellFormat: (cellId: string, format: Partial<CellFormat>) => void
   setRangeFormat: (format: Partial<CellFormat>) => void
+  /** Strip CellFormat from the selection; keep value/formula/validation. */
+  clearRangeFormat: () => void
   setSelection: (sel: Selection | null) => void
   addSelection: (sel: Selection) => void
   mergeSelection: (desc?: string) => void

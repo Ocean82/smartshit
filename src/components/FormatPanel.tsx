@@ -19,7 +19,7 @@ const FONT_SIZES = [10, 11, 12, 13, 14, 16, 18, 20, 24, 28, 32, 36];
 const FONT_FAMILIES = ['System', 'Arial', 'Calibri', 'Times New Roman', 'Georgia', 'Courier New', 'Verdana', 'Tahoma', 'Trebuchet MS', 'Comic Sans MS'];
 
 export function FormatPanel() {
-  const { showFormatPanel, setShowFormatPanel, selection, getActiveSheet, setRangeFormat, applyOuterBorders } = useStore();
+  const { showFormatPanel, setShowFormatPanel, selection, getActiveSheet, setRangeFormat, applyOuterBorders, clearRangeFormat } = useStore();
   const sheet = getActiveSheet();
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [borderStyle, setBorderStyle] = useState('1px solid');
@@ -97,14 +97,25 @@ export function FormatPanel() {
     <div className="w-[280px] border-l border-gray-200 bg-white h-full overflow-y-auto shrink-0 max-md:fixed max-md:inset-0 max-md:z-40 max-md:w-full">
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
         <h3 className="text-sm font-semibold text-gray-900">Format</h3>
-        <button
-          type="button"
-          onClick={() => setShowFormatPanel(false)}
-          className="p-1 max-md:p-2.5 text-gray-400 hover:text-gray-600"
-          aria-label="Close format panel"
-        >
-          ✕
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            disabled={!hasSelection}
+            onClick={() => clearRangeFormat()}
+            className="px-2 py-1 max-md:py-2 text-[11px] font-medium text-gray-600 hover:text-red-600 disabled:text-gray-300 disabled:cursor-not-allowed"
+            title="Clear formatting (keep values)"
+          >
+            Clear formatting
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowFormatPanel(false)}
+            className="p-1 max-md:p-2.5 text-gray-400 hover:text-gray-600"
+            aria-label="Close format panel"
+          >
+            ✕
+          </button>
+        </div>
       </div>
 
       {!hasSelection && (
@@ -213,7 +224,7 @@ export function FormatPanel() {
             </button>
           </div>
           <div className="flex gap-2">
-            <div>
+            <div className="flex-1">
               <div className="text-[10px] text-gray-500 mb-1">Text Color</div>
               <div className="grid grid-cols-7 gap-0.5">
                 {COLORS.map((c) => (
@@ -229,8 +240,19 @@ export function FormatPanel() {
                   />
                 ))}
               </div>
+              <label className="mt-1.5 flex items-center gap-1.5 text-[10px] text-gray-500">
+                Custom
+                <input
+                  type="color"
+                  disabled={!hasSelection}
+                  value={cellFormat?.fontColor && /^#[0-9A-Fa-f]{6}$/.test(cellFormat.fontColor) ? cellFormat.fontColor : '#000000'}
+                  onChange={(e) => setRangeFormat({ fontColor: e.target.value })}
+                  className="w-7 h-6 rounded border border-gray-200 cursor-pointer disabled:cursor-not-allowed"
+                  aria-label="Custom text color"
+                />
+              </label>
             </div>
-            <div>
+            <div className="flex-1">
               <div className="text-[10px] text-gray-500 mb-1">Fill Color</div>
               <div className="grid grid-cols-7 gap-0.5">
                 {COLORS.map((c) => (
@@ -246,6 +268,17 @@ export function FormatPanel() {
                   />
                 ))}
               </div>
+              <label className="mt-1.5 flex items-center gap-1.5 text-[10px] text-gray-500">
+                Custom
+                <input
+                  type="color"
+                  disabled={!hasSelection}
+                  value={cellFormat?.bgColor && /^#[0-9A-Fa-f]{6}$/.test(cellFormat.bgColor) ? cellFormat.bgColor : '#FFFFFF'}
+                  onChange={(e) => setRangeFormat({ bgColor: e.target.value })}
+                  className="w-7 h-6 rounded border border-gray-200 cursor-pointer disabled:cursor-not-allowed"
+                  aria-label="Custom fill color"
+                />
+              </label>
             </div>
           </div>
         </div>
@@ -374,19 +407,32 @@ export function FormatPanel() {
       </Section>
 
       <Section id="fill" title="Fill">
-        <div className={`grid grid-cols-7 gap-1 ${!hasSelection ? 'opacity-50 pointer-events-none' : ''}`}>
-          {COLORS.map((c) => (
-            <button
-              key={`panel-fill-${c}`}
-              type="button"
+        <div className={`space-y-2 ${!hasSelection ? 'opacity-50 pointer-events-none' : ''}`}>
+          <div className="grid grid-cols-7 gap-1">
+            {COLORS.map((c) => (
+              <button
+                key={`panel-fill-${c}`}
+                type="button"
+                disabled={!hasSelection}
+                className="w-6 h-6 rounded border border-gray-200 hover:scale-110 disabled:hover:scale-100"
+                style={{ backgroundColor: c }}
+                onClick={() => setRangeFormat({ bgColor: c })}
+                title={`Fill ${c}`}
+                aria-label={`Fill ${c}`}
+              />
+            ))}
+          </div>
+          <label className="flex items-center gap-2 text-[10px] text-gray-500">
+            Custom fill
+            <input
+              type="color"
               disabled={!hasSelection}
-              className="w-6 h-6 rounded border border-gray-200 hover:scale-110 disabled:hover:scale-100"
-              style={{ backgroundColor: c }}
-              onClick={() => setRangeFormat({ bgColor: c })}
-              title={`Fill ${c}`}
-              aria-label={`Fill ${c}`}
+              value={cellFormat?.bgColor && /^#[0-9A-Fa-f]{6}$/.test(cellFormat.bgColor) ? cellFormat.bgColor : '#FFFFFF'}
+              onChange={(e) => setRangeFormat({ bgColor: e.target.value })}
+              className="w-8 h-7 rounded border border-gray-200 cursor-pointer disabled:cursor-not-allowed"
+              aria-label="Custom fill color"
             />
-          ))}
+          </label>
         </div>
       </Section>
     </div>

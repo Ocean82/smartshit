@@ -371,23 +371,41 @@ export function Toolbar() {
             onClose={() => setShowCellColor(false)}
             anchorRef={cellColorRef}
             width={168}
-            maxHeight={120}
+            maxHeight={160}
             aria-label="Cell background colors"
-            className="bg-white rounded-lg shadow-xl border border-gray-200 p-2 grid grid-cols-7 gap-1"
+            className="bg-white rounded-lg shadow-xl border border-gray-200 p-2"
           >
-            {colorOptions.map((color, index) => (
-              <button
-                key={color}
-                type="button"
-                className={`w-5 h-5 rounded border border-gray-200 hover:scale-110 transition-transform toolbar-color-${index}`}
-                onClick={() => {
-                  setRangeFormat({ bgColor: color });
+            <div className="grid grid-cols-7 gap-1">
+              {colorOptions.map((color, index) => (
+                <button
+                  key={color}
+                  type="button"
+                  className={`w-5 h-5 rounded border border-gray-200 hover:scale-110 transition-transform toolbar-color-${index}`}
+                  style={{ backgroundColor: color }}
+                  onClick={() => {
+                    setRangeFormat({ bgColor: color });
+                    setShowCellColor(false);
+                  }}
+                  aria-label={`Set cell color ${color}`}
+                  title={`Set cell color ${color}`}
+                />
+              ))}
+            </div>
+            <label className="mt-2 flex items-center gap-2 text-[10px] text-gray-500">
+              Custom
+              <input
+                type="color"
+                value={selectedCellData?.format?.bgColor && /^#[0-9A-Fa-f]{6}$/.test(selectedCellData.format.bgColor)
+                  ? selectedCellData.format.bgColor
+                  : '#FFFFFF'}
+                onChange={(e) => {
+                  setRangeFormat({ bgColor: e.target.value });
                   setShowCellColor(false);
                 }}
-                aria-label={`Set cell color ${color}`}
-                title={`Set cell color ${color}`}
+                className="w-7 h-6 rounded border border-gray-200 cursor-pointer"
+                aria-label="Custom cell background color"
               />
-            ))}
+            </label>
           </AnchoredPanel>
 
           <button
@@ -415,24 +433,41 @@ export function Toolbar() {
             onClose={() => setShowFontColor(false)}
             anchorRef={fontColorRef}
             width={168}
-            maxHeight={120}
+            maxHeight={160}
             aria-label="Text colors"
-            className="bg-white border border-gray-200 rounded-lg shadow-lg p-2 grid grid-cols-7 gap-1"
+            className="bg-white border border-gray-200 rounded-lg shadow-lg p-2"
           >
-            {fontColorOptions.map((c) => (
-              <button
-                key={c}
-                type="button"
-                className="w-5 h-5 rounded border border-gray-200 hover:scale-110 transition-transform"
-                style={{ backgroundColor: c }}
-                onClick={() => {
-                  setRangeFormat({ fontColor: c });
+            <div className="grid grid-cols-7 gap-1">
+              {fontColorOptions.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  className="w-5 h-5 rounded border border-gray-200 hover:scale-110 transition-transform"
+                  style={{ backgroundColor: c }}
+                  onClick={() => {
+                    setRangeFormat({ fontColor: c });
+                    setShowFontColor(false);
+                  }}
+                  aria-label={`Set text color ${c}`}
+                  title={`Set text color ${c}`}
+                />
+              ))}
+            </div>
+            <label className="mt-2 flex items-center gap-2 text-[10px] text-gray-500">
+              Custom
+              <input
+                type="color"
+                value={selectedCellData?.format?.fontColor && /^#[0-9A-Fa-f]{6}$/.test(selectedCellData.format.fontColor)
+                  ? selectedCellData.format.fontColor
+                  : '#000000'}
+                onChange={(e) => {
+                  setRangeFormat({ fontColor: e.target.value });
                   setShowFontColor(false);
                 }}
-                aria-label={`Set text color ${c}`}
-                title={`Set text color ${c}`}
+                className="w-7 h-6 rounded border border-gray-200 cursor-pointer"
+                aria-label="Custom text color"
               />
-            ))}
+            </label>
           </AnchoredPanel>
         </div>
 

@@ -8,7 +8,7 @@ import { AnchoredPanel } from '@/components/AnchoredPanel'
 import {
   Copy, Scissors, ClipboardPaste, Trash2, Plus,
   ArrowDown, ArrowRight, Bold, Italic, Strikethrough, WrapText, Shield, StickyNote, X, Check,
-  TableCellsMerge, TableCellsSplit,
+  TableCellsMerge, TableCellsSplit, Eraser,
 } from 'lucide-react'
 
 interface ContextAction {
@@ -34,6 +34,8 @@ export function ContextMenu() {
     setCellValue,
     mergeSelection,
     unmergeSelection,
+    clearRangeFormat,
+    setSelection,
     selection,
     activeSheetId,
   } = useStore(useShallow((s) => ({
@@ -51,6 +53,8 @@ export function ContextMenu() {
     setCellValue: s.setCellValue,
     mergeSelection: s.mergeSelection,
     unmergeSelection: s.unmergeSelection,
+    clearRangeFormat: s.clearRangeFormat,
+    setSelection: s.setSelection,
     selection: s.selection,
     activeSheetId: s.activeSheetId,
   })))
@@ -166,6 +170,22 @@ export function ContextMenu() {
       icon: <Trash2 size={13} />,
       label: 'Clear Cell',
       action: () => runAndClose(() => { pushHistory('Clear'); setCellValue(contextMenu.cell, null) }),
+    },
+    {
+      icon: <Eraser size={13} />,
+      label: 'Clear Formatting',
+      action: () => runAndClose(() => {
+        const ref = cellToRef(contextMenu.cell)
+        const inSelection = selection &&
+          ref.row >= Math.min(selection.startRow, selection.endRow) &&
+          ref.row <= Math.max(selection.startRow, selection.endRow) &&
+          ref.col >= Math.min(selection.startCol, selection.endCol) &&
+          ref.col <= Math.max(selection.startCol, selection.endCol)
+        if (!inSelection) {
+          setSelection({ startRow: ref.row, startCol: ref.col, endRow: ref.row, endCol: ref.col })
+        }
+        clearRangeFormat()
+      }),
     },
     ...(selection ? [
       null,

@@ -119,6 +119,17 @@ export function MobileToolbar() {
                   aria-label={`Set background color ${color}`}
                 />
               ))}
+              <label className="shrink-0 flex flex-col items-center gap-0.5 text-[9px]" style={{ color: 'var(--ink-muted)' }}>
+                Custom
+                <input
+                  type="color"
+                  value="#FFFFFF"
+                  onChange={(e) => setRangeFormat({ bgColor: e.target.value })}
+                  className="w-10 h-10 rounded-lg border cursor-pointer"
+                  style={{ borderColor: 'var(--neutral-200)' }}
+                  aria-label="Custom background color"
+                />
+              </label>
             </div>
           )}
           <button

@@ -108,6 +108,8 @@ export interface WorkbookActions {
   setCellValue: (cellId: string, value: string | number | boolean | null, formula?: string) => void
   setCellFormat: (cellId: string, format: Partial<CellFormat>) => void
   setRangeFormat: (format: Partial<CellFormat>) => void
+  /** Strip CellFormat from the selection; keep value/formula/validation. */
+  clearRangeFormat: () => void
   setSelection: (sel: Selection | null) => void
   addSelection: (sel: Selection) => void
   mergeSelection: (desc?: string) => void
@@ -316,6 +318,32 @@ export function createWorkbookActions(
               }
             }
           }
+        });
+      },
+
+      clearRangeFormat: () => {
+        const sel = get().selection;
+        if (!sel) return;
+        get().pushHistory('Clear formatting');
+        set((s) => {
+          const sheet = s.workbook.sheets.find((sh) => sh.id === s.activeSheetId);
+          if (!sheet) return;
+          const allRanges = [sel, ...s.additionalSelections];
+          for (const range of allRanges) {
+            const minR = Math.min(range.startRow, range.endRow);
+            const maxR = Math.max(range.startRow, range.endRow);
+            const minC = Math.min(range.startCol, range.endCol);
+            const maxC = Math.max(range.startCol, range.endCol);
+            for (let r = minR; r <= maxR; r++) {
+              for (let c = minC; c <= maxC; c++) {
+                const cid = refToCell(r, c);
+                const cell = sheet.cells[cid];
+                if (!cell?.format) continue;
+                delete cell.format;
+              }
+            }
+          }
+          s.workbook.updatedAt = Date.now();
         });
       },
 
