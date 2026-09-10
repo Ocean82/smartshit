@@ -743,26 +743,16 @@ export function SpreadsheetGrid() {
       : resolvedGetColWidth(col);
 
     if (isMergeCell && !isMergeHead) {
-      const spacer = (
-        <div
-          key={col}
-          className="shrink-0"
-          style={{ width: colWidth, height: rowHeight }}
-          aria-hidden="true"
-        />
-      );
-      if (stickyLeft == null) return spacer;
       return (
         <div
           key={col}
           className="shrink-0"
           style={{
-            position: 'sticky',
-            left: stickyLeft,
-            zIndex: stickyZ,
             width: colWidth,
             height: rowHeight,
-            backgroundColor: '#fff',
+            ...(stickyLeft != null
+              ? { position: 'sticky', left: stickyLeft, zIndex: stickyZ }
+              : {}),
           }}
           aria-hidden="true"
         />
@@ -774,9 +764,9 @@ export function SpreadsheetGrid() {
     const crosshair = !active && !selected && selectionManager.selection != null &&
       (row === selectionManager.selection.startRow || col === selectionManager.selection.startCol);
 
-    const cell = (
+    return (
       <GridCell
-        key={stickyLeft == null ? col : undefined}
+        key={col}
         row={row}
         col={col}
         cellId={cellId}
@@ -798,6 +788,8 @@ export function SpreadsheetGrid() {
         iconSetPeers={iconSetPeersByCol.get(col) ?? []}
         editContainerRef={editingController.editContainerRef}
         inputRef={editingController.inputRef}
+        stickyLeft={stickyLeft ?? undefined}
+        stickyZIndex={stickyLeft != null ? stickyZ : undefined}
         onMouseDown={selectionManager.handleMouseDown}
         onMouseMove={selectionManager.handleMouseMove}
         onDoubleClick={selectionManager.handleCellDoubleClick}
@@ -809,22 +801,6 @@ export function SpreadsheetGrid() {
           setCellValue(cid, getCheckboxToggleValue(cd));
         }}
       />
-    );
-
-    if (stickyLeft == null) return cell;
-    return (
-      <div
-        key={col}
-        className="shrink-0"
-        style={{
-          position: 'sticky',
-          left: stickyLeft,
-          zIndex: stickyZ,
-          backgroundColor: '#fff',
-        }}
-      >
-        {cell}
-      </div>
     );
   };
 
@@ -874,7 +850,6 @@ export function SpreadsheetGrid() {
                 position: 'sticky',
                 top: stickyTop,
                 zIndex: 12,
-                backgroundColor: '#fff',
               }
             : {}),
         }}

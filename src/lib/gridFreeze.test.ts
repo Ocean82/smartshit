@@ -4,6 +4,7 @@ import {
   computeFreezeBodyWindow,
   frozenColStickyLeft,
   frozenRowStickyTop,
+  stickyPaneBackground,
 } from './gridFreeze'
 
 describe('clampFreezeCount', () => {
@@ -78,5 +79,17 @@ describe('sticky offsets', () => {
     const widths = [100, 80, 60]
     expect(frozenColStickyLeft(46, (c) => widths[c], 0)).toBe(46)
     expect(frozenColStickyLeft(46, (c) => widths[c], 2)).toBe(46 + 100 + 80)
+  })
+})
+
+describe('stickyPaneBackground', () => {
+  it('keeps explicit cell fill', () => {
+    expect(stickyPaneBackground('#ff0000')).toBe('#ff0000')
+  })
+
+  it('falls back to white when empty', () => {
+    expect(stickyPaneBackground(undefined)).toBe('#fff')
+    expect(stickyPaneBackground('')).toBe('#fff')
+    expect(stickyPaneBackground('   ')).toBe('#fff')
   })
 })

@@ -20,6 +20,7 @@ import { resolveCellFormat, getDataBarRule, getDataBarInfo, getColorScaleRule, c
 import { getBorderCSS, isNegativeRedFormat } from '@/lib/formatUtils'
 import { isCellChecked } from '@/lib/checkbox'
 import { textDecorationStyle, verticalAlignToCSS, isWrapEnabled } from '@/lib/cellFormat'
+import { stickyPaneBackground } from '@/lib/gridFreeze'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -62,6 +63,9 @@ export interface GridCellProps {
   onEditChange: (val: string) => void
   onEditBlur: () => void
   onCheckboxToggle: (cellId: string, cellData: CellData) => void
+  /** Pin under horizontal scroll (frozen columns). */
+  stickyLeft?: number
+  stickyZIndex?: number
 }
 
 // ─── Helper ──────────────────────────────────────────────────────────────────
@@ -121,6 +125,8 @@ export const GridCell = memo(function GridCell({
   onEditChange,
   onEditBlur,
   onCheckboxToggle,
+  stickyLeft,
+  stickyZIndex,
 }: GridCellProps) {
   const rawValue = (computed || cellData?.value) ?? null
   const hasFormula = !!cellData?.formula
@@ -139,6 +145,8 @@ export const GridCell = memo(function GridCell({
     ? computeIconForCell(computed, iconSetPeers, iconSetRule.iconSetConfig)
     : null
 
+  const isSticky = stickyLeft != null
+
   return (
     <div
       ref={isEditing ? editContainerRef : undefined}
@@ -146,7 +154,9 @@ export const GridCell = memo(function GridCell({
       aria-colindex={col + 2}
       aria-selected={isActive || isSelected}
       aria-readonly={!isEditing}
-      className={`border-b border-r shrink-0 relative transition-shadow group/cell ${
+      className={`border-b border-r shrink-0 transition-shadow group/cell ${
+        isSticky ? '' : 'relative '
+      }${
         pendingChange
           ? 'ring-2 ring-emerald-400 ring-inset z-10 bg-emerald-50/80'
           : isActive
@@ -161,11 +171,22 @@ export const GridCell = memo(function GridCell({
         width: colWidth,
         height: cellHeight,
         flexShrink: 0,
-        position: 'relative',
+        position: isSticky ? 'sticky' : 'relative',
+        ...(isSticky ? { left: stickyLeft, zIndex: stickyZIndex ?? 11 } : {}),
         ...getCellStyle(resolvedFormat, rawValue),
         ...(mergeBoxed ? { backgroundColor: 'transparent', borderWidth: 0, overflow: 'hidden' } : {}),
         ...(colorScaleBg && !pendingChange ? { backgroundColor: colorScaleBg } : {}),
         ...(pendingChange ? { backgroundColor: undefined } : {}),
+        // After format/color-scale merges: empty sticky cells need opaque fill so scroll doesn't bleed through.
+        ...(isSticky && !mergeBoxed && !pendingChange
+          ? {
+              backgroundColor: stickyPaneBackground(
+                (colorScaleBg && !pendingChange
+                  ? colorScaleBg
+                  : resolvedFormat?.bgColor) ?? null,
+              ),
+            }
+          : {}),
       }}
       onMouseDown={(e) => onMouseDown(row, col, e)}
       onMouseMove={(e) => onMouseMove(row, col, e)}

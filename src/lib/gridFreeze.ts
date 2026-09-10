@@ -72,3 +72,9 @@ export function frozenColStickyLeft(rowHeaderWidth: number, getColWidth: (col: n
   for (let c = 0; c < col; c++) left += getColWidth(c)
   return left
 }
+
+/** Opaque sticky-pane fill: keep cell format/color-scale when set, else white. */
+export function stickyPaneBackground(explicitBg?: string | null): string {
+  const v = explicitBg?.trim()
+  return v ? v : '#fff'
+}
