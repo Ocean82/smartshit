@@ -10,7 +10,7 @@ import { findLastDataRow } from '@/lib/sheetSort';
 import { columnDataBarPeerValues, columnColorScalePeerValues, columnIconSetPeerValues } from '@/lib/conditionalFormat';
 import { findActivePendingPreview } from '@/lib/pendingActionPreview';
 import { getRowHeight, clampRowHeight } from '@/lib/rowLayout';
-import { frozenColStickyLeft, frozenRowStickyTop } from '@/lib/gridFreeze';
+import { frozenColStickyLeft, frozenRowStickyTop, splitRectAcrossFreeze } from '@/lib/gridFreeze';
 import { useTouch } from '@/hooks/useTouch';
 import { getCellNotesService } from '@/lib/cellNotes';
 import { buildMergeIndex, isMergeAnchor, type MergeRange } from '@/lib/merge';
@@ -660,6 +660,13 @@ export function SpreadsheetGrid() {
   };
 
   // Fill-handle position (bottom-right corner of the selection) + live preview rect.
+  const freezeTopPx = viewport.rowOffsets[viewport.frozenRows] ?? 0;
+  const freezeLeftPx = useMemo(() => {
+    let w = 0;
+    for (let c = 0; c < viewport.frozenCols; c++) w += resolvedGetColWidth(c);
+    return w;
+  }, [viewport.frozenCols, resolvedGetColWidth]);
+
   const fillHandlePos = useMemo(() => {
     const sel = selectionManager.selection;
     if (!sel || editingController.editingCell) return null;
@@ -669,8 +676,18 @@ export function SpreadsheetGrid() {
     for (let r = 0; r <= maxRow; r++) top += resolvedGetRowHeight(r);
     let left = ROW_HEADER_WIDTH;
     for (let c = 0; c <= maxCol; c++) left += resolvedGetColWidth(c);
-    return { top: top - 5, left: left - 5 };
-  }, [selectionManager.selection, editingController.editingCell, resolvedGetRowHeight, resolvedGetColWidth]);
+    const contentTop = top - COL_HEADER_HEIGHT - 5;
+    const contentLeft = left - ROW_HEADER_WIDTH - 5;
+    const inFrozenRow = contentTop < freezeTopPx;
+    const inFrozenCol = contentLeft < freezeLeftPx;
+    return {
+      top: top - 5,
+      left: left - 5,
+      sticky: inFrozenRow || inFrozenCol,
+      contentTop,
+      contentLeft,
+    };
+  }, [selectionManager.selection, editingController.editingCell, resolvedGetRowHeight, resolvedGetColWidth, freezeTopPx, freezeLeftPx]);
 
   const fillPreviewRect = useMemo(() => {
     const sel = selectionManager.selection;
@@ -683,9 +700,9 @@ export function SpreadsheetGrid() {
     const endRow = Math.max(sr1, target.row);
     const endCol = Math.max(sc1, target.col);
     if (endRow <= sr1 && endCol <= sc1) return null;
-    let top = COL_HEADER_HEIGHT;
+    let top = 0;
     for (let r = 0; r < sr0; r++) top += resolvedGetRowHeight(r);
-    let left = ROW_HEADER_WIDTH;
+    let left = 0;
     for (let c = 0; c < sc0; c++) left += resolvedGetColWidth(c);
     let height = 0;
     for (let r = sr0; r <= endRow; r++) height += resolvedGetRowHeight(r);
@@ -693,6 +710,7 @@ export function SpreadsheetGrid() {
     for (let c = sc0; c <= endCol; c++) width += resolvedGetColWidth(c);
     return { top, left, width, height };
   }, [selectionManager.selection, selectionManager.fillTarget, resolvedGetRowHeight, resolvedGetColWidth]);
+
 
   // Touch support
   const touch = useGridTouch({
@@ -986,25 +1004,106 @@ export function SpreadsheetGrid() {
           rowHeights={resolvedRowHeights}
           rowHeaderWidth={ROW_HEADER_WIDTH}
           colHeaderHeight={COL_HEADER_HEIGHT}
+          frozenRowHeight={freezeTopPx}
+          frozenColWidth={freezeLeftPx}
+          scrollTop={viewport.scrollState.scrollTop}
+          scrollLeft={viewport.scrollState.scrollLeft}
+          viewportHeight={viewport.scrollState.viewportHeight}
+          viewportWidth={viewport.scrollState.viewportWidth}
         />
 
-        {fillHandlePos && (
+        {fillHandlePos && !fillHandlePos.sticky && (
           <FillHandle top={fillHandlePos.top} left={fillHandlePos.left} onPointerDown={selectionManager.handleFillPointerDown} />
         )}
 
-        {fillPreviewRect && (
+        {fillHandlePos?.sticky && (
           <div
-            className="absolute pointer-events-none z-[6]"
+            className="z-[14]"
             style={{
-              top: fillPreviewRect.top,
-              left: fillPreviewRect.left,
-              width: fillPreviewRect.width,
-              height: fillPreviewRect.height,
-              border: '2px dashed rgba(59, 130, 246, 0.8)',
-              boxSizing: 'border-box',
+              position: 'sticky',
+              top: 0,
+              left: 0,
+              width: viewport.scrollState.viewportWidth,
+              height: viewport.scrollState.viewportHeight,
+              overflow: 'hidden',
+              pointerEvents: 'none',
             }}
-          />
+          >
+            <div style={{ pointerEvents: 'auto' }}>
+              <FillHandle
+                top={
+                  fillHandlePos.contentTop < freezeTopPx
+                    ? COL_HEADER_HEIGHT + fillHandlePos.contentTop
+                    : COL_HEADER_HEIGHT + fillHandlePos.contentTop - viewport.scrollState.scrollTop
+                }
+                left={
+                  fillHandlePos.contentTop < freezeTopPx
+                    ? ROW_HEADER_WIDTH + fillHandlePos.contentLeft - viewport.scrollState.scrollLeft
+                    : ROW_HEADER_WIDTH + fillHandlePos.contentLeft
+                }
+                onPointerDown={selectionManager.handleFillPointerDown}
+              />
+            </div>
+          </div>
         )}
+
+        {fillPreviewRect && (() => {
+          const parts = (freezeTopPx > 0 || freezeLeftPx > 0)
+            ? splitRectAcrossFreeze(fillPreviewRect, { topInset: freezeTopPx, leftInset: freezeLeftPx })
+            : { frozen: [] as { top: number; left: number; width: number; height: number }[], body: fillPreviewRect };
+          return (
+            <>
+              {parts.body && (
+                <div
+                  className="absolute pointer-events-none z-[6]"
+                  style={{
+                    top: parts.body.top + COL_HEADER_HEIGHT,
+                    left: parts.body.left + ROW_HEADER_WIDTH,
+                    width: parts.body.width,
+                    height: parts.body.height,
+                    border: '2px dashed rgba(59, 130, 246, 0.8)',
+                    boxSizing: 'border-box',
+                  }}
+                />
+              )}
+              {(freezeTopPx > 0 || freezeLeftPx > 0) && parts.frozen.length > 0 && (
+                <div
+                  className="pointer-events-none z-[13]"
+                  style={{
+                    position: 'sticky',
+                    top: 0,
+                    left: 0,
+                    width: viewport.scrollState.viewportWidth,
+                    height: viewport.scrollState.viewportHeight,
+                    overflow: 'hidden',
+                  }}
+                >
+                  {parts.frozen.map((band, j) => {
+                    const inTop = band.top < freezeTopPx;
+                    return (
+                      <div
+                        key={j}
+                        className="absolute pointer-events-none"
+                        style={{
+                          top: inTop
+                            ? COL_HEADER_HEIGHT + band.top
+                            : COL_HEADER_HEIGHT + band.top - viewport.scrollState.scrollTop,
+                          left: inTop
+                            ? ROW_HEADER_WIDTH + band.left - viewport.scrollState.scrollLeft
+                            : ROW_HEADER_WIDTH + band.left,
+                          width: band.width,
+                          height: band.height,
+                          border: '2px dashed rgba(59, 130, 246, 0.8)',
+                          boxSizing: 'border-box',
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+              )}
+            </>
+          );
+        })()}
 
         <FreezePaneIndicators
           frozenRows={frozenRows}

@@ -78,3 +78,51 @@ export function stickyPaneBackground(explicitBg?: string | null): string {
   const v = explicitBg?.trim()
   return v ? v : '#fff'
 }
+
+export interface ContentRect {
+  top: number
+  left: number
+  width: number
+  height: number
+}
+
+function clipRect(
+  rect: ContentRect,
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+): ContentRect | null {
+  const left = Math.max(rect.left, x0)
+  const top = Math.max(rect.top, y0)
+  const right = Math.min(rect.left + rect.width, x1)
+  const bottom = Math.min(rect.top + rect.height, y1)
+  const width = right - left
+  const height = bottom - top
+  if (width <= 0 || height <= 0) return null
+  return { top, left, width, height }
+}
+
+/**
+ * Split a content-space rect into freeze-band pieces (sticky) and the
+ * scrollable body quadrant (absolute). Bands: top strip (y < topInset) and
+ * left strip below it (x < leftInset, y >= topInset).
+ */
+export function splitRectAcrossFreeze(
+  rect: ContentRect,
+  freeze: { topInset: number; leftInset: number },
+): { frozen: ContentRect[]; body: ContentRect | null } {
+  const { topInset, leftInset } = freeze
+  const right = rect.left + rect.width
+  const bottom = rect.top + rect.height
+  const frozen: ContentRect[] = []
+
+  const topBand = clipRect(rect, rect.left, 0, right, topInset)
+  if (topBand) frozen.push(topBand)
+
+  const leftBand = clipRect(rect, 0, topInset, leftInset, bottom)
+  if (leftBand) frozen.push(leftBand)
+
+  const body = clipRect(rect, leftInset, topInset, Infinity, Infinity)
+  return { frozen, body }
+}

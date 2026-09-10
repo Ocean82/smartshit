@@ -5,6 +5,7 @@ import {
   frozenColStickyLeft,
   frozenRowStickyTop,
   stickyPaneBackground,
+  splitRectAcrossFreeze,
 } from './gridFreeze'
 
 describe('clampFreezeCount', () => {
@@ -91,5 +92,37 @@ describe('stickyPaneBackground', () => {
     expect(stickyPaneBackground(undefined)).toBe('#fff')
     expect(stickyPaneBackground('')).toBe('#fff')
     expect(stickyPaneBackground('   ')).toBe('#fff')
+  })
+})
+
+describe('splitRectAcrossFreeze', () => {
+  it('returns only body when rect is fully past freeze', () => {
+    const { frozen, body } = splitRectAcrossFreeze(
+      { top: 80, left: 120, width: 50, height: 40 },
+      { topInset: 56, leftInset: 100 },
+    )
+    expect(frozen).toEqual([])
+    expect(body).toEqual({ top: 80, left: 120, width: 50, height: 40 })
+  })
+
+  it('returns only frozen when rect is inside the freeze corner', () => {
+    const { frozen, body } = splitRectAcrossFreeze(
+      { top: 0, left: 0, width: 50, height: 40 },
+      { topInset: 56, leftInset: 100 },
+    )
+    expect(body).toBeNull()
+    expect(frozen).toEqual([{ top: 0, left: 0, width: 50, height: 40 }])
+  })
+
+  it('splits a straddling rect into non-overlapping frozen + body', () => {
+    const { frozen, body } = splitRectAcrossFreeze(
+      { top: 20, left: 40, width: 120, height: 80 },
+      { topInset: 56, leftInset: 100 },
+    )
+    expect(frozen).toEqual([
+      { top: 20, left: 40, width: 120, height: 36 },
+      { top: 56, left: 40, width: 60, height: 44 },
+    ])
+    expect(body).toEqual({ top: 56, left: 100, width: 60, height: 44 })
   })
 })
