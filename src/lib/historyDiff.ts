@@ -43,6 +43,8 @@ export interface WorkbookPatch {
   sheets: SheetPatch[]
   activeSheetIdBefore: string
   activeSheetIdAfter: string
+  updatedAtBefore?: number
+  updatedAtAfter?: number
   /** Full before/after for structural changes (add/remove/reorder sheets) */
   structuralBefore?: WorkbookData
   structuralAfter?: WorkbookData
@@ -79,6 +81,11 @@ export function diffWorkbooks(before: WorkbookData, after: WorkbookData): Workbo
     patch.structuralBefore = before
     patch.structuralAfter = after
     return patch
+  }
+
+  if (before.updatedAt !== after.updatedAt) {
+    patch.updatedAtBefore = before.updatedAt
+    patch.updatedAtAfter = after.updatedAt
   }
 
   // Diff each sheet's cells
@@ -184,6 +191,7 @@ export function applyUndo(current: WorkbookData, entry: HistoryEntry): WorkbookD
 
   const wb = structuredClone(current)
   wb.activeSheetId = patch.activeSheetIdBefore
+  if (patch.updatedAtBefore !== undefined) wb.updatedAt = patch.updatedAtBefore
 
   for (const sheetPatch of patch.sheets) {
     const sheet = wb.sheets.find((s) => s.id === sheetPatch.sheetId)
@@ -237,6 +245,7 @@ export function applyRedo(current: WorkbookData, entry: HistoryEntry): WorkbookD
 
   const wb = structuredClone(current)
   wb.activeSheetId = patch.activeSheetIdAfter
+  if (patch.updatedAtAfter !== undefined) wb.updatedAt = patch.updatedAtAfter
 
   for (const sheetPatch of patch.sheets) {
     const sheet = wb.sheets.find((s) => s.id === sheetPatch.sheetId)
