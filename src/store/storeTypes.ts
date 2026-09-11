@@ -107,6 +107,7 @@ export interface AppState extends UIState, UIActions, FileActions, ChatActions {
   paste: () => void
   pasteFromClipboard: () => Promise<void>
   autofillTo: (endRow: number, endCol: number) => void
+  relocateRange: (args: { mode: 'move' | 'copy'; destRow: number; destCol: number }) => void
   setRowHeight: (row: number, height: number) => void
   /** Autofit one or more rows to wrapped cell content (undoable). */
   autoFitRows: (rows: number[]) => void

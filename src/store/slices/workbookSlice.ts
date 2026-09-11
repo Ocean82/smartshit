@@ -31,6 +31,7 @@ import { mergeChartLayout } from '@/lib/chartLayout'
 import { toMergeRange, parseMergeRange, rangesOverlap } from '@/lib/merge'
 import { encodeCellBlock, parseGridClipboard } from '@/lib/clipboardCodec'
 import { buildFillPattern, adjustFormulaRefs, fillCellAt, type FilledCell } from '@/lib/autofill'
+import { buildRelocatePlan } from '@/lib/relocateRange'
 import { clampRowHeight, getRowHeight, setRowAt, shiftRowHeightsOnDelete, shiftRowHeightsOnInsert } from '@/lib/rowLayout'
 import { setHidden, shiftHiddenOnDelete, shiftHiddenOnInsert } from '@/lib/rowColVisibility'
 import { autoFitRowHeights, createCanvasTextMeasurer } from '@/lib/rowAutoFit'
@@ -90,6 +91,7 @@ export interface WorkbookSliceState {
   paste: () => void
   pasteFromClipboard: () => Promise<void>
   autofillTo: (endRow: number, endCol: number) => void
+  relocateRange: (args: { mode: 'move' | 'copy'; destRow: number; destCol: number }) => void
   setRowHeight: (row: number, height: number) => void
   /** Autofit one or more rows to wrapped cell content (undoable). */
   autoFitRows: (rows: number[]) => void
@@ -127,6 +129,7 @@ export interface WorkbookActions {
   paste: () => void
   pasteFromClipboard: () => Promise<void>
   autofillTo: (endRow: number, endCol: number) => void
+  relocateRange: (args: { mode: 'move' | 'copy'; destRow: number; destCol: number }) => void
   setRowHeight: (row: number, height: number) => void
   autoFitRows: (rows: number[]) => void
   addChart: (chart: ChartConfig) => void
@@ -667,6 +670,47 @@ export function createWorkbookActions(
         }
 
         set((s) => { s.selection = { startRow: sr0, startCol: sc0, endRow, endCol }; s.additionalSelections = []; });
+      },
+
+      relocateRange: ({ mode, destRow, destCol }) => {
+        const state = get();
+        const sel = state.selection;
+        if (!sel || state.editingCell) return;
+
+        const sheet = get().getActiveSheet();
+        const plan = buildRelocatePlan({
+          cells: sheet.cells,
+          source: sel,
+          destRow,
+          destCol,
+          mode,
+        });
+        if (!plan) return;
+
+        get().pushHistory(mode === 'move' ? 'Move cells' : 'Copy cells');
+
+        for (const { cellId, data } of plan.writes) {
+          get().setCellValue(cellId, data.value, data.formula);
+          if (data.format) get().setCellFormat(cellId, data.format);
+        }
+
+        if (plan.clears.length > 0) {
+          set((s) => {
+            const active = s.workbook.sheets.find((sh) => sh.id === s.activeSheetId);
+            if (!active) return;
+            for (const cellId of plan.clears) {
+              const ref = cellToRef(cellId);
+              s.engine.setCellValue(s.activeSheetId, ref.row, ref.col, null);
+              delete active.cells[cellId];
+            }
+            s.workbook.updatedAt = Date.now();
+          });
+        }
+
+        set((s) => {
+          s.selection = plan.destSelection;
+          s.additionalSelections = [];
+        });
       },
 
       addChart: (chart) => {
