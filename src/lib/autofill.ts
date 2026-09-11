@@ -53,6 +53,7 @@ export interface FilledCell {
   value: string | number | boolean | null
   formula?: string
   format?: CellFormat
+  hyperlink?: CellData['hyperlink']
   /** Index into the source strip this filled cell derives from (formula deltas). */
   sourceStripIndex: number
 }
@@ -129,7 +130,13 @@ export function fillCellAt(pattern: FillPattern, k: number): FilledCell | null {
       const idx = (k - 1) % pattern.strip.length
       const src = pattern.strip[idx]
       if (!src) return null
-      return { value: src.value ?? null, formula: src.formula, format: src.format, sourceStripIndex: idx }
+      return {
+        value: src.value ?? null,
+        formula: src.formula,
+        format: src.format,
+        hyperlink: src.hyperlink,
+        sourceStripIndex: idx,
+      }
     }
     case 'linear':
       return { value: pattern.start + pattern.step * (pattern.len - 1 + k), format: pattern.format, sourceStripIndex: 0 }

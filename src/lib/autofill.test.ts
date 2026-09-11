@@ -44,6 +44,13 @@ describe('buildFillPattern', () => {
     expect(buildFillPattern([str('hello')]).kind).toBe('repeat')
   })
 
+  it('copies hyperlink on repeat fill', () => {
+    const link = { url: 'https://example.com/' }
+    const p = buildFillPattern([{ value: 'Click', hyperlink: link }])
+    expect(p.kind).toBe('repeat')
+    expect(fillCellAt(p, 1)?.hyperlink).toEqual(link)
+  })
+
   it('boolean cell → repeat', () => {
     expect(buildFillPattern([{ value: true }, { value: false }]).kind).toBe('repeat')
   })

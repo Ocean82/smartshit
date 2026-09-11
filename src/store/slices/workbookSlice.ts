@@ -36,7 +36,7 @@ import { buildAutoAggregatePlan, type AggregateFn } from '@/lib/autoAggregate'
 import { clampRowHeight, getRowHeight, setRowAt, shiftRowHeightsOnDelete, shiftRowHeightsOnInsert } from '@/lib/rowLayout'
 import { setHidden, shiftHiddenOnDelete, shiftHiddenOnInsert } from '@/lib/rowColVisibility'
 import { autoFitRowHeights, createCanvasTextMeasurer } from '@/lib/rowAutoFit'
-import { parseHyperlinkUrl, type Hyperlink } from '@/lib/hyperlink'
+import { resolveHyperlinkOnEdit, type Hyperlink } from '@/lib/hyperlink'
 import { MAX_UNDO_STACK } from '../storeTypes'
 import { v4 as uuid } from 'uuid'
 
@@ -380,33 +380,23 @@ export function createWorkbookActions(
             delete sheet.cells[cellId];
           } else {
             const prev = sheet.cells[cellId];
-            const prevUrl = prev?.hyperlink?.url;
             if (!sheet.cells[cellId]) {
               sheet.cells[cellId] = { value: null };
             }
+            const nextLink = resolveHyperlinkOnEdit({
+              prevValue: prev?.value,
+              prevHyperlink: prev?.hyperlink,
+              nextValue: value,
+              formula,
+            });
             sheet.cells[cellId].value = value;
             sheet.cells[cellId].formula = formula;
             // Clear stale displayValue when formula changes
             if (isAI) {
               sheet.cells[cellId].displayValue = undefined;
             }
-            // Hyperlink sync: auto-link bare URLs; drop link when replacing a URL-valued cell with non-URL.
-            if (formula) {
-              delete sheet.cells[cellId].hyperlink;
-            } else if (typeof value === 'string') {
-              const parsed = parseHyperlinkUrl(value);
-              if (parsed) {
-                sheet.cells[cellId].hyperlink = { url: parsed };
-              } else if (
-                prevUrl &&
-                typeof prev?.value === 'string' &&
-                parseHyperlinkUrl(prev.value) === prevUrl
-              ) {
-                delete sheet.cells[cellId].hyperlink;
-              }
-            } else if (typeof value !== 'string') {
-              delete sheet.cells[cellId].hyperlink;
-            }
+            if (nextLink) sheet.cells[cellId].hyperlink = nextLink;
+            else delete sheet.cells[cellId].hyperlink;
           }
           // Grow/shrink wrapped rows with content (no extra history — undo
           // restores the pre-edit workbook snapshot including rowHeights).
@@ -736,9 +726,8 @@ export function createWorkbookActions(
           if (cellData.format) {
             get().setCellFormat(newCellId, cellData.format);
           }
-          if (cellData.hyperlink) {
-            get().setCellHyperlink(newCellId, cellData.hyperlink);
-          }
+          // Always replace dest link (including clear) so paste cannot leave a stale labeled link.
+          get().setCellHyperlink(newCellId, cellData.hyperlink ?? null);
         }
 
         if (isCut) {
@@ -835,6 +824,7 @@ export function createWorkbookActions(
           if (formula) get().setCellValue(id, filled.value ?? null, formula);
           else if (filled.value !== null) get().setCellValue(id, filled.value);
           if (filled.format) get().setCellFormat(id, filled.format);
+          get().setCellHyperlink(id, filled.hyperlink ?? null);
         };
 
         // 1. Fill right: extend each source row across the new columns.
@@ -884,6 +874,7 @@ export function createWorkbookActions(
         for (const { cellId, data } of plan.writes) {
           get().setCellValue(cellId, data.value, data.formula);
           if (data.format) get().setCellFormat(cellId, data.format);
+          get().setCellHyperlink(cellId, data.hyperlink ?? null);
         }
 
         if (plan.clears.length > 0) {
