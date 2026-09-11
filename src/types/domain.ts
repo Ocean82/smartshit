@@ -217,6 +217,10 @@ export interface SheetData {
   hiddenRows?: Record<number, true>;
   /** Sheet columns omitted from the grid display (keys are 0-based col indices). */
   hiddenCols?: Record<number, true>;
+  /** Tab accent color (CSS). */
+  tabColor?: string;
+  /** When true, sheet is omitted from the main tab strip. */
+  hidden?: boolean;
   frozenRows?: number;
   frozenCols?: number;
   filters?: FilterConfig[];

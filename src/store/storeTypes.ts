@@ -81,6 +81,11 @@ export interface AppState extends UIState, UIActions, FileActions, ChatActions {
   addSheet: (name?: string) => void
   deleteSheet: (sheetId: string) => void
   renameSheet: (sheetId: string, name: string) => void
+  duplicateSheet: (sheetId: string) => void
+  moveSheet: (sheetId: string, toIndex: number) => void
+  setSheetTabColor: (sheetId: string, color: string | null) => void
+  hideSheet: (sheetId: string) => void
+  unhideSheet: (sheetId: string) => void
   setCellValue: (cellId: string, value: string | number | boolean | null, formula?: string) => void
   setCellFormat: (cellId: string, format: Partial<CellFormat>) => void
   setRangeFormat: (format: Partial<CellFormat>) => void

@@ -37,6 +37,7 @@ import { clampRowHeight, getRowHeight, setRowAt, shiftRowHeightsOnDelete, shiftR
 import { setHidden, shiftHiddenOnDelete, shiftHiddenOnInsert } from '@/lib/rowColVisibility'
 import { autoFitRowHeights, createCanvasTextMeasurer } from '@/lib/rowAutoFit'
 import { MAX_UNDO_STACK } from '../storeTypes'
+import { v4 as uuid } from 'uuid'
 
 /** Convert raw clipboard text into a typed value suitable for setCellValue. */
 function coerceValue(raw: string): string | number | boolean | null {
@@ -102,6 +103,11 @@ export interface WorkbookSliceState {
   deleteRow: (row: number) => void
   renameSheet: (sheetId: string, name: string) => void
   addSheet: (name?: string) => void
+  duplicateSheet: (sheetId: string) => void
+  moveSheet: (sheetId: string, toIndex: number) => void
+  setSheetTabColor: (sheetId: string, color: string | null) => void
+  hideSheet: (sheetId: string) => void
+  unhideSheet: (sheetId: string) => void
   addChart: (chart: ChartConfig) => void
   setFilters: (filters: FilterConfig[]) => void
   getActiveSheet: () => SheetData
@@ -114,6 +120,11 @@ export interface WorkbookActions {
   addSheet: (name?: string) => void
   deleteSheet: (sheetId: string) => void
   renameSheet: (sheetId: string, name: string) => void
+  duplicateSheet: (sheetId: string) => void
+  moveSheet: (sheetId: string, toIndex: number) => void
+  setSheetTabColor: (sheetId: string, color: string | null) => void
+  hideSheet: (sheetId: string) => void
+  unhideSheet: (sheetId: string) => void
   setCellValue: (cellId: string, value: string | number | boolean | null, formula?: string) => void
   setCellFormat: (cellId: string, format: Partial<CellFormat>) => void
   setRangeFormat: (format: Partial<CellFormat>) => void
@@ -261,6 +272,94 @@ export function createWorkbookActions(
           s.workbook.updatedAt = Date.now();
         });
         get().engine.loadWorkbook(get().workbook);
+      },
+
+      duplicateSheet: (sheetId) => {
+        const sheets = get().workbook.sheets;
+        const idx = sheets.findIndex((sh) => sh.id === sheetId);
+        if (idx < 0) return;
+        const source = sheets[idx];
+        const base = source.name;
+        let name = `${base} (2)`;
+        let n = 2;
+        while (sheets.some((sh) => sh.name === name)) {
+          n += 1;
+          name = `${base} (${n})`;
+        }
+        const clone: SheetData = {
+          ...structuredClone(source),
+          id: uuid(),
+          name,
+          hidden: false,
+        };
+        get().pushHistory('Duplicate sheet');
+        set((s) => {
+          s.workbook.sheets.splice(idx + 1, 0, clone);
+          s.activeSheetId = clone.id;
+          s.workbook.activeSheetId = clone.id;
+          s.workbook.updatedAt = Date.now();
+        });
+        get().engine.loadWorkbook(get().workbook);
+      },
+
+      moveSheet: (sheetId, toIndex) => {
+        const sheets = get().workbook.sheets;
+        const from = sheets.findIndex((sh) => sh.id === sheetId);
+        if (from < 0) return;
+        const to = Math.max(0, Math.min(sheets.length - 1, toIndex));
+        if (from === to) return;
+        get().pushHistory('Move sheet');
+        set((s) => {
+          const [sheet] = s.workbook.sheets.splice(from, 1);
+          s.workbook.sheets.splice(to, 0, sheet);
+          s.workbook.updatedAt = Date.now();
+        });
+        get().engine.loadWorkbook(get().workbook);
+      },
+
+      setSheetTabColor: (sheetId, color) => {
+        get().pushHistory('Sheet tab color');
+        set((s) => {
+          const sheet = s.workbook.sheets.find((sh) => sh.id === sheetId);
+          if (!sheet) return;
+          if (color) sheet.tabColor = color;
+          else delete sheet.tabColor;
+          s.workbook.updatedAt = Date.now();
+        });
+      },
+
+      hideSheet: (sheetId) => {
+        const sheets = get().workbook.sheets;
+        const sheet = sheets.find((sh) => sh.id === sheetId);
+        if (!sheet || sheet.hidden) return;
+        const visible = sheets.filter((sh) => !sh.hidden);
+        if (visible.length <= 1) return;
+        get().pushHistory('Hide sheet');
+        set((s) => {
+          const target = s.workbook.sheets.find((sh) => sh.id === sheetId);
+          if (!target) return;
+          target.hidden = true;
+          if (s.activeSheetId === sheetId) {
+            const next = s.workbook.sheets.find((sh) => !sh.hidden);
+            if (next) {
+              s.activeSheetId = next.id;
+              s.workbook.activeSheetId = next.id;
+            }
+          }
+          s.workbook.updatedAt = Date.now();
+        });
+      },
+
+      unhideSheet: (sheetId) => {
+        get().pushHistory('Unhide sheet');
+        set((s) => {
+          const sheet = s.workbook.sheets.find((sh) => sh.id === sheetId);
+          if (!sheet) return;
+          delete sheet.hidden;
+          s.activeSheetId = sheet.id;
+          s.workbook.activeSheetId = sheet.id;
+          s.workbook.updatedAt = Date.now();
+        });
       },
 
       setCellValue: (cellId, value, formula) => {
