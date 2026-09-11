@@ -16,6 +16,7 @@ import { useTouch } from '@/hooks/useTouch';
 import { getCellNotesService } from '@/lib/cellNotes';
 import { buildMergeIndex, isMergeAnchor, type MergeRange } from '@/lib/merge';
 import { pointToCell } from '@/lib/autofill';
+import { hitSelectionBorder } from '@/lib/relocateRange';
 import { GridCell, FillHandle } from './grid';
 import { useGridViewport } from './grid/GridViewport';
 import { useEditingController } from './grid/EditingController';
@@ -772,6 +773,70 @@ export function SpreadsheetGrid() {
     return { top: rowSpan.offset, left: colSpan.offset, width: colSpan.size, height: rowSpan.size };
   }, [selectionManager.selection, selectionManager.fillTarget, resolvedGetRowHeight, resolvedGetColWidth, viewport.displayRows, viewport.displayCols, viewport.TOTAL_ROWS, viewport.TOTAL_COLS]);
 
+  const selectionContentRect = useMemo(() => {
+    const sel = selectionManager.selection;
+    if (!sel || editingController.editingCell) return null;
+    const rowSpan = visibleContentSpan({
+      displayIndices: viewport.displayRows,
+      totalCount: viewport.TOTAL_ROWS,
+      start: Math.min(sel.startRow, sel.endRow),
+      end: Math.max(sel.startRow, sel.endRow),
+      getSize: resolvedGetRowHeight,
+    });
+    const colSpan = visibleContentSpan({
+      displayIndices: viewport.displayCols,
+      totalCount: viewport.TOTAL_COLS,
+      start: Math.min(sel.startCol, sel.endCol),
+      end: Math.max(sel.startCol, sel.endCol),
+      getSize: resolvedGetColWidth,
+    });
+    if (!rowSpan || !colSpan) return null;
+    return { top: rowSpan.offset, left: colSpan.offset, width: colSpan.size, height: rowSpan.size };
+  }, [selectionManager.selection, editingController.editingCell, resolvedGetRowHeight, resolvedGetColWidth, viewport.displayRows, viewport.displayCols, viewport.TOTAL_ROWS, viewport.TOTAL_COLS]);
+
+  const relocatePreviewRect = useMemo(() => {
+    const sel = selectionManager.selection;
+    const target = selectionManager.relocateTarget;
+    if (!sel || !target) return null;
+    const sr0 = Math.min(sel.startRow, sel.endRow);
+    const sr1 = Math.max(sel.startRow, sel.endRow);
+    const sc0 = Math.min(sel.startCol, sel.endCol);
+    const sc1 = Math.max(sel.startCol, sel.endCol);
+    if (target.row === sr0 && target.col === sc0) return null;
+    const rowSpan = visibleContentSpan({
+      displayIndices: viewport.displayRows,
+      totalCount: viewport.TOTAL_ROWS,
+      start: target.row,
+      end: target.row + (sr1 - sr0),
+      getSize: resolvedGetRowHeight,
+    });
+    const colSpan = visibleContentSpan({
+      displayIndices: viewport.displayCols,
+      totalCount: viewport.TOTAL_COLS,
+      start: target.col,
+      end: target.col + (sc1 - sc0),
+      getSize: resolvedGetColWidth,
+    });
+    if (!rowSpan || !colSpan) return null;
+    return { top: rowSpan.offset, left: colSpan.offset, width: colSpan.size, height: rowSpan.size };
+  }, [selectionManager.selection, selectionManager.relocateTarget, resolvedGetRowHeight, resolvedGetColWidth, viewport.displayRows, viewport.displayCols, viewport.TOTAL_ROWS, viewport.TOTAL_COLS]);
+
+  const handleCellMouseDown = useCallback((row: number, col: number, e: React.MouseEvent) => {
+    if (e.button === 0 && selectionContentRect) {
+      const gridEl = viewport.gridRef.current;
+      if (gridEl) {
+        const bounds = gridEl.getBoundingClientRect();
+        const contentX = e.clientX - bounds.left + gridEl.scrollLeft - ROW_HEADER_WIDTH;
+        const contentY = e.clientY - bounds.top + gridEl.scrollTop - COL_HEADER_HEIGHT;
+        if (hitSelectionBorder({ x: contentX, y: contentY, rect: selectionContentRect })) {
+          selectionManager.handleRelocatePointerDown(e);
+          return;
+        }
+      }
+    }
+    selectionManager.handleMouseDown(row, col, e);
+  }, [selectionContentRect, selectionManager, viewport.gridRef]);
+
 
   // Touch support
   const touch = useGridTouch({
@@ -869,7 +934,7 @@ export function SpreadsheetGrid() {
         inputRef={editingController.inputRef}
         stickyLeft={stickyLeft ?? undefined}
         stickyZIndex={stickyLeft != null ? stickyZ : undefined}
-        onMouseDown={selectionManager.handleMouseDown}
+        onMouseDown={handleCellMouseDown}
         onMouseMove={selectionManager.handleMouseMove}
         onDoubleClick={selectionManager.handleCellDoubleClick}
         onContextMenu={selectionManager.handleContextMenu}
@@ -1184,6 +1249,64 @@ export function SpreadsheetGrid() {
                     return (
                       <div
                         key={j}
+                        className="absolute pointer-events-none"
+                        style={{
+                          top: inTop
+                            ? COL_HEADER_HEIGHT + band.top
+                            : COL_HEADER_HEIGHT + band.top - viewport.scrollState.scrollTop,
+                          left: inTop
+                            ? ROW_HEADER_WIDTH + band.left - viewport.scrollState.scrollLeft
+                            : ROW_HEADER_WIDTH + band.left,
+                          width: band.width,
+                          height: band.height,
+                          border: '2px dashed rgba(59, 130, 246, 0.8)',
+                          boxSizing: 'border-box',
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+              )}
+            </>
+          );
+        })()}
+
+        {relocatePreviewRect && (() => {
+          const parts = (freezeTopPx > 0 || freezeLeftPx > 0)
+            ? splitRectAcrossFreeze(relocatePreviewRect, { topInset: freezeTopPx, leftInset: freezeLeftPx })
+            : { frozen: [] as { top: number; left: number; width: number; height: number }[], body: relocatePreviewRect };
+          return (
+            <>
+              {parts.body && (
+                <div
+                  className="absolute pointer-events-none z-[6]"
+                  style={{
+                    top: parts.body.top + COL_HEADER_HEIGHT,
+                    left: parts.body.left + ROW_HEADER_WIDTH,
+                    width: parts.body.width,
+                    height: parts.body.height,
+                    border: '2px dashed rgba(59, 130, 246, 0.8)',
+                    boxSizing: 'border-box',
+                  }}
+                />
+              )}
+              {(freezeTopPx > 0 || freezeLeftPx > 0) && parts.frozen.length > 0 && (
+                <div
+                  className="pointer-events-none z-[13]"
+                  style={{
+                    position: 'sticky',
+                    top: 0,
+                    left: 0,
+                    width: viewport.scrollState.viewportWidth,
+                    height: viewport.scrollState.viewportHeight,
+                    overflow: 'hidden',
+                  }}
+                >
+                  {parts.frozen.map((band, j) => {
+                    const inTop = band.top < freezeTopPx;
+                    return (
+                      <div
+                        key={`relocate-${j}`}
                         className="absolute pointer-events-none"
                         style={{
                           top: inTop

@@ -64,6 +64,11 @@ export function useSelectionManager(config: SelectionManagerConfig) {
   /** Removes document/window listeners registered for the active fill drag. */
   const fillCleanupRef = useRef<(() => void) | null>(null);
 
+  const isRelocateDragging = useRef(false);
+  const relocateTargetRef = useRef<{ row: number; col: number; mode: 'move' | 'copy' } | null>(null);
+  const [relocateTarget, setRelocateTarget] = useState<{ row: number; col: number; mode: 'move' | 'copy' } | null>(null);
+  const relocateCleanupRef = useRef<(() => void) | null>(null);
+
   const mergeIndex = useMemo(() => buildMergeIndex(sheet.mergedCells), [sheet.mergedCells]);
 
   /** Resolve the merge covering (row, col); returns its bounds or null. */
@@ -337,12 +342,83 @@ export function useSelectionManager(config: SelectionManagerConfig) {
     if (commit && target) useStore.getState().autofillTo(target.row, target.col);
   }, []);
 
+  const updateRelocateTarget = useCallback((clientX: number, clientY: number, ctrlKey: boolean) => {
+    if (!pointToCellInViewport) return;
+    const t = pointToCellInViewport(clientX, clientY);
+    const next = { row: t.row, col: t.col, mode: (ctrlKey ? 'copy' : 'move') as 'move' | 'copy' };
+    relocateTargetRef.current = next;
+    setRelocateTarget(next);
+  }, [pointToCellInViewport]);
+
+  const endRelocateDrag = useCallback((commit: boolean) => {
+    const cleanup = relocateCleanupRef.current;
+    relocateCleanupRef.current = null;
+    if (cleanup) cleanup();
+    isRelocateDragging.current = false;
+    const target = relocateTargetRef.current;
+    relocateTargetRef.current = null;
+    setRelocateTarget(null);
+    if (commit && target) {
+      useStore.getState().relocateRange({
+        mode: target.mode,
+        destRow: target.row,
+        destCol: target.col,
+      });
+    }
+  }, []);
+
+  const handleRelocatePointerDown = useCallback((e: {
+    clientX: number
+    clientY: number
+    ctrlKey: boolean
+    preventDefault: () => void
+    stopPropagation: () => void
+  }) => {
+    e.preventDefault();
+    e.stopPropagation();
+    endDrag();
+    endFillDrag(false);
+    endRelocateDrag(false);
+    isRelocateDragging.current = true;
+    updateRelocateTarget(e.clientX, e.clientY, e.ctrlKey);
+
+    const onPointerMove = (ev: globalThis.PointerEvent) => updateRelocateTarget(ev.clientX, ev.clientY, ev.ctrlKey);
+    const onPointerUp = () => endRelocateDrag(true);
+    const onBlur = () => endRelocateDrag(false);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') endRelocateDrag(false);
+    };
+    const onPointerCancel = () => endRelocateDrag(false);
+    const onKeyDown = (ev: globalThis.KeyboardEvent) => {
+      if (ev.key === 'Escape') endRelocateDrag(false);
+    };
+
+    document.addEventListener('pointermove', onPointerMove);
+    document.addEventListener('pointerup', onPointerUp);
+    window.addEventListener('blur', onBlur);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    document.addEventListener('pointercancel', onPointerCancel);
+    document.addEventListener('keydown', onKeyDown);
+
+    relocateCleanupRef.current = () => {
+      document.removeEventListener('pointermove', onPointerMove);
+      document.removeEventListener('pointerup', onPointerUp);
+      window.removeEventListener('blur', onBlur);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      document.removeEventListener('pointercancel', onPointerCancel);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [endDrag, endFillDrag, endRelocateDrag, updateRelocateTarget]);
+
+  useEffect(() => () => { endRelocateDrag(false); }, [endRelocateDrag]);
+
   const handleFillPointerDown = useCallback((e: PointerEvent<HTMLElement>) => {
     if (e.button !== 0) return;
     e.preventDefault();
     e.stopPropagation();
-    endDrag();          // drop any selection drag state
-    endFillDrag(false); // drop a prior unfinished fill drag
+    endDrag();
+    endRelocateDrag(false);
+    endFillDrag(false);
     isFillDragging.current = true;
 
     const onPointerMove = (ev: globalThis.PointerEvent) => updateFillTarget(ev.clientX, ev.clientY);
@@ -366,9 +442,8 @@ export function useSelectionManager(config: SelectionManagerConfig) {
       document.removeEventListener('visibilitychange', onVisibilityChange);
       document.removeEventListener('pointercancel', onPointerCancel);
     };
-  }, [endDrag, endFillDrag, updateFillTarget]);
+  }, [endDrag, endFillDrag, endRelocateDrag, updateFillTarget]);
 
-  // Clean up a dangling fill drag on unmount.
   useEffect(() => () => { endFillDrag(false); }, [endFillDrag]);
 
   const getSelectionInfo = useMemo(() => {
@@ -408,6 +483,8 @@ export function useSelectionManager(config: SelectionManagerConfig) {
     handleContextMenu,
     handleFillPointerDown,
     fillTarget,
+    handleRelocatePointerDown,
+    relocateTarget,
     getSelectionInfo,
     handleColSelect: (col: number) => setSelection({ startRow: 0, startCol: col, endRow: TOTAL_ROWS - 1, endCol: col }),
     handleRowSelect: (row: number) => setSelection({ startRow: row, startCol: 0, endRow: row, endCol: TOTAL_COLS - 1 }),

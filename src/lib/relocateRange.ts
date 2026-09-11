@@ -7,6 +7,40 @@ import { adjustFormulaRefs } from '@/lib/autofill'
 
 export type RelocateMode = 'move' | 'copy'
 
+/** ~4px border ring in content space; excludes fill-handle corner. */
+export function hitSelectionBorder(args: {
+  x: number
+  y: number
+  rect: { top: number; left: number; width: number; height: number }
+  threshold?: number
+  /** Bottom-right square excluded so the fill handle wins. */
+  excludeCornerSize?: number
+}): boolean {
+  const threshold = args.threshold ?? 4
+  const exclude = args.excludeCornerSize ?? 12
+  const { top, left, width, height } = args.rect
+  const right = left + width
+  const bottom = top + height
+  const { x, y } = args
+
+  if (x < left - threshold || x > right + threshold || y < top - threshold || y > bottom + threshold)
+    return false
+
+  const nearLeft = Math.abs(x - left) <= threshold
+  const nearRight = Math.abs(x - right) <= threshold
+  const nearTop = Math.abs(y - top) <= threshold
+  const nearBottom = Math.abs(y - bottom) <= threshold
+  if (!(nearLeft || nearRight || nearTop || nearBottom)) return false
+
+  // Stay on the ring: for left/right edges require y within vertical span; same for top/bottom.
+  if ((nearLeft || nearRight) && (y < top - threshold || y > bottom + threshold)) return false
+  if ((nearTop || nearBottom) && (x < left - threshold || x > right + threshold)) return false
+
+  if (x >= right - exclude && y >= bottom - exclude) return false
+  return true
+}
+
+
 export interface RelocateWrite {
   cellId: string
   data: CellData

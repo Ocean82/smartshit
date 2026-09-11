@@ -1,5 +1,22 @@
 import { describe, expect, it } from 'vitest'
-import { buildRelocatePlan } from './relocateRange'
+import { buildRelocatePlan, hitSelectionBorder } from './relocateRange'
+
+describe('hitSelectionBorder', () => {
+  const rect = { top: 10, left: 20, width: 100, height: 40 }
+
+  it('hits left/top edges within threshold', () => {
+    expect(hitSelectionBorder({ x: 20, y: 30, rect })).toBe(true)
+    expect(hitSelectionBorder({ x: 50, y: 10, rect })).toBe(true)
+  })
+
+  it('misses deep interior', () => {
+    expect(hitSelectionBorder({ x: 70, y: 30, rect })).toBe(false)
+  })
+
+  it('excludes bottom-right fill-handle corner', () => {
+    expect(hitSelectionBorder({ x: 118, y: 48, rect })).toBe(false)
+  })
+})
 
 describe('buildRelocatePlan', () => {
   const source = { startRow: 0, startCol: 0, endRow: 1, endCol: 0 }
