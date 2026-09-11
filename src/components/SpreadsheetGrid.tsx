@@ -485,6 +485,7 @@ export function SpreadsheetGrid() {
     setShowFindReplace,
     unhideRows,
     unhideCols,
+    showGridlines,
   } = useStore();
 
   const sheet = getActiveSheet();
@@ -935,6 +936,7 @@ export function SpreadsheetGrid() {
         inputRef={editingController.inputRef}
         stickyLeft={stickyLeft ?? undefined}
         stickyZIndex={stickyLeft != null ? stickyZ : undefined}
+        showGridlines={showGridlines}
         onMouseDown={handleCellMouseDown}
         onMouseMove={selectionManager.handleMouseMove}
         onDoubleClick={selectionManager.handleCellDoubleClick}

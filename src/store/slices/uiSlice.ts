@@ -21,6 +21,9 @@ export interface UIState {
   showChartDialog: boolean
   showFormatPanel: boolean
   showToolbar: boolean
+  showFormulaBar: boolean
+  showSheetTabs: boolean
+  showGridlines: boolean
   showVersionHistory: boolean
   showValidationDialog: boolean
   showPivotDialog: boolean
@@ -61,6 +64,9 @@ export interface UIActions {
   setShowFormatPanel: (v: boolean) => void
   setShowToolbar: (v: boolean) => void
   toggleToolbar: () => void
+  toggleFormulaBar: () => void
+  toggleSheetTabs: () => void
+  toggleGridlines: () => void
   setShowVersionHistory: (v: boolean) => void
   setShowValidationDialog: (show: boolean) => void
   setContextMenu: (menu: { x: number; y: number; cell: string } | null) => void
@@ -95,6 +101,9 @@ export function createUIState(): UIState {
     showChartDialog: false,
     showFormatPanel: false,
     showToolbar: storage?.getItem('smartsht-show-toolbar') !== '0',
+    showFormulaBar: true,
+    showSheetTabs: true,
+    showGridlines: true,
     showVersionHistory: false,
     showValidationDialog: false,
     showPivotDialog: false,
@@ -166,6 +175,9 @@ export function createUIActions(
       set((s) => { s.showToolbar = next })
       storage?.setItem('smartsht-show-toolbar', next ? '1' : '0')
     },
+    toggleFormulaBar: () => set((s) => { s.showFormulaBar = !s.showFormulaBar }),
+    toggleSheetTabs: () => set((s) => { s.showSheetTabs = !s.showSheetTabs }),
+    toggleGridlines: () => set((s) => { s.showGridlines = !s.showGridlines }),
     setShowVersionHistory: (v) => set((s) => { s.showVersionHistory = v }),
     setShowValidationDialog: (show) => set((s) => { s.showValidationDialog = show }),
     setContextMenu: (menu) => set((s) => { s.contextMenu = menu }),

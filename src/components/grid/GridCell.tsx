@@ -66,6 +66,8 @@ export interface GridCellProps {
   /** Pin under horizontal scroll (frozen columns). */
   stickyLeft?: number
   stickyZIndex?: number
+  /** When false, omit default cell chrome borders (selection/active still show). */
+  showGridlines?: boolean
 }
 
 // ─── Helper ──────────────────────────────────────────────────────────────────
@@ -127,6 +129,7 @@ export const GridCell = memo(function GridCell({
   onCheckboxToggle,
   stickyLeft,
   stickyZIndex,
+  showGridlines = true,
 }: GridCellProps) {
   const rawValue = (computed || cellData?.value) ?? null
   const hasFormula = !!cellData?.formula
@@ -146,6 +149,7 @@ export const GridCell = memo(function GridCell({
     : null
 
   const isSticky = stickyLeft != null
+  const showChromeBorder = showGridlines || isSelected || isCrosshair
 
   return (
     <div
@@ -154,7 +158,7 @@ export const GridCell = memo(function GridCell({
       aria-colindex={col + 2}
       aria-selected={isActive || isSelected}
       aria-readonly={!isEditing}
-      className={`border-b border-r shrink-0 transition-shadow group/cell ${
+      className={`${showChromeBorder ? 'border-b border-r ' : ''}shrink-0 transition-shadow group/cell ${
         isSticky ? '' : 'relative '
       }${
         pendingChange
@@ -165,7 +169,9 @@ export const GridCell = memo(function GridCell({
               ? 'bg-blue-50/60 border-blue-200'
               : isCrosshair
                 ? 'bg-blue-50/30 border-gray-200'
-                : 'border-gray-200 hover:bg-blue-50/20'
+                : showGridlines
+                  ? 'border-gray-200 hover:bg-blue-50/20'
+                  : 'hover:bg-blue-50/20'
       }`}
       style={{
         width: colWidth,

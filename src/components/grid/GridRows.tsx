@@ -76,6 +76,8 @@ export function GridRows({
   onEditBlur,
   totalCols,
 }: GridRowsProps) {
+  const showGridlines = useStore((s) => s.showGridlines)
+
   // Grid rows
   const rows = useMemo(() => {
     const handleRowSelect = (row: number) => {
@@ -187,6 +189,7 @@ export function GridRows({
                   onContextMenu={onContextMenu}
                   onEditChange={onEditChange}
                   onEditBlur={onEditBlur}
+                  showGridlines={showGridlines}
                   onCheckboxToggle={(cid, cd) => {
                     useStore.getState().pushHistory('Toggle checkbox');
                     useStore.getState().setCellValue(cid, getCheckboxToggleValue(cd));
@@ -226,6 +229,7 @@ export function GridRows({
     onEditChange,
     onEditBlur,
     totalCols,
+    showGridlines,
   ]);
 
   return (

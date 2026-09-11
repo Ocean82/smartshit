@@ -69,10 +69,12 @@ const {
     setActivePanel,
     activePanel,
     showToolbar,
+    showFormulaBar,
+    showSheetTabs,
   } = useStore(useShallow((s) => ({
     workbook: s.workbook,
     engine: s.engine,
-showValidationDialog: s.showValidationDialog,
+    showValidationDialog: s.showValidationDialog,
     setShowValidationDialog: s.setShowValidationDialog,
     showPivotDialog: s.showPivotDialog,
     setShowPivotDialog: s.setShowPivotDialog,
@@ -83,6 +85,8 @@ showValidationDialog: s.showValidationDialog,
     setActivePanel: s.setActivePanel,
     activePanel: s.activePanel,
     showToolbar: s.showToolbar,
+    showFormulaBar: s.showFormulaBar,
+    showSheetTabs: s.showSheetTabs,
   })))
   const [isLoaded, setIsLoaded] = useState(false)
   const [showTemplates, setShowTemplates] = useState(false)
@@ -212,7 +216,7 @@ showValidationDialog: s.showValidationDialog,
           <Toolbar />
         </div>
       )}
-      <FormulaBar />
+      {showFormulaBar && <FormulaBar />}
 
       <div className="flex-1 flex overflow-hidden min-h-0">
         <FileExplorer />
@@ -226,7 +230,7 @@ showValidationDialog: s.showValidationDialog,
             <ChartOverlay />
             <EmptyGridGuide onOpenTemplates={() => setShowTemplates(true)} />
           </div>
-          <SheetTabs />
+          {showSheetTabs && <SheetTabs />}
         </div>
 
         {/* Right-side panel system */}

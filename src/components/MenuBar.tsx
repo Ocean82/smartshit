@@ -67,6 +67,12 @@ export function MenuBar() {
     showConfirm,
     showToolbar,
     toggleToolbar,
+    showFormulaBar,
+    toggleFormulaBar,
+    showSheetTabs,
+    toggleSheetTabs,
+    showGridlines,
+    toggleGridlines,
   } = useStore(useShallow((s) => ({
     workbook: s.workbook,
     undo: s.undo,
@@ -100,6 +106,12 @@ export function MenuBar() {
     showConfirm: s.showConfirm,
     showToolbar: s.showToolbar,
     toggleToolbar: s.toggleToolbar,
+    showFormulaBar: s.showFormulaBar,
+    toggleFormulaBar: s.toggleFormulaBar,
+    showSheetTabs: s.showSheetTabs,
+    toggleSheetTabs: s.toggleSheetTabs,
+    showGridlines: s.showGridlines,
+    toggleGridlines: s.toggleGridlines,
   })))
 
   const closeMenu = useCallback(() => setOpenMenu(null), [])
@@ -332,6 +344,9 @@ export function MenuBar() {
       label: 'View',
       items: [
         { label: showToolbar ? '✓ Toolbar' : '  Toolbar', shortcut: 'Ctrl+Shift+T', action: () => { toggleToolbar(); setOpenMenu(null) } },
+        { label: showFormulaBar ? '✓ Formula Bar' : '  Formula Bar', action: () => { toggleFormulaBar(); setOpenMenu(null) } },
+        { label: showSheetTabs ? '✓ Sheet Tabs' : '  Sheet Tabs', action: () => { toggleSheetTabs(); setOpenMenu(null) } },
+        { label: showGridlines ? '✓ Gridlines' : '  Gridlines', action: () => { toggleGridlines(); setOpenMenu(null) }, dividerAfter: true },
         { label: showFileExplorer ? '✓ File Explorer' : '  File Explorer', action: () => { toggleFileExplorer(); setOpenMenu(null) } },
         { label: showFormatPanel ? '✓ Format Panel' : '  Format Panel', action: () => { setShowFormatPanel(!showFormatPanel); setOpenMenu(null) } },
         { label: showVersionHistory ? '✓ Version History' : '  Version History', action: () => { setShowVersionHistory(!showVersionHistory); setOpenMenu(null) } },
