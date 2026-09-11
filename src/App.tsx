@@ -47,6 +47,7 @@ const CommandPalette = lazy(() => import('@/components/CommandPalette').then(m =
 const WorkbookPicker = lazy(() => import('@/components/WorkbookPicker').then(m => ({ default: m.WorkbookPicker })))
 const ShareDialog = lazy(() => import('@/components/ShareDialog').then(m => ({ default: m.ShareDialog })))
 const GoToCellDialog = lazy(() => import('@/components/GoToCellDialog').then(m => ({ default: m.GoToCellDialog })))
+const HyperlinkDialog = lazy(() => import('@/components/HyperlinkDialog').then(m => ({ default: m.HyperlinkDialog })))
 const VersionHistoryPanel = lazy(() => import('@/components/VersionHistoryPanel').then(m => ({ default: m.VersionHistoryPanel })))
 const TelemetryDebugPanel = lazy(() => import('@/components/TelemetryDebugPanel').then(m => ({ default: m.TelemetryDebugPanel })))
 
@@ -321,6 +322,7 @@ const {
         <WorkbookPicker open={showWorkbookPicker} onClose={() => setShowWorkbookPicker(false)} />
         <ShareDialog open={showShareDialog} onClose={() => setShowShareDialog(false)} />
         <GoToCellDialog open={showGoToCell} onClose={() => setShowGoToCell(false)} />
+        <HyperlinkDialog />
       </Suspense>
       {import.meta.env.DEV ? <Suspense fallback={null}><TelemetryDebugPanel /></Suspense> : null}
       <ToastContainer />

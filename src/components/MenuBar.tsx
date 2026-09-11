@@ -361,6 +361,7 @@ export function MenuBar() {
       items: [
         { label: 'Chart', action: () => { setShowChartDialog(true); setOpenMenu(null) } },
         { label: 'Pivot Table', action: () => { setShowPivotDialog(true); setOpenMenu(null) }, disabled: !selection, dividerAfter: true },
+        { label: 'Link…', action: () => { useStore.getState().setShowHyperlinkDialog(true); setOpenMenu(null) }, disabled: !selection },
         { label: 'New Sheet', action: () => { useStore.getState().addSheet(); setOpenMenu(null) } },
       ],
     },

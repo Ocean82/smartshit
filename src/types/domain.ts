@@ -4,6 +4,12 @@
  * Core spreadsheet data structures - pure domain logic, no UI concerns.
  */
 
+/** Cell hyperlink metadata. v1 uses `url`; `displayText` reserved for later. */
+export interface Hyperlink {
+  url: string;
+  displayText?: string;
+}
+
 export interface CellData {
   value: string | number | boolean | null;
   formula?: string;
@@ -11,6 +17,7 @@ export interface CellData {
   format?: CellFormat;
   validation?: DataValidation;
   validationError?: string;
+  hyperlink?: Hyperlink;
 }
 
 export interface CellFormat {

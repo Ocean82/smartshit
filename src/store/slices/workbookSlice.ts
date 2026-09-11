@@ -36,6 +36,7 @@ import { buildAutoAggregatePlan, type AggregateFn } from '@/lib/autoAggregate'
 import { clampRowHeight, getRowHeight, setRowAt, shiftRowHeightsOnDelete, shiftRowHeightsOnInsert } from '@/lib/rowLayout'
 import { setHidden, shiftHiddenOnDelete, shiftHiddenOnInsert } from '@/lib/rowColVisibility'
 import { autoFitRowHeights, createCanvasTextMeasurer } from '@/lib/rowAutoFit'
+import { parseHyperlinkUrl, type Hyperlink } from '@/lib/hyperlink'
 import { MAX_UNDO_STACK } from '../storeTypes'
 import { v4 as uuid } from 'uuid'
 
@@ -85,6 +86,7 @@ export interface WorkbookSliceState {
   redoStack: HistoryEntry[]
   pushHistory: (desc: string) => void
   setCellValue: (cellId: string, value: string | number | boolean | null, formula?: string) => void
+  setCellHyperlink: (cellId: string, hyperlink: Hyperlink | null) => void
   setCellFormat: (cellId: string, format: Partial<CellFormat>) => void
   deleteSelectedCells: () => void
   applySortPatch: (patch: SortPatch) => void
@@ -126,6 +128,7 @@ export interface WorkbookActions {
   hideSheet: (sheetId: string) => void
   unhideSheet: (sheetId: string) => void
   setCellValue: (cellId: string, value: string | number | boolean | null, formula?: string) => void
+  setCellHyperlink: (cellId: string, hyperlink: Hyperlink | null) => void
   setCellFormat: (cellId: string, format: Partial<CellFormat>) => void
   setRangeFormat: (format: Partial<CellFormat>) => void
   /** Strip CellFormat from the selection; keep value/formula/validation. */
@@ -376,6 +379,8 @@ export function createWorkbookActions(
           if (value === null && !formula) {
             delete sheet.cells[cellId];
           } else {
+            const prev = sheet.cells[cellId];
+            const prevUrl = prev?.hyperlink?.url;
             if (!sheet.cells[cellId]) {
               sheet.cells[cellId] = { value: null };
             }
@@ -384,6 +389,23 @@ export function createWorkbookActions(
             // Clear stale displayValue when formula changes
             if (isAI) {
               sheet.cells[cellId].displayValue = undefined;
+            }
+            // Hyperlink sync: auto-link bare URLs; drop link when replacing a URL-valued cell with non-URL.
+            if (formula) {
+              delete sheet.cells[cellId].hyperlink;
+            } else if (typeof value === 'string') {
+              const parsed = parseHyperlinkUrl(value);
+              if (parsed) {
+                sheet.cells[cellId].hyperlink = { url: parsed };
+              } else if (
+                prevUrl &&
+                typeof prev?.value === 'string' &&
+                parseHyperlinkUrl(prev.value) === prevUrl
+              ) {
+                delete sheet.cells[cellId].hyperlink;
+              }
+            } else if (typeof value !== 'string') {
+              delete sheet.cells[cellId].hyperlink;
             }
           }
           // Grow/shrink wrapped rows with content (no extra history — undo
@@ -405,6 +427,20 @@ export function createWorkbookActions(
             }
           );
         }
+      },
+
+      setCellHyperlink: (cellId, hyperlink) => {
+        set((s) => {
+          const sheet = s.workbook.sheets.find((sh) => sh.id === s.activeSheetId);
+          if (!sheet) return;
+          if (!hyperlink) {
+            if (sheet.cells[cellId]) delete sheet.cells[cellId].hyperlink;
+            return;
+          }
+          if (!sheet.cells[cellId]) sheet.cells[cellId] = { value: null };
+          sheet.cells[cellId].hyperlink = hyperlink;
+          s.workbook.updatedAt = Date.now();
+        });
       },
 
       setCellFormat: (cellId, format) => {
@@ -699,6 +735,9 @@ export function createWorkbookActions(
           get().setCellValue(newCellId, cellData.value, cellData.formula);
           if (cellData.format) {
             get().setCellFormat(newCellId, cellData.format);
+          }
+          if (cellData.hyperlink) {
+            get().setCellHyperlink(newCellId, cellData.hyperlink);
           }
         }
 

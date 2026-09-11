@@ -26,6 +26,7 @@ export interface UIState {
   showGridlines: boolean
   showVersionHistory: boolean
   showValidationDialog: boolean
+  showHyperlinkDialog: boolean
   showPivotDialog: boolean
   showFilterDialog: boolean
   showConditionalFormatDialog: boolean
@@ -69,6 +70,7 @@ export interface UIActions {
   toggleGridlines: () => void
   setShowVersionHistory: (v: boolean) => void
   setShowValidationDialog: (show: boolean) => void
+  setShowHyperlinkDialog: (show: boolean) => void
   setContextMenu: (menu: { x: number; y: number; cell: string } | null) => void
   setScrollPosition: (row: number, col: number) => void
   showToast: (toast: Omit<Toast, 'id'>) => void
@@ -106,6 +108,7 @@ export function createUIState(): UIState {
     showGridlines: true,
     showVersionHistory: false,
     showValidationDialog: false,
+    showHyperlinkDialog: false,
     showPivotDialog: false,
     showFilterDialog: false,
     showConditionalFormatDialog: false,
@@ -180,6 +183,7 @@ export function createUIActions(
     toggleGridlines: () => set((s) => { s.showGridlines = !s.showGridlines }),
     setShowVersionHistory: (v) => set((s) => { s.showVersionHistory = v }),
     setShowValidationDialog: (show) => set((s) => { s.showValidationDialog = show }),
+    setShowHyperlinkDialog: (show) => set((s) => { s.showHyperlinkDialog = show }),
     setContextMenu: (menu) => set((s) => { s.contextMenu = menu }),
     setScrollPosition: (row, col) => set((s) => { s.scrollRow = row; s.scrollCol = col }),
     showToast: (toast) => {

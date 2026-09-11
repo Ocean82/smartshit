@@ -18,6 +18,7 @@ import { getCellNotesService } from '@/lib/cellNotes';
 import { buildMergeIndex, isMergeAnchor, type MergeRange } from '@/lib/merge';
 import { pointToCell } from '@/lib/autofill';
 import { hitSelectionBorder } from '@/lib/relocateRange';
+import { openHyperlink } from '@/lib/hyperlink';
 import { GridCell, FillHandle } from './grid';
 import { useGridViewport } from './grid/GridViewport';
 import { useEditingController } from './grid/EditingController';
@@ -824,6 +825,15 @@ export function SpreadsheetGrid() {
   }, [selectionManager.selection, selectionManager.relocateTarget, resolvedGetRowHeight, resolvedGetColWidth, viewport.displayRows, viewport.displayCols, viewport.TOTAL_ROWS, viewport.TOTAL_COLS]);
 
   const handleCellMouseDown = useCallback((row: number, col: number, e: React.MouseEvent) => {
+    if (e.button === 0 && (e.ctrlKey || e.metaKey)) {
+      const link = sheet.cells[refToCell(row, col)]?.hyperlink?.url
+      if (link) {
+        e.preventDefault()
+        e.stopPropagation()
+        openHyperlink(link)
+        return
+      }
+    }
     if (e.button === 0 && selectionContentRect) {
       const gridEl = viewport.gridRef.current;
       if (gridEl) {
@@ -837,7 +847,7 @@ export function SpreadsheetGrid() {
       }
     }
     selectionManager.handleMouseDown(row, col, e);
-  }, [selectionContentRect, selectionManager, viewport.gridRef]);
+  }, [selectionContentRect, selectionManager, viewport.gridRef, sheet.cells]);
 
 
   // Touch support

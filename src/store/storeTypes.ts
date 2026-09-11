@@ -87,6 +87,7 @@ export interface AppState extends UIState, UIActions, FileActions, ChatActions {
   hideSheet: (sheetId: string) => void
   unhideSheet: (sheetId: string) => void
   setCellValue: (cellId: string, value: string | number | boolean | null, formula?: string) => void
+  setCellHyperlink: (cellId: string, hyperlink: import('@/types').Hyperlink | null) => void
   setCellFormat: (cellId: string, format: Partial<CellFormat>) => void
   setRangeFormat: (format: Partial<CellFormat>) => void
   /** Strip CellFormat from the selection; keep value/formula/validation. */

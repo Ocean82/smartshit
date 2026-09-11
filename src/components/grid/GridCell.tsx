@@ -135,6 +135,8 @@ export const GridCell = memo(function GridCell({
   const hasFormula = !!cellData?.formula
   const resolvedFormat = resolveCellFormat(cellData?.format, computed)
   const wrapEnabled = isWrapEnabled(resolvedFormat)
+  const hasHyperlink = !!cellData?.hyperlink?.url
+
 
   // Conditional formatting
   const dataBarRule = getDataBarRule(cellData?.format, computed)
@@ -177,6 +179,7 @@ export const GridCell = memo(function GridCell({
         width: colWidth,
         height: cellHeight,
         flexShrink: 0,
+        cursor: hasHyperlink && !isEditing ? 'pointer' : undefined,
         position: isSticky ? 'sticky' : 'relative',
         ...(isSticky ? { left: stickyLeft, zIndex: stickyZIndex ?? 11 } : {}),
         ...getCellStyle(resolvedFormat, rawValue),
@@ -194,6 +197,7 @@ export const GridCell = memo(function GridCell({
             }
           : {}),
       }}
+      title={hasHyperlink ? `${cellData?.hyperlink?.url} (Ctrl+Click to open)` : undefined}
       onMouseDown={(e) => onMouseDown(row, col, e)}
       onMouseMove={(e) => onMouseMove(row, col, e)}
       onDoubleClick={() => onDoubleClick(row, col)}
@@ -271,6 +275,9 @@ export const GridCell = memo(function GridCell({
                 : (typeof cellData?.value === 'number' || (computed && !isNaN(Number(computed)) && computed !== ''))
                   ? 'right'
                   : undefined,
+              ...(hasHyperlink && !cellData?.format?.fontColor
+                ? { color: '#2563eb', textDecoration: 'underline' }
+                : {}),
             }}
             title={hasFormula ? `${cellData?.formula} = ${formatCellValue(rawValue, cellData?.format?.numberFormat)}` : formatCellValue(rawValue, cellData?.format?.numberFormat)}
           >

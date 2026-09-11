@@ -8,7 +8,7 @@ import { AnchoredPanel } from '@/components/AnchoredPanel'
 import {
   Copy, Scissors, ClipboardPaste, Trash2, Plus,
   ArrowDown, ArrowRight, Bold, Italic, Strikethrough, WrapText, Shield, StickyNote, X, Check,
-  TableCellsMerge, TableCellsSplit, Eraser, EyeOff, Eye,
+  TableCellsMerge, TableCellsSplit, Eraser, EyeOff, Eye, Link, Unlink,
 } from 'lucide-react'
 import { indicesInSpan, resolveUnhideIndices } from '@/lib/rowColVisibility'
 
@@ -258,6 +258,23 @@ export function ContextMenu() {
       label: 'Data Validation',
       action: () => runAndClose(() => useStore.getState().setShowValidationDialog(true)),
     },
+    null,
+    {
+      icon: <Link size={13} />,
+      label: getActiveSheet().cells[contextMenu.cell]?.hyperlink ? 'Edit Link' : 'Insert Link',
+      action: () => runAndClose(() => {
+        setSelection({ startRow: ref.row, startCol: ref.col, endRow: ref.row, endCol: ref.col })
+        useStore.getState().setShowHyperlinkDialog(true)
+      }),
+    },
+    ...(getActiveSheet().cells[contextMenu.cell]?.hyperlink ? [{
+      icon: <Unlink size={13} />,
+      label: 'Remove Link',
+      action: () => runAndClose(() => {
+        pushHistory('Remove link')
+        useStore.getState().setCellHyperlink(contextMenu.cell, null)
+      }),
+    }] : []),
     null,
     {
       icon: <StickyNote size={13} />,
