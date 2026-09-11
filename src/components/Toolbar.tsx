@@ -10,7 +10,7 @@ import {
   AlignLeft, AlignCenter, AlignRight,
   AlignVerticalJustifyStart, AlignVerticalJustifyCenter, AlignVerticalJustifyEnd,
   Undo2, Redo2, Paintbrush, Type, Grid3x3, BarChart3,
-  Download, Upload, ChevronDown,
+  Download, Upload, ChevronDown, Sigma,
   Filter, SortAsc,
 } from 'lucide-react';
 import { BG_COLORS, FULL_COLORS } from '@/data/colors';
@@ -41,6 +41,7 @@ export function Toolbar() {
     pushHistory,
     getActiveSheet,
     showConfirm,
+    applyAutoAggregate,
   } = useStore(useShallow((s) => ({
     selection: s.selection,
     setRangeFormat: s.setRangeFormat,
@@ -59,6 +60,7 @@ export function Toolbar() {
     pushHistory: s.pushHistory,
     getActiveSheet: s.getActiveSheet,
     showConfirm: s.showConfirm,
+    applyAutoAggregate: s.applyAutoAggregate,
   })));
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -66,10 +68,12 @@ export function Toolbar() {
   const fontColorRef = useRef<HTMLButtonElement>(null);
   const exportBtnRef = useRef<HTMLButtonElement>(null);
   const moreBtnRef = useRef<HTMLButtonElement>(null);
+  const autoSumBtnRef = useRef<HTMLButtonElement>(null);
   const [showCellColor, setShowCellColor] = useState(false);
   const [showFontColor, setShowFontColor] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [showAutoSum, setShowAutoSum] = useState(false);
   const sheet = getActiveSheet();
 
   const selectedCellId = selection ? refToCell(selection.startRow, selection.startCol) : '';
@@ -348,6 +352,81 @@ export function Toolbar() {
 
         <Divider />
 
+        {/* ─── Number formats + AutoSum ─── */}
+        <div className="toolbar-group">
+          <ToolButton
+            icon={<span className="text-[13px] font-semibold leading-none">%</span>}
+            title="Percent"
+            active={selectedCellData?.format?.numberFormat === 'percent'}
+            onClick={() => setRangeFormat({ numberFormat: 'percent' })}
+            disabled={!selection}
+          />
+          <ToolButton
+            icon={<span className="text-[13px] font-semibold leading-none">$</span>}
+            title="Currency"
+            active={selectedCellData?.format?.numberFormat === 'currency'}
+            onClick={() => setRangeFormat({ numberFormat: 'currency' })}
+            disabled={!selection}
+          />
+          <ToolButton
+            icon={<span className="text-[13px] font-semibold leading-none">,</span>}
+            title="Comma number format"
+            active={selectedCellData?.format?.numberFormat === 'number'}
+            onClick={() => setRangeFormat({ numberFormat: 'number' })}
+            disabled={!selection}
+          />
+          <button
+            ref={autoSumBtnRef}
+            type="button"
+            className={`toolbar-btn ${showAutoSum ? 'toolbar-btn-active' : ''}`}
+            title="AutoSum"
+            aria-label="AutoSum"
+            aria-expanded={showAutoSum}
+            disabled={!selection}
+            onClick={() => {
+              setShowCellColor(false);
+              setShowFontColor(false);
+              setShowExportMenu(false);
+              setShowMoreMenu(false);
+              setShowAutoSum((v) => !v);
+            }}
+          >
+            <Sigma size={15} />
+            <ChevronDown size={10} />
+          </button>
+          <AnchoredPanel
+            open={showAutoSum}
+            onClose={() => setShowAutoSum(false)}
+            anchorRef={autoSumBtnRef}
+            width={140}
+            maxHeight={220}
+            aria-label="AutoSum functions"
+            className="bg-white rounded-lg shadow-xl border border-gray-200 py-1"
+          >
+            {([
+              ['SUM', 'Sum'],
+              ['AVERAGE', 'Average'],
+              ['COUNT', 'Count'],
+              ['MAX', 'Max'],
+              ['MIN', 'Min'],
+            ] as const).map(([fn, label]) => (
+              <button
+                key={fn}
+                type="button"
+                className="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-100"
+                onClick={() => {
+                  applyAutoAggregate(fn);
+                  setShowAutoSum(false);
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </AnchoredPanel>
+        </div>
+
+        <Divider />
+
         {/* ─── Color tools ─── */}
         <div className="toolbar-group">
           <button
@@ -361,6 +440,7 @@ export function Toolbar() {
               setShowFontColor(false);
               setShowExportMenu(false);
               setShowMoreMenu(false);
+              setShowAutoSum(false);
               setShowCellColor((v) => !v);
             }}
           >
@@ -415,6 +495,7 @@ export function Toolbar() {
               setShowCellColor(false);
               setShowExportMenu(false);
               setShowMoreMenu(false);
+              setShowAutoSum(false);
               setShowFontColor((v) => !v);
             }}
             className="toolbar-btn-color"
@@ -505,6 +586,7 @@ export function Toolbar() {
               setShowCellColor(false);
               setShowFontColor(false);
               setShowExportMenu(false);
+              setShowAutoSum(false);
               setShowMoreMenu((v) => !v);
             }}
             className={`toolbar-btn-more ${showMoreMenu ? 'active' : ''}`}
@@ -575,6 +657,7 @@ export function Toolbar() {
               setShowCellColor(false);
               setShowFontColor(false);
               setShowMoreMenu(false);
+              setShowAutoSum(false);
               setShowExportMenu((v) => !v);
             }}
             className={`toolbar-btn-export ${showExportMenu ? 'active' : ''}`}

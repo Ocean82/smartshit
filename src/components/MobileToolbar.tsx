@@ -28,6 +28,7 @@ export function MobileToolbar() {
     setShowChartDialog,
     setShowFilterDialog,
     activeFilters,
+    applyAutoAggregate,
   } = useStore(useShallow((s) => ({
     selection: s.selection,
     setRangeFormat: s.setRangeFormat,
@@ -39,6 +40,7 @@ export function MobileToolbar() {
     setShowChartDialog: s.setShowChartDialog,
     setShowFilterDialog: s.setShowFilterDialog,
     activeFilters: s.activeFilters,
+    applyAutoAggregate: s.applyAutoAggregate,
   })));
 
   const [expandedGroup, setExpandedGroup] = useState<ToolGroup>(null);
@@ -86,6 +88,45 @@ export function MobileToolbar() {
                 {[10, 11, 12, 13, 14, 16, 18, 20, 24, 28, 32].map(s => (
                   <option key={s} value={s}>{s}px</option>
                 ))}
+              </select>
+              <div className="w-px h-6 mx-1" style={{ background: 'var(--neutral-200)' }} />
+              <MobileToolBtn
+                icon={<span className="text-sm font-semibold">%</span>}
+                active={selectedCellData?.format?.numberFormat === 'percent'}
+                onClick={() => setRangeFormat({ numberFormat: 'percent' })}
+                label="Percent"
+              />
+              <MobileToolBtn
+                icon={<span className="text-sm font-semibold">$</span>}
+                active={selectedCellData?.format?.numberFormat === 'currency'}
+                onClick={() => setRangeFormat({ numberFormat: 'currency' })}
+                label="Currency"
+              />
+              <MobileToolBtn
+                icon={<span className="text-sm font-semibold">,</span>}
+                active={selectedCellData?.format?.numberFormat === 'number'}
+                onClick={() => setRangeFormat({ numberFormat: 'number' })}
+                label="Comma"
+              />
+              <select
+                className="h-9 px-2 text-sm border rounded-lg"
+                style={{ background: 'var(--neutral-100)', borderColor: 'var(--neutral-200)', color: 'var(--ink-primary)' }}
+                defaultValue=""
+                disabled={!selection}
+                aria-label="AutoSum"
+                onChange={(e) => {
+                  const fn = e.target.value as 'SUM' | 'AVERAGE' | 'COUNT' | 'MAX' | 'MIN'
+                  if (!fn) return
+                  applyAutoAggregate(fn)
+                  e.target.value = ''
+                }}
+              >
+                <option value="" disabled>Σ</option>
+                <option value="SUM">Sum</option>
+                <option value="AVERAGE">Average</option>
+                <option value="COUNT">Count</option>
+                <option value="MAX">Max</option>
+                <option value="MIN">Min</option>
               </select>
             </>
           )}
