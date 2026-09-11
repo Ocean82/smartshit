@@ -33,6 +33,7 @@ import { toMergeRange, parseMergeRange, rangesOverlap } from '@/lib/merge'
 import { encodeCellBlock, parseGridClipboard } from '@/lib/clipboardCodec'
 import { buildFillPattern, adjustFormulaRefs, fillCellAt, type FilledCell } from '@/lib/autofill'
 import { buildRelocatePlan } from '@/lib/relocateRange'
+import { buildTransposePasteWrites } from '@/lib/transposePaste'
 import { buildAutoAggregatePlan, type AggregateFn } from '@/lib/autoAggregate'
 import { clampRowHeight, getRowHeight, setRowAt, shiftRowHeightsOnDelete, shiftRowHeightsOnInsert } from '@/lib/rowLayout'
 import { setHidden, shiftHiddenOnDelete, shiftHiddenOnInsert } from '@/lib/rowColVisibility'
@@ -101,6 +102,8 @@ export interface WorkbookSliceState {
   copy: () => void
   cut: () => void
   paste: () => void
+  /** Paste clipboard with rows/cols swapped at the selection anchor. */
+  pasteTranspose: () => void
   pasteFromClipboard: () => Promise<void>
   clearClipboard: () => void
   autofillTo: (endRow: number, endCol: number) => void
@@ -154,6 +157,7 @@ export interface WorkbookActions {
   copy: () => void
   cut: () => void
   paste: () => void
+  pasteTranspose: () => void
   pasteFromClipboard: () => Promise<void>
   clearClipboard: () => void
   autofillTo: (endRow: number, endCol: number) => void
@@ -793,6 +797,45 @@ export function createWorkbookActions(
             if (!sheet) return;
             for (let r = srcMinR; r <= srcMaxR; r++) {
               for (let c = srcMinC; c <= srcMaxC; c++) {
+                const id = refToCell(r, c);
+                if (destIds.has(id)) continue;
+                const ref = cellToRef(id);
+                s.engine.setCellValue(s.activeSheetId, ref.row, ref.col, null);
+                delete sheet.cells[id];
+              }
+            }
+            s.workbook.updatedAt = Date.now();
+          });
+          set((s) => { s.clipboard = null; s.copiedRange = null; });
+        } else {
+          set((s) => { s.copiedRange = null; });
+        }
+      },
+
+      pasteTranspose: () => {
+        const { clipboard, selection } = get();
+        if (!clipboard || !selection) return;
+        const isCut = clipboard.mode === 'cut';
+        get().pushHistory(isCut ? 'Cut transpose' : 'Paste transpose');
+        const dstR = Math.min(selection.startRow, selection.endRow);
+        const dstC = Math.min(selection.startCol, selection.endCol);
+        const { writes, destIds, sourceRect } = buildTransposePasteWrites({
+          cells: clipboard.cells,
+          source: clipboard.selection,
+          destRow: dstR,
+          destCol: dstC,
+        });
+        for (const w of writes) {
+          get().setCellValue(w.cellId, w.value, w.formula);
+          if (w.format) get().setCellFormat(w.cellId, w.format);
+          get().setCellHyperlink(w.cellId, w.hyperlink ?? null);
+        }
+        if (isCut) {
+          set((s) => {
+            const sheet = s.workbook.sheets.find((sh) => sh.id === s.activeSheetId);
+            if (!sheet) return;
+            for (let r = sourceRect.minR; r <= sourceRect.maxR; r++) {
+              for (let c = sourceRect.minC; c <= sourceRect.maxC; c++) {
                 const id = refToCell(r, c);
                 if (destIds.has(id)) continue;
                 const ref = cellToRef(id);

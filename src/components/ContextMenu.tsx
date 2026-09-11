@@ -130,6 +130,11 @@ export function ContextMenu() {
     { icon: <Copy size={13} />, label: 'Copy', shortcut: 'Ctrl+C', action: () => runAndClose(copy) },
     { icon: <Scissors size={13} />, label: 'Cut', shortcut: 'Ctrl+X', action: () => runAndClose(cut) },
     { icon: <ClipboardPaste size={13} />, label: 'Paste', shortcut: 'Ctrl+V', action: () => runAndClose(paste) },
+    {
+      icon: <ClipboardPaste size={13} />,
+      label: 'Paste Transpose',
+      action: () => runAndClose(() => useStore.getState().pasteTranspose()),
+    },
     null,
     {
       icon: <Plus size={13} />,

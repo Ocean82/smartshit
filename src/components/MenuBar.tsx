@@ -73,6 +73,7 @@ export function MenuBar() {
     toggleSheetTabs,
     showGridlines,
     toggleGridlines,
+    clipboard,
   } = useStore(useShallow((s) => ({
     workbook: s.workbook,
     undo: s.undo,
@@ -112,6 +113,7 @@ export function MenuBar() {
     toggleSheetTabs: s.toggleSheetTabs,
     showGridlines: s.showGridlines,
     toggleGridlines: s.toggleGridlines,
+    clipboard: s.clipboard,
   })))
 
   const closeMenu = useCallback(() => setOpenMenu(null), [])
@@ -335,7 +337,8 @@ export function MenuBar() {
         { label: 'Redo', shortcut: 'Ctrl+Y', action: () => { redo(); setOpenMenu(null) }, disabled: redoStack.length === 0, dividerAfter: true },
         { label: 'Cut', shortcut: 'Ctrl+X', action: () => { cut(); setOpenMenu(null) } },
         { label: 'Copy', shortcut: 'Ctrl+C', action: () => { copy(); setOpenMenu(null) } },
-        { label: 'Paste', shortcut: 'Ctrl+V', action: () => { paste(); setOpenMenu(null) }, dividerAfter: true },
+        { label: 'Paste', shortcut: 'Ctrl+V', action: () => { paste(); setOpenMenu(null) } },
+        { label: 'Paste Transpose', action: () => { useStore.getState().pasteTranspose(); setOpenMenu(null) }, disabled: !clipboard, dividerAfter: true },
         { label: 'Delete', shortcut: 'Del', action: () => { deleteSelectedCells(); setOpenMenu(null) }, disabled: !selection },
         { label: 'Find & Replace', shortcut: 'Ctrl+F', action: () => { setShowFindReplace(true); setOpenMenu(null) } },
       ],
