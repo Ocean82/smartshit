@@ -213,6 +213,21 @@ describe('setCellValue round-trip', () => {
     engine.destroy()
   })
 
+  it('resolves workbook named ranges in formulas', () => {
+    const engine = new SpreadsheetEngine()
+    const s = sheet('s1', 'S', {
+      B2: { value: 10 },
+      B3: { value: 20 },
+    })
+    engine.loadWorkbook({
+      ...workbook([s]),
+      namedRanges: [{ name: 'Sales', sheetId: 's1', range: '$B$2:$B$3' }],
+    })
+    engine.setCellValue('s1', 0, 2, '=SUM(Sales)')
+    expect(engine.getComputedValue('s1', 0, 2)).toBe('30')
+    engine.destroy()
+  })
+
   it('clears a cell when null is written', () => {
     const engine = new SpreadsheetEngine()
     const s = sheet('s1', 'S', { A1: { value: 99 } })

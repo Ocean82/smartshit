@@ -88,6 +88,11 @@ export interface AppState extends UIState, UIActions, FileActions, ChatActions {
   unhideSheet: (sheetId: string) => void
   setCellValue: (cellId: string, value: string | number | boolean | null, formula?: string) => void
   setCellHyperlink: (cellId: string, hyperlink: import('@/types').Hyperlink | null) => void
+  upsertNamedRange: (
+    nr: import('@/types').NamedRange,
+    opts?: { previousName?: string },
+  ) => { ok: true } | { ok: false; error: string }
+  deleteNamedRange: (name: string) => void
   setCellFormat: (cellId: string, format: Partial<CellFormat>) => void
   setRangeFormat: (format: Partial<CellFormat>) => void
   /** Strip CellFormat from the selection; keep value/formula/validation. */

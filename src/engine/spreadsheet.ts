@@ -1,11 +1,12 @@
 import { Workbook, type WorkbookApi, parse, FormulaDialect, ASTNodeData } from '@ocean8219/formualizer';
-import type { SheetData, WorkbookData, PivotConfig, PivotResult } from '@/types';
+import type { SheetData, WorkbookData, PivotConfig, PivotResult, NamedRange } from '@/types';
 import { v4 as uuid } from 'uuid';
 import { AIFunctionRegistry, type EvalValue } from './aiFunctions';
 import { registerBuiltinAIFunctions, getAIFunctionList } from './aiFunctionDefinitions';
 import { computePivotTable } from './pivot';
 import { initializeOnnxFunction, type OnnxInitOptions } from '@/onnx/onnxInit';
 import { CORE_FUNCTIONS, EXTENDED_FUNCTIONS, mergeFunctionSources, type FunctionInfo } from './functionCatalog';
+import { expandNamedRangesInFormula } from '@/lib/namedRanges';
 
 import { colToLetter, letterToCol, tryCellToRef, cellToRef, refToCell } from '@/lib/cellRef';
 export { colToLetter, letterToCol, tryCellToRef, cellToRef, refToCell };
@@ -52,6 +53,9 @@ export class SpreadsheetEngine {
   private _disposeAIFunctions: (() => void) | null = null;
   private _disposeOnnxFunction: (() => void) | null = null;
   private _onnxInitOptions: OnnxInitOptions | undefined;
+  private namedRanges: NamedRange[] = [];
+  /** sheet id → display name for named-range expansion */
+  private sheetNamesById: Map<string, string> = new Map();
 
   constructor(aiRegistry?: AIFunctionRegistry, onnxInitOptions?: OnnxInitOptions) {
     this._aiRegistry = aiRegistry ?? new AIFunctionRegistry();
@@ -68,6 +72,8 @@ export class SpreadsheetEngine {
 
   loadWorkbook(workbook: WorkbookData): void {
     this.reset();
+    this.namedRanges = workbook.namedRanges ? [...workbook.namedRanges] : [];
+    this.sheetNamesById = new Map(workbook.sheets.map((s) => [s.id, s.name]));
     for (const sheet of workbook.sheets) {
       this.loadSheet(sheet);
     }
@@ -81,9 +87,17 @@ export class SpreadsheetEngine {
     this._aiRegistry = new AIFunctionRegistry();
     this.wb = new Workbook();
     this.sheetMapping.clear();
+    this.namedRanges = [];
+    this.sheetNamesById.clear();
     this._disposeAIFunctions = registerBuiltinAIFunctions(this._aiRegistry);
     this._disposeOnnxFunction = initializeOnnxFunction(this._aiRegistry, this._onnxInitOptions);
     this.invalidateFunctionMap();
+  }
+
+  private expandFormula(formula: string, sheetId?: string): string {
+    if (this.namedRanges.length === 0) return formula;
+    const sheets = [...this.sheetNamesById.entries()].map(([id, name]) => ({ id, name }));
+    return expandNamedRangesInFormula(formula, this.namedRanges, sheets, sheetId);
   }
 
   loadSheet(sheet: SheetData): { success: boolean; error?: Error } {
@@ -110,7 +124,7 @@ export class SpreadsheetEngine {
           } else {
             // Only evaluate formula if we don't have a pre-computed value
             try {
-              this.wb.setFormula(sheetName, r, c, cellData.formula);
+              this.wb.setFormula(sheetName, r, c, this.expandFormula(cellData.formula, sheet.id));
             } catch {
               // Formula evaluation failed — leave cell empty in engine
             }
@@ -155,7 +169,7 @@ export class SpreadsheetEngine {
       if (value === null) {
         this.wb.setValue(sheetName, row + 1, col + 1, '');
       } else if (typeof value === 'string' && value.startsWith('=')) {
-        this.wb.setFormula(sheetName, row + 1, col + 1, value);
+        this.wb.setFormula(sheetName, row + 1, col + 1, this.expandFormula(value, sheetId));
       } else {
         this.wb.setValue(sheetName, row + 1, col + 1, value);
       }

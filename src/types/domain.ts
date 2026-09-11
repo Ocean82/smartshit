@@ -296,6 +296,13 @@ export interface AxisConfig {
   showGrid?: boolean;
 }
 
+export interface NamedRange {
+  name: string;
+  sheetId: string;
+  /** Absolute A1 range on `sheetId`, e.g. "$B$2:$B$100". */
+  range: string;
+}
+
 export interface WorkbookData {
   id: string;
   name: string;
@@ -303,6 +310,8 @@ export interface WorkbookData {
   activeSheetId: string;
   createdAt: number;
   updatedAt: number;
+  /** Workbook-scoped named ranges (formula engine expands these on eval). */
+  namedRanges?: NamedRange[];
   /** Registered ONNX model assets, keyed by name */
   modelAssets?: Record<string, import('@/onnx/types').ModelAsset>;
   /** User-dismissed auditor findings (for suppression) */

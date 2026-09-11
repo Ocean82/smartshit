@@ -14,6 +14,7 @@ import type {
   SortConfig,
   SortRule,
   DataValidation,
+  NamedRange,
 } from '@/types'
 import {
   createEmptyWorkbook,
@@ -37,6 +38,11 @@ import { clampRowHeight, getRowHeight, setRowAt, shiftRowHeightsOnDelete, shiftR
 import { setHidden, shiftHiddenOnDelete, shiftHiddenOnInsert } from '@/lib/rowColVisibility'
 import { autoFitRowHeights, createCanvasTextMeasurer } from '@/lib/rowAutoFit'
 import { resolveHyperlinkOnEdit, type Hyperlink } from '@/lib/hyperlink'
+import {
+  findNamedRangeConflict,
+  isValidNamedRangeName,
+  normalizeRangeText,
+} from '@/lib/namedRanges'
 import { MAX_UNDO_STACK } from '../storeTypes'
 import { v4 as uuid } from 'uuid'
 
@@ -87,6 +93,8 @@ export interface WorkbookSliceState {
   pushHistory: (desc: string) => void
   setCellValue: (cellId: string, value: string | number | boolean | null, formula?: string) => void
   setCellHyperlink: (cellId: string, hyperlink: Hyperlink | null) => void
+  upsertNamedRange: (nr: NamedRange, opts?: { previousName?: string }) => { ok: true } | { ok: false; error: string }
+  deleteNamedRange: (name: string) => void
   setCellFormat: (cellId: string, format: Partial<CellFormat>) => void
   deleteSelectedCells: () => void
   applySortPatch: (patch: SortPatch) => void
@@ -129,6 +137,8 @@ export interface WorkbookActions {
   unhideSheet: (sheetId: string) => void
   setCellValue: (cellId: string, value: string | number | boolean | null, formula?: string) => void
   setCellHyperlink: (cellId: string, hyperlink: Hyperlink | null) => void
+  upsertNamedRange: (nr: NamedRange, opts?: { previousName?: string }) => { ok: true } | { ok: false; error: string }
+  deleteNamedRange: (name: string) => void
   setCellFormat: (cellId: string, format: Partial<CellFormat>) => void
   setRangeFormat: (format: Partial<CellFormat>) => void
   /** Strip CellFormat from the selection; keep value/formula/validation. */
@@ -259,6 +269,9 @@ export function createWorkbookActions(
         get().pushHistory('Delete sheet');
         set((s) => {
           s.workbook.sheets = s.workbook.sheets.filter((sh) => sh.id !== sheetId);
+          if (s.workbook.namedRanges?.length) {
+            s.workbook.namedRanges = s.workbook.namedRanges.filter((n) => n.sheetId !== sheetId);
+          }
           if (s.activeSheetId === sheetId) {
             s.activeSheetId = s.workbook.sheets[0].id;
             s.workbook.activeSheetId = s.workbook.sheets[0].id;
@@ -431,6 +444,50 @@ export function createWorkbookActions(
           sheet.cells[cellId].hyperlink = hyperlink;
           s.workbook.updatedAt = Date.now();
         });
+      },
+
+      upsertNamedRange: (nr, opts) => {
+        const name = nr.name.trim();
+        if (!isValidNamedRangeName(name)) {
+          return { ok: false, error: 'Invalid name (use letters/digits/._; not a cell ref)' };
+        }
+        const range = normalizeRangeText(nr.range);
+        if (!range) return { ok: false, error: 'Invalid range (e.g. B2:B10)' };
+        const sheets = get().workbook.sheets;
+        if (!sheets.some((s) => s.id === nr.sheetId)) {
+          return { ok: false, error: 'Sheet not found' };
+        }
+        const existing = get().workbook.namedRanges ?? [];
+        if (findNamedRangeConflict(name, existing, opts?.previousName)) {
+          return { ok: false, error: 'Name already exists' };
+        }
+        const next: NamedRange = { name, sheetId: nr.sheetId, range };
+        get().pushHistory(opts?.previousName ? 'Edit named range' : 'Define named range');
+        set((s) => {
+          const list = [...(s.workbook.namedRanges ?? [])];
+          const prevKey = (opts?.previousName ?? name).toUpperCase();
+          const idx = list.findIndex((n) => n.name.toUpperCase() === prevKey);
+          if (idx >= 0) list[idx] = next;
+          else list.push(next);
+          list.sort((a, b) => a.name.localeCompare(b.name));
+          s.workbook.namedRanges = list;
+          s.workbook.updatedAt = Date.now();
+        });
+        get().engine.loadWorkbook(get().workbook);
+        return { ok: true };
+      },
+
+      deleteNamedRange: (name) => {
+        const upper = name.trim().toUpperCase();
+        if (!(get().workbook.namedRanges ?? []).some((n) => n.name.toUpperCase() === upper)) return;
+        get().pushHistory('Delete named range');
+        set((s) => {
+          s.workbook.namedRanges = (s.workbook.namedRanges ?? []).filter(
+            (n) => n.name.toUpperCase() !== upper,
+          );
+          s.workbook.updatedAt = Date.now();
+        });
+        get().engine.loadWorkbook(get().workbook);
       },
 
       setCellFormat: (cellId, format) => {

@@ -101,6 +101,7 @@ export function normalizeImportedWorkbook(workbook: WorkbookData): WorkbookData 
     ...workbook,
     sheets: validSheets,
     activeSheetId,
+    namedRanges: Array.isArray(workbook.namedRanges) ? workbook.namedRanges : [],
     updatedAt: Date.now(),
   }
 }

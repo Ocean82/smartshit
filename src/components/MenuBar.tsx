@@ -362,6 +362,7 @@ export function MenuBar() {
         { label: 'Chart', action: () => { setShowChartDialog(true); setOpenMenu(null) } },
         { label: 'Pivot Table', action: () => { setShowPivotDialog(true); setOpenMenu(null) }, disabled: !selection, dividerAfter: true },
         { label: 'Link…', action: () => { useStore.getState().setShowHyperlinkDialog(true); setOpenMenu(null) }, disabled: !selection },
+        { label: 'Name Manager…', action: () => { useStore.getState().setShowNameManagerDialog(true); setOpenMenu(null) } },
         { label: 'New Sheet', action: () => { useStore.getState().addSheet(); setOpenMenu(null) } },
       ],
     },
