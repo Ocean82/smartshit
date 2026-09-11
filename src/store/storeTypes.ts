@@ -23,6 +23,7 @@ import type { SpreadsheetEngine } from '@/engine/spreadsheet'
 import type { AttachedFilePreview } from '@/ai/types'
 import type { HistoryEntry } from '@/lib/historyDiff'
 import type { SortPatch } from '@/lib/sheetSort'
+import type { AggregateFn } from '@/lib/autoAggregate'
 import type { UIState, UIActions } from './slices/uiSlice'
 import type { FileActions } from './slices/fileSlice'
 import type { ChatActions } from './slices/chatSlice'
@@ -109,6 +110,7 @@ export interface AppState extends UIState, UIActions, FileActions, ChatActions {
   clearClipboard: () => void
   autofillTo: (endRow: number, endCol: number) => void
   relocateRange: (args: { mode: 'move' | 'copy'; destRow: number; destCol: number }) => void
+  applyAutoAggregate: (fn: AggregateFn) => void
   setRowHeight: (row: number, height: number) => void
   /** Autofit one or more rows to wrapped cell content (undoable). */
   autoFitRows: (rows: number[]) => void

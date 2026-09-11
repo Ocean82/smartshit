@@ -32,6 +32,7 @@ import { toMergeRange, parseMergeRange, rangesOverlap } from '@/lib/merge'
 import { encodeCellBlock, parseGridClipboard } from '@/lib/clipboardCodec'
 import { buildFillPattern, adjustFormulaRefs, fillCellAt, type FilledCell } from '@/lib/autofill'
 import { buildRelocatePlan } from '@/lib/relocateRange'
+import { buildAutoAggregatePlan, type AggregateFn } from '@/lib/autoAggregate'
 import { clampRowHeight, getRowHeight, setRowAt, shiftRowHeightsOnDelete, shiftRowHeightsOnInsert } from '@/lib/rowLayout'
 import { setHidden, shiftHiddenOnDelete, shiftHiddenOnInsert } from '@/lib/rowColVisibility'
 import { autoFitRowHeights, createCanvasTextMeasurer } from '@/lib/rowAutoFit'
@@ -93,6 +94,7 @@ export interface WorkbookSliceState {
   clearClipboard: () => void
   autofillTo: (endRow: number, endCol: number) => void
   relocateRange: (args: { mode: 'move' | 'copy'; destRow: number; destCol: number }) => void
+  applyAutoAggregate: (fn: AggregateFn) => void
   setRowHeight: (row: number, height: number) => void
   /** Autofit one or more rows to wrapped cell content (undoable). */
   autoFitRows: (rows: number[]) => void
@@ -132,6 +134,7 @@ export interface WorkbookActions {
   clearClipboard: () => void
   autofillTo: (endRow: number, endCol: number) => void
   relocateRange: (args: { mode: 'move' | 'copy'; destRow: number; destCol: number }) => void
+  applyAutoAggregate: (fn: AggregateFn) => void
   setRowHeight: (row: number, height: number) => void
   autoFitRows: (rows: number[]) => void
   addChart: (chart: ChartConfig) => void
@@ -760,6 +763,27 @@ export function createWorkbookActions(
 
         set((s) => {
           s.selection = plan.destSelection;
+          s.additionalSelections = [];
+        });
+      },
+
+      applyAutoAggregate: (fn) => {
+        const sel = get().selection;
+        if (!sel || get().editingCell) return;
+        const plan = buildAutoAggregatePlan({
+          selection: sel,
+          fn,
+          maxRow: 9999,
+          maxCol: 99,
+        });
+        if (!plan) return;
+        const label = fn === 'SUM' ? 'AutoSum' : `Auto${fn.charAt(0)}${fn.slice(1).toLowerCase()}`;
+        get().pushHistory(label);
+        for (const { cellId, formula } of plan.writes) {
+          get().setCellValue(cellId, null, formula);
+        }
+        set((s) => {
+          s.selection = plan.focus;
           s.additionalSelections = [];
         });
       },
