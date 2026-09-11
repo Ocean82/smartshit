@@ -131,6 +131,9 @@ export interface AppState extends UIState, UIActions, FileActions, ChatActions {
   addChart: (chart: ChartConfig) => void
   removeChart: (chartId: string) => void
   updateChartPosition: (chartId: string, x: number, y: number, size?: { width: number; height: number }) => void
+  addImage: (image: import('@/types').SheetImage) => void
+  removeImage: (imageId: string) => void
+  updateImagePosition: (imageId: string, x: number, y: number, size?: { width: number; height: number }) => void
   setFreeze: (rows: number, cols: number) => void
   hideRows: (rows: number[]) => void
   hideCols: (cols: number[]) => void

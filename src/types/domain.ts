@@ -233,9 +233,22 @@ export interface SheetData {
   filters?: FilterConfig[];
   sortConfig?: SortConfig;
   charts?: ChartConfig[];
+  /** Floating images over the grid (absolute x/y within the sheet viewport overlay). */
+  images?: SheetImage[];
   mergedCells?: string[];
   pivotConfig?: PivotConfig;
   pivotResult?: PivotResult;
+}
+
+/** Floating image on a sheet. `src` is a data URL for v1 persistence. */
+export interface SheetImage {
+  id: string;
+  /** ponytail: data URL; move to workbook asset map / IndexedDB if JSON size hurts. */
+  src: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 }
 
 export interface ChartSnapshot {

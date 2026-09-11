@@ -65,6 +65,7 @@ export function createHistoryActions(
               hiddenCols: s.hiddenCols ? { ...s.hiddenCols } : undefined,
               mergedCells: s.mergedCells ? [...s.mergedCells] : [],
               charts: s.charts ? [...s.charts] : [],
+              images: s.images ? s.images.map((img) => ({ ...img })) : [],
             }
           }
           // Non-active sheets: shallow copy (structural changes handled by diffWorkbooks)

@@ -86,6 +86,7 @@ export function normalizeImportedWorkbook(workbook: WorkbookData): WorkbookData 
     columnWidths: sheet.columnWidths ?? {},
     rowHeights: sheet.rowHeights ?? {},
     charts: sheet.charts ?? [],
+    images: sheet.images ?? [],
     // Canonicalize merges (legacy workbooks stored bare anchors) and drop
     // malformed entries before the engine loads them.
     mergedCells: (sheet.mergedCells ?? [])

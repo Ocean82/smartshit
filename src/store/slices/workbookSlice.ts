@@ -15,6 +15,7 @@ import type {
   SortRule,
   DataValidation,
   NamedRange,
+  SheetImage,
 } from '@/types'
 import {
   createEmptyWorkbook,
@@ -168,6 +169,9 @@ export interface WorkbookActions {
   addChart: (chart: ChartConfig) => void
   removeChart: (chartId: string) => void
   updateChartPosition: (chartId: string, x: number, y: number, size?: { width: number; height: number }) => void
+  addImage: (image: SheetImage) => void
+  removeImage: (imageId: string) => void
+  updateImagePosition: (imageId: string, x: number, y: number, size?: { width: number; height: number }) => void
   setFreeze: (rows: number, cols: number) => void
   hideRows: (rows: number[]) => void
   hideCols: (cols: number[]) => void
@@ -1045,6 +1049,43 @@ export function createWorkbookActions(
               chart.position = mergeChartLayout(chart.position, { x, y, ...size });
             }
           }
+        });
+      },
+
+      addImage: (image) => {
+        set((s) => {
+          const sheet = s.workbook.sheets.find((sh) => sh.id === s.activeSheetId);
+          if (!sheet) return;
+          if (!sheet.images) sheet.images = [];
+          sheet.images.push(image);
+          s.workbook.updatedAt = Date.now();
+        });
+      },
+
+      removeImage: (imageId) => {
+        set((s) => {
+          const sheet = s.workbook.sheets.find((sh) => sh.id === s.activeSheetId);
+          if (sheet?.images) {
+            sheet.images = sheet.images.filter((img) => img.id !== imageId);
+            s.workbook.updatedAt = Date.now();
+          }
+        });
+      },
+
+      updateImagePosition: (imageId, x, y, size) => {
+        set((s) => {
+          const sheet = s.workbook.sheets.find((sh) => sh.id === s.activeSheetId);
+          const img = sheet?.images?.find((i) => i.id === imageId);
+          if (!img) return;
+          const next = mergeChartLayout(
+            { x: img.x, y: img.y, width: img.width, height: img.height },
+            { x, y, ...size },
+          );
+          img.x = next.x;
+          img.y = next.y;
+          img.width = next.width;
+          img.height = next.height;
+          s.workbook.updatedAt = Date.now();
         });
       },
 

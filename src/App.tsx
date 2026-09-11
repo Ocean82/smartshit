@@ -10,6 +10,7 @@ import { SheetTabs } from '@/components/SheetTabs'
 import { FileExplorer } from '@/components/FileExplorer'
 import { ContextMenu } from '@/components/ContextMenu'
 import { ChartOverlay } from '@/components/ChartRenderer'
+import { ImageOverlay } from '@/components/ImageOverlay'
 import { FormatPanel } from '@/components/FormatPanel'
 import { StatusBar } from '@/components/StatusBar'
 import { WelcomeOverlay } from '@/components/WelcomeOverlay'
@@ -230,6 +231,7 @@ const {
               <SpreadsheetGrid />
             </ErrorBoundary>
             <ChartOverlay />
+            <ImageOverlay />
             <EmptyGridGuide onOpenTemplates={() => setShowTemplates(true)} />
           </div>
           {showSheetTabs && <SheetTabs />}
