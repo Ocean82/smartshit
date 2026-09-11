@@ -56,6 +56,22 @@ describe('rowPassesFilters', () => {
   it('filters contains', () => {
     expect(rowPassesFilters(3, [{ column: 0, condition: 'contains', value: 'rav' }], get, 0)).toBe(true)
   })
+
+  it('value-list allow-list matches case-insensitively', () => {
+    expect(rowPassesFilters(1, [{ column: 0, values: ['food'] }], get, 0)).toBe(true)
+    expect(rowPassesFilters(2, [{ column: 0, values: ['food'] }], get, 0)).toBe(false)
+  })
+
+  it('empty value-list matches nothing except optional blanks', () => {
+    const getBlank = (row: number, col: number) => {
+      if (row === 0) return 'H'
+      if (row === 1) return ''
+      return 'x'
+    }
+    expect(rowPassesFilters(1, [{ column: 0, values: [] }], getBlank, 0)).toBe(false)
+    expect(rowPassesFilters(1, [{ column: 0, values: [], includeBlank: true }], getBlank, 0)).toBe(true)
+    expect(rowPassesFilters(2, [{ column: 0, values: [], includeBlank: true }], getBlank, 0)).toBe(false)
+  })
 })
 
 describe('buildFilteredRowIndex', () => {

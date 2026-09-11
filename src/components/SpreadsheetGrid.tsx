@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState, useMemo, useRef } from 'react'
 import { Check, XCircle } from 'lucide-react';
 import { useStore } from '@/store/useStore';
 import { colToLetter, refToCell, cellToRef } from '@/engine/spreadsheet';
+import { ColumnFilterButton } from '@/components/grid/ColumnFilterPopover';
 import { FormulaAutocomplete } from './FormulaAutocomplete';
 import { FindReplaceDialog } from './FindReplaceDialog';
 import { SelectionOverlay } from '@/components/SelectionOverlay';
@@ -373,7 +374,7 @@ function ColumnHeader({ col, width, isSelected, sortDirection, isFiltered, stick
     >
       {colToLetter(col)}
       {sortDirection && <span className="ml-0.5 text-blue-500 text-[9px]">{sortDirection === 'asc' ? '▲' : '▼'}</span>}
-      {isFiltered && <span className="ml-0.5 text-amber-500 text-[9px]">⏷</span>}
+      <ColumnFilterButton col={col} isFiltered={isFiltered} />
       {unhideCols && unhideCols.length > 0 && onUnhideCols && (
         <button
           type="button"

@@ -86,11 +86,13 @@ export function buildFilteredRowIndex(
 function evaluateFilter(raw: string, filter: FilterConfig): boolean {
   const condition = normalizeFilterCondition(filter.condition)
 
-  // Value-list (multi-select) filtering takes precedence
-  if (filter.values && filter.values.length > 0 && filter.condition == null) {
-    const matches = filter.values.some((v) => String(v).toLowerCase() === raw.toLowerCase())
-    if (filter.includeBlank && raw.trim() === '') return true
-    return matches
+  // Value-list (multi-select) filtering takes precedence when `values` is set
+  // and no comparison condition is active. Empty allow-list → match nothing
+  // (unless includeBlank and the cell is blank).
+  if (filter.values && filter.condition == null) {
+    if (raw.trim() === '') return !!filter.includeBlank
+    if (filter.values.length === 0) return false
+    return filter.values.some((v) => String(v).toLowerCase() === raw.toLowerCase())
   }
 
   const target = filter.value != null ? String(filter.value) : ''
