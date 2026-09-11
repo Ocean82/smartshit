@@ -75,7 +75,7 @@ export interface WorkbookSliceState {
   editingCell: string | null
   editValue: string
   additionalSelections: Selection[]
-  clipboard: { cells: Record<string, CellData>; selection: Selection } | null
+  clipboard: { cells: Record<string, CellData>; selection: Selection; mode: 'copy' | 'cut' } | null
   copiedRange: Selection | null
   activeFilters: FilterConfig[]
   activeSortConfig: SortConfig | null
@@ -90,6 +90,7 @@ export interface WorkbookSliceState {
   cut: () => void
   paste: () => void
   pasteFromClipboard: () => Promise<void>
+  clearClipboard: () => void
   autofillTo: (endRow: number, endCol: number) => void
   relocateRange: (args: { mode: 'move' | 'copy'; destRow: number; destCol: number }) => void
   setRowHeight: (row: number, height: number) => void
@@ -128,6 +129,7 @@ export interface WorkbookActions {
   cut: () => void
   paste: () => void
   pasteFromClipboard: () => Promise<void>
+  clearClipboard: () => void
   autofillTo: (endRow: number, endCol: number) => void
   relocateRange: (args: { mode: 'move' | 'copy'; destRow: number; destCol: number }) => void
   setRowHeight: (row: number, height: number) => void
@@ -540,24 +542,53 @@ export function createWorkbookActions(
             }
           }
         }
-        set((s) => { s.clipboard = { cells, selection: sel }; s.copiedRange = sel; });
+        set((s) => { s.clipboard = { cells, selection: sel, mode: 'copy' }; s.copiedRange = sel; });
         void writeToOsClipboard(cells, sel);
       },
 
       cut: () => {
-        get().copy();
-        get().deleteSelectedCells();
+        const sel = get().selection;
+        if (!sel) return;
+        const sheet = get().getActiveSheet();
+        const cells: Record<string, CellData> = {};
+        const minR = Math.min(sel.startRow, sel.endRow);
+        const maxR = Math.max(sel.startRow, sel.endRow);
+        const minC = Math.min(sel.startCol, sel.endCol);
+        const maxC = Math.max(sel.startCol, sel.endCol);
+        for (let r = minR; r <= maxR; r++) {
+          for (let c = minC; c <= maxC; c++) {
+            const cid = refToCell(r, c);
+            if (sheet.cells[cid]) {
+              cells[cid] = { ...sheet.cells[cid] };
+            }
+          }
+        }
+        set((s) => { s.clipboard = { cells, selection: sel, mode: 'cut' }; s.copiedRange = sel; });
+        void writeToOsClipboard(cells, sel);
+      },
+
+      clearClipboard: () => {
+        set((s) => { s.clipboard = null; s.copiedRange = null; });
       },
 
       paste: () => {
         const { clipboard, selection } = get();
         if (!clipboard || !selection) return;
-        get().pushHistory('Paste');
+        const isCut = clipboard.mode === 'cut';
+        get().pushHistory(isCut ? 'Cut' : 'Paste');
         const srcMinR = Math.min(clipboard.selection.startRow, clipboard.selection.endRow);
+        const srcMaxR = Math.max(clipboard.selection.startRow, clipboard.selection.endRow);
         const srcMinC = Math.min(clipboard.selection.startCol, clipboard.selection.endCol);
+        const srcMaxC = Math.max(clipboard.selection.startCol, clipboard.selection.endCol);
         const dstR = Math.min(selection.startRow, selection.endRow);
         const dstC = Math.min(selection.startCol, selection.endCol);
 
+        const destIds = new Set<string>();
+        for (let r = srcMinR; r <= srcMaxR; r++) {
+          for (let c = srcMinC; c <= srcMaxC; c++) {
+            destIds.add(refToCell(r - srcMinR + dstR, c - srcMinC + dstC));
+          }
+        }
         for (const [cellId, cellData] of Object.entries(clipboard.cells)) {
           const ref = cellToRef(cellId);
           const newR = ref.row - srcMinR + dstR;
@@ -568,7 +599,26 @@ export function createWorkbookActions(
             get().setCellFormat(newCellId, cellData.format);
           }
         }
-        set((s) => { s.copiedRange = null; });
+
+        if (isCut) {
+          set((s) => {
+            const sheet = s.workbook.sheets.find((sh) => sh.id === s.activeSheetId);
+            if (!sheet) return;
+            for (let r = srcMinR; r <= srcMaxR; r++) {
+              for (let c = srcMinC; c <= srcMaxC; c++) {
+                const id = refToCell(r, c);
+                if (destIds.has(id)) continue;
+                const ref = cellToRef(id);
+                s.engine.setCellValue(s.activeSheetId, ref.row, ref.col, null);
+                delete sheet.cells[id];
+              }
+            }
+            s.workbook.updatedAt = Date.now();
+          });
+          set((s) => { s.clipboard = null; s.copiedRange = null; });
+        } else {
+          set((s) => { s.copiedRange = null; });
+        }
       },
 
       pasteFromClipboard: async () => {
@@ -598,7 +648,8 @@ export function createWorkbookActions(
               const newCellId = refToCell(ref.row + dstR, ref.col + dstC);
               get().setCellValue(newCellId, coerceValue(raw));
             }
-            set((s) => { s.copiedRange = null; });
+            // OS paste cancels pending cut without clearing the cut source.
+            set((s) => { s.clipboard = null; s.copiedRange = null; });
             return;
           }
         }

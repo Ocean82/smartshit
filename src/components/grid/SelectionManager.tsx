@@ -142,6 +142,15 @@ export function useSelectionManager(config: SelectionManagerConfig) {
       return;
     }
 
+    if (e.key === 'Escape') {
+      const st = useStore.getState();
+      if (st.copiedRange || st.clipboard) {
+        e.preventDefault();
+        st.clearClipboard();
+      }
+      return;
+    }
+
     if (!selection) return;
     const { startRow: r, startCol: c } = selection;
 

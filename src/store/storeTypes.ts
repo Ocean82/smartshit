@@ -64,7 +64,7 @@ export interface AppState extends UIState, UIActions, FileActions, ChatActions {
   skills: Skill[]
 
   // Clipboard
-  clipboard: { cells: Record<string, CellData>; selection: Selection } | null
+  clipboard: { cells: Record<string, CellData>; selection: Selection; mode: 'copy' | 'cut' } | null
   copiedRange: Selection | null
 
   // Multi-range selection (Ctrl+click)
@@ -106,6 +106,7 @@ export interface AppState extends UIState, UIActions, FileActions, ChatActions {
   cut: () => void
   paste: () => void
   pasteFromClipboard: () => Promise<void>
+  clearClipboard: () => void
   autofillTo: (endRow: number, endCol: number) => void
   relocateRange: (args: { mode: 'move' | 'copy'; destRow: number; destCol: number }) => void
   setRowHeight: (row: number, height: number) => void
