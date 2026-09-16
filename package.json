@@ -51,7 +51,7 @@
   },
   "dependencies": {
     "@clerk/react": "^6.11.4",
-    "@ocean8219/formualizer": "^0.8.5",
+    "@ocean8219/formualizer": "^0.9.3",
     "@sentry/react": "^10.67.0",
     "clsx": "2.1.1",
     "immer": "^11.1.8",
