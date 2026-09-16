@@ -62,9 +62,12 @@ export default defineConfig({
         },
       },
     },
-    // The xlsx + React + engine core still exceeds Vite's 500 kB default
-    // warning; 700 kB is the honest ceiling for this entry chunk.
-    chunkSizeWarningLimit: 700,
+    // Even after splitting out xlsx, React, Sentry, and Clerk, the entry chunk
+    // still carries the app shell + formula-engine glue and lands near ~1 MB
+    // (~285 kB gzip). That is the honest floor for this SPA's eager code, so the
+    // limit is set just above it to keep the warning meaningful for real
+    // regressions rather than firing on the known baseline.
+    chunkSizeWarningLimit: 1050,
   },
   resolve: {
     alias: {
