@@ -51,6 +51,13 @@ export default defineConfig({
           ) {
             return 'react'
           }
+          // Stable, self-contained vendors that would otherwise sit in the
+          // entry chunk. Splitting them out shrinks the eager `index` chunk and
+          // lets each cache independently across app-code deploys. Sentry
+          // (@sentry/react) is only pulled in by errorReporting; Clerk
+          // (@clerk/*) only by the auth components.
+          if (id.includes('node_modules/@sentry/')) return 'sentry'
+          if (id.includes('node_modules/@clerk/')) return 'clerk'
           return undefined
         },
       },

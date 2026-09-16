@@ -13,6 +13,7 @@ import { v4 as uuid } from 'uuid'
 import { AnchoredPanel } from '@/components/AnchoredPanel'
 import { RenameWorkbookDialog } from '@/components/RenameWorkbookDialog'
 import { indicesInSpan, resolveUnhideIndices } from '@/lib/rowColVisibility'
+import { pickAndInsertSheetImage } from '@/components/ImageOverlay'
 
 type MenuId = 'file' | 'edit' | 'view' | 'insert' | 'format' | 'data'
 
@@ -367,7 +368,7 @@ export function MenuBar() {
         { label: 'Chart', action: () => { setShowChartDialog(true); setOpenMenu(null) } },
         { label: 'Pivot Table', action: () => { setShowPivotDialog(true); setOpenMenu(null) }, disabled: !selection, dividerAfter: true },
         { label: 'Link…', action: () => { useStore.getState().setShowHyperlinkDialog(true); setOpenMenu(null) }, disabled: !selection },
-        { label: 'Image…', action: () => { void import('@/components/ImageOverlay').then((m) => m.pickAndInsertSheetImage()); setOpenMenu(null) } },
+        { label: 'Image…', action: () => { void pickAndInsertSheetImage(); setOpenMenu(null) } },
         { label: 'Name Manager…', action: () => { useStore.getState().setShowNameManagerDialog(true); setOpenMenu(null) } },
         { label: 'New Sheet', action: () => { useStore.getState().addSheet(); setOpenMenu(null) } },
       ],

@@ -17,6 +17,8 @@
  */
 
 import type { AIFunctionInfo, AsyncAIFunctionExecutor, AIFunctionRegistry } from './aiFunctions'
+import { getAuthHeaders } from '@/lib/cloudSync'
+import { getByokPayload } from '@/lib/userApiKey'
 
 const API_BASE = import.meta.env.VITE_AI_API_URL ?? ''
 
@@ -62,8 +64,6 @@ async function flushBatchQueue(): Promise<void> {
 
   // Batch mode
   try {
-    const { getAuthHeaders } = await import('@/lib/cloudSync')
-    const { getByokPayload } = await import('@/lib/userApiKey')
     const headers = await getAuthHeaders()
     const byok = getByokPayload()
 
@@ -121,8 +121,6 @@ async function callAIFunctionDirect(
   functionName: string,
   args: Record<string, unknown>,
 ): Promise<string | number | null> {
-  const { getByokPayload } = await import('@/lib/userApiKey')
-  const { getAuthHeaders } = await import('@/lib/cloudSync')
   const byok = getByokPayload()
   const headers = await getAuthHeaders()
   const res = await fetch(`${API_BASE}/api/ai-function`, {
