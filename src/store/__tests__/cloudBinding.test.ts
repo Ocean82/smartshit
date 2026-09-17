@@ -43,6 +43,8 @@ beforeEach(() => {
     files: [
       file('f-budget', budget.id, 'cloud-A'),
       file('f-groceries', groceries.id, 'cloud-B'),
+      // A local-only file that has never been saved to the cloud.
+      file('f-local', createEmptyWorkbook('Local').id),
     ],
     activeFileId: 'f-budget',
   })
@@ -67,6 +69,15 @@ describe('switching files changes the effective binding', () => {
     expect(activeCloudId()).toBe('cloud-B')
     useStore.getState().openFile('f-budget')
     expect(activeCloudId()).toBe('cloud-A')
+  })
+
+  it('switching from a bound file to a local-only file yields no cloud id', () => {
+    // The dangerous case: A was active (cloud-A). Landing on an unbound file
+    // must resolve to undefined so autosave no-ops instead of falling back to
+    // the previously active file's id and overwriting its cloud workbook.
+    expect(activeCloudId()).toBe('cloud-A')
+    useStore.getState().openFile('f-local')
+    expect(activeCloudId()).toBeUndefined()
   })
 })
 
