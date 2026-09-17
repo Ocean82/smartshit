@@ -105,9 +105,9 @@ export function createUIState(): UIState {
     showChartDialog: false,
     showFormatPanel: false,
     showToolbar: storage?.getItem('smartsht-show-toolbar') !== '0',
-    showFormulaBar: true,
-    showSheetTabs: true,
-    showGridlines: true,
+    showFormulaBar: storage?.getItem('smartsht-show-formula-bar') !== '0',
+    showSheetTabs: storage?.getItem('smartsht-show-sheet-tabs') !== '0',
+    showGridlines: storage?.getItem('smartsht-show-gridlines') !== '0',
     showVersionHistory: false,
     showValidationDialog: false,
     showHyperlinkDialog: false,
@@ -173,17 +173,28 @@ export function createUIActions(
     setShowFormatPanel: (v) => set((s) => { s.showFormatPanel = v }),
     setShowToolbar: (v) => {
       set((s) => { s.showToolbar = v })
-      storage?.setItem('smartsht-show-toolbar', v ? '1' : '0')
+      try { storage?.setItem('smartsht-show-toolbar', v ? '1' : '0') } catch { /* ignore */ }
     },
     toggleToolbar: () => {
-      // Need to read current value — use get()
       const next = !get().showToolbar
       set((s) => { s.showToolbar = next })
-      storage?.setItem('smartsht-show-toolbar', next ? '1' : '0')
+      try { storage?.setItem('smartsht-show-toolbar', next ? '1' : '0') } catch { /* ignore */ }
     },
-    toggleFormulaBar: () => set((s) => { s.showFormulaBar = !s.showFormulaBar }),
-    toggleSheetTabs: () => set((s) => { s.showSheetTabs = !s.showSheetTabs }),
-    toggleGridlines: () => set((s) => { s.showGridlines = !s.showGridlines }),
+    toggleFormulaBar: () => {
+      const next = !get().showFormulaBar
+      set((s) => { s.showFormulaBar = next })
+      try { storage?.setItem('smartsht-show-formula-bar', next ? '1' : '0') } catch { /* ignore */ }
+    },
+    toggleSheetTabs: () => {
+      const next = !get().showSheetTabs
+      set((s) => { s.showSheetTabs = next })
+      try { storage?.setItem('smartsht-show-sheet-tabs', next ? '1' : '0') } catch { /* ignore */ }
+    },
+    toggleGridlines: () => {
+      const next = !get().showGridlines
+      set((s) => { s.showGridlines = next })
+      try { storage?.setItem('smartsht-show-gridlines', next ? '1' : '0') } catch { /* ignore */ }
+    },
     setShowVersionHistory: (v) => set((s) => { s.showVersionHistory = v }),
     setShowValidationDialog: (show) => set((s) => { s.showValidationDialog = show }),
     setShowHyperlinkDialog: (show) => set((s) => { s.showHyperlinkDialog = show }),
