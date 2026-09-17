@@ -124,6 +124,7 @@ export interface AppState extends UIState, UIActions, FileActions, ChatActions {
   relocateRange: (args: { mode: 'move' | 'copy'; destRow: number; destCol: number }) => void
   applyAutoAggregate: (fn: AggregateFn) => void
   setRowHeight: (row: number, height: number) => void
+  setColumnWidth: (col: number, width: number) => void
   /** Autofit one or more rows to wrapped cell content (undoable). */
   autoFitRows: (rows: number[]) => void
 

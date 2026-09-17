@@ -93,6 +93,86 @@ export function isMergeAnchor(index: MergeIndex, row: number, col: number): bool
   return index.anchors.has(refToCell(row, col))
 }
 
+export type MergeAxis = 'row' | 'col'
+
+/**
+ * Remap merge refs after inserting a blank row/col after `afterIndex`
+ * (new index = afterIndex + 1). Entirely-after ranges shift; straddling
+ * ranges expand on the far edge. Input list is not mutated.
+ */
+export function shiftMergesOnInsert(
+  mergedCells: string[] | undefined,
+  axis: MergeAxis,
+  afterIndex: number,
+): string[] | undefined {
+  if (!mergedCells?.length) return mergedCells
+  const out: string[] = []
+  for (const ref of mergedCells) {
+    const r = parseMergeRange(ref)
+    if (!r) continue
+    const start = axis === 'row' ? r.startRow : r.startCol
+    const end = axis === 'row' ? r.endRow : r.endCol
+    let next = r
+    if (start > afterIndex) {
+      next = axis === 'row'
+        ? { ...r, startRow: r.startRow + 1, endRow: r.endRow + 1 }
+        : { ...r, startCol: r.startCol + 1, endCol: r.endCol + 1 }
+    } else if (start <= afterIndex && end > afterIndex) {
+      next = axis === 'row'
+        ? { ...r, endRow: r.endRow + 1 }
+        : { ...r, endCol: r.endCol + 1 }
+    }
+    const canon = toMergeRange(next.startRow, next.startCol, next.endRow, next.endCol)
+    if (canon) out.push(canon)
+  }
+  return out.sort()
+}
+
+/**
+ * Remap merge refs after deleting row/col at `index`. Entirely-after ranges
+ * shift up; ranges that contained the index shrink; a range that covered only
+ * that index on the axis is dropped. Input list is not mutated.
+ */
+export function shiftMergesOnDelete(
+  mergedCells: string[] | undefined,
+  axis: MergeAxis,
+  index: number,
+): string[] | undefined {
+  if (!mergedCells?.length) return mergedCells
+  const out: string[] = []
+  for (const ref of mergedCells) {
+    const r = parseMergeRange(ref)
+    if (!r) continue
+    const start = axis === 'row' ? r.startRow : r.startCol
+    const end = axis === 'row' ? r.endRow : r.endCol
+
+    if (end < index) {
+      // Entirely before — unchanged
+      const canon = toMergeRange(r.startRow, r.startCol, r.endRow, r.endCol)
+      if (canon) out.push(canon)
+      continue
+    }
+    if (start > index) {
+      const next = axis === 'row'
+        ? { ...r, startRow: r.startRow - 1, endRow: r.endRow - 1 }
+        : { ...r, startCol: r.startCol - 1, endCol: r.endCol - 1 }
+      const canon = toMergeRange(next.startRow, next.startCol, next.endRow, next.endCol)
+      if (canon) out.push(canon)
+      continue
+    }
+    // start <= index <= end
+    if (start === end) continue // only that axis index — drop
+    const next = axis === 'row'
+      ? { ...r, endRow: r.endRow - 1 }
+      : { ...r, endCol: r.endCol - 1 }
+    // Deleting the start edge: remaining cells shift into `index`, so start stays.
+    if (next.endRow < next.startRow || next.endCol < next.startCol) continue
+    const canon = toMergeRange(next.startRow, next.startCol, next.endRow, next.endCol)
+    if (canon) out.push(canon)
+  }
+  return out.length > 0 ? out.sort() : undefined
+}
+
 function colIndexFromLetters(letters: string): number {
   let n = 0
   for (let i = 0; i < letters.length; i++) {

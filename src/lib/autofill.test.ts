@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { CellData } from '@/types'
-import { adjustFormulaRefs, buildFillPattern, fillCellAt, pointToCell } from './autofill'
+import { adjustFormulaRefs, buildFillPattern, fillCellAt, pointToCell, shiftFormulaRefsOnDelete, shiftFormulaRefsOnInsert } from './autofill'
 
 const num = (v: number, extra?: Partial<CellData>): CellData => ({ value: v, ...extra })
 const str = (v: string): CellData => ({ value: v })
@@ -114,6 +114,30 @@ describe('adjustFormulaRefs', () => {
 
   it('handles multiple column letters (AA1)', () => {
     expect(adjustFormulaRefs('=AA1', 0, 1)).toBe('=AB1')
+  })
+})
+
+describe('shiftFormulaRefsOnInsert / OnDelete', () => {
+  const sheet1 = { editedSheetName: 'Sheet 1', formulaSheetIsEdited: true }
+  const onOther = { editedSheetName: 'Sheet 1', formulaSheetIsEdited: false }
+
+  it('shifts absolute and relative targets after the insert point', () => {
+    expect(shiftFormulaRefsOnInsert('=A1+$A$5', 'row', 0, sheet1)).toBe('=A1+$A$6')
+    expect(shiftFormulaRefsOnInsert('=SUM(A1:B2)', 'row', 0, sheet1)).toBe('=SUM(A1:B3)')
+    expect(shiftFormulaRefsOnInsert('=B1', 'col', 0, sheet1)).toBe('=C1')
+  })
+
+  it('shifts same-sheet qualified refs; leaves other sheets alone', () => {
+    expect(shiftFormulaRefsOnInsert("='Sheet 1'!A5", 'row', 0, sheet1)).toBe("='Sheet 1'!A6")
+    expect(shiftFormulaRefsOnInsert('=Sheet2!A5', 'row', 0, sheet1)).toBe('=Sheet2!A5')
+    expect(shiftFormulaRefsOnInsert("='Sheet 1'!A5", 'row', 0, onOther)).toBe("='Sheet 1'!A6")
+    expect(shiftFormulaRefsOnInsert('=A5', 'row', 0, onOther)).toBe('=A5')
+  })
+
+  it('deletes to #REF! and shifts later targets; shrinks ranges as a unit', () => {
+    expect(shiftFormulaRefsOnDelete('=A1+A5', 'row', 0, sheet1)).toBe('=#REF!+A4')
+    expect(shiftFormulaRefsOnDelete('=SUM(A1:B5)', 'row', 0, sheet1)).toBe('=SUM(A1:B4)')
+    expect(shiftFormulaRefsOnDelete('=SUM(B2:B4)', 'col', 1, sheet1)).toBe('=SUM(#REF!)')
   })
 })
 

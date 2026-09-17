@@ -86,28 +86,36 @@ export function setRowAt(rowHeights: Record<number, number>, row: number, height
 }
 
 /**
- * Shift height overrides down by one when a row is inserted after `afterRow`.
- * The input map is not mutated. The newly inserted row has no override.
+ * Shift a sparse index→number map down by one when an index is inserted after
+ * `afterIndex`. Used for rowHeights and columnWidths. Input is not mutated.
  */
-export function shiftRowHeightsOnInsert(rowHeights: Record<number, number>, afterRow: number): Record<number, number> {
+export function shiftSparseMapOnInsert(map: Record<number, number>, afterIndex: number): Record<number, number> {
   const next: Record<number, number> = {}
-  for (const [key, height] of Object.entries(rowHeights)) {
-    const r = Number(key)
-    next[r > afterRow ? r + 1 : r] = height
+  for (const [key, value] of Object.entries(map)) {
+    const i = Number(key)
+    next[i > afterIndex ? i + 1 : i] = value
   }
   return next
 }
 
 /**
- * Drop the override at `row` and shift later overrides up by one.
- * The input map is not mutated.
+ * Drop the entry at `index` and shift later entries up by one.
+ * Input is not mutated.
  */
-export function shiftRowHeightsOnDelete(rowHeights: Record<number, number>, row: number): Record<number, number> {
+export function shiftSparseMapOnDelete(map: Record<number, number>, index: number): Record<number, number> {
   const next: Record<number, number> = {}
-  for (const [key, height] of Object.entries(rowHeights)) {
-    const r = Number(key)
-    if (r === row) continue
-    next[r > row ? r - 1 : r] = height
+  for (const [key, value] of Object.entries(map)) {
+    const i = Number(key)
+    if (i === index) continue
+    next[i > index ? i - 1 : i] = value
   }
   return next
+}
+
+export function shiftRowHeightsOnInsert(rowHeights: Record<number, number>, afterRow: number): Record<number, number> {
+  return shiftSparseMapOnInsert(rowHeights, afterRow)
+}
+
+export function shiftRowHeightsOnDelete(rowHeights: Record<number, number>, row: number): Record<number, number> {
+  return shiftSparseMapOnDelete(rowHeights, row)
 }

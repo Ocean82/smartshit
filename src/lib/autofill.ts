@@ -6,10 +6,21 @@
  */
 import type { CellData, CellFormat } from '@/types'
 import { colToLetter, letterToCol } from '@/engine/spreadsheet'
+import { parseMergeRange, shiftMergesOnDelete, shiftMergesOnInsert, toMergeRange, type MergeAxis } from '@/lib/merge'
 import { rowIndexAtY } from '@/lib/rowLayout'
 
-/** Shift relative (non-$) A1 references in a formula by row/col deltas. */
-const A1_REF_RE = /(\$?)([A-Za-z]{1,3})(\$?)(\d{1,7})/g
+/** A1 refs: not mid-identifier (`Sheet2` must not match `t2`). */
+const A1_REF_RE = /(?<![A-Za-z])(\$?)([A-Za-z]{1,3})(\$?)(\d{1,7})/g
+
+/** A1:A1 ranges (optional $). */
+const A1_RANGE_RE = /(?<![A-Za-z])(\$?[A-Za-z]{1,3}\$?\d{1,7}):(\$?[A-Za-z]{1,3}\$?\d{1,7})/g
+
+export interface StructuralRefOpts {
+  /** Sheet whose rows/cols are changing. */
+  editedSheetName: string
+  /** True when this formula lives on the edited sheet (bare refs mean that sheet). */
+  formulaSheetIsEdited: boolean
+}
 
 export function adjustFormulaRefs(formula: string, deltaRow: number, deltaCol: number): string {
   return formula.replace(A1_REF_RE, (_m, colAbs: string, colStr: string, rowAbs: string, rowStr: string) => {
@@ -17,6 +28,150 @@ export function adjustFormulaRefs(formula: string, deltaRow: number, deltaCol: n
     const newRow = rowAbs ? rowStr : String(parseInt(rowStr, 10) + deltaRow)
     return `${colAbs}${newCol}${rowAbs}${newRow}`
   })
+}
+
+/** Unquoted / quoted sheet name immediately before `!` at bangIndex. */
+function sheetNameBeforeBang(full: string, bangIndex: number): string | null {
+  const before = full.slice(0, bangIndex)
+  const quoted = before.match(/'((?:[^']|'')*)'$/)
+  if (quoted) return quoted[1].replace(/''/g, "'")
+  const bare = before.match(/([A-Za-z_][A-Za-z0-9._]*)$/)
+  return bare ? bare[1] : null
+}
+
+function sheetNamesEqual(a: string, b: string): boolean {
+  return a.localeCompare(b, undefined, { sensitivity: 'base' }) === 0
+}
+
+/** Whether this A1 match (at offset) should be rewritten for the edited sheet. */
+function shouldRewriteRef(full: string, offset: number, opts: StructuralRefOpts): boolean {
+  if (offset > 0 && full[offset - 1] === '!') {
+    const prefix = sheetNameBeforeBang(full, offset - 1)
+    return !!prefix && sheetNamesEqual(prefix, opts.editedSheetName)
+  }
+  return opts.formulaSheetIsEdited
+}
+
+function shiftOneRef(
+  match: string,
+  colAbs: string,
+  colStr: string,
+  rowAbs: string,
+  rowStr: string,
+  axis: MergeAxis,
+  index: number,
+  mode: 'insert' | 'delete',
+): string {
+  if (axis === 'row') {
+    const r = parseInt(rowStr, 10) - 1
+    if (mode === 'insert') {
+      if (r > index) return `${colAbs}${colStr}${rowAbs}${r + 2}`
+      return match
+    }
+    if (r === index) return '#REF!'
+    if (r > index) return `${colAbs}${colStr}${rowAbs}${r}`
+    return match
+  }
+  const c = letterToCol(colStr)
+  if (mode === 'insert') {
+    if (c > index) return `${colAbs}${colToLetter(c + 1)}${rowAbs}${rowStr}`
+    return match
+  }
+  if (c === index) return '#REF!'
+  if (c > index) return `${colAbs}${colToLetter(c - 1)}${rowAbs}${rowStr}`
+  return match
+}
+
+/** Rewrite A1:A1 ranges as a unit; return placeholders so singles won't re-touch them. */
+function shiftFormulaRanges(
+  formula: string,
+  axis: MergeAxis,
+  index: number,
+  mode: 'insert' | 'delete',
+  opts: StructuralRefOpts,
+): { text: string; parts: string[] } {
+  const parts: string[] = []
+  const text = formula.replace(A1_RANGE_RE, (match, a: string, b: string, offset: number, full: string) => {
+    if (!shouldRewriteRef(full, offset, opts)) return match
+    const bare = `${a.replace(/\$/g, '')}:${b.replace(/\$/g, '')}`
+    const shifted = mode === 'insert'
+      ? shiftMergesOnInsert([bare], axis, index)
+      : shiftMergesOnDelete([bare], axis, index)
+    const next = shifted?.[0]
+    let out = '#REF!'
+    if (next) {
+      const parsed = parseMergeRange(next)
+      if (parsed) {
+        const canon = toMergeRange(parsed.startRow, parsed.startCol, parsed.endRow, parsed.endCol)
+        if (canon) {
+          const [left, right] = canon.split(':')
+          const fmt = (ref: string, src: string) => {
+            const m = /^([A-Z]+)(\d+)$/i.exec(ref)
+            if (!m) return ref
+            const colAbs = src.startsWith('$')
+            const rowAbs = /\$\d/.test(src)
+            return `${colAbs ? '$' : ''}${m[1]}${rowAbs ? '$' : ''}${m[2]}`
+          }
+          out = `${fmt(left, a)}:${fmt(right, b)}`
+        }
+      }
+    }
+    const token = `\uE000${parts.length}\uE001`
+    parts.push(out)
+    return token
+  })
+  return { text, parts }
+}
+
+function shiftFormulaSingles(
+  formula: string,
+  axis: MergeAxis,
+  index: number,
+  mode: 'insert' | 'delete',
+  opts: StructuralRefOpts,
+): string {
+  return formula.replace(A1_REF_RE, (match, colAbs: string, colStr: string, rowAbs: string, rowStr: string, offset: number, full: string) => {
+    if (!shouldRewriteRef(full, offset, opts)) return match
+    return shiftOneRef(match, colAbs, colStr, rowAbs, rowStr, axis, index, mode)
+  })
+}
+
+function applyStructuralFormulaShift(
+  formula: string,
+  axis: MergeAxis,
+  index: number,
+  mode: 'insert' | 'delete',
+  opts: StructuralRefOpts,
+): string {
+  const { text, parts } = shiftFormulaRanges(formula, axis, index, mode, opts)
+  const withSingles = shiftFormulaSingles(text, axis, index, mode, opts)
+  return withSingles.replace(/\uE000(\d+)\uE001/g, (_m, n: string) => parts[Number(n)] ?? '#REF!')
+}
+
+/**
+ * Structural insert: shift targets after `afterIndex` on the edited sheet.
+ * Bare refs only when the formula lives on that sheet; `Sheet!A1` when the
+ * prefix names the edited sheet.
+ */
+export function shiftFormulaRefsOnInsert(
+  formula: string,
+  axis: MergeAxis,
+  afterIndex: number,
+  opts: StructuralRefOpts = { editedSheetName: '', formulaSheetIsEdited: true },
+): string {
+  return applyStructuralFormulaShift(formula, axis, afterIndex, 'insert', opts)
+}
+
+/**
+ * Structural delete: shrink ranges / `#REF!` singles that pointed at `index`.
+ */
+export function shiftFormulaRefsOnDelete(
+  formula: string,
+  axis: MergeAxis,
+  index: number,
+  opts: StructuralRefOpts = { editedSheetName: '', formulaSheetIsEdited: true },
+): string {
+  return applyStructuralFormulaShift(formula, axis, index, 'delete', opts)
 }
 
 export interface PointToCellRef {

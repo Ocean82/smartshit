@@ -7,6 +7,8 @@ import {
   buildMergeIndex,
   getMergeAt,
   isMergeAnchor,
+  shiftMergesOnInsert,
+  shiftMergesOnDelete,
   type MergeRange,
 } from './merge'
 
@@ -100,5 +102,22 @@ describe('buildMergeIndex / getMergeAt / isMergeAnchor', () => {
   it('skips malformed entries', () => {
     const index = buildMergeIndex(['A1:B2', 'not-a-ref', ''])
     expect(index.byCell.size).toBe(4)
+  })
+})
+
+describe('shiftMergesOnInsert / shiftMergesOnDelete', () => {
+  it('shifts entirely-after merges and expands straddling ones on insert', () => {
+    expect(shiftMergesOnInsert(['A1:B2', 'D5:E6'], 'row', 0)).toEqual(['A1:B3', 'D6:E7'])
+    expect(shiftMergesOnInsert(['A1:B2', 'D5:E6'], 'col', 0)).toEqual(['A1:C2', 'E5:F6'])
+  })
+
+  it('leaves merges that end at the insert point alone', () => {
+    expect(shiftMergesOnInsert(['A1:B2'], 'row', 1)).toEqual(['A1:B2'])
+  })
+
+  it('shrinks / shifts / drops on delete', () => {
+    expect(shiftMergesOnDelete(['A1:B2', 'D5:E6'], 'row', 1)).toEqual(['A1:B1', 'D4:E5'])
+    expect(shiftMergesOnDelete(['A1:A2', 'C1:D1'], 'col', 0)).toEqual(['B1:C1'])
+    expect(shiftMergesOnDelete(['A1:A1'], 'row', 0)).toBeUndefined()
   })
 })

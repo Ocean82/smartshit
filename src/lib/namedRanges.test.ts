@@ -4,6 +4,8 @@ import {
   isValidNamedRangeName,
   normalizeRangeText,
   selectionToAbsRange,
+  shiftA1Range,
+  shiftNamedRangesOnSheet,
 } from './namedRanges'
 
 describe('isValidNamedRangeName', () => {
@@ -44,5 +46,29 @@ describe('expandNamedRangesInFormula', () => {
 
   it('leaves quoted strings alone', () => {
     expect(expandNamedRangesInFormula('="Sales"', names, sheets)).toBe('="Sales"')
+  })
+})
+
+describe('shiftNamedRangesOnSheet / shiftA1Range', () => {
+  it('shifts A1 ranges on insert', () => {
+    expect(shiftA1Range('A1:B2', 'row', 0, 'insert')).toBe('A1:B3')
+    expect(shiftA1Range('D5:E6', 'row', 0, 'insert')).toBe('D6:E7')
+  })
+
+  it('remaps names on the target sheet only', () => {
+    const names = [
+      { name: 'Sales', sheetId: 's1', range: '$A$1:$B$2' },
+      { name: 'Other', sheetId: 's2', range: '$A$1:$B$2' },
+    ]
+    const next = shiftNamedRangesOnSheet(names, 's1', 'row', 0, 'insert')
+    expect(next).toEqual([
+      { name: 'Sales', sheetId: 's1', range: '$A$1:$B$3' },
+      { name: 'Other', sheetId: 's2', range: '$A$1:$B$2' },
+    ])
+  })
+
+  it('drops a name whose only row was deleted', () => {
+    const names = [{ name: 'One', sheetId: 's1', range: '$A$1' }]
+    expect(shiftNamedRangesOnSheet(names, 's1', 'row', 0, 'delete')).toEqual([])
   })
 })

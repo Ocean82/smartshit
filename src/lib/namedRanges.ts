@@ -3,6 +3,7 @@
  * ponytail: expand to A1 before Formualizer (no define-name API in engine 0.8.5).
  */
 import { tryCellToRef, colToLetter } from '@/lib/cellRef'
+import { parseMergeRange, shiftMergesOnDelete, shiftMergesOnInsert, type MergeAxis } from '@/lib/merge'
 import type { NamedRange, Selection, SheetData } from '@/types'
 
 const NAME_RE = /^[A-Za-z_][A-Za-z0-9._]*$/
@@ -109,4 +110,61 @@ export function findNamedRangeConflict(
   return namedRanges.find(
     (n) => n.name.toUpperCase() === upper && n.name.toUpperCase() !== exclude,
   )
+}
+
+/** Remap A1 / $A$1 range text with the same insert/delete rules as merges. */
+export function shiftA1Range(
+  range: string,
+  axis: MergeAxis,
+  afterOrIndex: number,
+  mode: 'insert' | 'delete',
+): string | null {
+  const bare = (normalizeRangeText(range) ?? range.trim().replace(/\s+/g, '')).replace(/\$/g, '')
+  if (!bare || !parseMergeRange(bare)) return null
+  const shifted = mode === 'insert'
+    ? shiftMergesOnInsert([bare], axis, afterOrIndex)
+    : shiftMergesOnDelete([bare], axis, afterOrIndex)
+  const next = shifted?.[0]
+  if (!next) return null
+  const parsed = parseMergeRange(next)
+  if (!parsed) return null
+  return selectionToAbsRange({
+    startRow: parsed.startRow,
+    startCol: parsed.startCol,
+    endRow: parsed.endRow,
+    endCol: parsed.endCol,
+  }).replace(/\$/g, '') // charts / labels typically store relative A1
+}
+
+/**
+ * Remap named ranges that live on `sheetId` after a row/col insert or delete.
+ * Other sheets' names are left alone. Input list is not mutated.
+ */
+export function shiftNamedRangesOnSheet(
+  namedRanges: NamedRange[] | undefined,
+  sheetId: string,
+  axis: MergeAxis,
+  index: number,
+  mode: 'insert' | 'delete',
+): NamedRange[] | undefined {
+  if (!namedRanges?.length) return namedRanges
+  const out: NamedRange[] = []
+  for (const nr of namedRanges) {
+    if (nr.sheetId !== sheetId) {
+      out.push(nr)
+      continue
+    }
+    const bare = normalizeRangeText(nr.range)
+    if (!bare) {
+      out.push(nr)
+      continue
+    }
+    const nextBare = shiftA1Range(bare, axis, index, mode)
+    if (!nextBare) continue
+    // Restore absolute form for named ranges.
+    const abs = normalizeRangeText(nextBare)
+    if (!abs) continue
+    out.push({ ...nr, range: abs })
+  }
+  return out
 }

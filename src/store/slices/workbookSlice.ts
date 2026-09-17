@@ -30,13 +30,14 @@ import { getActionRecorder } from '@/lib/actionRecorder'
 import { validateCell } from '@/lib/validation'
 import type { HistoryEntry } from '@/lib/historyDiff'
 import { mergeChartLayout } from '@/lib/chartLayout'
-import { toMergeRange, parseMergeRange, rangesOverlap } from '@/lib/merge'
+import { toMergeRange, parseMergeRange, rangesOverlap, shiftMergesOnDelete, shiftMergesOnInsert, type MergeAxis } from '@/lib/merge'
 import { encodeCellBlock, parseGridClipboard } from '@/lib/clipboardCodec'
-import { buildFillPattern, adjustFormulaRefs, fillCellAt, type FilledCell } from '@/lib/autofill'
+import { buildFillPattern, adjustFormulaRefs, fillCellAt, type FilledCell, shiftFormulaRefsOnDelete, shiftFormulaRefsOnInsert } from '@/lib/autofill'
 import { buildRelocatePlan } from '@/lib/relocateRange'
 import { buildTransposePasteWrites } from '@/lib/transposePaste'
 import { buildAutoAggregatePlan, type AggregateFn } from '@/lib/autoAggregate'
-import { clampRowHeight, getRowHeight, setRowAt, shiftRowHeightsOnDelete, shiftRowHeightsOnInsert } from '@/lib/rowLayout'
+import { clampColWidth, getColWidth, setColAt } from '@/lib/colLayout'
+import { clampRowHeight, getRowHeight, setRowAt, shiftRowHeightsOnDelete, shiftRowHeightsOnInsert, shiftSparseMapOnDelete, shiftSparseMapOnInsert } from '@/lib/rowLayout'
 import { setHidden, shiftHiddenOnDelete, shiftHiddenOnInsert } from '@/lib/rowColVisibility'
 import { autoFitRowHeights, createCanvasTextMeasurer } from '@/lib/rowAutoFit'
 import { resolveHyperlinkOnEdit, type Hyperlink } from '@/lib/hyperlink'
@@ -44,6 +45,8 @@ import {
   findNamedRangeConflict,
   isValidNamedRangeName,
   normalizeRangeText,
+  shiftA1Range,
+  shiftNamedRangesOnSheet,
 } from '@/lib/namedRanges'
 import { MAX_UNDO_STACK } from '../storeTypes'
 import { v4 as uuid } from 'uuid'
@@ -75,6 +78,100 @@ async function writeToOsClipboard(
     ])
   } catch {
     // Clipboard unavailable, not in a user gesture, or permission denied — non-fatal.
+  }
+}
+
+function remapRangeField(
+  raw: string | undefined,
+  axis: MergeAxis,
+  index: number,
+  mode: 'insert' | 'delete',
+): string | undefined {
+  if (!raw) return raw
+  return shiftA1Range(raw, axis, index, mode) ?? undefined
+}
+
+/** Remap chart A1 ranges on a sheet after insert/delete. Pixel positions stay put. */
+function shiftChartsOnSheet(
+  charts: ChartConfig[] | undefined,
+  axis: MergeAxis,
+  index: number,
+  mode: 'insert' | 'delete',
+): ChartConfig[] | undefined {
+  if (!charts?.length) return charts
+  return charts.map((ch) => ({
+    ...ch,
+    dataRange: remapRangeField(ch.dataRange, axis, index, mode) ?? ch.dataRange,
+    labelRange: remapRangeField(ch.labelRange, axis, index, mode),
+    series: ch.series?.map((s) => ({
+      ...s,
+      dataRange: remapRangeField(s.dataRange, axis, index, mode) ?? s.dataRange,
+    })),
+  }))
+}
+
+/** Shift cell keys and rewrite formula refs for structural insert/delete. */
+function remapCellsOnAxis(
+  cells: Record<string, CellData>,
+  axis: MergeAxis,
+  index: number,
+  mode: 'insert' | 'delete',
+  isAIFormula: (f: string) => boolean,
+  opts: { editedSheetName: string; formulaSheetIsEdited: boolean },
+  moveKeys = true,
+): Record<string, CellData> {
+  const rewrite = (formula: string | undefined): string | undefined => {
+    if (!formula || isAIFormula(formula)) return formula
+    return mode === 'insert'
+      ? shiftFormulaRefsOnInsert(formula, axis, index, opts)
+      : shiftFormulaRefsOnDelete(formula, axis, index, opts)
+  }
+
+  const next: Record<string, CellData> = {}
+  for (const [cellId, data] of Object.entries(cells)) {
+    const ref = cellToRef(cellId)
+    if (moveKeys) {
+      const coord = axis === 'row' ? ref.row : ref.col
+      if (mode === 'delete' && coord === index) continue
+
+      let row = ref.row
+      let col = ref.col
+      if (mode === 'insert') {
+        if (axis === 'row' && row > index) row += 1
+        if (axis === 'col' && col > index) col += 1
+      } else {
+        if (axis === 'row' && row > index) row -= 1
+        if (axis === 'col' && col > index) col -= 1
+      }
+
+      const formula = rewrite(data.formula)
+      next[refToCell(row, col)] = formula === data.formula ? data : { ...data, formula }
+      continue
+    }
+
+    const formula = rewrite(data.formula)
+    next[cellId] = formula === data.formula ? data : { ...data, formula }
+  }
+  return next
+}
+
+/** After structural edit on one sheet, rewrite SheetX! refs on every other sheet. */
+function remapForeignSheetFormulas(
+  sheets: { id: string; name: string; cells: Record<string, CellData> }[],
+  editedSheetId: string,
+  editedSheetName: string,
+  axis: MergeAxis,
+  index: number,
+  mode: 'insert' | 'delete',
+  isAIFormula: (f: string) => boolean,
+): void {
+  for (const sh of sheets) {
+    if (sh.id === editedSheetId) continue
+    sh.cells = remapCellsOnAxis(
+      sh.cells, axis, index, mode, isAIFormula,
+      { editedSheetName, formulaSheetIsEdited: false },
+      false,
+    )
   }
 }
 
@@ -111,6 +208,7 @@ export interface WorkbookSliceState {
   relocateRange: (args: { mode: 'move' | 'copy'; destRow: number; destCol: number }) => void
   applyAutoAggregate: (fn: AggregateFn) => void
   setRowHeight: (row: number, height: number) => void
+  setColumnWidth: (col: number, width: number) => void
   /** Autofit one or more rows to wrapped cell content (undoable). */
   autoFitRows: (rows: number[]) => void
   insertRow: (afterRow: number) => void
@@ -165,6 +263,7 @@ export interface WorkbookActions {
   relocateRange: (args: { mode: 'move' | 'copy'; destRow: number; destCol: number }) => void
   applyAutoAggregate: (fn: AggregateFn) => void
   setRowHeight: (row: number, height: number) => void
+  setColumnWidth: (col: number, width: number) => void
   autoFitRows: (rows: number[]) => void
   addChart: (chart: ChartConfig) => void
   removeChart: (chartId: string) => void
@@ -659,6 +758,21 @@ export function createWorkbookActions(
           const sh = s.workbook.sheets.find((x) => x.id === s.activeSheetId);
           if (!sh) return;
           sh.rowHeights = setRowAt(sh.rowHeights, row, clamped);
+          s.workbook.updatedAt = Date.now();
+        });
+      },
+
+      setColumnWidth: (col, width) => {
+        if (col < 0) return;
+        const sheet = get().getActiveSheet();
+        const current = getColWidth(sheet.columnWidths, col);
+        const clamped = clampColWidth(width);
+        if (clamped === current) return;
+        get().pushHistory('Column width');
+        set((s) => {
+          const sh = s.workbook.sheets.find((x) => x.id === s.activeSheetId);
+          if (!sh) return;
+          sh.columnWidths = setColAt(sh.columnWidths, col, clamped);
           s.workbook.updatedAt = Date.now();
         });
       },
@@ -1258,19 +1372,21 @@ export function createWorkbookActions(
         set((s) => {
           const sheet = s.workbook.sheets.find((sh) => sh.id === s.activeSheetId);
           if (!sheet) return;
-          // Shift all cells down
-          const newCells: Record<string, CellData> = {};
-          for (const [cellId, data] of Object.entries(sheet.cells)) {
-            const ref = cellToRef(cellId);
-            if (ref.row > afterRow) {
-              newCells[refToCell(ref.row + 1, ref.col)] = data;
-            } else {
-              newCells[cellId] = data;
-            }
-          }
-          sheet.cells = newCells;
+          const isAI = (f: string) => s.engine.isAIFormula(f);
+          sheet.cells = remapCellsOnAxis(
+            sheet.cells, 'row', afterRow, 'insert', isAI,
+            { editedSheetName: sheet.name, formulaSheetIsEdited: true },
+          );
+          remapForeignSheetFormulas(
+            s.workbook.sheets, sheet.id, sheet.name, 'row', afterRow, 'insert', isAI,
+          );
           sheet.rowHeights = shiftRowHeightsOnInsert(sheet.rowHeights, afterRow);
           sheet.hiddenRows = shiftHiddenOnInsert(sheet.hiddenRows, afterRow);
+          sheet.mergedCells = shiftMergesOnInsert(sheet.mergedCells, 'row', afterRow);
+          sheet.charts = shiftChartsOnSheet(sheet.charts, 'row', afterRow, 'insert');
+          s.workbook.namedRanges = shiftNamedRangesOnSheet(
+            s.workbook.namedRanges, sheet.id, 'row', afterRow, 'insert',
+          );
         });
         get().engine.loadWorkbook(get().workbook);
       },
@@ -1279,17 +1395,21 @@ export function createWorkbookActions(
         set((s) => {
           const sheet = s.workbook.sheets.find((sh) => sh.id === s.activeSheetId);
           if (!sheet) return;
-          const newCells: Record<string, CellData> = {};
-          for (const [cellId, data] of Object.entries(sheet.cells)) {
-            const ref = cellToRef(cellId);
-            if (ref.col > afterCol) {
-              newCells[refToCell(ref.row, ref.col + 1)] = data;
-            } else {
-              newCells[cellId] = data;
-            }
-          }
-          sheet.cells = newCells;
+          const isAI = (f: string) => s.engine.isAIFormula(f);
+          sheet.cells = remapCellsOnAxis(
+            sheet.cells, 'col', afterCol, 'insert', isAI,
+            { editedSheetName: sheet.name, formulaSheetIsEdited: true },
+          );
+          remapForeignSheetFormulas(
+            s.workbook.sheets, sheet.id, sheet.name, 'col', afterCol, 'insert', isAI,
+          );
           sheet.hiddenCols = shiftHiddenOnInsert(sheet.hiddenCols, afterCol);
+          sheet.columnWidths = shiftSparseMapOnInsert(sheet.columnWidths, afterCol);
+          sheet.mergedCells = shiftMergesOnInsert(sheet.mergedCells, 'col', afterCol);
+          sheet.charts = shiftChartsOnSheet(sheet.charts, 'col', afterCol, 'insert');
+          s.workbook.namedRanges = shiftNamedRangesOnSheet(
+            s.workbook.namedRanges, sheet.id, 'col', afterCol, 'insert',
+          );
         });
         get().engine.loadWorkbook(get().workbook);
       },
@@ -1298,19 +1418,21 @@ export function createWorkbookActions(
         set((s) => {
           const sheet = s.workbook.sheets.find((sh) => sh.id === s.activeSheetId);
           if (!sheet) return;
-          const newCells: Record<string, CellData> = {};
-          for (const [cellId, data] of Object.entries(sheet.cells)) {
-            const ref = cellToRef(cellId);
-            if (ref.row === row) continue;
-            if (ref.row > row) {
-              newCells[refToCell(ref.row - 1, ref.col)] = data;
-            } else {
-              newCells[cellId] = data;
-            }
-          }
-          sheet.cells = newCells;
+          const isAI = (f: string) => s.engine.isAIFormula(f);
+          sheet.cells = remapCellsOnAxis(
+            sheet.cells, 'row', row, 'delete', isAI,
+            { editedSheetName: sheet.name, formulaSheetIsEdited: true },
+          );
+          remapForeignSheetFormulas(
+            s.workbook.sheets, sheet.id, sheet.name, 'row', row, 'delete', isAI,
+          );
           sheet.rowHeights = shiftRowHeightsOnDelete(sheet.rowHeights, row);
           sheet.hiddenRows = shiftHiddenOnDelete(sheet.hiddenRows, row);
+          sheet.mergedCells = shiftMergesOnDelete(sheet.mergedCells, 'row', row);
+          sheet.charts = shiftChartsOnSheet(sheet.charts, 'row', row, 'delete');
+          s.workbook.namedRanges = shiftNamedRangesOnSheet(
+            s.workbook.namedRanges, sheet.id, 'row', row, 'delete',
+          );
         });
         get().engine.loadWorkbook(get().workbook);
       },
@@ -1319,18 +1441,21 @@ export function createWorkbookActions(
         set((s) => {
           const sheet = s.workbook.sheets.find((sh) => sh.id === s.activeSheetId);
           if (!sheet) return;
-          const newCells: Record<string, CellData> = {};
-          for (const [cellId, data] of Object.entries(sheet.cells)) {
-            const ref = cellToRef(cellId);
-            if (ref.col === col) continue;
-            if (ref.col > col) {
-              newCells[refToCell(ref.row, ref.col - 1)] = data;
-            } else {
-              newCells[cellId] = data;
-            }
-          }
-          sheet.cells = newCells;
+          const isAI = (f: string) => s.engine.isAIFormula(f);
+          sheet.cells = remapCellsOnAxis(
+            sheet.cells, 'col', col, 'delete', isAI,
+            { editedSheetName: sheet.name, formulaSheetIsEdited: true },
+          );
+          remapForeignSheetFormulas(
+            s.workbook.sheets, sheet.id, sheet.name, 'col', col, 'delete', isAI,
+          );
           sheet.hiddenCols = shiftHiddenOnDelete(sheet.hiddenCols, col);
+          sheet.columnWidths = shiftSparseMapOnDelete(sheet.columnWidths, col);
+          sheet.mergedCells = shiftMergesOnDelete(sheet.mergedCells, 'col', col);
+          sheet.charts = shiftChartsOnSheet(sheet.charts, 'col', col, 'delete');
+          s.workbook.namedRanges = shiftNamedRangesOnSheet(
+            s.workbook.namedRanges, sheet.id, 'col', col, 'delete',
+          );
         });
         get().engine.loadWorkbook(get().workbook);
       },

@@ -11,6 +11,7 @@ import { findLastDataRow } from '@/lib/sheetSort';
 import { columnDataBarPeerValues, columnColorScalePeerValues, columnIconSetPeerValues } from '@/lib/conditionalFormat';
 import { findActivePendingPreview } from '@/lib/pendingActionPreview';
 import { getRowHeight, clampRowHeight } from '@/lib/rowLayout';
+import { clampColWidth, MIN_COL_WIDTH, MAX_COL_WIDTH } from '@/lib/colLayout';
 import { frozenRowStickyTop, splitRectAcrossFreeze } from '@/lib/gridFreeze';
 import { visibleContentSpan } from '@/lib/rowColVisibility';
 import { useTouch } from '@/hooks/useTouch';
@@ -29,8 +30,6 @@ import { useSelectionManager } from './grid/SelectionManager';
 const DEFAULT_CELL_WIDTH = 100;
 const ROW_HEADER_WIDTH = 46;
 const COL_HEADER_HEIGHT = 26;
-const MIN_COL_WIDTH = 40;
-const MAX_COL_WIDTH = 400;
 const MEASURE_FONT = '13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
 
 // ─── Conditional Format Peer Cache Hook ───────────────────────────────────────
@@ -105,12 +104,18 @@ function useConditionalFormatPeers(
 
 // ─── Column Resize Hook ───────────────────────────────────────────────────────
 
-function useColumnResize(getColWidth: (col: number) => number, getActiveSheet: () => ReturnType<typeof useStore.getState>['getActiveSheet'] extends () => infer R ? R : never, getComputedValue: (row: number, col: number) => string) {
+function useColumnResize(
+  getColWidthFor: (col: number) => number,
+  getActiveSheet: () => ReturnType<typeof useStore.getState>['getActiveSheet'] extends () => infer R ? R : never,
+  getComputedValue: (row: number, col: number) => string,
+  onCommit: (col: number, width: number) => void,
+) {
   const [columnWidths, setColumnWidths] = useState<Record<number, number>>({});
   const resizeStartRef = useRef<{ col: number; startX: number; startWidth: number } | null>(null);
 
   const workbookId = useStore((s) => s.workbook.id);
-  useEffect(() => { setColumnWidths({}); }, [workbookId]);
+  const activeSheetId = useStore((s) => s.activeSheetId);
+  useEffect(() => { setColumnWidths({}); }, [workbookId, activeSheetId]);
 
   useEffect(() => () => {
     resizeStartRef.current = null;
@@ -119,22 +124,35 @@ function useColumnResize(getColWidth: (col: number) => number, getActiveSheet: (
   }, []);
 
   const handleResizeEnd = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    const start = resizeStartRef.current;
     resizeStartRef.current = null;
     if (e.currentTarget.hasPointerCapture(e.pointerId)) {
       e.currentTarget.releasePointerCapture(e.pointerId);
     }
     document.body.style.cursor = '';
     document.body.style.userSelect = '';
-  }, []);
+    if (!start) return;
+    const finalWidth = clampColWidth(start.startWidth + (e.clientX - start.startX));
+    if (finalWidth !== start.startWidth) onCommit(start.col, finalWidth);
+    setColumnWidths((prev) => {
+      const next = { ...prev };
+      delete next[start.col];
+      return next;
+    });
+  }, [onCommit]);
 
   const handleResizeStart = useCallback((col: number, e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
-    e.currentTarget.setPointerCapture(e.pointerId);
-    resizeStartRef.current = { col, startX: e.clientX, startWidth: columnWidths[col] ?? getColWidth(col) };
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      // Capture can fail for synthetic events; move/up still land on the handle.
+    }
+    resizeStartRef.current = { col, startX: e.clientX, startWidth: getColWidthFor(col) };
     document.body.style.cursor = 'col-resize';
     document.body.style.userSelect = 'none';
-  }, [getColWidth, columnWidths]);
+  }, [getColWidthFor]);
 
   const handleResizeMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     const start = resizeStartRef.current;
@@ -142,7 +160,7 @@ function useColumnResize(getColWidth: (col: number) => number, getActiveSheet: (
     if ((e.buttons & 1) === 0) { handleResizeEnd(e); return; }
     setColumnWidths((prev) => ({
       ...prev,
-      [start.col]: Math.max(MIN_COL_WIDTH, start.startWidth + (e.clientX - start.startX)),
+      [start.col]: clampColWidth(start.startWidth + (e.clientX - start.startX)),
     }));
   }, [handleResizeEnd]);
 
@@ -163,8 +181,8 @@ function useColumnResize(getColWidth: (col: number) => number, getActiveSheet: (
       if (text) maxWidth = Math.max(maxWidth, ctx.measureText(text).width + 20);
     }
 
-    setColumnWidths((prev) => ({ ...prev, [col]: Math.ceil(Math.min(maxWidth, MAX_COL_WIDTH)) }));
-  }, [getComputedValue, getActiveSheet]);
+    onCommit(col, Math.ceil(Math.min(maxWidth, MAX_COL_WIDTH)));
+  }, [getComputedValue, getActiveSheet, onCommit]);
 
   return { columnWidths, handleResizeStart, handleResizeMove, handleResizeEnd, handleAutoFitColumn };
 }
@@ -497,14 +515,17 @@ export function SpreadsheetGrid() {
   // Conditional format caches
   const { dataBarPeersByCol, colorScalePeersByCol, iconSetPeersByCol } = useConditionalFormatPeers(sheet, getComputedValue);
 
-  // Column widths
-  const getColWidth = useCallback((col: number) => {
+  // Column widths: local overrides during drag, store commit on pointerup / autofit.
+  const committedGetColWidth = useCallback((col: number) => {
     return sheet.columnWidths[col] || DEFAULT_CELL_WIDTH;
   }, [sheet.columnWidths]);
 
-  const resizeState = useColumnResize(getColWidth, getActiveSheet, getComputedValue);
+  const commitColumnWidth = useCallback((col: number, w: number) => {
+    useStore.getState().setColumnWidth(col, w);
+  }, []);
 
-  // Reassign getColWidth to use local state (avoids stale closure)
+  const resizeState = useColumnResize(committedGetColWidth, getActiveSheet, getComputedValue, commitColumnWidth);
+
   const resolvedGetColWidth = useCallback((col: number) => {
     return resizeState.columnWidths[col] || sheet.columnWidths[col] || DEFAULT_CELL_WIDTH;
   }, [resizeState.columnWidths, sheet.columnWidths]);
