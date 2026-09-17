@@ -152,9 +152,12 @@ export const useStore = create<AppState>()(
       ...workbookActions,
       ...chatActions,
 
-      // Wrap data-only import with chat/insights/audit orchestration
+      // Wrap data-only import with chat/insights/audit orchestration.
+      // Imported content is a new local workbook, not the file's existing cloud
+      // workbook, so clear the cloud binding to avoid overwriting it on autosave.
       importWorkbook: (workbook: WorkbookData, meta?: { fileName?: string }) => {
         workbookActions.importWorkbook(workbook, meta)
+        useStore.getState().setActiveFileCloudId(null)
         applyWorkbookImportEffects(
           set as unknown as Parameters<typeof applyWorkbookImportEffects>[0],
           get as unknown as Parameters<typeof applyWorkbookImportEffects>[1],
@@ -164,7 +167,8 @@ export const useStore = create<AppState>()(
       },
 
       // New Workbook replaces the active file's content: rebind the file's
-      // workbookId to the fresh workbook and drop the previous slot.
+      // workbookId to the fresh workbook and drop the previous slot. The fresh
+      // workbook is not the old cloud workbook, so clear the cloud binding too.
       initWorkbook: (name?: string) => {
         workbookActions.initWorkbook(name)
         const s = useStore.getState()
@@ -178,6 +182,7 @@ export const useStore = create<AppState>()(
           st.workbookSlots = next.workbookSlots
           st.files = next.files
         })
+        useStore.getState().setActiveFileCloudId(null)
       },
     }
   }),

@@ -3,7 +3,6 @@ import { useStore } from '@/store/useStore'
 import {
   listVersions,
   loadVersion,
-  getCloudWorkbookId,
   isCloudConfigured,
   type VersionEntry,
 } from '@/lib/cloudSync'
@@ -42,7 +41,8 @@ export function VersionHistoryPanel() {
   const focusTrapRef = useFocusTrap<HTMLDivElement>(!!preview)
   useEscapeToClose(!!preview, () => setPreview(null))
 
-  const cloudId = getCloudWorkbookId()
+  // Version history is for the active file's cloud workbook.
+  const cloudId = useStore((s) => s.files.find((f) => f.id === s.activeFileId)?.cloudWorkbookId)
 
   const closePreview = useCallback(() => setPreview(null), [])
 

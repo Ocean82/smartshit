@@ -39,8 +39,10 @@ export function WorkbookPicker({ open, onClose }: WorkbookPickerProps) {
     setActionId(id)
     const data = await loadFromCloud(id)
     if (data) {
-      // Load into store — this replaces the current workbook
+      // Load into store — this replaces the current workbook — then bind the
+      // active file to this cloud workbook so autosave targets the right slot.
       useStore.getState().loadWorkbookData(data)
+      useStore.getState().setActiveFileCloudId(id)
       onClose()
     }
     setActionId(null)
@@ -72,6 +74,11 @@ export function WorkbookPicker({ open, onClose }: WorkbookPickerProps) {
         setActionId(id)
         const ok = await deleteFromCloud(id)
         if (ok) {
+          // If the active file was bound to the just-deleted workbook, clear the
+          // binding so autosave stops targeting a now-nonexistent cloud slot.
+          const store = useStore.getState()
+          const activeFile = store.files.find((f) => f.id === store.activeFileId)
+          if (activeFile?.cloudWorkbookId === id) store.setActiveFileCloudId(null)
           setWorkbooks((prev) => prev.filter((w) => w.id !== id))
           showToast({ type: 'success', message: 'Workbook deleted from cloud' })
         } else {
@@ -84,7 +91,10 @@ export function WorkbookPicker({ open, onClose }: WorkbookPickerProps) {
 
   const doSaveCurrent = async () => {
     setActionId('new')
-    await createInCloud(workbook)
+    const created = await createInCloud(workbook)
+    // Bind the active file to the new cloud workbook so subsequent autosaves
+    // update it instead of creating duplicates.
+    if (created) useStore.getState().setActiveFileCloudId(created.id)
     // Refresh the list
     const fresh = await listCloudWorkbooks()
     setWorkbooks(fresh)

@@ -74,9 +74,11 @@ const {
     showToolbar,
     showFormulaBar,
     showSheetTabs,
+    activeCloudId,
   } = useStore(useShallow((s) => ({
     workbook: s.workbook,
     engine: s.engine,
+    activeCloudId: s.files.find((f) => f.id === s.activeFileId)?.cloudWorkbookId,
     showValidationDialog: s.showValidationDialog,
     setShowValidationDialog: s.setShowValidationDialog,
     showPivotDialog: s.showPivotDialog,
@@ -111,12 +113,15 @@ const {
     })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Cloud sync: schedule a save whenever workbook updates
+  // Cloud sync: schedule a save whenever the workbook updates, targeting the
+  // active file's own cloud workbook. No-ops when the file is local-only
+  // (no cloud id). activeCloudId is a dep so switching files re-evaluates and
+  // never schedules against a stale binding.
   useEffect(() => {
     if (isLoaded && isCloudConfigured()) {
-      scheduleSave(workbook)
+      scheduleSave(activeCloudId, workbook)
     }
-  }, [workbook.updatedAt, isLoaded]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [workbook.updatedAt, activeCloudId, isLoaded]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Listen for share dialog open event from MenuBar
   useEffect(() => {

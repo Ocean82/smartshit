@@ -67,7 +67,11 @@ window.addEventListener('beforeunload', () => {
     saveTimer = null
   }
   persistLocalSnapshot()
-  if (isCloudConfigured()) flushSave(useStore.getState().workbook)
+  if (isCloudConfigured()) {
+    const s = useStore.getState()
+    const cloudId = s.files.find((f) => f.id === s.activeFileId)?.cloudWorkbookId
+    flushSave(cloudId, s.workbook)
+  }
 })
 
 // Check if this is a shared workbook view (/shared/:token)

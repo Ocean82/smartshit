@@ -337,6 +337,8 @@ export interface FileItem {
   type: 'file' | 'folder';
   parentId: string | null;
   workbookId?: string;
+  /** Cloud workbook id this file syncs to. Absent = local-only, not yet in cloud. */
+  cloudWorkbookId?: string;
   children?: string[];
   createdAt: number;
   updatedAt: number;

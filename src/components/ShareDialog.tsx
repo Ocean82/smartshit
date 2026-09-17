@@ -10,7 +10,7 @@ import {
   Globe,
   Clock,
 } from 'lucide-react'
-import { getCloudWorkbookId, isCloudConfigured, getAuthHeaders } from '@/lib/cloudSync'
+import { isCloudConfigured, getAuthHeaders } from '@/lib/cloudSync'
 import { useStore } from '@/store/useStore'
 import { useFocusTrap } from '@/hooks/useFocusTrap'
 
@@ -39,7 +39,8 @@ export function ShareDialog({ open, onClose }: ShareDialogProps) {
   const [expiresIn, setExpiresIn] = useState<'24h' | '7d' | '30d' | 'never'>('never')
   const containerRef = useFocusTrap<HTMLDivElement>(open, onClose)
 
-  const cloudId = getCloudWorkbookId()
+  // Share the active file's cloud workbook.
+  const cloudId = useStore((s) => s.files.find((f) => f.id === s.activeFileId)?.cloudWorkbookId)
   const canShare = isCloudConfigured() && Boolean(cloudId)
 
   const fetchShares = useCallback(async () => {

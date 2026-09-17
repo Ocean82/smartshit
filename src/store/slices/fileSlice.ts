@@ -19,6 +19,8 @@ export interface FileActions {
   deleteFile: (id: string) => void
   renameFile: (id: string, name: string) => void
   openFile: (id: string) => void
+  /** Set (or clear, with null) the cloud workbook binding on the active file. */
+  setActiveFileCloudId: (cloudId: string | null) => void
 }
 
 /**
@@ -70,6 +72,15 @@ export function createFileActions(
 
     openFile: (id) => {
       set((s) => { s.activeFileId = id })
+    },
+
+    setActiveFileCloudId: (cloudId) => {
+      set((s) => {
+        const file = s.files.find((f) => f.id === s.activeFileId)
+        if (!file) return
+        if (cloudId) file.cloudWorkbookId = cloudId
+        else delete file.cloudWorkbookId
+      })
     },
   }
 }

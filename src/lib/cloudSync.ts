@@ -45,32 +45,16 @@ export interface VersionEntry {
 
 let _syncStatus: SyncStatus = 'idle'
 let _listeners: Array<(status: SyncStatus) => void> = []
-let _debounceTimer: ReturnType<typeof setTimeout> | null = null
-let _currentCloudId: string | null = null
+// One debounce timer per cloud workbook id. Keying by id keeps a pending save
+// for workbook A independent of one for workbook B, so switching files can
+// never flush the wrong workbook's contents over another's cloud slot.
+const _debounceTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
 const DEBOUNCE_MS = 5_000 // 5 seconds after last edit
 
 export function getSyncStatus(): SyncStatus {
   return _syncStatus
 }
-
-export function getCloudWorkbookId(): string | null {
-  return _currentCloudId
-}
-
-export function setCloudWorkbookId(id: string | null): void {
-  _currentCloudId = id
-  if (id) {
-    localStorage.setItem('smartsht-cloud-workbook-id', id)
-  } else {
-    localStorage.removeItem('smartsht-cloud-workbook-id')
-  }
-}
-
-// Restore from localStorage on load
-const storedCloudId =
-  typeof localStorage !== 'undefined' ? localStorage.getItem('smartsht-cloud-workbook-id') : null
-if (storedCloudId) _currentCloudId = storedCloudId
 
 export function onSyncStatusChange(listener: (status: SyncStatus) => void): () => void {
   _listeners.push(listener)
@@ -182,7 +166,6 @@ export async function loadFromCloud(workbookId: string): Promise<WorkbookData | 
 
     if (!res.ok) return null
     const data = (await res.json()) as WorkbookData
-    setCloudWorkbookId(workbookId)
     return data
   } catch {
     return null
@@ -221,7 +204,6 @@ export async function createInCloud(workbook: WorkbookData): Promise<CreateResul
     }
 
     const result = (await res.json()) as CreateResult
-    setCloudWorkbookId(result.id)
     setSyncStatus('saved')
     return result
   } catch {
@@ -232,9 +214,15 @@ export async function createInCloud(workbook: WorkbookData): Promise<CreateResul
 
 /**
  * Save (update existing) a workbook to the cloud.
+ *
+ * The target cloud id is passed in by the caller (resolved from the active
+ * file) — never read from mutable module state — so the workbook contents and
+ * the cloud slot they are written to always belong to the same file.
  */
-export async function saveToCloud(workbook: WorkbookData): Promise<SaveResult | null> {
-  const cloudId = _currentCloudId
+export async function saveToCloud(
+  cloudId: string,
+  workbook: WorkbookData,
+): Promise<SaveResult | null> {
   if (!cloudId || !isCloudConfigured()) return null
 
   setSyncStatus('syncing')
@@ -286,10 +274,6 @@ export async function deleteFromCloud(workbookId: string): Promise<boolean> {
       headers,
       signal: AbortSignal.timeout(10_000),
     })
-
-    if (workbookId === _currentCloudId) {
-      setCloudWorkbookId(null)
-    }
 
     return res.ok
   } catch {
@@ -351,32 +335,39 @@ export async function loadVersion(
 // ─── Debounced Auto-Save ─────────────────────────────────────────────────────
 
 /**
- * Schedule a debounced cloud save. Call this on every workbook mutation.
- * Waits 5 seconds after the last edit, then syncs to cloud.
+ * Schedule a debounced cloud save for a specific cloud workbook id. Call this
+ * on every workbook mutation, passing the active file's cloud id. Waits 5
+ * seconds after the last edit for that id, then syncs to cloud.
+ *
+ * No-ops when the file is not cloud-bound (no id) or cloud is unconfigured.
+ * The (id, workbook) pair is captured now, so a later file switch cannot
+ * redirect this save to a different workbook.
  */
-export function scheduleSave(workbook: WorkbookData): void {
-  if (!isCloudConfigured() || !_currentCloudId) return
+export function scheduleSave(cloudId: string | null | undefined, workbook: WorkbookData): void {
+  if (!isCloudConfigured() || !cloudId) return
 
-  if (_debounceTimer) {
-    clearTimeout(_debounceTimer)
-  }
+  const existing = _debounceTimers.get(cloudId)
+  if (existing) clearTimeout(existing)
 
-  _debounceTimer = setTimeout(() => {
-    _debounceTimer = null
-    void saveToCloud(workbook)
+  const timer = setTimeout(() => {
+    _debounceTimers.delete(cloudId)
+    void saveToCloud(cloudId, workbook)
   }, DEBOUNCE_MS)
+  _debounceTimers.set(cloudId, timer)
 }
 
 /**
- * Force an immediate save (e.g., on page unload or manual save).
+ * Force an immediate save for a specific cloud workbook id (e.g., on page
+ * unload or manual save). No-ops when not cloud-bound or unconfigured.
  */
-export function flushSave(workbook: WorkbookData): void {
-  if (!isCloudConfigured() || !_currentCloudId) return
+export function flushSave(cloudId: string | null | undefined, workbook: WorkbookData): void {
+  if (!isCloudConfigured() || !cloudId) return
 
-  if (_debounceTimer) {
-    clearTimeout(_debounceTimer)
-    _debounceTimer = null
+  const existing = _debounceTimers.get(cloudId)
+  if (existing) {
+    clearTimeout(existing)
+    _debounceTimers.delete(cloudId)
   }
 
-  void saveToCloud(workbook)
+  void saveToCloud(cloudId, workbook)
 }
