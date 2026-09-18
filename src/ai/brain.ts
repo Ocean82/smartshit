@@ -21,7 +21,7 @@ import { runCleaningSkill } from '@/ai/analysis/cleaning'
 import { runQueryFromIntent } from '@/ai/queryEngine'
 import { queryComparison } from '@/ai/comparison'
 import { formatInsights, explainOutliers, mergeToolResultContent, toolResultToMessage } from '@/ai/responseBuilder'
-import { chatWithAgentServerStream } from '@/ai/agentClient'
+import { chatWithAgentServerStream, isAgentServerError } from '@/ai/agentClient'
 import { recordTelemetry } from '@/ai/telemetry'
 import { runAudit, formatAuditForContext } from '@/auditor'
 import { getContextualSuggestions } from '@/ai/contextualSuggestions'
@@ -926,7 +926,19 @@ export async function processMessage(input: ProcessMessageInput): Promise<ToolRe
     onToken: input.onToken ?? (() => {}),
   })
 
-  // 8. Build final response
+  // 8. Server explicitly refused (auth / rate limit / quota): surface its worded
+  // message instead of the local fallback, which would hide the real CTA.
+  if (isAgentServerError(serverResult)) {
+    recordTelemetry('fallbackResponses', `ai-server-refused:${serverResult.status}`)
+    return {
+      success: false,
+      message: serverResult.message,
+      toolUsed: 'server-error',
+      suggestions: resolveContextualSuggestions(target, input),
+    }
+  }
+
+  // 9. Build final response
   if (serverResult) {
     return buildFinalResponse({ deterministicText, insightsBlock, serverResult, deterministic, target, input })
   }

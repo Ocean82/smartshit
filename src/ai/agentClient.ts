@@ -29,6 +29,67 @@ export interface ServerChatResponse {
   meta?: ProviderMeta
 }
 
+/**
+ * A non-200 server response that carries an actionable message (rate limit,
+ * expired session, quota exhausted). These MUST be surfaced to the user rather
+ * than swallowed into a null "server unreachable" — otherwise a logged-out or
+ * rate-limited user sees a misleading local-insights dump instead of the real
+ * "sign in again / slow down / upgrade" CTA the server worded for them.
+ */
+export interface AgentServerError {
+  kind: 'server-error'
+  /** Coarse category the pipeline can branch on. */
+  status: 'rate_limited' | 'auth' | 'quota' | 'error'
+  /** Human-readable message from the server body (already worded as a CTA). */
+  message: string
+  /** Raw HTTP status, for logging/telemetry. */
+  httpStatus: number
+}
+
+export function isAgentServerError(
+  value: ServerChatResponse | AgentServerError | null,
+): value is AgentServerError {
+  return value !== null && (value as AgentServerError).kind === 'server-error'
+}
+
+/** Default per-status messages when the server body omits one. */
+const DEFAULT_ERROR_MESSAGE: Record<AgentServerError['status'], string> = {
+  rate_limited: 'You are sending messages too quickly. Please wait a moment and try again.',
+  auth: 'Your session has expired. Please sign in again to continue.',
+  quota: "You've reached your free AI limit. Upgrade to Pro for unlimited access.",
+  error: 'The AI service returned an error. Please try again in a moment.',
+}
+
+function statusKindFromHttp(httpStatus: number): AgentServerError['status'] {
+  if (httpStatus === 401 || httpStatus === 403) return 'auth'
+  if (httpStatus === 402) return 'quota'
+  if (httpStatus === 429) return 'rate_limited'
+  return 'error'
+}
+
+/**
+ * Build an AgentServerError from a non-ok Response, reading `{ error | message }`
+ * from the JSON body when present. Never throws — a body that isn't JSON falls
+ * back to the per-status default message.
+ */
+async function toAgentServerError(res: Response): Promise<AgentServerError> {
+  const status = statusKindFromHttp(res.status)
+  let message = ''
+  try {
+    const body = (await res.json()) as { error?: unknown; message?: unknown }
+    if (typeof body.message === 'string' && body.message.trim()) message = body.message
+    else if (typeof body.error === 'string' && body.error.trim()) message = body.error
+  } catch {
+    // Non-JSON body — use the per-status default below.
+  }
+  return {
+    kind: 'server-error',
+    status,
+    message: message || DEFAULT_ERROR_MESSAGE[status],
+    httpStatus: res.status,
+  }
+}
+
 export type AgentChatTurn = { role: 'user' | 'assistant'; content: string }
 
 /** Shared payload for non-streaming and streaming chat. */
@@ -90,10 +151,12 @@ async function postAgentChat(
 /** Non-streaming chat — fallback if SSE fails */
 export async function chatWithAgentServer(
   request: AgentChatRequest,
-): Promise<ServerChatResponse | null> {
+): Promise<ServerChatResponse | AgentServerError | null> {
   try {
     const res = await postAgentChat('/api/chat', request, AbortSignal.timeout(CHAT_TIMEOUT_MS))
-    if (!res.ok) return null
+    // A 4xx here carries an actionable message (auth/rate-limit/quota) — surface
+    // it instead of returning null, which the pipeline treats as "unreachable".
+    if (!res.ok) return await toAgentServerError(res)
     return (await res.json()) as ServerChatResponse
   } catch {
     return null
@@ -107,14 +170,18 @@ export async function chatWithAgentServer(
  */
 export async function chatWithAgentServerStream(
   request: AgentStreamChatRequest,
-): Promise<ServerChatResponse | null> {
+): Promise<ServerChatResponse | AgentServerError | null> {
   try {
     const res = await postAgentChat(
       '/api/chat/stream',
       request,
       request.signal ?? AbortSignal.timeout(CHAT_TIMEOUT_MS),
     )
-    const reader = res.ok ? res.body?.getReader() : undefined
+    // Non-200 before the SSE stream opens (e.g. 401 expired token, 429 rate
+    // limit from middleware) has a JSON body with an actionable message. Surface
+    // it rather than dropping to null and rendering a misleading local fallback.
+    if (!res.ok) return await toAgentServerError(res)
+    const reader = res.body?.getReader()
     if (!reader) return null
     return readAgentSseStream(reader, request.onToken)
   } catch {

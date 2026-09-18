@@ -18,6 +18,8 @@ import type { PipelineContext } from '../types'
 
 vi.mock('@/ai/agentClient', () => ({
   chatWithAgentServerStream: vi.fn(),
+  isAgentServerError: (v: unknown) =>
+    v !== null && typeof v === 'object' && (v as { kind?: string }).kind === 'server-error',
 }))
 
 vi.mock('@/ai/buildContext', () => ({
@@ -228,6 +230,31 @@ describe('LLMGateway stage', () => {
     // Instead we get the generic error since the server is unreachable
     expect(result!.success).toBe(false)
     expect(result!.message).toContain('couldn\'t reach the AI service')
+  })
+
+  // Bug fix: a server refusal (rate limit / auth / quota) must surface the
+  // server's worded message, NOT the local insights fallback — even when
+  // insights are available. Previously !res.ok collapsed to null and the user
+  // saw a misleading insights dump instead of the real CTA.
+  it('surfaces a server error message instead of the insights fallback', async () => {
+    vi.mocked(chatWithAgentServerStream).mockResolvedValue({
+      kind: 'server-error',
+      status: 'rate_limited',
+      message: 'You are sending messages too quickly. Please wait a moment.',
+      httpStatus: 429,
+    } as any)
+    // Insights ARE available — the old code would have returned them here.
+    vi.mocked(isLlmOnlyMode).mockReturnValue(false)
+    vi.mocked(formatInsights).mockReturnValue('### Sheet insights\nTotal: $5000')
+
+    const stage = createLLMGatewayStage()
+    const result = await stage.process(makeContext({ mode: 'act' }))
+
+    expect(result!.success).toBe(false)
+    expect(result!.message).toBe('You are sending messages too quickly. Please wait a moment.')
+    expect(result!.message).not.toContain('Sheet insights')
+    expect(result!.metadata?.source).toBe('ai-server-refused')
+    expect(result!.metadata?.errorStatus).toBe('rate_limited')
   })
 
   it('returns error StageResult when LLM fails completely', async () => {

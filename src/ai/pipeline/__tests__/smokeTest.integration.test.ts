@@ -65,6 +65,8 @@ vi.mock('@/templates', () => ({
 
 vi.mock('@/ai/agentClient', () => ({
   chatWithAgentServerStream: vi.fn(),
+  isAgentServerError: (v: unknown) =>
+    v !== null && typeof v === 'object' && (v as { kind?: string }).kind === 'server-error',
 }))
 
 vi.mock('@shared/intentParser', async (importOriginal) => {

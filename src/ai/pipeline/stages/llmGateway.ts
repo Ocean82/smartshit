@@ -17,7 +17,7 @@
  */
 
 import type { PipelineContext, PipelineStage, StageResult } from '../types'
-import { chatWithAgentServerStream } from '@/ai/agentClient'
+import { chatWithAgentServerStream, isAgentServerError } from '@/ai/agentClient'
 import { buildAdaptiveContext, getClientContextBudget } from '@/ai/adaptiveContext'
 import { formatInsights, mergeToolResultContent } from '@/ai/responseBuilder'
 import { isLlmOnlyMode } from '@/ai/mode'
@@ -74,6 +74,25 @@ export function createLLMGatewayStage(): PipelineStage {
         history: context.history ?? [],
         onToken,
       })
+
+      // Server explicitly refused (auth / rate limit / quota). Surface its
+      // worded message as a real assistant reply — falling back to local
+      // insights here would hide the "sign in / slow down / upgrade" CTA and
+      // pretend the request succeeded.
+      if (isAgentServerError(serverResult)) {
+        return {
+          success: false,
+          message: serverResult.message,
+          stageName: 'llm-gateway',
+          suggestions: suggestionsForServerError(serverResult.status),
+          metadata: {
+            toolUsed: 'server-error',
+            source: 'ai-server-refused',
+            errorStatus: serverResult.status,
+            httpStatus: serverResult.httpStatus,
+          },
+        }
+      }
 
       if (serverResult) {
         // Successful LLM response
@@ -159,4 +178,20 @@ function buildSummary(
   }
 
   return mergeToolResultContent(parts.filter(Boolean))
+}
+
+/** Follow-up chips tailored to why the server refused the request. */
+function suggestionsForServerError(
+  status: 'rate_limited' | 'auth' | 'quota' | 'error',
+): string[] {
+  switch (status) {
+    case 'rate_limited':
+      return ['Wait a moment, then try again']
+    case 'auth':
+      return ['Sign in again']
+    case 'quota':
+      return ['Upgrade to Pro', 'Add your own API key']
+    default:
+      return ['Try your question again']
+  }
 }
