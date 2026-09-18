@@ -2,13 +2,52 @@ import { useStore } from '@/store/useStore';
 import { refToCell } from '@/engine/spreadsheet';
 import { useMemo, useEffect, useCallback } from 'react';
 import type { ChangeEvent } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { Minus, Plus } from 'lucide-react';
+import type { ChatMessage } from '@/types';
+import type { AppState } from '@/store/storeTypes';
 
 const ZOOM_LEVELS = [50, 75, 85, 100, 125, 150, 175, 200];
 
+/**
+ * Last AI response time as a display string (or null). Computed from message
+ * timestamps only — not content — so it's stable while a reply streams and can
+ * be selected as a primitive instead of subscribing to the whole messages array.
+ */
+function computeResponseTime(messages: ChatMessage[]): string | null {
+  if (messages.length < 2) return null;
+  for (let i = messages.length - 1; i >= 1; i--) {
+    if (messages[i].role === 'assistant' && messages[i].content) {
+      for (let j = i - 1; j >= 0; j--) {
+        if (messages[j].role === 'user') {
+          const diff = messages[i].timestamp - messages[j].timestamp;
+          if (diff > 0 && diff < 120_000) {
+            return diff < 1000 ? `${diff}ms` : `${(diff / 1000).toFixed(1)}s`;
+          }
+          return null;
+        }
+      }
+    }
+  }
+  return null;
+}
+
 export function StatusBar() {
-  const { selection, getActiveSheet, getComputedValue, messages, gridZoom, setGridZoom } = useStore();
-  const sheet = getActiveSheet();
+  // Narrow subscription: re-render on selection, active-sheet, zoom, or a
+  // completed AI response — but NOT on every streamed token (which only grows
+  // the streaming message's content, leaving responseTime and the sheet
+  // unchanged). Previously this used a no-selector useStore() and re-rendered
+  // on every store mutation, including each token.
+  const { selection, sheet, getComputedValue, responseTime, gridZoom, setGridZoom } = useStore(
+    useShallow((s: AppState) => ({
+      selection: s.selection,
+      sheet: s.getActiveSheet(),
+      getComputedValue: s.getComputedValue,
+      responseTime: computeResponseTime(s.messages),
+      gridZoom: s.gridZoom,
+      setGridZoom: s.setGridZoom,
+    })),
+  );
 
   // Apply zoom as a CSS custom property on the grid container.
   // The grid reads --grid-zoom and scales its font/cell sizes accordingly.
@@ -72,24 +111,6 @@ export function StatusBar() {
       max: Math.max(...values),
     };
   }, [selection, sheet.cells, getComputedValue]);
-
-  const responseTime = useMemo(() => {
-    if (messages.length < 2) return null;
-    for (let i = messages.length - 1; i >= 1; i--) {
-      if (messages[i].role === 'assistant' && messages[i].content) {
-        for (let j = i - 1; j >= 0; j--) {
-          if (messages[j].role === 'user') {
-            const diff = messages[i].timestamp - messages[j].timestamp;
-            if (diff > 0 && diff < 120_000) {
-              return diff < 1000 ? `${diff}ms` : `${(diff / 1000).toFixed(1)}s`;
-            }
-            return null;
-          }
-        }
-      }
-    }
-    return null;
-  }, [messages]);
 
   const cellCount = Object.keys(sheet.cells).filter((k) => sheet.cells[k]?.value != null).length;
 

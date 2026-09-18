@@ -1,10 +1,14 @@
 import React, { useState, useRef, useCallback } from 'react'
 import { useStore } from '@/store/useStore'
+import { useShallow } from 'zustand/react/shallow'
 import { Plus, X, Edit3, Check, ChevronDown } from 'lucide-react'
 import { AnchoredPanel } from '@/components/AnchoredPanel'
 import { BG_COLORS } from '@/data/colors'
 
 export function SheetTabs() {
+  // Only re-render when the workbook (sheet list/order/color/visibility) or the
+  // active sheet changes — not on every unrelated store mutation (toasts, panel
+  // toggles, cell edits, streamed chat tokens). Action fns are stable refs.
   const {
     workbook,
     activeSheetId,
@@ -20,7 +24,24 @@ export function SheetTabs() {
     showConfirm,
     showToast,
     undo,
-  } = useStore()
+  } = useStore(
+    useShallow((s) => ({
+      workbook: s.workbook,
+      activeSheetId: s.activeSheetId,
+      setActiveSheet: s.setActiveSheet,
+      addSheet: s.addSheet,
+      deleteSheet: s.deleteSheet,
+      renameSheet: s.renameSheet,
+      duplicateSheet: s.duplicateSheet,
+      moveSheet: s.moveSheet,
+      setSheetTabColor: s.setSheetTabColor,
+      hideSheet: s.hideSheet,
+      unhideSheet: s.unhideSheet,
+      showConfirm: s.showConfirm,
+      showToast: s.showToast,
+      undo: s.undo,
+    })),
+  )
 
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')

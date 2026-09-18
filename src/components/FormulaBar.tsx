@@ -9,23 +9,38 @@
  */
 import React, { useCallback, useRef, useState } from 'react';
 import { useStore } from '@/store/useStore';
+import { useShallow } from 'zustand/react/shallow';
 import { colToLetter, refToCell, cellToRef } from '@/engine/spreadsheet';
 import { X, Check, FunctionSquare } from 'lucide-react';
 
 export function FormulaBar() {
+  // Re-render only on selection / edit-state / active-sheet changes, not on
+  // every unrelated store mutation. `sheet` is selected as the active sheet
+  // object so cell edits (which produce a new sheet ref) still refresh the
+  // displayed cell content. Action fns are stable references.
   const {
     selection,
     editingCell,
     editValue,
+    sheet,
     setEditingCell,
     setEditValue,
     setCellValue,
     pushHistory,
-    getActiveSheet,
     setSelection,
-  } = useStore();
-
-  const sheet = getActiveSheet();
+  } = useStore(
+    useShallow((s) => ({
+      selection: s.selection,
+      editingCell: s.editingCell,
+      editValue: s.editValue,
+      sheet: s.getActiveSheet(),
+      setEditingCell: s.setEditingCell,
+      setEditValue: s.setEditValue,
+      setCellValue: s.setCellValue,
+      pushHistory: s.pushHistory,
+      setSelection: s.setSelection,
+    })),
+  );
   const inputRef = useRef<HTMLInputElement>(null);
   const nameBoxRef = useRef<HTMLInputElement>(null);
   const [nameBoxValue, setNameBoxValue] = useState('');
