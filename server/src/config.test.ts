@@ -136,3 +136,43 @@ describe('stripePriceId', () => {
     expect((await loadConfig()).stripePriceId).toBe('price_1Tshf9P38C54URjEpxmSrir2')
   })
 })
+
+describe('requiresDbSsl', () => {
+  async function loadRequiresDbSsl() {
+    vi.resetModules()
+    const mod = await import('./config.js')
+    return mod.requiresDbSsl
+  }
+
+  it('never blocks outside production', async () => {
+    process.env.NODE_ENV = 'development'
+    const requiresDbSsl = await loadRequiresDbSsl()
+    expect(requiresDbSsl('postgres://user:pw@db.example.com:5432/app')).toBe(false)
+  })
+
+  it('flags a remote production DB without sslmode', async () => {
+    process.env.NODE_ENV = 'production'
+    const requiresDbSsl = await loadRequiresDbSsl()
+    expect(requiresDbSsl('postgres://user:pw@db.example.com:5432/app')).toBe(true)
+  })
+
+  it('accepts a remote production DB that opts into TLS', async () => {
+    process.env.NODE_ENV = 'production'
+    const requiresDbSsl = await loadRequiresDbSsl()
+    expect(requiresDbSsl('postgres://user:pw@db.example.com:5432/app?sslmode=require')).toBe(false)
+    expect(requiresDbSsl('postgres://user:pw@db.example.com:5432/app?sslmode=verify-full')).toBe(false)
+  })
+
+  it('exempts localhost in production (local dev DB, no TLS needed)', async () => {
+    process.env.NODE_ENV = 'production'
+    const requiresDbSsl = await loadRequiresDbSsl()
+    expect(requiresDbSsl('postgres://user:pw@localhost:5432/app')).toBe(false)
+    expect(requiresDbSsl('postgres://user:pw@127.0.0.1:5432/app')).toBe(false)
+  })
+
+  it('does not throw on an unparseable URL', async () => {
+    process.env.NODE_ENV = 'production'
+    const requiresDbSsl = await loadRequiresDbSsl()
+    expect(requiresDbSsl('not a url')).toBe(false)
+  })
+})

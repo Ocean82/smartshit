@@ -234,6 +234,23 @@ pm2 startup
 > `pm2 restart smartsht-api --update-env` reuses that saved definition. This is the
 > intended steady state.
 
+> **⚠️ Run a single instance only — do NOT use PM2 cluster mode.** The `pm2 start`
+> above launches exactly one process (fork mode), which is required. Several pieces
+> of server state live in-process and are **not** shared across workers:
+> - `express-rate-limit` uses the in-memory `MemoryStore` — N workers would each
+>   allow the full quota, multiplying effective rate limits by N.
+> - the provider **circuit breaker** state (`providers.ts`) — one worker's open
+>   breaker wouldn't stop the others from hammering a failing provider.
+> - the Pro-plan cache (`proCache`), experimental-function burst counters
+>   (`experimentalBursts`), and the `memoryUsage` fallback counter (used only when
+>   `DATABASE_URL` is unset) — all per-process, so they fragment under clustering.
+>
+> Usage metering itself is safe under clustering (it was migrated to Postgres), but
+> the items above are not. **Do not** run `pm2 scale`, set `instances > 1`, or add
+> `exec_mode: 'cluster'` in any local `ecosystem.config.cjs`. If you need to scale
+> beyond one process, first move the rate limiter to a shared store (e.g. Redis via
+> `rate-limit-redis`) and externalize the circuit-breaker/cache state.
+
 ---
 
 ## 6. Verify Production

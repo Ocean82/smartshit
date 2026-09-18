@@ -135,6 +135,19 @@ const {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const store = useStore.getState()
+
+      // Don't hijack text-editing chords (Ctrl+S/O/B/I/U) while focus is in an
+      // editable element — the chat input, a dialog text field, etc. Otherwise
+      // e.g. Ctrl+B ("go back" in some editors) would silently mutate cell
+      // formats or Ctrl+O would open the file picker mid-sentence.
+      const target = e.target as HTMLElement | null
+      const inEditable =
+        !!target &&
+        (target.isContentEditable ||
+          target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT')
+
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault()
         setShowCommandPalette(true)
@@ -148,18 +161,18 @@ const {
         store.toggleToolbar()
       }
       // Ctrl+S: Save as Excel
-      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === 's') {
+      if (!inEditable && (e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === 's') {
         e.preventDefault()
         exportWorkbookToXlsx(store.workbook)
         store.showToast({ type: 'success', message: 'Saved as Excel' })
       }
       // Ctrl+O: Open file
-      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === 'o') {
+      if (!inEditable && (e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === 'o') {
         e.preventDefault()
         document.querySelector<HTMLInputElement>('input[accept=".csv,.xlsx,.xls"]')?.click()
       }
-      // Ctrl+B/I/U: Text formatting (only when not editing a cell)
-      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === 'b') {
+      // Ctrl+B/I/U: Text formatting (only when a cell is selected and not editing text)
+      if (!inEditable && (e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === 'b') {
         if (store.selection && !store.editingCell) {
           e.preventDefault()
           const cellId = refToCell(store.selection.startRow, store.selection.startCol)
@@ -167,7 +180,7 @@ const {
           store.setRangeFormat({ bold: !cell?.format?.bold })
         }
       }
-      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === 'i') {
+      if (!inEditable && (e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === 'i') {
         if (store.selection && !store.editingCell) {
           e.preventDefault()
           const cellId = refToCell(store.selection.startRow, store.selection.startCol)
@@ -175,7 +188,7 @@ const {
           store.setRangeFormat({ italic: !cell?.format?.italic })
         }
       }
-      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === 'u') {
+      if (!inEditable && (e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === 'u') {
         if (store.selection && !store.editingCell) {
           e.preventDefault()
           const cellId = refToCell(store.selection.startRow, store.selection.startCol)

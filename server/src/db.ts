@@ -17,7 +17,10 @@ export function getPool(): pg.Pool {
 
     pool = new Pool({
       connectionString: config.databaseUrl,
-      ssl: config.databaseUrl.includes('sslmode=require')
+      // Enable verified TLS whenever the URL opts into it. Kept in sync with
+      // requiresDbSsl() in config.ts so a URL that passes startup validation
+      // actually connects with SSL.
+      ssl: /sslmode=(require|verify-ca|verify-full)/i.test(config.databaseUrl)
         ? { rejectUnauthorized: true }
         : undefined,
       max: 10,

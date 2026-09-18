@@ -292,6 +292,30 @@ interface ConfigWarning {
  * Called at server startup — logs warnings for missing optional services
  * and throws if the server cannot function at all.
  */
+/**
+ * Whether a DATABASE_URL must be rejected for missing SSL. True only in
+ * production, only for non-localhost hosts, and only when the connection string
+ * does not already opt into TLS via sslmode. Local dev (localhost / 127.0.0.1 /
+ * unix sockets) is exempt.
+ */
+export function requiresDbSsl(databaseUrl: string): boolean {
+  if (process.env.NODE_ENV !== 'production') return false
+
+  let host = ''
+  try {
+    host = new URL(databaseUrl).hostname.toLowerCase()
+  } catch {
+    // Unparseable URL — leave other validation to surface it; don't block on SSL.
+    return false
+  }
+
+  const isLocal = host === '' || host === 'localhost' || host === '127.0.0.1' || host === '::1'
+  if (isLocal) return false
+
+  const enforcesSsl = /sslmode=(require|verify-ca|verify-full)/i.test(databaseUrl)
+  return !enforcesSsl
+}
+
 export function validateConfig(): void {
   const warnings: ConfigWarning[] = []
 
@@ -314,6 +338,13 @@ export function validateConfig(): void {
   // Required for cloud features
   if (!config.databaseUrl) {
     warnings.push({ level: 'warn', message: 'DATABASE_URL is not set — cloud save, workbook sharing, and usage tracking disabled' })
+  } else if (requiresDbSsl(config.databaseUrl)) {
+    // Non-localhost DB in production without TLS means credentials transit in
+    // plaintext. Fail fast rather than silently connecting insecurely.
+    warnings.push({
+      level: 'error',
+      message: 'DATABASE_URL points to a remote host without SSL — add sslmode=require (credentials would otherwise transit unencrypted)',
+    })
   }
   if (!config.awsAccessKeyId || !config.awsSecretAccessKey) {
     warnings.push({ level: 'warn', message: 'AWS credentials not set — S3 storage for version history disabled' })
