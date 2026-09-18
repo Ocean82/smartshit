@@ -8,6 +8,7 @@ import {
   applyUndo,
   applyRedo,
   capUndoStack,
+  newHistoryEntryId,
   type HistoryEntry,
 } from '@/lib/historyDiff'
 import type { SpreadsheetEngine } from '@/engine/spreadsheet'
@@ -74,8 +75,10 @@ export function createHistoryActions(
         }),
       }
 
+      const entryId = newHistoryEntryId()
       set((s) => {
         s.undoStack.push({
+          id: entryId,
           patch: {
             sheets: [],
             activeSheetIdBefore: beforeSnapshot.activeSheetId,
@@ -94,22 +97,18 @@ export function createHistoryActions(
       })
 
       // After the mutation happens (synchronously by the caller),
-      // we finalize the patch in a microtask to capture "after" state.
+      // finalize THIS entry by id — never by description string (duplicate
+      // labels in one tick would otherwise finalize the wrong top entry).
       queueMicrotask(() => {
         const afterWb = get().workbook
         const stack = get().undoStack
-        if (stack.length === 0) return
-
-        const lastEntry = stack[stack.length - 1]
-        if (lastEntry.description !== desc) return // Guard against interleaving
+        const target = stack.find((e) => e.id === entryId)
+        if (!target) return
 
         const patch = diffWorkbooks(beforeSnapshot, afterWb)
         set((s) => {
-          const entry = s.undoStack[s.undoStack.length - 1]
-          if (entry && entry.description === desc) {
-            entry.patch = patch
-          }
-          // Now that sizes are accurate, enforce the byte budget.
+          const entry = s.undoStack.find((e) => e.id === entryId)
+          if (entry) entry.patch = patch
           capUndoStack(s.undoStack, {
             maxEntries: MAX_UNDO_STACK,
             maxBytes: MAX_UNDO_STACK_BYTES,
@@ -130,7 +129,7 @@ export function createHistoryActions(
       if (entry.patch.structuralBefore && entry.patch.structuralAfter === undefined && entry.patch.sheets.length === 0) {
         const afterWb = get().workbook
         const patch = diffWorkbooks(entry.patch.structuralBefore, afterWb)
-        finalEntry = { patch, description: entry.description }
+        finalEntry = { id: entry.id, patch, description: entry.description }
       }
 
       const currentWb = get().workbook

@@ -1,5 +1,5 @@
 import { Router, type Request } from 'express'
-import { query } from '../db.js'
+import { query, getPool } from '../db.js'
 import { uploadWorkbook, downloadObject } from '../s3.js'
 import { getRequestUserId } from '../auth/clerk.js'
 import { sendServerError } from '../httpError.js'
@@ -132,23 +132,38 @@ versionsRouter.post('/:id/versions', async (req, res) => {
     // Download current latest
     const currentData = await downloadObject(workbook.rows[0].s3_key)
 
-    // Get next version number
-    const versionResult = await query<{ max_version: number | null }>(
-      `SELECT MAX(version_number) as max_version FROM smartsht.workbook_versions WHERE workbook_id = $1`,
-      [id],
-    )
-    const nextVersion = (versionResult.rows[0].max_version ?? 0) + 1
+    const pool = getPool()
+    const client = await pool.connect()
+    let nextVersion: number
+    let sizeBytes: number
+    try {
+      await client.query('BEGIN')
+      await client.query(
+        `SELECT id FROM smartsht.workbooks WHERE id = $1 FOR UPDATE`,
+        [id],
+      )
+      const versionResult = await client.query<{ max_version: number | null }>(
+        `SELECT MAX(version_number) as max_version FROM smartsht.workbook_versions WHERE workbook_id = $1`,
+        [id],
+      )
+      nextVersion = (versionResult.rows[0].max_version ?? 0) + 1
 
-    // Upload snapshot
-    const versionFilename = `v${String(nextVersion).padStart(3, '0')}.json`
-    const { key, sizeBytes } = await uploadWorkbook(userId, id, versionFilename, currentData)
+      const versionFilename = `v${String(nextVersion).padStart(3, '0')}.json`
+      const uploaded = await uploadWorkbook(userId, id, versionFilename, currentData)
+      sizeBytes = uploaded.sizeBytes
 
-    // Insert version record
-    await query(
-      `INSERT INTO smartsht.workbook_versions (workbook_id, version_number, s3_key, size_bytes, description)
-       VALUES ($1, $2, $3, $4, $5)`,
-      [id, nextVersion, key, sizeBytes, description ?? 'Manual snapshot'],
-    )
+      await client.query(
+        `INSERT INTO smartsht.workbook_versions (workbook_id, version_number, s3_key, size_bytes, description)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [id, nextVersion, uploaded.key, sizeBytes, description ?? 'Manual snapshot'],
+      )
+      await client.query('COMMIT')
+    } catch (err) {
+      await client.query('ROLLBACK')
+      throw err
+    } finally {
+      client.release()
+    }
 
     res.status(201).json({
       version: nextVersion,

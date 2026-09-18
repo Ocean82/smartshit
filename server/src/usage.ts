@@ -28,14 +28,15 @@ function usageEnabled(): boolean {
 
 export interface UsageCheckResult {
   allowed: boolean
-  remaining: number
-  limit: number
+  /** null = unlimited (Pro / BYOK). Prefer over Infinity — JSON.stringify turns Infinity into null anyway. */
+  remaining: number | null
+  limit: number | null
   used: number
   isPro: boolean
 }
 
 function unlimited(): UsageCheckResult {
-  return { allowed: true, remaining: Infinity, limit: Infinity, used: 0, isPro: true }
+  return { allowed: true, remaining: null, limit: null, used: 0, isPro: true }
 }
 
 function resultFor(used: number): UsageCheckResult {

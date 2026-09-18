@@ -51,8 +51,18 @@ export interface WorkbookPatch {
 }
 
 export interface HistoryEntry {
+  /** Stable identity for microtask finalization — never match by description. */
+  id: string
   patch: WorkbookPatch
   description: string
+}
+
+/** Fresh history entry id (crypto when available). */
+export function newHistoryEntryId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return `h-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
 }
 
 // ─── Diff Computation ────────────────────────────────────────────────────────

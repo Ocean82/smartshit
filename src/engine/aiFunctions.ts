@@ -67,7 +67,8 @@ interface CacheEntry {
 /** An async invocation shared by every cell that requested the same result. */
 interface PendingCall {
   promise: Promise<string | number | boolean | null>
-  cellIds: Set<string>
+  /** cellId → sheetId (so late results land on the sheet that requested them) */
+  cells: Map<string, string>
 }
 
 const DEFAULT_CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
@@ -92,10 +93,10 @@ export class AIFunctionRegistry {
   private _concurrencyLimit: number = DEFAULT_CONCURRENCY_LIMIT
   private _runningCalls = 0
   private _callQueue: Array<() => void> = []
-  private _onCellUpdate: ((cellId: string, value: string | number | boolean | null) => void) | null = null
+  private _onCellUpdate: ((sheetId: string, cellId: string, value: string | number | boolean | null) => void) | null = null
 
   /** Set the callback that pushes resolved async values back into the sheet */
-  setUpdateCallback(cb: (cellId: string, value: string | number | boolean | null) => void) {
+  setUpdateCallback(cb: (sheetId: string, cellId: string, value: string | number | boolean | null) => void) {
     this._onCellUpdate = cb
   }
 
@@ -165,12 +166,15 @@ export class AIFunctionRegistry {
    * @param name Function name (e.g., "AI.CATEGORIZE")
    * @param cellId The cell where this formula lives (for async result delivery)
    * @param args The arguments passed to the function
+   * @param sheetId Sheet that owns the cell — required so late results don't
+   *   write into whichever sheet is active when the promise resolves
    * @returns Immediate result (sync) or placeholder string (async)
    */
   execute(
     name: string,
     cellId: string,
     args: EvalValue[],
+    sheetId: string,
   ): string | number | boolean | null {
     const key = name.toUpperCase()
     const entry = this._functions.get(key)
@@ -202,28 +206,28 @@ export class AIFunctionRegistry {
     // the rest stay on the loading placeholder permanently.
     const pending = this._pendingCalls.get(cacheKey)
     if (pending) {
-      pending.cellIds.add(cellId)
+      pending.cells.set(cellId, sheetId)
       return '⏳ Loading...'
     }
 
     // Fire async call with concurrency limiting
-    const cellIds = new Set<string>([cellId])
+    const cells = new Map<string, string>([[cellId, sheetId]])
     const promise = this._runWithLimit(() => (entry.executor as AsyncAIFunctionExecutor)(...args))
-    this._pendingCalls.set(cacheKey, { promise, cellIds })
+    this._pendingCalls.set(cacheKey, { promise, cells })
 
     promise
       .then((result) => {
         // Cache the result
         this._setCacheEntry(cacheKey, result)
-        // Push the result into every cell that asked for it
+        // Push the result into every cell that asked for it (on its own sheet)
         if (this._onCellUpdate) {
-          for (const id of cellIds) this._onCellUpdate(id, result)
+          for (const [id, sid] of cells) this._onCellUpdate(sid, id, result)
         }
       })
       .catch((err) => {
         console.error(`[AIFunction] Async error in ${key}:`, err)
         if (this._onCellUpdate) {
-          for (const id of cellIds) this._onCellUpdate(id, '#AI_ERROR!')
+          for (const [id, sid] of cells) this._onCellUpdate(sid, id, '#AI_ERROR!')
         }
       })
       .finally(() => {

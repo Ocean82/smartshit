@@ -10,6 +10,7 @@
 #   ./scripts/deploy-remote.sh              # full deploy
 #   ./scripts/deploy-remote.sh --server     # server only
 #   ./scripts/deploy-remote.sh --frontend   # frontend only
+#   ./scripts/deploy-remote.sh --skip-push  # deploy without pushing first
 #
 # Prerequisites:
 #   - SSH key at ~/.ssh/server_saver_key (or set SMARTSHT_SSH_KEY)
@@ -26,8 +27,26 @@ SSH_HOST="ubuntu@52.0.207.242"
 SSH_OPTS="-i $SSH_KEY -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10"
 DEPLOY_SCRIPT="/opt/smartsht/current/scripts/deploy.sh"
 
-# Pass through any flags (--server, --frontend)
-DEPLOY_ARGS="${*}"
+# ─── Argument Parsing ─────────────────────────────────────────────────────────
+
+SKIP_PUSH=false
+DEPLOY_ARGS=()
+
+for arg in "$@"; do
+  case "$arg" in
+    --skip-push) SKIP_PUSH=true ;;
+    --server|--frontend) DEPLOY_ARGS+=("$arg") ;;
+    --help|-h)
+      echo "Usage: deploy-remote.sh [--server|--frontend] [--skip-push]"
+      exit 0
+      ;;
+    *)
+      echo "[deploy] Unknown flag: $arg" >&2
+      echo "Usage: deploy-remote.sh [--server|--frontend] [--skip-push]" >&2
+      exit 1
+      ;;
+  esac
+done
 
 # ─── Colors ───────────────────────────────────────────────────────────────────
 
@@ -52,7 +71,7 @@ if [ -n "$(git status --porcelain)" ]; then
   warn "Working tree has uncommitted changes:"
   git status --short
   echo ""
-  read -r -p "Deploy anyway? (current branch tip will be deployed) [y/N] " confirm
+  read -r -p "Deploy anyway? (origin/main will be deployed on the server) [y/N] " confirm
   if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
     error "Aborted — commit or stash changes first."
   fi
@@ -70,9 +89,13 @@ fi
 
 # ─── Push to Remote ──────────────────────────────────────────────────────────
 
-info "Pushing to origin/main..."
-git push origin main --quiet 2>&1 || error "Git push failed. Resolve conflicts first."
-info "Push complete ✓"
+if [ "$SKIP_PUSH" = true ]; then
+  warn "Skipping git push (--skip-push)"
+else
+  info "Pushing to origin/main..."
+  git push origin main --quiet 2>&1 || error "Git push failed. Resolve conflicts first."
+  info "Push complete ✓"
+fi
 
 # ─── SSH Deploy ───────────────────────────────────────────────────────────────
 
@@ -80,7 +103,7 @@ info "Connecting to production server..."
 echo ""
 
 # shellcheck disable=SC2086
-ssh $SSH_OPTS "$SSH_HOST" "bash $DEPLOY_SCRIPT $DEPLOY_ARGS"
+ssh $SSH_OPTS "$SSH_HOST" "bash $DEPLOY_SCRIPT ${DEPLOY_ARGS[*]-}"
 
 STATUS=$?
 echo ""

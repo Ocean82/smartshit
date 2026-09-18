@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState, useMemo, useRef } from 'react';
 import { Check, XCircle } from 'lucide-react';
+import { useShallow } from 'zustand/react/shallow';
 import { useStore } from '@/store/useStore';
 import { colToLetter, refToCell, cellToRef } from '@/engine/spreadsheet';
 import { ColumnFilterButton } from '@/components/grid/ColumnFilterPopover';
@@ -494,7 +495,10 @@ function RowHeader({ row, height, isSelected, stickyZIndex = 10, unhideRows, onU
 const selectPendingPreviewActionFromState = (s: AppState) => selectPendingPreviewAction(s.messages)
 
 export function SpreadsheetGrid() {
+  // Narrow subscription: active sheet + filters/UI flags the grid paints.
+  // Bare useStore() re-rendered on every toast/panel/chat token.
   const {
+    sheet,
     setCellValue,
     pushHistory,
     getActiveSheet,
@@ -508,16 +512,28 @@ export function SpreadsheetGrid() {
     unhideRows,
     unhideCols,
     showGridlines,
-  } = useStore();
+  } = useStore(
+    useShallow((s: AppState) => ({
+      sheet: s.getActiveSheet(),
+      setCellValue: s.setCellValue,
+      pushHistory: s.pushHistory,
+      getActiveSheet: s.getActiveSheet,
+      getComputedValue: s.getComputedValue,
+      activeFilters: s.activeFilters,
+      activeSortConfig: s.activeSortConfig,
+      applyAction: s.applyAction,
+      rejectAction: s.rejectAction,
+      showFindReplace: s.showFindReplace,
+      setShowFindReplace: s.setShowFindReplace,
+      unhideRows: s.unhideRows,
+      unhideCols: s.unhideCols,
+      showGridlines: s.showGridlines,
+    })),
+  );
 
-  // Subscribe to the pending preview ACTION, not the whole `messages` array.
-  // A streaming chat reply mutates `messages` on every token, but the pending
-  // action's reference is stable across those tokens — so this selector's
-  // Object.is result only changes when the pending action actually changes,
-  // sparing the grid a full re-render per streamed token.
+  // Pending preview ACTION only — not the whole messages array (tokens).
   const pendingAction = useStore(selectPendingPreviewActionFromState);
 
-  const sheet = getActiveSheet();
   const notesService = getCellNotesService();
 
   const pendingPreview = useMemo(() => buildPendingPreview(pendingAction), [pendingAction]);

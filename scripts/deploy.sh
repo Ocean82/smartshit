@@ -27,6 +27,12 @@ HEALTH_URL="http://127.0.0.1:8787/health?strict=1"
 HEALTH_TIMEOUT=30
 DEPLOY_LOG="${LOGS_DIR}/deploy.log"
 
+# ─── Utilities ────────────────────────────────────────────────────────────────
+
+timestamp() { date '+%Y-%m-%d %H:%M:%S'; }
+log() { echo "[$(timestamp)] $*" | tee -a "$DEPLOY_LOG"; }
+die() { log "FATAL: $*"; exit 1; }
+
 # ─── Argument Parsing ─────────────────────────────────────────────────────────
 
 DEPLOY_SERVER=true
@@ -43,14 +49,11 @@ for arg in "$@"; do
       echo "  --frontend   Frontend only: pull, build UI, copy to www"
       exit 0
       ;;
+    *)
+      die "Unknown flag: $arg (allowed: --server, --frontend)"
+      ;;
   esac
 done
-
-# ─── Utilities ────────────────────────────────────────────────────────────────
-
-timestamp() { date '+%Y-%m-%d %H:%M:%S'; }
-log() { echo "[$(timestamp)] $*" | tee -a "$DEPLOY_LOG"; }
-die() { log "FATAL: $*"; exit 1; }
 
 # ─── Pre-flight Checks ───────────────────────────────────────────────────────
 

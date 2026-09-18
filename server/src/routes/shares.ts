@@ -169,8 +169,12 @@ sharesRouter.delete('/shares/:token', async (req, res) => {
 })
 
 // ─── GET /api/shared/:token — Access a shared workbook (PUBLIC) ──────────────
+// Mounted at /api/shared (not under the broad /api sharesRouter) so mutating
+// /:id/share routes are not also exposed at /api/:id/share.
 
-sharesRouter.get('/shared/:token', async (req, res) => {
+export const publicSharesRouter = Router()
+
+publicSharesRouter.get('/:token', async (req, res) => {
   const { token } = req.params
 
   try {

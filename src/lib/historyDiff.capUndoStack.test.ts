@@ -16,6 +16,7 @@ function smallEntry(desc: string): HistoryEntry {
   const before: CellData = { value: 1 }
   const after: CellData = { value: 2 }
   return {
+    id: `small-${desc}`,
     description: desc,
     patch: {
       sheets: [{ sheetId: 's1', cells: [{ cellId: 'A1', before, after }] }],
@@ -36,6 +37,7 @@ function bigEntry(desc: string, approxBytesPerSnapshot: number, opts?: { after?:
     sheets: [{ id: 's1', name: 'S1', cells, columnWidths: {}, rowHeights: {} } as WorkbookData['sheets'][number]],
   }
   return {
+    id: `big-${desc}`,
     description: desc,
     patch: {
       sheets: [],

@@ -187,13 +187,14 @@ export class SpreadsheetEngine {
     cellId: string,
     formulaText: string,
     resolveArg: (ref: string) => string | number | boolean | null,
+    sheetId: string,
   ): Promise<string | number | boolean | null> {
     const parsed = this.canUseFormualizer()
       ? await this.parseFormulaWithFormualizer(formulaText, resolveArg)
       : this.parseFormulaWithRegex(formulaText, resolveArg);
 
     if (!parsed) return '#NAME?';
-    return this._aiRegistry.execute(parsed.funcName, cellId, parsed.args);
+    return this._aiRegistry.execute(parsed.funcName, cellId, parsed.args, sheetId);
   }
 
   /**
@@ -321,7 +322,7 @@ export class SpreadsheetEngine {
 
     for (const [cellId, cellData] of Object.entries(cells)) {
       if (cellData.formula && this.isAIFormula(cellData.formula)) {
-        void this.executeAIFormula(cellId, cellData.formula, resolveArg);
+        void this.executeAIFormula(cellId, cellData.formula, resolveArg, sheetId);
       }
     }
   }

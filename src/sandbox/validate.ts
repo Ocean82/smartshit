@@ -71,6 +71,49 @@ export interface ValidationResult {
 }
 
 /**
+ * Strip string literals and comments so REJECTED_PATTERNS don't false-positive
+ * on LLM comments like "// group by window size" or strings containing "fetch".
+ * Not a security boundary — the VM is.
+ */
+function stripStringsAndComments(code: string): string {
+  let out = ''
+  let i = 0
+  while (i < code.length) {
+    const c = code[i]
+    const next = code[i + 1]
+
+    // Line comment
+    if (c === '/' && next === '/') {
+      i += 2
+      while (i < code.length && code[i] !== '\n') i++
+      continue
+    }
+    // Block comment
+    if (c === '/' && next === '*') {
+      i += 2
+      while (i < code.length && !(code[i] === '*' && code[i + 1] === '/')) i++
+      i += 2
+      continue
+    }
+    // String / template
+    if (c === '"' || c === "'" || c === '`') {
+      const quote = c
+      i++
+      while (i < code.length) {
+        if (code[i] === '\\') { i += 2; continue }
+        if (code[i] === quote) { i++; break }
+        i++
+      }
+      out += ' '
+      continue
+    }
+    out += c
+    i++
+  }
+  return out
+}
+
+/**
  * Validate a script before execution.
  *
  * Returns { valid: true } if the script passes all checks, or
@@ -91,8 +134,9 @@ export function validateScript(code: string): ValidationResult {
     }
   }
 
+  const scanned = stripStringsAndComments(code)
   for (const { pattern, reason } of REJECTED_PATTERNS) {
-    if (pattern.test(code)) {
+    if (pattern.test(scanned)) {
       return { valid: false, error: reason }
     }
   }

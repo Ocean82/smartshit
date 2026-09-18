@@ -9,14 +9,13 @@ import { useServerHealth } from '@/ai/useServerHealth'
 
 export function EmptyGridGuide({ onOpenTemplates }: { onOpenTemplates: () => void }) {
   const sheet = useStore((s) => s.getActiveSheet())
-  const messages = useStore((s) => s.messages)
+  const hasUserMessages = useStore((s) => s.messages.some((m) => m.role === 'user'))
   const setActivePanel = useStore((s) => s.setActivePanel)
   const health = useServerHealth()
   const aiReady = Boolean(health?.ok)
 
   // Only show when grid is truly empty and user hasn't started working
   const hasData = Object.keys(sheet.cells).length > 0
-  const hasUserMessages = messages.some((m) => m.role === 'user')
   const welcomeDismissed = (() => {
     try { return !!localStorage.getItem('smartsht-welcome-dismissed') } catch { return false }
   })()

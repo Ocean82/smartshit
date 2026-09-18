@@ -305,7 +305,7 @@ aiFunctionRouter.post('/', aiFunctionRateLimiter, validateBody(aiFunctionBodySch
     isPro,
     usageAllowed: usage.allowed,
     hasByokCredentials,
-    dailyLimit: usage.limit,
+    dailyLimit: usage.limit ?? 0,
   })
 
   if (!access.allowed) {

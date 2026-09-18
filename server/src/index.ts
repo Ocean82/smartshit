@@ -42,7 +42,7 @@ import { dbHealthCheck, closePool } from './db.js'
 import { s3HealthCheck } from './s3.js'
 import { workbooksRouter } from './routes/workbooks.js'
 import { versionsRouter } from './routes/versions.js'
-import { sharesRouter } from './routes/shares.js'
+import { sharesRouter, publicSharesRouter } from './routes/shares.js'
 import { templatesRouter } from './routes/templates.js'
 import { aiFunctionRouter } from './routes/aiFunction.js'
 import { requireAuth, getRequestUserId, getClerkClient, getClerkMiddlewareOptions } from './auth/clerk.js'
@@ -120,7 +120,7 @@ app.use(globalRateLimiter)
 app.use('/api/workbooks', requireAuth, workbooksRouter)
 app.use('/api/workbooks', requireAuth, versionsRouter)
 app.use('/api/workbooks', requireAuth, sharesRouter)
-app.use('/api', sharedAccessRateLimiter, sharesRouter)  // Public GET /api/shared/:token; mutating routes check auth in-handler
+app.use('/api/shared', sharedAccessRateLimiter, publicSharesRouter)
 app.use('/api/community-templates', templatesRouter)
 
 // ─── AI Function endpoint (formula-level AI calls) ───────────────────────────
@@ -717,7 +717,7 @@ app.post('/api/chat/stream', requireAuth, chatRateLimiter, validateBody(chatStre
     isPro,
     usageAllowed: usage.allowed,
     hasByokCredentials,
-    dailyLimit: usage.limit,
+    dailyLimit: usage.limit ?? 0,
   })
 
   if (!access.allowed) {
@@ -814,7 +814,7 @@ app.post('/api/chat', requireAuth, chatRateLimiter, validateBody(chatBodySchema)
     isPro,
     usageAllowed: usage.allowed,
     hasByokCredentials,
-    dailyLimit: usage.limit,
+    dailyLimit: usage.limit ?? 0,
   })
 
   if (!access.allowed) {

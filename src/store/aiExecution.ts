@@ -19,7 +19,7 @@ import { analyzeBudget, budgetAnalysisToToolResult, savingsRecommendation } from
 import { parseUserIntent } from '@shared/intentParser'
 import { resolveActTemplates } from '@shared/actTemplates'
 import { buildActionPreview } from '@/lib/previewBuilders'
-import { capUndoStack, diffWorkbooks } from '@/lib/historyDiff'
+import { capUndoStack, diffWorkbooks, newHistoryEntryId } from '@/lib/historyDiff'
 import { exportSheetToCsv, exportWorkbookToXlsx } from '@/io/xlsx'
 import { exportWorkbookToJson } from '@/io/workbookJson'
 import { v4 as uuid } from 'uuid'
@@ -373,7 +373,7 @@ export async function executeMacroAction(
     const patch = diffWorkbooks(before, get().workbook);
     const description = label.startsWith('Macro:') ? label : `Macro: ${label}`;
     set((s: AppState) => {
-      s.undoStack.push({ patch, description });
+      s.undoStack.push({ id: newHistoryEntryId(), patch, description });
       // Structural macros still carry full snapshots, so keep enforcing the
       // byte budget (a no-op for the now-common lightweight cell-diff case).
       capUndoStack(s.undoStack, {

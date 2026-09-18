@@ -32,19 +32,15 @@ export const useStore = create<AppState>()(
     const persisted = loadPersistedState()
     const seeded = resolveInitialState(persisted)
 
-    // Wire AI function registry to push async results back into cells
-    engine.aiRegistry.setUpdateCallback((cellId, value) => {
+    // Wire AI function registry to push async results back into the owning sheet
+    engine.aiRegistry.setUpdateCallback((sheetId, cellId, value) => {
       setTimeout(() => {
-        const state = useStore.getState()
-        const sheet = state.workbook.sheets.find((s) => s.id === state.activeSheetId)
-        if (sheet && sheet.cells[cellId]) {
-          useStore.setState((s) => {
-            const sh = s.workbook.sheets.find((sh: SheetData) => sh.id === s.activeSheetId)
-            if (sh && sh.cells[cellId]) {
-              sh.cells[cellId].displayValue = value === null ? undefined : String(value)
-            }
-          })
-        }
+        useStore.setState((s) => {
+          const sh = s.workbook.sheets.find((sheet: SheetData) => sheet.id === sheetId)
+          if (sh && sh.cells[cellId]) {
+            sh.cells[cellId].displayValue = value === null ? undefined : String(value)
+          }
+        })
       }, 0)
     })
 

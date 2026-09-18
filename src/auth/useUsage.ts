@@ -36,15 +36,17 @@ function setStoredUsage(data: UsageData): void {
 /**
  * Core usage tracking logic, extracted to break the circular dependency between
  * useTrackedUsage and the final exported useUsage hook. This is not a hook.
+ * `dailyLimit` comes from the server when available so env overrides stay in sync.
  */
 function getUsageState(
   isPro: boolean,
   hasByok: boolean,
   isCheckingPro: boolean,
   usage: UsageData,
+  dailyLimit: number,
 ) {
-  const canAsk = isPro || isCheckingPro || usage.count < FREE_DAILY_LIMIT
-  const remaining = isPro || isCheckingPro ? Infinity : Math.max(0, FREE_DAILY_LIMIT - usage.count)
+  const canAsk = isPro || isCheckingPro || usage.count < dailyLimit
+  const remaining = isPro || isCheckingPro ? Infinity : Math.max(0, dailyLimit - usage.count)
   return { canAsk, remaining }
 }
 
@@ -83,6 +85,7 @@ function useTrackedUsage() {
   const { sessionClaims, getToken } = useAuth()
   const [usage, setUsage] = useState<UsageData>(getStoredUsage)
   const [serverIsPro, setServerIsPro] = useState<boolean | null>(null)
+  const [serverLimit, setServerLimit] = useState<number | null>(null)
   const fetchedRef = useRef(false)
 
   // BYOK users bypass limits — they're paying for their own tokens
@@ -119,6 +122,7 @@ function useTrackedUsage() {
             setServerIsPro(true)
           } else {
             setServerIsPro(false)
+            if (typeof data?.limit === 'number') setServerLimit(data.limit)
           }
         })
         .catch(() => setServerIsPro(false))
@@ -126,18 +130,19 @@ function useTrackedUsage() {
   }, [getToken, claimsPro, hasByok])
 
   const isPro = claimsPro || serverIsPro === true || hasByok
+  const dailyLimit = serverLimit ?? FREE_DAILY_LIMIT
 
   // While server check is in-flight (serverIsPro === null), don't gate the user.
   // This prevents the flash of "3 questions remaining" before the server responds.
   const isCheckingPro = !claimsPro && !hasByok && serverIsPro === null
-  const { canAsk, remaining } = getUsageState(isPro, hasByok, isCheckingPro, usage)
+  const { canAsk, remaining } = getUsageState(isPro, hasByok, isCheckingPro, usage, dailyLimit)
   const recordUsage = useCallback(() => createRecordUsage(isPro, hasByok, setUsage)(), [isPro, hasByok, setUsage])
 
   return {
     isPro,
     canAsk,
     remaining,
-    dailyLimit: FREE_DAILY_LIMIT,
+    dailyLimit,
     usedToday: usage.count,
     recordUsage,
   }

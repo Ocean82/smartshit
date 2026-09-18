@@ -28,7 +28,7 @@ import { computeSortedCellUpdates, computeMultiSortedCellUpdates, type SortPatch
 import { conditionToRule, attachConditionalRuleToColumn } from '@/lib/conditionalFormat'
 import { getActionRecorder } from '@/lib/actionRecorder'
 import { validateCell } from '@/lib/validation'
-import { capUndoStack, type HistoryEntry } from '@/lib/historyDiff'
+import { capUndoStack, newHistoryEntryId, type HistoryEntry } from '@/lib/historyDiff'
 import { mergeChartLayout } from '@/lib/chartLayout'
 import { toMergeRange, parseMergeRange, rangesOverlap, shiftMergesOnDelete, shiftMergesOnInsert, type MergeAxis } from '@/lib/merge'
 import { encodeCellBlock, parseGridClipboard } from '@/lib/clipboardCodec'
@@ -534,7 +534,8 @@ export function createWorkbookActions(
             (ref) => {
               const refPos = cellToRef(ref);
               return newState.engine.getComputedValue(newState.activeSheetId, refPos.row, refPos.col) || null;
-            }
+            },
+            newState.activeSheetId,
           );
         }
       },
@@ -1525,6 +1526,7 @@ export function createWorkbookActions(
             // undo() restore the exact prior document, including cells,
             // layout, and undo-able history.
             s.undoStack.push({
+              id: newHistoryEntryId(),
               patch: {
                 sheets: [],
                 activeSheetIdBefore: beforeSnapshot.activeSheetId,

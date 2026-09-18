@@ -2,6 +2,7 @@
  * Cell Store — Syncs workbook data from S3 (JSON) into the Postgres EAV table.
  * Provides SQL query tools for the AI agent to access real spreadsheet data.
  */
+import { createHash } from 'node:crypto'
 import { query } from './db.js'
 
 export interface CellRow {
@@ -20,17 +21,35 @@ export interface SheetMeta {
   headers: string[]
 }
 
+type SyncSheet = {
+  name: string
+  cells: Record<string, { value?: string | number | boolean | null; formula?: string }>
+}
+
+/** Content hash for skip-if-unchanged against cell_sync.version_hash. */
+export function hashWorkbookSheets(sheets: SyncSheet[]): string {
+  return createHash('sha256').update(JSON.stringify(sheets)).digest('hex')
+}
+
 /**
  * Sync a workbook's cell data into Postgres.
- * Called after upload/save. Replaces all cells for the workbook.
+ * Called after upload/save. Replaces all cells for the workbook unless the
+ * content hash matches the last sync (avoids full EAV rewrites on every autosave).
  */
 export async function syncWorkbookCells(
   workbookId: string,
-  sheets: Array<{
-    name: string
-    cells: Record<string, { value?: string | number | boolean | null; formula?: string }>
-  }>,
-): Promise<{ cellCount: number }> {
+  sheets: SyncSheet[],
+): Promise<{ cellCount: number; skipped?: boolean }> {
+  const versionHash = hashWorkbookSheets(sheets)
+
+  const prior = await query<{ version_hash: string | null; cell_count: number | null }>(
+    `SELECT version_hash, cell_count FROM smartsht.cell_sync WHERE workbook_id = $1`,
+    [workbookId],
+  )
+  if (prior.rows[0]?.version_hash === versionHash) {
+    return { cellCount: prior.rows[0].cell_count ?? 0, skipped: true }
+  }
+
   // Clear existing cells for this workbook
   await query('DELETE FROM smartsht.cells WHERE workbook_id = $1', [workbookId])
   await query('DELETE FROM smartsht.sheet_meta WHERE workbook_id = $1', [workbookId])
@@ -117,13 +136,13 @@ export async function syncWorkbookCells(
     )
   }
 
-  // Update sync status
+  // Update sync status including content hash for the next skip check
   await query(
-    `INSERT INTO smartsht.cell_sync (workbook_id, last_synced_at, cell_count)
-     VALUES ($1, NOW(), $2)
+    `INSERT INTO smartsht.cell_sync (workbook_id, last_synced_at, cell_count, version_hash)
+     VALUES ($1, NOW(), $2, $3)
      ON CONFLICT (workbook_id)
-     DO UPDATE SET last_synced_at = NOW(), cell_count = EXCLUDED.cell_count`,
-    [workbookId, totalCells],
+     DO UPDATE SET last_synced_at = NOW(), cell_count = EXCLUDED.cell_count, version_hash = EXCLUDED.version_hash`,
+    [workbookId, totalCells, versionHash],
   )
 
   return { cellCount: totalCells }

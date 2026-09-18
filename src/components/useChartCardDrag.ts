@@ -27,7 +27,7 @@ function releasePointerIfCaptured(e: React.PointerEvent<HTMLDivElement>): void {
 }
 
 export function useChartCardDrag({ chartId, position, bounds }: UseChartCardDragArgs) {
-  const { updateChartPosition } = useStore()
+  const updateChartPosition = useStore((s) => s.updateChartPosition)
   const box = clampChartBox(
     { x: position.x, y: position.y, width: position.width, height: position.height },
     bounds,

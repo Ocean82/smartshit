@@ -39,8 +39,9 @@ describe('macro undo via diffWorkbooks (cell-only change)', () => {
   })
 
   it('is far smaller than the old two-full-clone entry', () => {
-    const diffEntry = { patch: diffWorkbooks(before, after), description: 'Macro: edit' }
+    const diffEntry = { id: 'd1', patch: diffWorkbooks(before, after), description: 'Macro: edit' }
     const oldStyle = {
+      id: 'old',
       patch: {
         sheets: [], activeSheetIdBefore: 's1', activeSheetIdAfter: 's1',
         structuralBefore: before, structuralAfter: after,
@@ -52,7 +53,7 @@ describe('macro undo via diffWorkbooks (cell-only change)', () => {
 
   it('round-trips through undo then redo', () => {
     const patch = diffWorkbooks(before, after)
-    const entry = { patch, description: 'Macro: edit' }
+    const entry = { id: 'e1', patch, description: 'Macro: edit' }
 
     // Undo: from the after-state back to before.
     const undone = applyUndo(after, entry)
@@ -79,7 +80,7 @@ describe('macro undo via diffWorkbooks (structural change)', () => {
     expect(patch.structuralAfter).toBeDefined()
 
     // And undo still restores the exact prior document.
-    const undone = applyUndo(after, { patch, description: 'Macro: add sheet' })
+    const undone = applyUndo(after, { id: 's1', patch, description: 'Macro: add sheet' })
     expect(undone.sheets).toHaveLength(2)
   })
 })

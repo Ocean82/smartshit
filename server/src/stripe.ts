@@ -80,22 +80,26 @@ export function verifyWebhookSignature(
     throw new Error('Missing stripe-signature header')
   }
 
-  // Parse the signature header: t=timestamp,v1=signature
+  // Parse the signature header: t=timestamp,v1=signature[,v1=...]
+  // Stripe sends multiple v1= values during signing-secret rotation — accept any.
   const elements = signatureHeader.split(',')
   const timestampStr = elements.find((e) => e.startsWith('t='))?.slice(2)
-  const signature = elements.find((e) => e.startsWith('v1='))?.slice(3)
+  const signatures = elements
+    .filter((e) => e.startsWith('v1='))
+    .map((e) => e.slice(3))
+    .filter(Boolean)
 
-  if (!timestampStr || !signature) {
+  if (!timestampStr || signatures.length === 0) {
     throw new Error('Invalid stripe-signature header format')
   }
 
   const timestamp = parseInt(timestampStr, 10)
 
-  // Reject if timestamp is older than 5 minutes (replay protection)
+  // Reject if timestamp is outside ±5 minutes (replay + clock-skew / future stamps)
   const tolerance = 300 // 5 minutes
   const now = Math.floor(Date.now() / 1000)
-  if (now - timestamp > tolerance) {
-    throw new Error('Webhook timestamp too old — possible replay attack')
+  if (Math.abs(now - timestamp) > tolerance) {
+    throw new Error('Webhook timestamp outside tolerance — possible replay attack')
   }
 
   // Compute expected signature
@@ -106,11 +110,16 @@ export function verifyWebhookSignature(
     .update(signedPayload, 'utf8')
     .digest('hex')
 
-  // Timing-safe comparison
-  const sigBuffer = Buffer.from(signature, 'hex')
   const expectedBuffer = Buffer.from(expectedSignature, 'hex')
+  const matched = signatures.some((signature) => {
+    const sigBuffer = Buffer.from(signature, 'hex')
+    return (
+      sigBuffer.length === expectedBuffer.length &&
+      crypto.timingSafeEqual(sigBuffer, expectedBuffer)
+    )
+  })
 
-  if (sigBuffer.length !== expectedBuffer.length || !crypto.timingSafeEqual(sigBuffer, expectedBuffer)) {
+  if (!matched) {
     throw new Error('Webhook signature verification failed')
   }
 

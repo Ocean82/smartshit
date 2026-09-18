@@ -92,7 +92,6 @@ async function executeScript(call: ParsedToolCall, ctx: ExecutionContext): Promi
   }
 
   const description = String(params.description ?? 'Script execution')
-  ctx.pushHistory(description)
 
   try {
     const result = await runScript(code, {
@@ -104,6 +103,10 @@ async function executeScript(call: ParsedToolCall, ctx: ExecutionContext): Promi
       recordTelemetry('sandboxErrors', result.error)
       return { success: false, message: result.error, modified: 0 }
     }
+
+    // Push history only after the script succeeds — a failed run must not leave
+    // a no-op undo entry. Capture before applying mutations.
+    ctx.pushHistory(description)
 
     // Apply collected mutations
     const cellCount = Object.keys(result.cellUpdates).length

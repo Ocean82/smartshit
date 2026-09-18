@@ -1,5 +1,5 @@
 import { Router, type Request, type Response } from 'express'
-import { query } from '../db.js'
+import { query, getPool } from '../db.js'
 import { uploadWorkbook, downloadObject, deleteObject } from '../s3.js'
 import { config } from '../config.js'
 import { getRequestUserId } from '../auth/clerk.js'
@@ -229,8 +229,12 @@ async function insertWorkbookRow(
   return insertResult.rows[0].id
 }
 
-async function nextWorkbookVersionNumber(workbookId: string): Promise<number> {
-  const versionResult = await query<{ max_version: number | null }>(
+async function nextWorkbookVersionNumber(
+  workbookId: string,
+  client: { query: typeof query },
+): Promise<number> {
+  // Caller must hold a transaction with FOR UPDATE on the workbook row.
+  const versionResult = await client.query<{ max_version: number | null }>(
     `SELECT MAX(version_number) as max_version FROM smartsht.workbook_versions WHERE workbook_id = $1`,
     [workbookId],
   )
@@ -240,27 +244,45 @@ async function nextWorkbookVersionNumber(workbookId: string): Promise<number> {
 /**
  * Upload a versioned copy and insert the matching workbook_versions row.
  * Shared by create (v001) and save (vNNN).
+ * Serializes allocation with FOR UPDATE so concurrent tabs can't collide.
  */
 async function writeWorkbookVersion(
   userId: string,
   workbookId: string,
   data: string,
-  versionNumber: number,
   sizeBytes: number,
   description: string,
-): Promise<void> {
-  const versionUpload = await uploadWorkbook(
-    userId,
-    workbookId,
-    workbookVersionFilename(versionNumber),
-    data,
-  )
+): Promise<number> {
+  const pool = getPool()
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    await client.query(
+      `SELECT id FROM smartsht.workbooks WHERE id = $1 FOR UPDATE`,
+      [workbookId],
+    )
+    const versionNumber = await nextWorkbookVersionNumber(workbookId, client)
 
-  await query(
-    `INSERT INTO smartsht.workbook_versions (workbook_id, version_number, s3_key, size_bytes, description)
-     VALUES ($1, $2, $3, $4, $5)`,
-    [workbookId, versionNumber, versionUpload.key, sizeBytes, description],
-  )
+    const versionUpload = await uploadWorkbook(
+      userId,
+      workbookId,
+      workbookVersionFilename(versionNumber),
+      data,
+    )
+
+    await client.query(
+      `INSERT INTO smartsht.workbook_versions (workbook_id, version_number, s3_key, size_bytes, description)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [workbookId, versionNumber, versionUpload.key, sizeBytes, description],
+    )
+    await client.query('COMMIT')
+    return versionNumber
+  } catch (err) {
+    await client.query('ROLLBACK')
+    throw err
+  } finally {
+    client.release()
+  }
 }
 
 async function uploadLatestWorkbook(
@@ -318,13 +340,13 @@ async function persistNewWorkbook(
     [key, sizeBytes, workbookId],
   )
 
-  await writeWorkbookVersion(userId, workbookId, payload.data, 1, sizeBytes, 'Initial save')
+  const version = await writeWorkbookVersion(userId, workbookId, payload.data, sizeBytes, 'Initial save')
 
   return {
     id: workbookId,
     s3Key: key,
     sizeBytes,
-    version: 1,
+    version,
   }
 }
 
@@ -334,9 +356,7 @@ async function persistWorkbookUpdate(
   payload: SaveWorkbookPayload,
 ): Promise<SavedWorkbook> {
   const { key, sizeBytes } = await uploadLatestWorkbook(userId, workbookId, payload.data)
-  const nextVersion = await nextWorkbookVersionNumber(workbookId)
-
-  await writeWorkbookVersion(userId, workbookId, payload.data, nextVersion, sizeBytes, 'Auto-save')
+  const nextVersion = await writeWorkbookVersion(userId, workbookId, payload.data, sizeBytes, 'Auto-save')
   void pruneOldVersions(workbookId)
 
   const update = buildWorkbookUpdateQuery(key, sizeBytes, workbookId, {
