@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { useStore } from '@/store/useStore'
+import { useShallow } from 'zustand/react/shallow'
 import { colToLetter, refToCell } from '@/engine/spreadsheet'
 import type { ConditionalFormatCondition } from '@/lib/conditionalFormat'
 import { PRESET_COLOR_SCALES } from '@/lib/colorScale'
@@ -16,7 +17,14 @@ interface Props {
 type RuleCategory = 'highlight' | 'dataBar' | 'colorScale' | 'iconSet'
 
 export function ConditionalFormatDialog({ isOpen, onClose }: Props) {
-  const { selection, applyConditionalFormat, getActiveSheet, setCellFormat } = useStore()
+  const { selection, applyConditionalFormat, getActiveSheet, setCellFormat } = useStore(
+    useShallow((s) => ({
+      selection: s.selection,
+      applyConditionalFormat: s.applyConditionalFormat,
+      getActiveSheet: s.getActiveSheet,
+      setCellFormat: s.setCellFormat,
+    })),
+  )
   const [category, setCategory] = useState<RuleCategory>('highlight')
   const [condition, setCondition] = useState<ConditionalFormatCondition>('negative')
   const [threshold, setThreshold] = useState('0')

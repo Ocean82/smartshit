@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useStore } from '@/store/useStore';
+import { useShallow } from 'zustand/react/shallow';
 import { X, BarChart3, LineChart, PieChart, TrendingUp } from 'lucide-react';
 import { v4 as uuid } from 'uuid';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
@@ -22,7 +23,14 @@ const trendTypes: { value: TrendLineConfig['type']; label: string }[] = [
 ];
 
 export function ChartDialog() {
-  const { showChartDialog, setShowChartDialog, addChart, selection } = useStore();
+  const { showChartDialog, setShowChartDialog, addChart, selection } = useStore(
+    useShallow((s) => ({
+      showChartDialog: s.showChartDialog,
+      setShowChartDialog: s.setShowChartDialog,
+      addChart: s.addChart,
+      selection: s.selection,
+    })),
+  );
   const [selectedType, setSelectedType] = useState<ChartConfig['type']>('bar');
   const [title, setTitle] = useState('My Chart');
   const [enableTrend, setEnableTrend] = useState(false);

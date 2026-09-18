@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { useStore } from '@/store/useStore';
+import { useShallow } from 'zustand/react/shallow';
 import type { DataValidation } from '@/types';
 import { refToCell } from '@/engine/spreadsheet';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
@@ -11,8 +12,13 @@ interface Props {
 }
 
 export function ValidationDialog({ isOpen, onClose }: Props) {
-  const { selection, getActiveSheet, setCellValidation } = useStore();
-  const sheet = getActiveSheet();
+  const { selection, sheet, setCellValidation } = useStore(
+    useShallow((s) => ({
+      selection: s.selection,
+      sheet: s.getActiveSheet(),
+      setCellValidation: s.setCellValidation,
+    })),
+  );
   const cellId = selection ? refToCell(selection.startRow, selection.startCol) : null;
   const existing = cellId ? sheet.cells[cellId]?.validation : undefined;
 

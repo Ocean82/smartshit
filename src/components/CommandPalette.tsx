@@ -4,6 +4,7 @@ import {
   Paintbrush, Download, Undo2, Redo2, FileJson, X,
 } from 'lucide-react'
 import { useStore } from '@/store/useStore'
+import { useShallow } from 'zustand/react/shallow'
 import { getPopularTemplates } from '@/data/templates'
 import { exportWorkbookToXlsx, exportSheetToCsv } from '@/io/xlsx'
 import { hasTemplateSpec } from '@/templates'
@@ -47,7 +48,18 @@ export function CommandPalette({
     runTemplateTool,
     workbook,
     getActiveSheet,
-  } = useStore()
+  } = useStore(
+    useShallow((s) => ({
+      setShowChartDialog: s.setShowChartDialog,
+      setShowPivotDialog: s.setShowPivotDialog,
+      setShowConditionalFormatDialog: s.setShowConditionalFormatDialog,
+      undo: s.undo,
+      redo: s.redo,
+      runTemplateTool: s.runTemplateTool,
+      workbook: s.workbook,
+      getActiveSheet: s.getActiveSheet,
+    })),
+  )
 
   const commands = useMemo((): PaletteCommand[] => {
     const popular = getPopularTemplates()

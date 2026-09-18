@@ -8,6 +8,7 @@
 
 import { useMemo } from 'react'
 import { useStore } from '@/store/useStore'
+import { useShallow } from 'zustand/react/shallow'
 import { computeSheetInsights } from '@/ai/sheetInsights'
 import { buildSheetProfile } from '@/ai/sheetProfile'
 import { TrendingUp, TrendingDown, PiggyBank, AlertTriangle, BarChart3 } from 'lucide-react'
@@ -26,8 +27,12 @@ function formatCurrency(n: number): string {
 }
 
 export function InsightsPanelContent() {
-  const { getActiveSheet, getComputedValue } = useStore()
-  const sheet = getActiveSheet()
+  const { sheet, getComputedValue } = useStore(
+    useShallow((s) => ({
+      sheet: s.getActiveSheet(),
+      getComputedValue: s.getComputedValue,
+    })),
+  )
 
   const insights = useMemo(() => {
     return computeSheetInsights(sheet, getComputedValue)

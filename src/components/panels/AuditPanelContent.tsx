@@ -5,6 +5,7 @@
 
 import { useState, useCallback, useEffect } from 'react'
 import { useStore } from '@/store/useStore'
+import { useShallow } from 'zustand/react/shallow'
 import { runAudit, getFixAbortReason } from '@/auditor'
 import { loadCustomRules } from '@/auditor/customRules'
 import type { AuditResult, AuditFinding, Severity } from '@/auditor/types'
@@ -19,7 +20,13 @@ const SEVERITY_FILTERS = ['all', 'critical', 'high', 'medium', 'low', 'info'] as
 type FilterValue = (typeof SEVERITY_FILTERS)[number]
 
 export function AuditPanelContent() {
-  const { workbook, activeSheetId, getComputedValue } = useStore()
+  const { workbook, activeSheetId, getComputedValue } = useStore(
+    useShallow((s) => ({
+      workbook: s.workbook,
+      activeSheetId: s.activeSheetId,
+      getComputedValue: s.getComputedValue,
+    })),
+  )
   const { isPro } = useUsage()
   const [result, setResult] = useState<AuditResult | null>(null)
   const [loading, setLoading] = useState(false)

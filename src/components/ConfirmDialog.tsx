@@ -4,7 +4,9 @@ import { AlertTriangle } from 'lucide-react';
 import './ConfirmDialog.css';
 
 export function ConfirmDialog() {
-  const { confirmDialog, dismissConfirm } = useStore();
+  // Always mounted — only re-render when the confirm dialog opens/closes.
+  const confirmDialog = useStore((s) => s.confirmDialog);
+  const dismissConfirm = useStore((s) => s.dismissConfirm);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const confirmBtnRef = useRef<HTMLButtonElement>(null);
   const cancelBtnRef = useRef<HTMLButtonElement>(null);

@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import type { KeyboardEvent } from 'react'
 import { useStore } from '@/store/useStore'
+import { useShallow } from 'zustand/react/shallow'
 import { useFocusTrap } from '@/hooks/useFocusTrap'
 import { cellToRef } from '@/engine/spreadsheet'
 import { Search, Replace, X, ArrowDown, ArrowUp } from 'lucide-react'
@@ -18,7 +19,15 @@ interface MatchResult {
 }
 
 export function FindReplaceDialog({ isOpen, onClose }: Props) {
-  const { getActiveSheet, getComputedValue, setCellValue, pushHistory, setSelection } = useStore()
+  const { getActiveSheet, getComputedValue, setCellValue, pushHistory, setSelection } = useStore(
+    useShallow((s) => ({
+      getActiveSheet: s.getActiveSheet,
+      getComputedValue: s.getComputedValue,
+      setCellValue: s.setCellValue,
+      pushHistory: s.pushHistory,
+      setSelection: s.setSelection,
+    })),
+  )
   const [findText, setFindText] = useState('')
   const [replaceText, setReplaceText] = useState('')
   const [showReplace, setShowReplace] = useState(false)

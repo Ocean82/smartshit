@@ -15,6 +15,7 @@
  */
 import { useMemo } from 'react';
 import { useStore } from '@/store/useStore';
+import { useShallow } from 'zustand/react/shallow';
 import type { Selection } from '@/types';
 import { getRowHeight } from '@/lib/rowLayout';
 import { splitRectAcrossFreeze, type ContentRect } from '@/lib/gridFreeze';
@@ -118,7 +119,13 @@ export function SelectionOverlay({
   viewportHeight = 600,
   viewportWidth = 800,
 }: SelectionOverlayProps) {
-  const { selection, additionalSelections, copiedRange } = useStore();
+  const { selection, additionalSelections, copiedRange } = useStore(
+    useShallow((s) => ({
+      selection: s.selection,
+      additionalSelections: s.additionalSelections,
+      copiedRange: s.copiedRange,
+    })),
+  );
   const hasFreeze = frozenRowHeight > 0 || frozenColWidth > 0;
 
   const selectionRects = useMemo(() => {

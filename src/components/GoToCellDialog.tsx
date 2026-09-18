@@ -16,7 +16,8 @@ interface GoToCellDialogProps {
 }
 
 export function GoToCellDialog({ open, onClose }: GoToCellDialogProps) {
-  const { setSelection } = useStore();
+  // Single stable action ref — plain selector, no re-render on unrelated state.
+  const setSelection = useStore((s) => s.setSelection);
   const [value, setValue] = useState('');
   const [error, setError] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);

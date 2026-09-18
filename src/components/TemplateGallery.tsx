@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react'
 import { useStore } from '@/store/useStore'
+import { useShallow } from 'zustand/react/shallow'
 import { LayoutTemplate, X, Search, ChevronRight, Upload, Download, Star, Globe, Loader2, Send } from 'lucide-react'
 import { templates, templateCategories, getPopularTemplates, searchTemplates, type TemplateCategory } from '@/data/templates'
 import { hasTemplateSpec } from '@/templates'
@@ -28,7 +29,13 @@ interface TemplateGalleryProps {
 }
 
 export function TemplateGallery({ open, onClose }: TemplateGalleryProps) {
-  const { setChatInput, sendMessage, runTemplateTool } = useStore()
+  const { setChatInput, sendMessage, runTemplateTool } = useStore(
+    useShallow((s) => ({
+      setChatInput: s.setChatInput,
+      sendMessage: s.sendMessage,
+      runTemplateTool: s.runTemplateTool,
+    })),
+  )
   const [searchQuery, setSearchQuery] = useState('')
   const [activeCategory, setActiveCategory] = useState<TemplateCategory | 'Popular' | 'All' | 'Community' | 'Marketplace'>('Popular')
   const [communityTemplates, setCommunityTemplates] = useState<CommunityTemplate[]>(loadCommunityTemplates)

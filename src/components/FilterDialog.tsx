@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { useStore } from '@/store/useStore'
+import { useShallow } from 'zustand/react/shallow'
 import { colToLetter } from '@/engine/spreadsheet'
 import type { FilterConditionType } from '@/lib/rowFilter'
 import { useFocusTrap } from '@/hooks/useFocusTrap'
@@ -31,7 +32,13 @@ function conditionLabel(condition: string | undefined): string {
 }
 
 export function FilterDialog({ isOpen, onClose }: Props) {
-  const { selection, activeFilters, setFilters } = useStore()
+  const { selection, activeFilters, setFilters } = useStore(
+    useShallow((s) => ({
+      selection: s.selection,
+      activeFilters: s.activeFilters,
+      setFilters: s.setFilters,
+    })),
+  )
   const [condition, setCondition] = useState<FilterConditionType>('equals')
   const [value, setValue] = useState('')
   const [value2, setValue2] = useState('')

@@ -10,13 +10,23 @@
 
 import { useMemo } from 'react'
 import { useStore } from '@/store/useStore'
+import { useShallow } from 'zustand/react/shallow'
 import { cellToRef, refToCell, colToLetter, letterToCol } from '@/engine/spreadsheet'
 import { explainFormula, describeCellValue } from '@/lib/formulaExplainer'
 import { ArrowDownRight, ArrowUpLeft, Hash, Type, Search } from 'lucide-react'
 
 export function InspectorPanelContent() {
-  const { selection, getActiveSheet, getComputedValue, setSelection, setChatInput, sendMessage, setActivePanel } = useStore()
-  const sheet = getActiveSheet()
+  const { selection, sheet, getComputedValue, setSelection, setChatInput, sendMessage, setActivePanel } = useStore(
+    useShallow((s) => ({
+      selection: s.selection,
+      sheet: s.getActiveSheet(),
+      getComputedValue: s.getComputedValue,
+      setSelection: s.setSelection,
+      setChatInput: s.setChatInput,
+      sendMessage: s.sendMessage,
+      setActivePanel: s.setActivePanel,
+    })),
+  )
 
   // Get the selected cell info
   const cellInfo = useMemo(() => {

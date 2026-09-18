@@ -9,6 +9,7 @@ import {
   type CloudWorkbook,
 } from '@/lib/cloudSync'
 import { useStore } from '@/store/useStore'
+import { useShallow } from 'zustand/react/shallow'
 import { useFocusTrap } from '@/hooks/useFocusTrap'
 import { workbookHasContent } from '@/lib/workbookGuard'
 
@@ -18,7 +19,13 @@ interface WorkbookPickerProps {
 }
 
 export function WorkbookPicker({ open, onClose }: WorkbookPickerProps) {
-  const { workbook, showConfirm, showToast } = useStore()
+  const { workbook, showConfirm, showToast } = useStore(
+    useShallow((s) => ({
+      workbook: s.workbook,
+      showConfirm: s.showConfirm,
+      showToast: s.showToast,
+    })),
+  )
   const [workbooks, setWorkbooks] = useState<CloudWorkbook[]>([])
   const [loading, setLoading] = useState(false)
   const [actionId, setActionId] = useState<string | null>(null)

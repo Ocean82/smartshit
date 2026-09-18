@@ -1,4 +1,5 @@
 import { useStore } from '@/store/useStore';
+import { useShallow } from 'zustand/react/shallow';
 import { X, Move } from 'lucide-react';
 import React, { useMemo, useRef, useState, useLayoutEffect } from 'react';
 import { getChartOverlayBounds, type ChartBounds } from '@/lib/chartLayout';
@@ -44,8 +45,9 @@ function renderChart(type: string, props: ChartProps): React.ReactNode {
 // ─── Overlay Entry Point ──────────────────────────────────────────────────────
 
 export function ChartOverlay() {
-  const { getActiveSheet, removeChart } = useStore();
-  const sheet = getActiveSheet();
+  const { sheet, removeChart } = useStore(
+    useShallow((s) => ({ sheet: s.getActiveSheet(), removeChart: s.removeChart })),
+  );
   const wrapRef = useRef<HTMLDivElement>(null);
   const [bounds, setBounds] = useState<ChartBounds>(() => getChartOverlayBounds());
 
@@ -120,8 +122,9 @@ function ChartSeriesLegend({ series }: { series: SeriesData[] }) {
 }
 
 function ChartCard({ chart, onRemove, bounds }: { chart: ChartConfig; onRemove: () => void; bounds: ChartBounds }) {
-  const { getActiveSheet, getComputedValue } = useStore();
-  const sheet = getActiveSheet();
+  const { sheet, getComputedValue } = useStore(
+    useShallow((s) => ({ sheet: s.getActiveSheet(), getComputedValue: s.getComputedValue })),
+  );
   const { box, pos, handlePointerDown, handlePointerMove, endDrag } = useChartCardDrag({
     chartId: chart.id,
     position: chart.position,

@@ -1,5 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { useStore } from '@/store/useStore';
+import { useShallow } from 'zustand/react/shallow';
 import { refToCell } from '@/engine/spreadsheet';
 import { NUMBER_FORMATS, NUMBER_FORMAT_GROUPS } from '@/lib/formatUtils';
 import { FULL_COLORS as COLORS } from '@/data/colors';
@@ -19,8 +20,17 @@ const FONT_SIZES = [10, 11, 12, 13, 14, 16, 18, 20, 24, 28, 32, 36];
 const FONT_FAMILIES = ['System', 'Arial', 'Calibri', 'Times New Roman', 'Georgia', 'Courier New', 'Verdana', 'Tahoma', 'Trebuchet MS', 'Comic Sans MS'];
 
 export function FormatPanel() {
-  const { showFormatPanel, setShowFormatPanel, selection, getActiveSheet, setRangeFormat, applyOuterBorders, clearRangeFormat } = useStore();
-  const sheet = getActiveSheet();
+  const { showFormatPanel, setShowFormatPanel, selection, sheet, setRangeFormat, applyOuterBorders, clearRangeFormat } = useStore(
+    useShallow((s) => ({
+      showFormatPanel: s.showFormatPanel,
+      setShowFormatPanel: s.setShowFormatPanel,
+      selection: s.selection,
+      sheet: s.getActiveSheet(),
+      setRangeFormat: s.setRangeFormat,
+      applyOuterBorders: s.applyOuterBorders,
+      clearRangeFormat: s.clearRangeFormat,
+    })),
+  );
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [borderStyle, setBorderStyle] = useState('1px solid');
   const [borderColor, setBorderColor] = useState('#000000');

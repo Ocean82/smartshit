@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { X } from 'lucide-react';
 import { useStore } from '@/store/useStore';
+import { useShallow } from 'zustand/react/shallow';
 import { colToLetter, refToCell } from '@/engine/spreadsheet';
 import type { PivotConfig, PivotField } from '@/types';
 import {
@@ -18,8 +19,13 @@ interface Props {
 }
 
 export function PivotDialog({ isOpen, onClose }: Props) {
-  const { selection, getActiveSheet, engine } = useStore();
-  const sheet = getActiveSheet();
+  const { selection, sheet, engine } = useStore(
+    useShallow((s) => ({
+      selection: s.selection,
+      sheet: s.getActiveSheet(),
+      engine: s.engine,
+    })),
+  );
 
   const columns = useMemo(() => {
     if (!selection) return [];

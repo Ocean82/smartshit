@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useStore } from '@/store/useStore'
+import { useShallow } from 'zustand/react/shallow'
 import {
   listVersions,
   loadVersion,
@@ -31,7 +32,15 @@ interface PreviewState {
 }
 
 export function VersionHistoryPanel() {
-  const { showVersionHistory, setShowVersionHistory, loadWorkbookData, showConfirm, showToast } = useStore()
+  const { showVersionHistory, setShowVersionHistory, loadWorkbookData, showConfirm, showToast } = useStore(
+    useShallow((s) => ({
+      showVersionHistory: s.showVersionHistory,
+      setShowVersionHistory: s.setShowVersionHistory,
+      loadWorkbookData: s.loadWorkbookData,
+      showConfirm: s.showConfirm,
+      showToast: s.showToast,
+    })),
+  )
   const { isPro } = useUsage()
   const [versions, setVersions] = useState<VersionEntry[]>([])
   const [loading, setLoading] = useState(false)

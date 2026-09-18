@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useStore } from '@/store/useStore';
+import { useShallow } from 'zustand/react/shallow';
 import {
   File, Folder, FolderPlus, FilePlus, Trash2, Edit3,
   ChevronRight, ChevronDown, X,
@@ -17,7 +18,20 @@ export function FileExplorer() {
     renameFile,
     openFile,
     showConfirm,
-  } = useStore();
+  } = useStore(
+    useShallow((s) => ({
+      files: s.files,
+      activeFileId: s.activeFileId,
+      showFileExplorer: s.showFileExplorer,
+      toggleFileExplorer: s.toggleFileExplorer,
+      createFile: s.createFile,
+      createFolder: s.createFolder,
+      deleteFile: s.deleteFile,
+      renameFile: s.renameFile,
+      openFile: s.openFile,
+      showConfirm: s.showConfirm,
+    })),
+  );
 
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
   const [renamingId, setRenamingId] = useState<string | null>(null);
