@@ -739,9 +739,14 @@ app.post('/api/chat/stream', requireAuth, chatRateLimiter, validateBody(chatStre
     reqAbort.abort()
   })
 
-  // Separate signal for LLM — timeout-based only, not tied to req close race condition
+  // LLM has its own 90s cap, but must ALSO stop when the client disconnects or
+  // the 120s hard timeout fires — otherwise a closed tab keeps the provider
+  // stream (and token spend) running for up to 90s. Compose both signals so the
+  // call is aborted by whichever fires first. The res.writableEnded guards below
+  // already handle the close race the provider stream could lose.
   const llmAbort = new AbortController()
   const llmTimeout = setTimeout(() => llmAbort.abort(), 90_000)
+  const llmSignal = AbortSignal.any([llmAbort.signal, reqAbort.signal])
 
   try {
     const result = await runLlmChat({
@@ -757,7 +762,7 @@ app.post('/api/chat/stream', requireAuth, chatRateLimiter, validateBody(chatStre
           res.write(`data: ${JSON.stringify({ type: 'token', content: chunk })}\n\n`)
         }
       },
-      signal: llmAbort.signal,
+      signal: llmSignal,
     })
 
     clearTimeout(llmTimeout)
