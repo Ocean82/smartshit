@@ -299,16 +299,24 @@ function cellsEqual(a: CellData, b: CellData): boolean {
 }
 
 /**
- * Estimate the memory size of a history entry in bytes (rough).
- * Useful for adaptive stack size limits.
+ * Estimate the memory footprint of a history entry in bytes (rough, but good
+ * enough to drive the undo-stack byte budget). JSON length approximates the
+ * retained size of the plain-JSON cell/workbook data; ×2 accounts for JS string
+ * storage being ~2 bytes/char.
  */
 export function estimatePatchSize(entry: HistoryEntry): number {
-  if (entry.patch.structuralBefore) {
-    // Structural patches store full snapshots — estimate via JSON length
-    return JSON.stringify(entry.patch.structuralBefore).length * 2
+  const { patch } = entry
+  // Structural patches store full workbook snapshots — the heavy entries. Count
+  // BOTH sides: a successful macro carries structuralBefore AND structuralAfter,
+  // so counting only `before` (the old behavior) undercounted macros by ~half.
+  if (patch.structuralBefore || patch.structuralAfter) {
+    let size = 0
+    if (patch.structuralBefore) size += JSON.stringify(patch.structuralBefore).length * 2
+    if (patch.structuralAfter) size += JSON.stringify(patch.structuralAfter).length * 2
+    return size + entry.description.length
   }
   let size = 0
-  for (const sp of entry.patch.sheets) {
+  for (const sp of patch.sheets) {
     for (const cp of sp.cells) {
       size += cp.cellId.length * 2
       if (cp.before) size += JSON.stringify(cp.before).length
@@ -316,4 +324,38 @@ export function estimatePatchSize(entry: HistoryEntry): number {
     }
   }
   return size + entry.description.length
+}
+
+/**
+ * Evict the OLDEST entries from an undo stack until it fits within both an
+ * entry-count ceiling and a total-byte budget, while never dropping below a
+ * minimum number of recent entries.
+ *
+ * Rationale: a plain count cap treats a 2-cell edit and a multi-megabyte
+ * macro snapshot (two full workbook clones) identically. For the advertised
+ * import sizes (5,000×200), a stack of 150 macro/restore entries could retain
+ * hundreds of MB. Budgeting by bytes bounds worst-case memory; the min-entries
+ * floor guarantees a usable undo depth even when every entry is large.
+ *
+ * Mutates `stack` in place (shift from the front) and returns it.
+ */
+export function capUndoStack(
+  stack: HistoryEntry[],
+  opts: { maxEntries: number; maxBytes: number; minEntries: number },
+): HistoryEntry[] {
+  const { maxEntries, maxBytes, minEntries } = opts
+
+  // Hard entry ceiling first (cheap, no size math).
+  while (stack.length > maxEntries) stack.shift()
+
+  // Then trim by bytes, but keep at least `minEntries` so undo stays useful
+  // even if the newest entries are individually huge.
+  if (stack.length <= minEntries) return stack
+  let total = 0
+  for (const entry of stack) total += estimatePatchSize(entry)
+  while (stack.length > minEntries && total > maxBytes) {
+    total -= estimatePatchSize(stack[0])
+    stack.shift()
+  }
+  return stack
 }

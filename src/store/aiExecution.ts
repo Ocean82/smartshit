@@ -19,10 +19,11 @@ import { analyzeBudget, budgetAnalysisToToolResult, savingsRecommendation } from
 import { parseUserIntent } from '@shared/intentParser'
 import { resolveActTemplates } from '@shared/actTemplates'
 import { buildActionPreview } from '@/lib/previewBuilders'
+import { capUndoStack } from '@/lib/historyDiff'
 import { exportSheetToCsv, exportWorkbookToXlsx } from '@/io/xlsx'
 import { exportWorkbookToJson } from '@/io/workbookJson'
 import { v4 as uuid } from 'uuid'
-import { MAX_UNDO_STACK, type AppState, type StoreGet, type StoreSet } from './storeTypes'
+import { MAX_UNDO_STACK, MAX_UNDO_STACK_BYTES, MIN_UNDO_STACK_ENTRIES, type AppState, type StoreGet, type StoreSet } from './storeTypes'
 
 // AI Command Processing (local fallback when server is unavailable)
 export function processAICommand(
@@ -376,7 +377,13 @@ export async function executeMacroAction(
         },
         description: label.startsWith('Macro:') ? label : `Macro: ${label}`,
       });
-      if (s.undoStack.length > MAX_UNDO_STACK) s.undoStack.shift();
+      // Macro entries carry two full workbook clones — the heaviest kind — so
+      // enforce the byte budget here, not just the entry count.
+      capUndoStack(s.undoStack, {
+        maxEntries: MAX_UNDO_STACK,
+        maxBytes: MAX_UNDO_STACK_BYTES,
+        minEntries: MIN_UNDO_STACK_ENTRIES,
+      });
       s.redoStack = [];
     });
 

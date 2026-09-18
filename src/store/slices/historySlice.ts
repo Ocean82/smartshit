@@ -7,10 +7,11 @@ import {
   diffWorkbooks,
   applyUndo,
   applyRedo,
+  capUndoStack,
   type HistoryEntry,
 } from '@/lib/historyDiff'
 import type { SpreadsheetEngine } from '@/engine/spreadsheet'
-import { MAX_UNDO_STACK } from '../storeTypes'
+import { MAX_UNDO_STACK, MAX_UNDO_STACK_BYTES, MIN_UNDO_STACK_ENTRIES } from '../storeTypes'
 
 export interface HistoryState {
   undoStack: HistoryEntry[]
@@ -84,6 +85,10 @@ export function createHistoryActions(
           },
           description: desc,
         })
+        // Cheap entry-count cap only. The provisional entry still holds a full
+        // structuralBefore snapshot here; byte-budget eviction runs in the
+        // microtask below once the patch is finalized to its real (usually tiny)
+        // size, so we don't over-evict based on the temporary snapshot.
         if (s.undoStack.length > MAX_UNDO_STACK) s.undoStack.shift()
         s.redoStack = []
       })
@@ -104,6 +109,12 @@ export function createHistoryActions(
           if (entry && entry.description === desc) {
             entry.patch = patch
           }
+          // Now that sizes are accurate, enforce the byte budget.
+          capUndoStack(s.undoStack, {
+            maxEntries: MAX_UNDO_STACK,
+            maxBytes: MAX_UNDO_STACK_BYTES,
+            minEntries: MIN_UNDO_STACK_ENTRIES,
+          })
         })
       })
     },

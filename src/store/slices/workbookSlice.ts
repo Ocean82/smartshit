@@ -28,7 +28,7 @@ import { computeSortedCellUpdates, computeMultiSortedCellUpdates, type SortPatch
 import { conditionToRule, attachConditionalRuleToColumn } from '@/lib/conditionalFormat'
 import { getActionRecorder } from '@/lib/actionRecorder'
 import { validateCell } from '@/lib/validation'
-import type { HistoryEntry } from '@/lib/historyDiff'
+import { capUndoStack, type HistoryEntry } from '@/lib/historyDiff'
 import { mergeChartLayout } from '@/lib/chartLayout'
 import { toMergeRange, parseMergeRange, rangesOverlap, shiftMergesOnDelete, shiftMergesOnInsert, type MergeAxis } from '@/lib/merge'
 import { encodeCellBlock, parseGridClipboard } from '@/lib/clipboardCodec'
@@ -48,7 +48,7 @@ import {
   shiftA1Range,
   shiftNamedRangesOnSheet,
 } from '@/lib/namedRanges'
-import { MAX_UNDO_STACK } from '../storeTypes'
+import { MAX_UNDO_STACK, MAX_UNDO_STACK_BYTES, MIN_UNDO_STACK_ENTRIES } from '../storeTypes'
 import { v4 as uuid } from 'uuid'
 
 /** Convert raw clipboard text into a typed value suitable for setCellValue. */
@@ -1533,7 +1533,12 @@ export function createWorkbookActions(
               },
               description: 'Restore version',
             });
-            if (s.undoStack.length > MAX_UNDO_STACK) s.undoStack.shift();
+            // Restore-version entries store a full workbook clone; cap by bytes.
+            capUndoStack(s.undoStack, {
+              maxEntries: MAX_UNDO_STACK,
+              maxBytes: MAX_UNDO_STACK_BYTES,
+              minEntries: MIN_UNDO_STACK_ENTRIES,
+            });
             s.redoStack = [];
           } else {
             s.undoStack = [];

@@ -28,8 +28,22 @@ import type { UIState, UIActions } from './slices/uiSlice'
 import type { FileActions } from './slices/fileSlice'
 import type { ChatActions } from './slices/chatSlice'
 
-/** Maximum undo stack depth — patches are lightweight */
+/** Hard ceiling on undo stack depth. Most entries are lightweight cell diffs. */
 export const MAX_UNDO_STACK = 150
+
+/**
+ * Total-byte budget for the undo stack. Structural/macro/restore entries store
+ * full workbook clones, so a 150-entry cap alone can retain hundreds of MB on
+ * large sheets. Beyond this budget the oldest entries are evicted first.
+ * ~64MB balances a deep history against memory pressure on big workbooks.
+ */
+export const MAX_UNDO_STACK_BYTES = 64 * 1024 * 1024
+
+/**
+ * Never evict below this many recent entries for the byte budget, so undo stays
+ * useful even when every retained entry is individually large.
+ */
+export const MIN_UNDO_STACK_ENTRIES = 10
 
 export interface AppState extends UIState, UIActions, FileActions, ChatActions {
   // Workbook
