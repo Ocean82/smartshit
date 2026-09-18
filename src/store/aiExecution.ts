@@ -19,7 +19,7 @@ import { analyzeBudget, budgetAnalysisToToolResult, savingsRecommendation } from
 import { parseUserIntent } from '@shared/intentParser'
 import { resolveActTemplates } from '@shared/actTemplates'
 import { buildActionPreview } from '@/lib/previewBuilders'
-import { capUndoStack } from '@/lib/historyDiff'
+import { capUndoStack, diffWorkbooks } from '@/lib/historyDiff'
 import { exportSheetToCsv, exportWorkbookToXlsx } from '@/io/xlsx'
 import { exportWorkbookToJson } from '@/io/workbookJson'
 import { v4 as uuid } from 'uuid'
@@ -365,20 +365,17 @@ export async function executeMacroAction(
   );
 
   if (result.success) {
-    const after = structuredClone(get().workbook);
+    // Diff before→after into a minimal patch instead of storing two full
+    // workbook clones. A macro that touches a few cells now costs a few cells
+    // of history, not 2× the whole workbook. diffWorkbooks still falls back to
+    // full structuralBefore/structuralAfter snapshots automatically when the
+    // macro changed sheet structure (add/remove/reorder), so undo stays exact.
+    const patch = diffWorkbooks(before, get().workbook);
+    const description = label.startsWith('Macro:') ? label : `Macro: ${label}`;
     set((s: AppState) => {
-      s.undoStack.push({
-        patch: {
-          sheets: [],
-          activeSheetIdBefore: before.activeSheetId,
-          activeSheetIdAfter: after.activeSheetId,
-          structuralBefore: before,
-          structuralAfter: after,
-        },
-        description: label.startsWith('Macro:') ? label : `Macro: ${label}`,
-      });
-      // Macro entries carry two full workbook clones — the heaviest kind — so
-      // enforce the byte budget here, not just the entry count.
+      s.undoStack.push({ patch, description });
+      // Structural macros still carry full snapshots, so keep enforcing the
+      // byte budget (a no-op for the now-common lightweight cell-diff case).
       capUndoStack(s.undoStack, {
         maxEntries: MAX_UNDO_STACK,
         maxBytes: MAX_UNDO_STACK_BYTES,
