@@ -301,7 +301,7 @@ interface ConfigWarning {
 export function requiresDbSsl(databaseUrl: string): boolean {
   if (process.env.NODE_ENV !== 'production') return false
 
-  let host = ''
+  let host: string
   try {
     host = new URL(databaseUrl).hostname.toLowerCase()
   } catch {
