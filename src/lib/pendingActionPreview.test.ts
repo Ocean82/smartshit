@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { findActivePendingPreview } from './pendingActionPreview'
-import type { ChatMessage } from '@/types'
+import { findActivePendingPreview, selectPendingPreviewAction } from './pendingActionPreview'
+import type { AgentAction, ChatMessage } from '@/types'
 
 describe('findActivePendingPreview', () => {
   it('returns null when no pending previews exist', () => {
@@ -92,5 +92,42 @@ describe('findActivePendingPreview', () => {
       ],
     }]
     expect(findActivePendingPreview(messages)?.action.id).toBe('pending')
+  })
+})
+
+describe('selectPendingPreviewAction', () => {
+  // The grid subscribes to this selector instead of the whole `messages` array
+  // so it can skip re-rendering on every streamed token. That only works if the
+  // returned reference is stable while a message streams — this pins that.
+  it('returns the same action reference when an unrelated message streams', () => {
+    const pending: AgentAction = {
+      id: 'p1',
+      tool: 'set_cell',
+      params: {},
+      description: 'Pending',
+      status: 'pending',
+      preview: { changes: [{ cell: 'A1', oldValue: 1, newValue: 2 }] },
+    }
+    const withPending: ChatMessage = {
+      id: 'm1', role: 'assistant', content: 'done', timestamp: 1, actions: [pending],
+    }
+    // A separate assistant message whose text grows token by token.
+    const streaming: ChatMessage = { id: 'm2', role: 'assistant', content: '', timestamp: 2 }
+
+    const before = selectPendingPreviewAction([withPending, { ...streaming, content: 'Hel' }])
+    const after = selectPendingPreviewAction([withPending, { ...streaming, content: 'Hello' }])
+
+    // Same action object → Object.is true → zustand skips the grid re-render.
+    expect(before).toBe(pending)
+    expect(after).toBe(pending)
+    expect(before).toBe(after)
+  })
+
+  it('returns null when the only pending action has no preview changes', () => {
+    const messages: ChatMessage[] = [{
+      id: 'm1', role: 'assistant', content: 'x', timestamp: 1,
+      actions: [{ id: 'a', tool: 'noop', params: {}, description: 'x', status: 'pending' }],
+    }]
+    expect(selectPendingPreviewAction(messages)).toBeNull()
   })
 })

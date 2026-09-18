@@ -9,7 +9,8 @@ import { SelectionOverlay } from '@/components/SelectionOverlay';
 import { getCheckboxToggleValue } from '@/lib/checkbox';
 import { findLastDataRow } from '@/lib/sheetSort';
 import { columnDataBarPeerValues, columnColorScalePeerValues, columnIconSetPeerValues } from '@/lib/conditionalFormat';
-import { findActivePendingPreview } from '@/lib/pendingActionPreview';
+import { selectPendingPreviewAction, buildPendingPreview } from '@/lib/pendingActionPreview';
+import type { AppState } from '@/store/storeTypes';
 import { getRowHeight, clampRowHeight } from '@/lib/rowLayout';
 import { clampColWidth, MIN_COL_WIDTH, MAX_COL_WIDTH } from '@/lib/colLayout';
 import { frozenRowStickyTop, splitRectAcrossFreeze } from '@/lib/gridFreeze';
@@ -489,6 +490,9 @@ function RowHeader({ row, height, isSelected, stickyZIndex = 10, unhideRows, onU
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
+/** Stable module-level selector so the grid subscribes to the pending action only. */
+const selectPendingPreviewActionFromState = (s: AppState) => selectPendingPreviewAction(s.messages)
+
 export function SpreadsheetGrid() {
   const {
     setCellValue,
@@ -497,7 +501,6 @@ export function SpreadsheetGrid() {
     getComputedValue,
     activeFilters,
     activeSortConfig,
-    messages,
     applyAction,
     rejectAction,
     showFindReplace,
@@ -507,10 +510,17 @@ export function SpreadsheetGrid() {
     showGridlines,
   } = useStore();
 
+  // Subscribe to the pending preview ACTION, not the whole `messages` array.
+  // A streaming chat reply mutates `messages` on every token, but the pending
+  // action's reference is stable across those tokens — so this selector's
+  // Object.is result only changes when the pending action actually changes,
+  // sparing the grid a full re-render per streamed token.
+  const pendingAction = useStore(selectPendingPreviewActionFromState);
+
   const sheet = getActiveSheet();
   const notesService = getCellNotesService();
 
-  const pendingPreview = useMemo(() => findActivePendingPreview(messages), [messages]);
+  const pendingPreview = useMemo(() => buildPendingPreview(pendingAction), [pendingAction]);
 
   // Conditional format caches
   const { dataBarPeersByCol, colorScalePeersByCol, iconSetPeersByCol } = useConditionalFormatPeers(sheet, getComputedValue);
