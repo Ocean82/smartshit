@@ -6,6 +6,8 @@
 import { describe, it, expect } from 'vitest'
 import { AIFunctionRegistry, type AIFunctionInfo } from './aiFunctions'
 
+const SHEET = 'sheet-1'
+
 function info(name: string): AIFunctionInfo {
   return {
     name,
@@ -29,35 +31,35 @@ describe('async execution', () => {
    */
   it('delivers the result to every cell awaiting the same invocation', async () => {
     const registry = new AIFunctionRegistry()
-    const updates: Array<[string, unknown]> = []
-    registry.setUpdateCallback((cellId, value) => updates.push([cellId, value]))
+    const updates: Array<[string, string, unknown]> = []
+    registry.setUpdateCallback((sheetId, cellId, value) => updates.push([sheetId, cellId, value]))
     registry.registerAsyncFunction(info('AI.T'), async () => {
       await tick(10)
       return 'RESULT'
     })
 
-    expect(registry.execute('AI.T', 'A1', ['same'])).toBe('⏳ Loading...')
-    expect(registry.execute('AI.T', 'B1', ['same'])).toBe('⏳ Loading...')
-    expect(registry.execute('AI.T', 'C1', ['same'])).toBe('⏳ Loading...')
+    expect(registry.execute('AI.T', 'A1', ['same'], SHEET)).toBe('⏳ Loading...')
+    expect(registry.execute('AI.T', 'B1', ['same'], SHEET)).toBe('⏳ Loading...')
+    expect(registry.execute('AI.T', 'C1', ['same'], SHEET)).toBe('⏳ Loading...')
 
     await tick(60)
 
     expect(updates).toHaveLength(3)
-    expect(updates.map(([cell]) => cell).sort()).toEqual(['A1', 'B1', 'C1'])
-    expect(updates.every(([, value]) => value === 'RESULT')).toBe(true)
+    expect(updates.map(([, cell]) => cell).sort()).toEqual(['A1', 'B1', 'C1'])
+    expect(updates.every(([sid, , value]) => sid === SHEET && value === 'RESULT')).toBe(true)
   })
 
   it('reports failures to every waiting cell', async () => {
     const registry = new AIFunctionRegistry()
     const updates: Array<[string, unknown]> = []
-    registry.setUpdateCallback((cellId, value) => updates.push([cellId, value]))
+    registry.setUpdateCallback((_sheetId, cellId, value) => updates.push([cellId, value]))
     registry.registerAsyncFunction(info('AI.T'), async () => {
       await tick(5)
       throw new Error('boom')
     })
 
-    registry.execute('AI.T', 'A1', ['same'])
-    registry.execute('AI.T', 'B1', ['same'])
+    registry.execute('AI.T', 'A1', ['same'], SHEET)
+    registry.execute('AI.T', 'B1', ['same'], SHEET)
     await tick(50)
 
     expect(updates).toHaveLength(2)
@@ -72,10 +74,10 @@ describe('async execution', () => {
       return 'VAL'
     })
 
-    registry.execute('AI.T', 'A1', ['x'])
+    registry.execute('AI.T', 'A1', ['x'], SHEET)
     await tick(20)
 
-    expect(registry.execute('AI.T', 'B1', ['x'])).toBe('VAL')
+    expect(registry.execute('AI.T', 'B1', ['x'], SHEET)).toBe('VAL')
     expect(invocations).toBe(1)
   })
 })
@@ -86,7 +88,7 @@ describe('cache management', () => {
     registry.registerAsyncFunction(info('AI.T'), async (value) => String(value))
 
     for (let i = 0; i < 700; i++) {
-      registry.execute('AI.T', `A${i}`, [`v${i}`])
+      registry.execute('AI.T', `A${i}`, [`v${i}`], SHEET)
     }
     await tick(80)
 
@@ -100,10 +102,10 @@ describe('cache management', () => {
     registry.setCacheTtl(1)
     registry.registerAsyncFunction(info('AI.T'), async () => 'V')
 
-    registry.execute('AI.T', 'A1', ['k'])
+    registry.execute('AI.T', 'A1', ['k'], SHEET)
     await tick(20)
     // Reading past the TTL must evict, not just ignore
-    registry.execute('AI.T', 'A1', ['k'])
+    registry.execute('AI.T', 'A1', ['k'], SHEET)
 
     const cache = (registry as unknown as { _cache: Map<string, unknown> })._cache
     expect(cache.size).toBeLessThanOrEqual(1)
@@ -114,8 +116,8 @@ describe('cache management', () => {
     registry.registerAsyncFunction(info('AI.X'), async () => 'x')
     registry.registerAsyncFunction(info('AI.Y'), async () => 'y')
 
-    registry.execute('AI.X', 'A1', ['a'])
-    registry.execute('AI.Y', 'B1', ['b'])
+    registry.execute('AI.X', 'A1', ['a'], SHEET)
+    registry.execute('AI.Y', 'B1', ['b'], SHEET)
     await tick(20)
 
     registry.clearFunctionCache('AI.X')
@@ -128,7 +130,7 @@ describe('cache management', () => {
 describe('registration', () => {
   it('returns #NAME? for unknown functions', () => {
     const registry = new AIFunctionRegistry()
-    expect(registry.execute('AI.NOPE', 'A1', [])).toBe('#NAME?')
+    expect(registry.execute('AI.NOPE', 'A1', [], SHEET)).toBe('#NAME?')
   })
 
   it('dispose clears all state', () => {

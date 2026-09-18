@@ -329,7 +329,7 @@ describe('registerOnnxFunction', () => {
     registerOnnxFunction(registry, deps);
     // Execute returns placeholder for async functions; the actual #NAME? is
     // returned by the executor, which runs asynchronously
-    const result = registry.execute('ONNX.RUN', 'A1', ['unknown_model', [[1, 2, 3, 4]]]);
+    const result = registry.execute('ONNX.RUN', 'A1', ['unknown_model', [[1, 2, 3, 4]]], 'sheet-1');
     // Async function returns loading placeholder
     expect(result).toBe('⏳ Loading...');
   });
