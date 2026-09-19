@@ -5,9 +5,9 @@
 import { z } from 'zod'
 import { byokSchema } from './byok.js'
 
-/** A single message in the conversation history. */
+/** A single message in the conversation history (client-sent; no system role). */
 const historyMessageSchema = z.object({
-  role: z.enum(['user', 'assistant', 'system']),
+  role: z.enum(['user', 'assistant']),
   content: z.string(),
 })
 
@@ -54,7 +54,6 @@ export const chatStreamBodySchema = z.object({
   context: contextSchema.optional(),
   forceLlm: z.boolean().optional(),
   byok: byokSchema.nullable().optional(),
-  sheetData: z.unknown().optional(),
 })
 
 /** POST /api/chat (non-streaming) — same schema as streaming. */

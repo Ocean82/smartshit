@@ -5,6 +5,7 @@ import { config } from '../config.js'
 import { getRequestUserId } from '../auth/clerk.js'
 import { resolveIsPro } from '../plan.js'
 import { syncWorkbookCells } from '../cellStore.js'
+import { createWorkbookBodySchema, saveWorkbookBodySchema } from '../schemas/workbook.js'
 import { sendServerError } from '../httpError.js'
 
 export const workbooksRouter = Router()
@@ -140,42 +141,32 @@ async function exceedsFreeTierWorkbookLimit(userId: string, res: Response): Prom
   return false
 }
 
-function isMissingCreateFields(name: unknown, data: unknown): boolean {
-  return !name || !data
-}
-
 function readCreateWorkbookBody(req: Request, res: Response): CreateWorkbookPayload | null {
-  const { name, data, sheetCount } = req.body as {
-    name?: unknown
-    data?: unknown
-    sheetCount?: number
-  }
-
-  if (isMissingCreateFields(name, data)) {
-    res.status(400).json({ error: 'name and data are required' })
+  const parsed = createWorkbookBodySchema.safeParse(req.body)
+  if (!parsed.success) {
+    const message = parsed.error.issues[0]?.message ?? 'Invalid workbook payload'
+    res.status(400).json({ error: message })
     return null
   }
-
   return {
-    name: name as string,
-    data: data as string,
-    sheetCount: sheetCount ?? 1,
+    name: parsed.data.name,
+    data: parsed.data.data,
+    sheetCount: parsed.data.sheetCount ?? 1,
   }
 }
 
 function readSaveWorkbookBody(req: Request, res: Response): SaveWorkbookPayload | null {
-  const { name, data, sheetCount } = req.body as {
-    name?: string
-    data?: string
-    sheetCount?: number
-  }
-
-  if (!data) {
-    res.status(400).json({ error: 'data is required' })
+  const parsed = saveWorkbookBodySchema.safeParse(req.body)
+  if (!parsed.success) {
+    const message = parsed.error.issues[0]?.message ?? 'Invalid workbook payload'
+    res.status(400).json({ error: message })
     return null
   }
-
-  return { name, data, sheetCount }
+  return {
+    name: parsed.data.name,
+    data: parsed.data.data,
+    sheetCount: parsed.data.sheetCount,
+  }
 }
 
 /**
@@ -481,7 +472,12 @@ async function handleDeleteWorkbook(req: Request, res: Response, userId: string)
   )
   if (!workbook) return
 
-  await query(`UPDATE smartsht.workbooks SET is_deleted = TRUE WHERE id = $1`, [id])
+  await query(
+    `UPDATE smartsht.workbooks SET is_deleted = TRUE, deleted_at = NOW() WHERE id = $1`,
+    [id],
+  )
+  // Revoke share links immediately — don't wait for the grace-period purge.
+  await query(`DELETE FROM smartsht.shares WHERE workbook_id = $1`, [id])
   res.json({ deleted: true })
 }
 

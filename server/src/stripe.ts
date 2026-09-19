@@ -1,8 +1,18 @@
-import crypto from 'node:crypto'
+import Stripe from 'stripe'
 import { config } from './config.js'
 
 interface CheckoutSession {
   url: string | null
+}
+
+/** Lazy Stripe client — checkout still uses raw fetch; webhooks use the SDK. */
+function getStripe(): Stripe {
+  if (!config.stripeSecretKey) {
+    throw new Error('STRIPE_SECRET_KEY not configured')
+  }
+  return new Stripe(config.stripeSecretKey, {
+    apiVersion: '2025-02-24.acacia',
+  })
 }
 
 /**
@@ -64,14 +74,20 @@ export async function createCheckoutSession(
   return { url: session.url }
 }
 
+export type StripeWebhookEvent = {
+  id: string
+  type: string
+  data: { object: Record<string, unknown> }
+}
+
 /**
- * Verify Stripe webhook signature using HMAC-SHA256.
- * Returns the parsed event if valid, throws if verification fails.
+ * Verify Stripe webhook signature via the official SDK (handles multi-v1
+ * rotation, clock skew, and payload parsing). Throws on failure.
  */
 export function verifyWebhookSignature(
   payload: Buffer | string,
   signatureHeader: string | undefined,
-): { type: string; data: { object: Record<string, unknown> } } {
+): StripeWebhookEvent {
   if (!config.stripeWebhookSecret) {
     throw new Error('STRIPE_WEBHOOK_SECRET not configured — cannot verify webhook')
   }
@@ -80,52 +96,46 @@ export function verifyWebhookSignature(
     throw new Error('Missing stripe-signature header')
   }
 
-  // Parse the signature header: t=timestamp,v1=signature[,v1=...]
-  // Stripe sends multiple v1= values during signing-secret rotation — accept any.
-  const elements = signatureHeader.split(',')
-  const timestampStr = elements.find((e) => e.startsWith('t='))?.slice(2)
-  const signatures = elements
-    .filter((e) => e.startsWith('v1='))
-    .map((e) => e.slice(3))
-    .filter(Boolean)
+  const stripe = getStripe()
+  const event = stripe.webhooks.constructEvent(
+    payload,
+    signatureHeader,
+    config.stripeWebhookSecret,
+  )
 
-  if (!timestampStr || signatures.length === 0) {
-    throw new Error('Invalid stripe-signature header format')
+  return {
+    id: event.id,
+    type: event.type,
+    data: { object: event.data.object as unknown as Record<string, unknown> },
   }
+}
 
-  const timestamp = parseInt(timestampStr, 10)
+// ─── Event-id dedupe (in-process; sufficient for single-instance PM2) ────────
 
-  // Reject if timestamp is outside ±5 minutes (replay + clock-skew / future stamps)
-  const tolerance = 300 // 5 minutes
-  const now = Math.floor(Date.now() / 1000)
-  if (Math.abs(now - timestamp) > tolerance) {
-    throw new Error('Webhook timestamp outside tolerance — possible replay attack')
+const SEEN_EVENT_TTL_MS = 24 * 60 * 60 * 1000
+const seenEventIds = new Map<string, number>()
+
+function pruneSeenEvents(now: number): void {
+  for (const [id, at] of seenEventIds) {
+    if (now - at > SEEN_EVENT_TTL_MS) seenEventIds.delete(id)
   }
+}
 
-  // Compute expected signature
-  const payloadStr = typeof payload === 'string' ? payload : payload.toString('utf8')
-  const signedPayload = `${timestampStr}.${payloadStr}`
-  const expectedSignature = crypto
-    .createHmac('sha256', config.stripeWebhookSecret)
-    .update(signedPayload, 'utf8')
-    .digest('hex')
+/**
+ * Returns true the first time this event id is seen (process it).
+ * Returns false on replay within the TTL window (skip side effects).
+ */
+export function claimWebhookEvent(eventId: string): boolean {
+  const now = Date.now()
+  pruneSeenEvents(now)
+  if (seenEventIds.has(eventId)) return false
+  seenEventIds.set(eventId, now)
+  return true
+}
 
-  const expectedBuffer = Buffer.from(expectedSignature, 'hex')
-  const matched = signatures.some((signature) => {
-    const sigBuffer = Buffer.from(signature, 'hex')
-    return (
-      sigBuffer.length === expectedBuffer.length &&
-      crypto.timingSafeEqual(sigBuffer, expectedBuffer)
-    )
-  })
-
-  if (!matched) {
-    throw new Error('Webhook signature verification failed')
-  }
-
-  // Signature valid — parse the event
-  const event = JSON.parse(payloadStr) as { type: string; data: { object: Record<string, unknown> } }
-  return event
+/** Test helper — clear the dedupe map. */
+export function resetWebhookEventDedupe(): void {
+  seenEventIds.clear()
 }
 
 /**

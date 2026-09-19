@@ -79,10 +79,15 @@ app.use((_req, res, next) => {
 // Stripe webhook needs raw body — register BEFORE express.json()
 app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
   try {
-    const { verifyWebhookSignature, handleStripeWebhook } = await import('./stripe.js')
+    const { verifyWebhookSignature, handleStripeWebhook, claimWebhookEvent } = await import('./stripe.js')
     const signatureHeader = req.headers['stripe-signature'] as string | undefined
 
     const event = verifyWebhookSignature(req.body, signatureHeader)
+    if (!claimWebhookEvent(event.id)) {
+      // Replay within TTL — acknowledge without re-applying side effects
+      res.json({ received: true, duplicate: true })
+      return
+    }
     const result = handleStripeWebhook(event)
 
     if (result) {
@@ -1003,6 +1008,13 @@ app.listen(config.port, config.host, () => {
     const status = onnxSessionPool.getStatus()
     console.log(`ONNX session pool: warmed ${status.loaded} model(s)`)
   })
+
+  if (config.databaseUrl) {
+    void import('./workbookPurge.js').then(({ startWorkbookPurgeScheduler }) => {
+      startWorkbookPurgeScheduler()
+      console.log('Workbook soft-delete purge scheduler: ✓ (30-day grace)')
+    })
+  }
 })
 
 // Graceful shutdown
