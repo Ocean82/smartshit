@@ -36,28 +36,37 @@ vi.mock('../config.js', () => ({
 // Mock database — tracks queries for assertions
 const mockQueryResults = new Map<string, { rows: Record<string, unknown>[] }>()
 
+const mockQuery = vi.fn(async (sql: string, _params?: unknown[]) => {
+  // Match based on the query pattern — order matters (most specific first)
+  if (sql.includes('COUNT(*)') && sql.includes('workbooks')) {
+    return mockQueryResults.get('count_workbooks') ?? { rows: [{ count: 0 }] }
+  }
+  if (sql.includes('ORDER BY last_saved_at')) {
+    return mockQueryResults.get('list_workbooks') ?? { rows: [] }
+  }
+  if (sql.includes('SELECT') && sql.includes('owner_id') && sql.includes('s3_key')) {
+    return mockQueryResults.get('select_workbook_with_key') ?? { rows: [] }
+  }
+  if (sql.includes('SELECT') && sql.includes('owner_id')) {
+    return mockQueryResults.get('select_workbook_owner') ?? { rows: [] }
+  }
+  if (sql.includes('INSERT INTO smartsht.workbooks')) {
+    return { rows: [{ id: 'wb_new_123' }] }
+  }
+  if (sql.includes('SELECT MAX(version_number)')) {
+    return { rows: [{ max_version: 1 }] }
+  }
+  // BEGIN / COMMIT / ROLLBACK / FOR UPDATE / version INSERT — no-op success
+  return { rows: [] }
+})
+
 vi.mock('../db.js', () => ({
-  query: vi.fn(async (sql: string, _params?: unknown[]) => {
-    // Match based on the query pattern — order matters (most specific first)
-    if (sql.includes('COUNT(*)') && sql.includes('workbooks')) {
-      return mockQueryResults.get('count_workbooks') ?? { rows: [{ count: 0 }] }
-    }
-    if (sql.includes('ORDER BY last_saved_at')) {
-      return mockQueryResults.get('list_workbooks') ?? { rows: [] }
-    }
-    if (sql.includes('SELECT') && sql.includes('owner_id') && sql.includes('s3_key')) {
-      return mockQueryResults.get('select_workbook_with_key') ?? { rows: [] }
-    }
-    if (sql.includes('SELECT') && sql.includes('owner_id')) {
-      return mockQueryResults.get('select_workbook_owner') ?? { rows: [] }
-    }
-    if (sql.includes('INSERT INTO smartsht.workbooks')) {
-      return { rows: [{ id: 'wb_new_123' }] }
-    }
-    if (sql.includes('SELECT MAX(version_number)')) {
-      return { rows: [{ max_version: 1 }] }
-    }
-    return { rows: [] }
+  query: (...args: unknown[]) => mockQuery(...args),
+  getPool: () => ({
+    connect: async () => ({
+      query: (...args: unknown[]) => mockQuery(...args),
+      release: () => {},
+    }),
   }),
 }))
 

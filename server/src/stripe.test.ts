@@ -75,7 +75,7 @@ describe('verifyWebhookSignature', () => {
     const oldTimestamp = Math.floor(Date.now() / 1000) - 600 // 10 minutes ago
     const sig = generateSignature(payload, MOCK_WEBHOOK_SECRET, oldTimestamp)
 
-    expect(() => verifyWebhookSignature(payload, sig)).toThrow('Webhook timestamp too old')
+    expect(() => verifyWebhookSignature(payload, sig)).toThrow('Webhook timestamp outside tolerance')
   })
 
   it('rejects an invalid signature (wrong secret)', () => {
