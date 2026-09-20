@@ -67,18 +67,27 @@ jobs:
           fi
           [ "$ok" = "1" ]
 
-      - name: Start SSH agent
-        uses: webfactory/ssh-agent@v0.9.1
-        with:
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
-
-      - name: Trust host key
+      - name: Install SSH deploy key
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
         run: |
+          set -euo pipefail
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
+          # Write key via env (avoids heredoc mangling). Strip CR if secret was edited on Windows.
+          printenv SSH_PRIVATE_KEY | sed 's/\r$//' > ~/.ssh/smartsht_gha_deploy
+          chmod 600 ~/.ssh/smartsht_gha_deploy
+          if ! grep -q 'BEGIN OPENSSH PRIVATE KEY\|BEGIN .*PRIVATE KEY' ~/.ssh/smartsht_gha_deploy; then
+            echo "::error::SSH_PRIVATE_KEY does not look like a PEM/OpenSSH private key."
+            exit 1
+          fi
+          # Fingerprint only (safe to log).
+          ssh-keygen -lf ~/.ssh/smartsht_gha_deploy || ssh-keygen -y -f ~/.ssh/smartsht_gha_deploy | ssh-keygen -lf -
           host="${SSH_HOST#*@}"
           ssh-keyscan -H -T 30 "$host" >> ~/.ssh/known_hosts
           chmod 644 ~/.ssh/known_hosts
+          # Prove auth before uploading secrets.
+          ssh -i ~/.ssh/smartsht_gha_deploy -o IdentitiesOnly=yes -o BatchMode=yes "$SSH_HOST" 'echo ssh_ok'
 
       - name: Sync ENV secret → /opt/smartsht/.env
         if: >
@@ -89,6 +98,8 @@ jobs:
         run: |
           set -euo pipefail
           umask 077
+          SSH=(ssh -i ~/.ssh/smartsht_gha_deploy -o IdentitiesOnly=yes -o BatchMode=yes)
+          SCP=(scp -i ~/.ssh/smartsht_gha_deploy -o IdentitiesOnly=yes -o BatchMode=yes)
           # Avoid heredoc/interpolation issues with multiline secrets.
           printenv ENV_FILE | sed 's/\r$//' > /tmp/smartsht.env
           # Sanity: must look like a dotenv file, not empty / placeholder.
@@ -102,8 +113,8 @@ jobs:
           fi
           key_count=$(grep -cE '^[A-Z0-9_]+=' /tmp/smartsht.env || true)
           echo "Prepared env file ($key_count keys); uploading…"
-          scp -o IdentitiesOnly=yes /tmp/smartsht.env "${SSH_HOST}:/tmp/smartsht.env.incoming"
-          ssh -o IdentitiesOnly=yes "$SSH_HOST" bash -s <<'REMOTE'
+          "${SCP[@]}" /tmp/smartsht.env "${SSH_HOST}:/tmp/smartsht.env.incoming"
+          "${SSH[@]}" "$SSH_HOST" bash -s <<'REMOTE'
           set -euo pipefail
           umask 077
           ts=$(date +%Y%m%d-%H%M%S)
@@ -142,7 +153,7 @@ jobs:
           flags='${{ steps.args.outputs.flags }}'
           echo "Running deploy.sh ${flags:- (full)}"
           # shellcheck disable=SC2086
-          ssh -o IdentitiesOnly=yes "$SSH_HOST" \
+          ssh -i ~/.ssh/smartsht_gha_deploy -o IdentitiesOnly=yes -o BatchMode=yes "$SSH_HOST" \
             "cd /opt/smartsht/current && bash ./scripts/deploy.sh ${flags}"
 
       - name: Public strict health check
