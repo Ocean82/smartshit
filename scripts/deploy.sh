@@ -165,6 +165,29 @@ fi
 # normal deploy path and again by the rollback path to restore the old frontend.
 mirror_frontend() {
   log "Building frontend (vite)..."
+  # Vite `--mode production` loads repo `.env.production`, which only has
+  # placeholders (git reset --hard restores them every deploy). Overlay real
+  # VITE_* values from the shared secrets file so the publishable key (and any
+  # other client env) is baked correctly. Process env wins over .env files.
+  if [ -f "$SHARED_ENV" ]; then
+    while IFS= read -r line || [ -n "$line" ]; do
+      case "$line" in
+        VITE_*=*)
+          key=${line%%=*}
+          val=${line#*=}
+          export "$key=$val"
+          ;;
+      esac
+    done < <(grep -E '^VITE_[A-Z0-9_]+=' "$SHARED_ENV" || true)
+    if [ -z "${VITE_CLERK_PUBLISHABLE_KEY:-}" ] || [[ "${VITE_CLERK_PUBLISHABLE_KEY}" == *... ]]; then
+      log "FATAL: VITE_CLERK_PUBLISHABLE_KEY missing or still a placeholder in $SHARED_ENV"
+      return 1
+    fi
+    log "Frontend build env: VITE_CLERK_PUBLISHABLE_KEY is set (len=${#VITE_CLERK_PUBLISHABLE_KEY})"
+  else
+    log "FATAL: shared env missing at $SHARED_ENV (required for VITE_* bake)"
+    return 1
+  fi
   npx vite build --mode production 2>&1 | tail -5
 
   if [ ! -f dist/index.html ]; then
