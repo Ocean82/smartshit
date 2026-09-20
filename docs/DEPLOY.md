@@ -86,52 +86,62 @@ large ones). The whole `dist/` tree must be deployed together; copying only
 
 ### Automated deployment (recommended)
 
-The project includes deployment scripts that handle the full pipeline with health checks and automatic rollback on failure.
+**Preferred:** GitHub Actions workflow [`Deploy`](../.github/workflows/deploy.yml) — syncs the `production` Environment secret `ENV` to `/opt/smartsht/.env`, SSHs in, and runs `scripts/deploy.sh` (same logic as local).
 
-**From your local machine (Windows):**
+| Trigger | Behavior |
+|---------|----------|
+| Actions → **Deploy** → Run workflow | Manual; choose `full` / `server` / `frontend`; optional env sync |
+| Push to `main` after **CI** succeeds | Full deploy + env sync (not PR CI, not the weekly schedule job) |
+
+**Required Environment secrets** (`Settings → Environments → production`)
+
+| Name | Value |
+|------|--------|
+| `ENV` | Entire contents of `/opt/smartsht/.env` as one multiline secret |
+| `SSH_PRIVATE_KEY` | Private key for `ssh ubuntu@52.0.207.242` (same material as `~/.ssh/server_saver_key`) |
+
+Optional Environment **variable**: `SSH_HOST` (default `ubuntu@52.0.207.242`).
+
+After Actions is in use, treat the GitHub `ENV` secret as the secrets source of truth for deploys (each sync overwrites `/opt/smartsht/.env` and keeps a `.env.bak-gha-*` backup). Update that secret whenever production config changes.
+
+**Local fallback** (Windows):
 ```powershell
-# Full deploy (frontend + server)
-npm run deploy
-
-# Server only (faster — skips vite build)
-npm run deploy:server
-
-# Frontend only (no PM2 restart)
-npm run deploy:frontend
+npm run deploy              # full
+npm run deploy:server       # server only
+npm run deploy:frontend     # frontend only
 ```
 
-**Or using bash (Git Bash / WSL / macOS):**
+**Local fallback** (bash / Git Bash / WSL / macOS):
 ```bash
 ./scripts/deploy-remote.sh              # full deploy
 ./scripts/deploy-remote.sh --server     # server only
 ./scripts/deploy-remote.sh --frontend   # frontend only
 ```
 
-### What the deploy script does
+### What deploy.sh does (on the server)
 
-1. Pushes your current `main` branch to GitHub
-2. SSHs into the production server (`ubuntu@52.0.207.242`)
-3. Runs `/opt/smartsht/current/scripts/deploy.sh` which:
-   - `git fetch` + `git reset --hard origin/main` (sync to latest main)
-   - `npm ci` at root and in `server/` (full install — build tools like tsc/vite are required, so **not** `--omit=dev`)
-   - Syncs the shared `.env` into `server/.env` if newer
-   - Self-heals MiniLM ONNX models and precomputes intent vectors if needed
-   - Builds frontend (`vite build`) → mirrors the whole `dist/` tree to `/var/www/smartsht/app/`; fails (→ rollback) if no `.wasm` engines are emitted
-   - Installs `landing/smartsht.nginx.conf`, runs `nginx -t`, reloads nginx (a failed `nginx -t` aborts the deploy — see the nginx gotcha in §4)
-   - Builds server (`tsc`) → restarts PM2 (`pm2 restart smartsht-api --update-env`)
-   - Runs a **strict** health check against `http://127.0.0.1:8787/health?strict=1` (503 unless DB + S3 + Clerk are all healthy; plain `/health` always returns 200 and only reflects AI-provider liveness)
-   - **Rolls back** to the previous commit if the strict health check fails
+Invoked by Actions or `deploy-remote.sh`:
+
+1. `git fetch` + `git reset --hard origin/main`
+2. `npm ci` at root and in `server/` (full install — **not** `--omit=dev`)
+3. Syncs shared `/opt/smartsht/.env` → `server/.env` if newer
+4. Self-heals MiniLM ONNX models / intent vectors if needed
+5. Builds frontend → mirrors `dist/` to `/var/www/smartsht/app/` (fails → rollback if no `.wasm`)
+6. Installs nginx conf, `nginx -t`, reload
+7. Builds server (`tsc`) → `pm2 restart smartsht-api --update-env`
+8. Strict health check `http://127.0.0.1:8787/health?strict=1` (DB + S3 + Clerk); rollback on failure
 
 ### Server directory layout
 
 ```
 /opt/smartsht/
-├── .env                # Shared secrets (never in git)
+├── .env                # Shared secrets (never in git; Actions can sync from secret ENV)
 ├── current/            # Git clone of main branch
 │   ├── dist/           # Frontend build output
 │   ├── server/
 │   │   ├── dist/server/src/index.js  # Compiled server entrypoint (PM2 runs this)
-│   │   └── .env        # Copied from /opt/smartsht/.env (compiled build loads dist/server/.env, a symlink to this)
+│   │   ├── .env        # Copied from /opt/smartsht/.env
+│   │   └── dist/server/.env  # Symlink → /opt/smartsht/.env (what loadEnv finds first)
 │   │   # NOTE: server/ecosystem.config.cjs is GITIGNORED — NOT present on the box. PM2 is driven by the saved dump (see §5).
 │   └── scripts/
 │       └── deploy.sh   # Server-side deploy logic
@@ -141,8 +151,8 @@ npm run deploy:frontend
 /var/www/smartsht/
 ├── index.html          # Landing page
 ├── app/
-│   ├── index.html      # SPA shell (~1.7MB, JS/CSS inlined)
-│   ├── assets/         # .wasm engines + worker bundles (~43MB, external — required)
+│   ├── index.html      # SPA shell
+│   ├── assets/         # .wasm engines + worker bundles
 │   └── sw.js           # Service worker
 ├── terms.html
 ├── privacy.html

@@ -1,0 +1,164 @@
+name: Deploy
+
+# Wraps /opt/smartsht/current/scripts/deploy.sh on the production box.
+# Manual path (scripts/deploy-remote.sh) remains the emergency fallback.
+#
+# Required GitHub Environment secrets (environment: production):
+#   ENV              — full contents of /opt/smartsht/.env (multiline)
+#   SSH_PRIVATE_KEY  — private key that can SSH as ubuntu@production
+#
+# Optional Environment variables:
+#   SSH_HOST         — default ubuntu@52.0.207.242
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Deploy target
+        type: choice
+        required: true
+        default: full
+        options:
+          - full
+          - server
+          - frontend
+      sync_env:
+        description: Write secrets.ENV to /opt/smartsht/.env before deploy
+        type: boolean
+        required: true
+        default: true
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to production
+    runs-on: ubuntu-latest
+    environment: production
+    # Manual runs always; auto only after a successful CI *push* to main
+    # (not PR CI, not the weekly schedule audit).
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push')
+    env:
+      SSH_HOST: ${{ vars.SSH_HOST || 'ubuntu@52.0.207.242' }}
+    steps:
+      - name: Check required secrets
+        env:
+          HAS_ENV: ${{ secrets.ENV != '' }}
+          HAS_KEY: ${{ secrets.SSH_PRIVATE_KEY != '' }}
+        run: |
+          ok=1
+          if [ "$HAS_ENV" != "true" ]; then
+            echo "::error::Missing Environment secret ENV (full /opt/smartsht/.env contents)."
+            ok=0
+          fi
+          if [ "$HAS_KEY" != "true" ]; then
+            echo "::error::Missing Environment secret SSH_PRIVATE_KEY (ubuntu deploy key)."
+            ok=0
+          fi
+          [ "$ok" = "1" ]
+
+      - name: Start SSH agent
+        uses: webfactory/ssh-agent@v0.9.1
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Trust host key
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          host="${SSH_HOST#*@}"
+          ssh-keyscan -H -T 30 "$host" >> ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Sync ENV secret → /opt/smartsht/.env
+        if: >
+          github.event_name == 'workflow_run' ||
+          github.event.inputs.sync_env == 'true'
+        env:
+          ENV_FILE: ${{ secrets.ENV }}
+        run: |
+          set -euo pipefail
+          umask 077
+          # Avoid heredoc/interpolation issues with multiline secrets.
+          printenv ENV_FILE | sed 's/\r$//' > /tmp/smartsht.env
+          # Sanity: must look like a dotenv file, not empty / placeholder.
+          if ! grep -qE '^(DATABASE_URL|S3_BUCKET|CLERK_SECRET_KEY)=' /tmp/smartsht.env; then
+            echo "::error::ENV secret does not look like a smartsht server .env (missing required keys)."
+            exit 1
+          fi
+          if grep -qiE 'burntbeats-db|burntbeatz2-storage|://burntbeatsadmin:' /tmp/smartsht.env; then
+            echo "::error::ENV secret still contains retired burntbeats naming. Update the production ENV secret from the live server file."
+            exit 1
+          fi
+          key_count=$(grep -cE '^[A-Z0-9_]+=' /tmp/smartsht.env || true)
+          echo "Prepared env file ($key_count keys); uploading…"
+          scp -o IdentitiesOnly=yes /tmp/smartsht.env "${SSH_HOST}:/tmp/smartsht.env.incoming"
+          ssh -o IdentitiesOnly=yes "$SSH_HOST" bash -s <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          ts=$(date +%Y%m%d-%H%M%S)
+          if [ -f /opt/smartsht/.env ]; then
+            cp -a /opt/smartsht/.env "/opt/smartsht/.env.bak-gha-${ts}"
+          fi
+          install -m 600 /tmp/smartsht.env.incoming /opt/smartsht/.env
+          chown ubuntu:ubuntu /opt/smartsht/.env
+          # Keep the deploy working copy in sync (deploy.sh also does this when shared is newer).
+          cp -a /opt/smartsht/.env /opt/smartsht/current/server/.env
+          chmod 600 /opt/smartsht/current/server/.env
+          # Ensure compiled load path still resolves (symlink → shared env).
+          mkdir -p /opt/smartsht/current/server/dist/server
+          ln -sfn /opt/smartsht/.env /opt/smartsht/current/server/dist/server/.env
+          rm -f /tmp/smartsht.env.incoming
+          echo "ENV synced to /opt/smartsht/.env"
+          REMOTE
+          shred -u /tmp/smartsht.env 2>/dev/null || rm -f /tmp/smartsht.env
+
+      - name: Resolve deploy args
+        id: args
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            case "${{ github.event.inputs.target }}" in
+              server) echo "flags=--server" >> "$GITHUB_OUTPUT" ;;
+              frontend) echo "flags=--frontend" >> "$GITHUB_OUTPUT" ;;
+              *) echo "flags=" >> "$GITHUB_OUTPUT" ;;
+            esac
+          else
+            echo "flags=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run deploy.sh on server
+        run: |
+          set -euo pipefail
+          flags='${{ steps.args.outputs.flags }}'
+          echo "Running deploy.sh ${flags:- (full)}"
+          # shellcheck disable=SC2086
+          ssh -o IdentitiesOnly=yes "$SSH_HOST" \
+            "cd /opt/smartsht/current && bash ./scripts/deploy.sh ${flags}"
+
+      - name: Public strict health check
+        run: |
+          set -euo pipefail
+          for i in 1 2 3 4 5; do
+            code=$(curl -sS -o /tmp/health.json -w '%{http_code}' \
+              'https://smartsht.com/health?strict=1' || echo '000')
+            echo "attempt $i → HTTP $code"
+            if [ "$code" = "200" ]; then
+              cat /tmp/health.json
+              echo
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::Public strict health check failed"
+          cat /tmp/health.json || true
+          exit 1
