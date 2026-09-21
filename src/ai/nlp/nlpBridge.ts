@@ -18,6 +18,7 @@ import type {
   NLPEngineState,
   ClassificationResult,
 } from './types'
+import { assetUrl } from '@/lib/assetUrl'
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -39,7 +40,7 @@ interface PendingRequest {
 }
 
 export interface NLPBridgeOptions {
-  /** Base URL for model assets. Default: '/models/minilm/' */
+  /** Base URL for model assets. Default: Vite base + models/minilm/ */
   modelBaseUrl?: string
   /** Inference timeout in ms. Default: 500 */
   inferenceTimeoutMs?: number
@@ -67,7 +68,7 @@ export class NLPWorkerBridge {
   private onStateChange?: (state: NLPEngineState) => void
 
   constructor(options?: NLPBridgeOptions) {
-    this.modelBaseUrl = options?.modelBaseUrl ?? '/models/minilm/'
+    this.modelBaseUrl = options?.modelBaseUrl ?? assetUrl('models/minilm/')
     this.inferenceTimeoutMs = options?.inferenceTimeoutMs ?? DEFAULT_INFERENCE_TIMEOUT_MS
     this.initTimeoutMs = options?.initTimeoutMs ?? DEFAULT_INIT_TIMEOUT_MS
     this.onStateChange = options?.onStateChange

@@ -11,6 +11,7 @@ import {
   capabilityPhrasesHash,
   type CapabilityDef,
 } from '@shared/capabilities.js'
+import { assetUrl } from '@/lib/assetUrl'
 
 export const EMBEDDING_DIM = 384
 export const CAPABILITY_VECTORS_VERSION = 2
@@ -22,7 +23,7 @@ export interface CapabilityEmbeddingEntry {
   phrases: string[]
 }
 
-const CAPABILITY_VECTORS_URL = '/models/minilm/capability-vectors.bin'
+const CAPABILITY_VECTORS_URL = assetUrl('models/minilm/capability-vectors.bin')
 
 let CAPABILITY_EMBEDDINGS: CapabilityEmbeddingEntry[] = []
 let _bootstrapped = false

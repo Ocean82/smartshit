@@ -36,6 +36,7 @@ import {
 import { exportWorkbookToJson, importWorkbookFromJsonFile, normalizeImportedWorkbook } from '@/io/workbookJson'
 import { exportWorkbookToXlsx } from '@/io/xlsx'
 import { refToCell } from '@/engine/spreadsheet'
+import { assetUrl } from '@/lib/assetUrl'
 
 // ─── Lazy-loaded components (dialogs, overlays, and panels opened on demand) ─
 const ChartDialog = lazy(() => import('@/components/ChartDialog').then(m => ({ default: m.ChartDialog })))
@@ -444,7 +445,7 @@ function TitleBar({ onOpenTemplates, onOpenCloudPicker, onOpenShare, onOpenComma
       />
 
       <div className="flex items-center gap-2">
-        <img src="/app/pwa-icon-192.png" alt="smartsh!t" className="w-6 h-6 rounded-lg opacity-80" />
+        <img src={assetUrl('pwa-icon-192.png')} alt="smartsh!t" className="w-6 h-6 rounded-lg opacity-80" />
         <span className="text-sm font-medium tracking-tight hidden sm:inline" style={{ color: 'var(--neutral-400)' }}>smartsh!t</span>
       </div>
 

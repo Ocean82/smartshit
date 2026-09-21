@@ -98,6 +98,23 @@ export function AnchoredPanel({
 }: AnchoredPanelProps) {
   const panelRef = useRef<HTMLDivElement>(null)
   const [frame, setFrame] = useState<AnchoredPanelFrame | null>(null)
+  const anchorX = anchorPoint?.x
+  const anchorY = anchorPoint?.y
+
+  const applyFrame = useCallback((next: AnchoredPanelFrame) => {
+    setFrame((prev) => {
+      if (
+        prev &&
+        prev.top === next.top &&
+        prev.left === next.left &&
+        prev.width === next.width &&
+        prev.height === next.height
+      ) {
+        return prev
+      }
+      return next
+    })
+  }, [])
 
   const reposition = useCallback(() => {
     const viewport = resolveViewportBounds(window.visualViewport, {
@@ -109,10 +126,10 @@ export function AnchoredPanel({
       measurePreferredHeight(panelRef.current, maxHeight),
     )
 
-    if (anchorPoint) {
-      setFrame(
+    if (anchorX != null && anchorY != null) {
+      applyFrame(
         computePointPanelFrame({
-          point: anchorPoint,
+          point: { x: anchorX, y: anchorY },
           viewport,
           width,
           height: preferredHeight,
@@ -124,7 +141,7 @@ export function AnchoredPanel({
     const anchor = anchorRef?.current
     if (!anchor) return
 
-    setFrame(
+    applyFrame(
       computeAnchoredPanelFrame({
         anchor: anchor.getBoundingClientRect(),
         viewport,
@@ -133,18 +150,19 @@ export function AnchoredPanel({
         align,
       }),
     )
-  }, [align, anchorPoint, anchorRef, maxHeight, width])
+  }, [align, anchorRef, anchorX, anchorY, applyFrame, maxHeight, width])
 
+  // Do not depend on `children` — inline JSX is a new reference every parent
+  // render and would re-run this layout effect → setState → max update depth.
   useLayoutEffect(() => {
     if (!open) {
-      setFrame(null)
+      setFrame((prev) => (prev === null ? prev : null))
       return
     }
     reposition()
     const raf = requestAnimationFrame(reposition)
     return () => cancelAnimationFrame(raf)
-  }, [open, reposition, children])
-
+  }, [open, reposition])
   useEffect(() => {
     if (!open) return
 

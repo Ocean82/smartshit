@@ -17,6 +17,7 @@
 
 import type { IntentType } from '@shared/intentTypes'
 import { INTENT_PHRASES as SHARED_INTENT_PHRASES, intentPhrasesHash } from '@shared/intentPhrases.js'
+import { assetUrl } from '@/lib/assetUrl'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -94,7 +95,7 @@ function buildPlaceholders(): IntentEmbeddingEntry[] {
 // ─── Pre-computed Loading (Fast Path) ───────────────────────────────────────
 
 /** URL for the pre-computed intent vectors binary */
-const INTENT_VECTORS_URL = '/models/minilm/intent-vectors.bin'
+const INTENT_VECTORS_URL = assetUrl('models/minilm/intent-vectors.bin')
 
 /**
  * Load pre-computed intent embeddings from a binary file.

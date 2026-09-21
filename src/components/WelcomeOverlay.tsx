@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { MessageSquare, Zap, LayoutTemplate, ArrowRight, X, Shield, Search } from 'lucide-react'
+import { assetUrl } from '@/lib/assetUrl'
 
 interface WelcomeOverlayProps {
   onOpenTemplates: () => void
@@ -19,7 +20,7 @@ export function WelcomeOverlay({ onOpenTemplates }: WelcomeOverlayProps) {
 
   const steps = [
     {
-      icon: <img src="/smartsht-logo2.PNG" alt="smartsh!t" className="w-16 h-16 object-contain" />,
+      icon: <img src={assetUrl('logo.png')} alt="smartsh!t" className="w-16 h-16 object-contain" />,
       title: 'Welcome to smartsh!t',
       description:
         'A spreadsheet that listens. Tell the assistant what you want to track — budgets, expenses, inventory — and it builds it for you.',

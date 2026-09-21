@@ -96,7 +96,7 @@ function SignInPrompt() {
         appearance={clerkAppearance}
       />
       <p className="mt-4 text-xs text-white/60">
-        Free tier includes 3 AI questions per day
+        Free tier includes 7 AI questions per day
       </p>
     </div>
   )

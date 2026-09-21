@@ -24,6 +24,7 @@ import {
 import { classifyIntent as classifyIntentKeyword } from './intentClassifier'
 import { extractEntities } from './entityExtractor'
 import { getCachedEmbedding, setCachedEmbedding, getCachedBootstrap, setCachedBootstrap } from './embeddingCache'
+import { assetUrl } from '@/lib/assetUrl'
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -37,7 +38,7 @@ const AMBIGUITY_GAP = 0.08
 const EMBEDDING_CACHE_SIZE = 64
 
 /** Model base URL for public assets */
-const DEFAULT_MODEL_URL = '/models/minilm/'
+const DEFAULT_MODEL_URL = assetUrl('models/minilm/')
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 

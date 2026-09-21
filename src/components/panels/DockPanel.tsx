@@ -59,11 +59,13 @@ export function DockPanel({ panelId, children, title, headerActions }: DockPanel
   const { width, minWidth, maxWidth: effectiveMaxWidth, isMobile } = frame
   const isOpen = activePanel === panelId
 
+  // Persist a one-time clamp when stored width is outside the live viewport
+  // range. Skip while closed — display already clamps via `width`.
   useEffect(() => {
-    if (isMobile) return
-    if (storedWidth !== width) setPanelWidth(panelId, width)
-  }, [isMobile, panelId, setPanelWidth, storedWidth, width])
-
+    if (!isOpen || isMobile) return
+    if (storedWidth === width) return
+    setPanelWidth(panelId, width)
+  }, [isMobile, isOpen, panelId, setPanelWidth, storedWidth, width])
   // Unmount cleanup: if the panel is closed mid-drag, release body styles and drag state.
   useEffect(() => {
     return () => {

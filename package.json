@@ -50,7 +50,7 @@
     "model:setup": "npm run setup-model --prefix server"
   },
   "dependencies": {
-    "@clerk/react": "^6.11.4",
+    "@clerk/react": "^6.16.1",
     "@ocean8219/formualizer": "^0.9.3",
     "@sentry/react": "^10.67.0",
     "clsx": "2.1.1",

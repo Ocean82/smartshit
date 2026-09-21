@@ -13,6 +13,9 @@ export function UpgradePrompt({ remaining, dailyLimit }: UpgradePromptProps) {
   // Don't render upgrade prompts in dev mode without Clerk
   if (!CLERK_PUBLISHABLE_KEY) return null
 
+  // Infinity while the server pro-check is in flight — hide the banner.
+  if (!Number.isFinite(remaining)) return null
+
   if (remaining > 0) {
     return (
       <div className="mx-3 mb-2 px-3 py-2 rounded-lg" style={{ background: 'var(--warning-soft)', border: '1px solid oklch(0.85 0.08 70)' }}>
