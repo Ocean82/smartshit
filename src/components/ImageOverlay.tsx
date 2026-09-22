@@ -172,7 +172,7 @@ function ImageCard({
         ? prev
         : { x: next.x, y: next.y, w: next.width, h: next.height }
     ))
-  }, [image.x, image.y, image.width, image.height, bounds.width, bounds.height])
+  }, [image.x, image.y, image.width, image.height, bounds])
 
   const commit = useCallback(() => {
     updateImagePosition(image.id, posRef.current.x, posRef.current.y, {
