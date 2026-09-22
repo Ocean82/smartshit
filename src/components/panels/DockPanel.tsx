@@ -48,7 +48,12 @@ export function DockPanel({ panelId, children, title, headerActions }: DockPanel
   )
 
   useEffect(() => {
-    const handleViewportResize = () => setViewportWidth(window.innerWidth)
+    const handleViewportResize = () => {
+      setViewportWidth((prev) => {
+        const next = window.innerWidth
+        return prev === next ? prev : next
+      })
+    }
     window.addEventListener('resize', handleViewportResize)
     return () => window.removeEventListener('resize', handleViewportResize)
   }, [])

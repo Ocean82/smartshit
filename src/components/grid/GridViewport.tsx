@@ -192,7 +192,17 @@ export function useGridViewport(config: GridViewportConfig): GridViewportReturn 
   const handleScroll = useCallback(() => {
     if (!gridRef.current) return;
     const { scrollTop, scrollLeft, clientHeight, clientWidth } = gridRef.current;
-    setScrollState({ scrollTop, scrollLeft, viewportHeight: clientHeight, viewportWidth: clientWidth });
+    setScrollState((prev) => {
+      if (
+        prev.scrollTop === scrollTop &&
+        prev.scrollLeft === scrollLeft &&
+        prev.viewportHeight === clientHeight &&
+        prev.viewportWidth === clientWidth
+      ) {
+        return prev;
+      }
+      return { scrollTop, scrollLeft, viewportHeight: clientHeight, viewportWidth: clientWidth };
+    });
   }, []);
 
   useEffect(() => {

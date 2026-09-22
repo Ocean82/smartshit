@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import type { ReactNode } from 'react';
 import { useStore } from '@/store/useStore';
-import { clampFixedPopup, resolveViewportBounds } from '@/lib/chartLayout';
+import { clampFixedPopup, resolveViewportBounds, sameChartBounds } from '@/lib/chartLayout';
 
 interface Props {
   visible: boolean;
@@ -77,10 +77,11 @@ export function FormulaAutocomplete({ visible, editValue, onSelect, position }: 
   useEffect(() => {
     if (!visible) return;
     const sync = () => {
-      setViewport(resolveViewportBounds(
+      const next = resolveViewportBounds(
         window.visualViewport,
         { width: window.innerWidth, height: window.innerHeight },
-      ));
+      );
+      setViewport((prev) => (sameChartBounds(prev, next) ? prev : next));
     };
     sync();
     window.visualViewport?.addEventListener('resize', sync);

@@ -7,6 +7,7 @@
 
 import { useStore } from '@/store/useStore';
 import { useMemo } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 
 // ─── Core State ────────────────────────────────────────────────────────────────
 
@@ -261,7 +262,7 @@ export function useSetScrollPosition() {
 
 /** Get scroll position */
 export function useScrollPosition() {
-  return useStore((s) => ({ scrollRow: s.scrollRow, scrollCol: s.scrollCol }));
+  return useStore(useShallow((s) => ({ scrollRow: s.scrollRow, scrollCol: s.scrollCol })));
 }
 
 // ─── Chat State ────────────────────────────────────────────────────────────────

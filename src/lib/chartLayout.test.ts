@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { clampChartBox, clampFixedPopup, defaultChartPosition, mergeChartLayout, resolveViewportBounds } from './chartLayout'
+import { clampChartBox, clampFixedPopup, defaultChartPosition, mergeChartLayout, resolveViewportBounds, sameChartBounds } from './chartLayout'
 
 describe('clampChartBox', () => {
   it('shrinks a 400px chart to fit a phone-width overlay', () => {
@@ -91,5 +91,13 @@ describe('mergeChartLayout', () => {
       width: 400,
       height: 300,
     })
+  })
+})
+
+describe('sameChartBounds', () => {
+  it('returns true only when both dimensions match', () => {
+    expect(sameChartBounds({ width: 100, height: 50 }, { width: 100, height: 50 })).toBe(true)
+    expect(sameChartBounds({ width: 100, height: 50 }, { width: 100, height: 51 })).toBe(false)
+    expect(sameChartBounds(null, { width: 100, height: 50 })).toBe(false)
   })
 })

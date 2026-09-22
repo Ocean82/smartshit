@@ -102,17 +102,25 @@ export function AnchoredPanel({
   const anchorY = anchorPoint?.y
 
   const applyFrame = useCallback((next: AnchoredPanelFrame) => {
+    // Round to whole pixels — getBoundingClientRect / visualViewport are floaty
+    // and sub-pixel oscillation + viewport listeners → React #185.
+    const rounded: AnchoredPanelFrame = {
+      top: Math.round(next.top),
+      left: Math.round(next.left),
+      width: Math.round(next.width),
+      height: Math.round(next.height),
+    }
     setFrame((prev) => {
       if (
         prev &&
-        prev.top === next.top &&
-        prev.left === next.left &&
-        prev.width === next.width &&
-        prev.height === next.height
+        prev.top === rounded.top &&
+        prev.left === rounded.left &&
+        prev.width === rounded.width &&
+        prev.height === rounded.height
       ) {
         return prev
       }
-      return next
+      return rounded
     })
   }, [])
 
@@ -178,7 +186,16 @@ export function AnchoredPanel({
       if (anchorRef?.current?.contains(target)) return
       onClose()
     }
-    const onViewportChange = () => reposition()
+    // Coalesce viewport events — visualViewport scroll/resize can fire in a
+    // feedback loop when fixed-position panels update their frame.
+    let viewportRaf = 0
+    const onViewportChange = () => {
+      if (viewportRaf) return
+      viewportRaf = requestAnimationFrame(() => {
+        viewportRaf = 0
+        reposition()
+      })
+    }
 
     document.addEventListener('keydown', onKeyDown)
     // Use click (not mousedown) so the opening right-click / contextmenu
@@ -194,6 +211,7 @@ export function AnchoredPanel({
       window.removeEventListener('resize', onViewportChange)
       window.visualViewport?.removeEventListener('resize', onViewportChange)
       window.visualViewport?.removeEventListener('scroll', onViewportChange)
+      if (viewportRaf) cancelAnimationFrame(viewportRaf)
     }
   }, [open, onClose, anchorRef, reposition])
 

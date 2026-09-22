@@ -2,7 +2,7 @@ import { useStore } from '@/store/useStore';
 import { useShallow } from 'zustand/react/shallow';
 import { X, Move } from 'lucide-react';
 import React, { useMemo, useRef, useState, useLayoutEffect } from 'react';
-import { getChartOverlayBounds, type ChartBounds } from '@/lib/chartLayout';
+import { getChartOverlayBounds, sameChartBounds, type ChartBounds } from '@/lib/chartLayout';
 import type { ChartConfig, TrendLineConfig, AxisConfig } from '@/types';
 import {
   computeTrendValues,
@@ -54,7 +54,10 @@ export function ChartOverlay() {
   useLayoutEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
-    const measure = () => setBounds({ width: el.clientWidth, height: el.clientHeight });
+    const measure = () => {
+      const next = { width: el.clientWidth, height: el.clientHeight };
+      setBounds((prev) => (sameChartBounds(prev, next) ? prev : next));
+    };
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);

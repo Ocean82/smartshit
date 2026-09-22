@@ -10,6 +10,11 @@ export interface ChartBounds {
   height: number
 }
 
+/** True when both bounds share the same pixel size (avoids ResizeObserver setState loops). */
+export function sameChartBounds(a: ChartBounds | null | undefined, b: ChartBounds): boolean {
+  return !!a && a.width === b.width && a.height === b.height
+}
+
 export const DEFAULT_CHART_SIZE = { width: 400, height: 300 } as const
 
 /**

@@ -147,9 +147,13 @@ export function createUIActions(
     setShowFindReplace: (v) => set((s) => { s.showFindReplace = v }),
     setActivePanel: (panel) => set((s) => { s.activePanel = panel }),
     setPanelWidth: (panel, width) => {
-      set((s) => { s.panelWidths[panel] = width })
+      set((s) => {
+        if (s.panelWidths[panel] === width) return
+        s.panelWidths[panel] = width
+      })
       try {
         const current = JSON.parse(storage?.getItem('smartsht-panel-widths') || '{}')
+        if (current[panel] === width) return
         current[panel] = width
         storage?.setItem('smartsht-panel-widths', JSON.stringify(current))
       } catch { /* ignore */ }

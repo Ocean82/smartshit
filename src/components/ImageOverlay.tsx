@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { X } from 'lucide-react'
 import { useStore } from '@/store/useStore'
-import { clampChartBox, getChartOverlayBounds, type ChartBounds } from '@/lib/chartLayout'
+import { clampChartBox, getChartOverlayBounds, sameChartBounds, type ChartBounds } from '@/lib/chartLayout'
 import type { SheetImage } from '@/types'
 import { defaultImageBox, readImageAsDataUrl } from '@/lib/sheetImage'
 import { v4 as uuid } from 'uuid'
@@ -18,7 +18,10 @@ export function ImageOverlay() {
   useLayoutEffect(() => {
     const el = wrapRef.current
     if (!el) return
-    const measure = () => setBounds({ width: el.clientWidth, height: el.clientHeight })
+    const measure = () => {
+      const next = { width: el.clientWidth, height: el.clientHeight }
+      setBounds((prev) => (sameChartBounds(prev, next) ? prev : next))
+    }
     measure()
     const ro = new ResizeObserver(measure)
     ro.observe(el)
@@ -164,8 +167,12 @@ function ImageCard({
       { x: image.x, y: image.y, width: image.width, height: image.height },
       bounds,
     )
-    setPos({ x: next.x, y: next.y, w: next.width, h: next.height })
-  }, [image.x, image.y, image.width, image.height, bounds])
+    setPos((prev) => (
+      prev.x === next.x && prev.y === next.y && prev.w === next.width && prev.h === next.height
+        ? prev
+        : { x: next.x, y: next.y, w: next.width, h: next.height }
+    ))
+  }, [image.x, image.y, image.width, image.height, bounds.width, bounds.height])
 
   const commit = useCallback(() => {
     updateImagePosition(image.id, posRef.current.x, posRef.current.y, {
