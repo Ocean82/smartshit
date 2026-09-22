@@ -107,6 +107,11 @@ export function createChatActions(
       if (msg) msg.pinned = !msg.pinned
     }),
 
+    // Allocates a fresh array each call. NEVER call this inside a Zustand
+    // selector body (e.g. useStore((s) => s.getPinnedMessages())) — the new
+    // reference fails Object.is every render and causes an infinite re-render
+    // loop (React error #185). Select the function reference and call it in
+    // an effect/handler, or wrap the result with useShallow.
     getPinnedMessages: () => get().messages.filter((m) => m.pinned),
 
     sendMessage: () => {
