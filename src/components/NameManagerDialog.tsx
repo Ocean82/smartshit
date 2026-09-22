@@ -9,10 +9,15 @@ import { useFocusTrap } from '@/hooks/useFocusTrap'
 import { selectionToAbsRange } from '@/lib/namedRanges'
 import type { NamedRange } from '@/types'
 
+// Stable empty-array reference so the selector below doesn't return a fresh
+// `[]` each render (which would fail Zustand's Object.is check and loop
+// forever — React error #185).
+const EMPTY_NAMED_RANGES: NamedRange[] = []
+
 export function NameManagerDialog() {
   const show = useStore((s) => s.showNameManagerDialog)
   const setShow = useStore((s) => s.setShowNameManagerDialog)
-  const namedRanges = useStore((s) => s.workbook.namedRanges ?? [])
+  const namedRanges = useStore((s) => s.workbook.namedRanges ?? EMPTY_NAMED_RANGES)
   const sheets = useStore((s) => s.workbook.sheets)
   const selection = useStore((s) => s.selection)
   const activeSheetId = useStore((s) => s.activeSheetId)
