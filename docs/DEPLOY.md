@@ -102,7 +102,9 @@ large ones). The whole `dist/` tree must be deployed together; copying only
 
 Optional Environment **variable**: `SSH_HOST` (default `ubuntu@52.0.207.242`).
 
-After Actions is in use, treat the GitHub `ENV` secret as the secrets source of truth for deploys (each sync overwrites `/opt/smartsht/.env` and keeps a `.env.bak-gha-*` backup). Update that secret whenever production config changes.
+After Actions is in use, treat the GitHub `ENV` secret as the secrets source of truth for deploys (each sync overwrites `/opt/smartsht/.env` and keeps up to 10 `.env.bak-gha-*` backups). Update that secret whenever production config changes.
+
+> ⚠️ **Do not hand-edit `/opt/smartsht/.env` on the box as a lasting change.** Every auto-deploy (merge to `main`) overwrites it from the GitHub `ENV` secret, so a server-side edit is silently reverted on the next merge. If you must hotfix on the server, paste the identical change into the GitHub `ENV` secret immediately so the two stay in sync. To confirm what the running server actually loaded, hit authenticated `/health` (`runtime.envFile.path` + `candidates`) or read the boot log line `Env file: ✓ loaded …` — no need to SSH in and diff files.
 
 **Local fallback** (Windows):
 ```powershell
