@@ -128,10 +128,12 @@ jobs:
           ts=$(date +%Y%m%d-%H%M%S)
           if [ -f /opt/smartsht/.env ]; then
             cp -a /opt/smartsht/.env "/opt/smartsht/.env.bak-gha-${ts}"
-            # Keep only the 10 most recent GHA backups; prune the rest so they
-            # don't accumulate unbounded on the box across many deploys.
-            ls -1t /opt/smartsht/.env.bak-gha-* 2>/dev/null | tail -n +11 | xargs -r rm -f
           fi
+          # Keep only the 10 most recent GHA backups; prune the rest so they
+          # don't accumulate unbounded on the box across many deploys. Runs
+          # every sync (outside the backup guard) so stale backups are pruned
+          # even when the live .env was absent this run.
+          ls -1t /opt/smartsht/.env.bak-gha-* 2>/dev/null | tail -n +11 | xargs -r rm -f
           install -m 600 /tmp/smartsht.env.incoming /opt/smartsht/.env
           chown ubuntu:ubuntu /opt/smartsht/.env
           # Keep the deploy working copy in sync (deploy.sh also does this when shared is newer).
