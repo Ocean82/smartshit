@@ -9,6 +9,14 @@ name: Deploy
 #
 # Optional Environment variables:
 #   SSH_HOST         — default ubuntu@52.0.207.242
+#
+# ⚠️ SOURCE OF TRUTH: the GitHub `ENV` secret is authoritative for
+# /opt/smartsht/.env. On every auto-deploy (workflow_run) the sync step below
+# OVERWRITES the server file with the secret's contents (a timestamped backup
+# is kept). So if you ever edit /opt/smartsht/.env directly on the box, you
+# MUST paste the same change into the GitHub `ENV` secret too — otherwise the
+# next merge to main silently reverts your server-side edit. Prefer editing the
+# secret and re-deploying over hand-editing the live file.
 
 on:
   workflow_dispatch:
@@ -121,6 +129,11 @@ jobs:
           if [ -f /opt/smartsht/.env ]; then
             cp -a /opt/smartsht/.env "/opt/smartsht/.env.bak-gha-${ts}"
           fi
+          # Keep only the 10 most recent GHA backups; prune the rest so they
+          # don't accumulate unbounded on the box across many deploys. Runs
+          # every sync (outside the backup guard) so stale backups are pruned
+          # even when the live .env was absent this run.
+          ls -1t /opt/smartsht/.env.bak-gha-* 2>/dev/null | tail -n +11 | xargs -r rm -f
           install -m 600 /tmp/smartsht.env.incoming /opt/smartsht/.env
           chown ubuntu:ubuntu /opt/smartsht/.env
           # Keep the deploy working copy in sync (deploy.sh also does this when shared is newer).
