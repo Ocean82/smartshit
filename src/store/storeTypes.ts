@@ -174,7 +174,7 @@ export interface AppState extends UIState, UIActions, FileActions, ChatActions {
 
   // Bulk operations (for AI)
   bulkSetCells: (cells: Record<string, { value: string | number | boolean | null; formula?: string }>) => void
-  importWorkbook: (workbook: WorkbookData, meta?: { fileName?: string }) => void
+  importWorkbook: (workbook: WorkbookData, meta?: { fileName?: string; warnings?: string[] }) => void
   loadWorkbookData: (workbook: WorkbookData, opts?: { pushUndo?: boolean }) => void
 
   // Get helpers

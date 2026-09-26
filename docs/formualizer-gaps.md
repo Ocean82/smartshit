@@ -1,26 +1,27 @@
 # Formualizer Gaps & Issues for SmartSht
 
 > Compiled from: GitHub issues, source analysis, SmartSht integration behavior, and formualizer.dev docs.
-> SmartSht uses `@ocean8219/formualizer@0.7.2` — latest is `0.8.4`.
+> SmartSht uses `@ocean8219/formualizer@^0.9.3` (aligned with upstream 0.9.3 as of 2026-09-11).
+> Last doc refresh: 2026-09-25.
 
 ---
 
-## 1. Version Gap (0.7.2 → 0.8.4)
+## 1. Version Status (current: 0.9.3)
 
-SmartSht is 3 minor versions behind. The following was fixed/added in 0.7.3–0.8.4 that SmartSht is missing:
+SmartSht is on **0.9.3**. The earlier 0.7.2 → 0.8.4 upgrade path is complete.
 
-- Multiple structural edit undo bugs fixed
-- Dependency graph edge-drop fixes (silent stale values)
-- Database function empty-text handling fix
-- SheetPort GIL deadlock fix (Python, but Rust core changes)
-- FormulaPlane span evaluation improvements
-- Semantic reference consolidation hardening
+Notable 0.8.x–0.9.x gains already in tree:
 
-**Recommendation:** Upgrade to `@ocean8219/formualizer@^0.8.4`
+- Structural edit / dependency-graph hardening from 0.7.3–0.8.4
+- 0.9.0 circular-cell fixed-point retention (large recalc wins for converged cycles)
+- 0.9.2 cache-only XLSX recalc APIs (opt-in; SmartSht does not use these yet)
+- 0.9.3 broader date/time text parsing (partial #290), COUNTIF/COUNTBLANK blank arithmetic (partial #285), bulk-ingest dependency fixes, formula-assignment failure reporting
+
+**Recommendation:** Stay on `^0.9.3` for now. Do not blind-upgrade further until golden-set tests and import-honesty warnings are green in CI. Re-evaluate when upstream closes remaining P0 issues below.
 
 ---
 
-## 2. Known Open Bugs (Affecting SmartSht Import/Eval)
+## 2. Remaining Risks — Open Upstream Issues (Affecting SmartSht Import/Eval)
 
 These are open issues on GitHub that directly impact SmartSht's uploaded worksheet behavior:
 
@@ -89,19 +90,14 @@ Based on the documented categories and what's commonly used in Excel but NOT lis
 
 ## 4. Date/Time Specific Issues
 
-Dates are the most problematic area for SmartSht imports:
+Dates remain a high-risk area for SmartSht imports, with partial relief in 0.9.3:
 
 1. **Serial number interpretation** — Formualizer handles Excel serial dates (1900 system) but:
-   - Issue #312: Date arithmetic (+/-) preserves a Date type Excel doesn't have
-   - Issue #290: Many text-to-date conversions fail that Excel accepts
-   - Issue #291: Date text comparisons in COUNTIF/SUMIF diverge
+   - Issue #312: Date arithmetic (+/-) preserves a Date type Excel doesn't have (**still open**)
+   - Issue #290: Partially addressed in 0.9.3 (#398) for single-digit years, `24:00`, truncated fractional seconds, month-year forms; remaining cases tracked in #416
+   - Issue #291: Date text comparisons in COUNTIF/SUMIF diverge (**still open**)
 
-2. **Missing date text formats** that Excel parses but Formualizer rejects:
-   - Single-digit year: `1/2/5` (January 2, 2005)
-   - 24:00 as midnight
-   - Fractional seconds: `12:30:45.5`
-   - Month-year only: `Jan 2024`
-   - DATEVALUE/TIMEVALUE with non-standard inputs
+2. **Date text forms** — 0.9.3 accepts more Excel-compatible text; still verify DATEVALUE/TIMEVALUE routing and `"24:00"`-as-full-day arithmetic (#416).
 
 3. **Time functions with dates** — When a cell contains a datetime serial like `45488.75`, functions like HOUR/MINUTE/SECOND should extract the fractional part, but the Date type preservation bug (#312) may cause incorrect extraction.
 
@@ -141,14 +137,14 @@ All functions using criteria matching (wildcards, comparisons) are affected by #
 ### P0 — Blocking SmartSht core functionality
 
 1. **Date arithmetic type preservation** (#312) — Causes formula results to be Date objects instead of numbers
-2. **VLOOKUP/HLOOKUP approximate mode sortedness** (#283) — Returns garbage data  
-3. **Date text parsing gaps** (#290) — Common date formats rejected
+2. **VLOOKUP/HLOOKUP approximate mode sortedness** (#283) — Returns garbage data
+3. **Date text parsing residual gaps** (#290 / #416) — Partial fix in 0.9.3; remaining DATEVALUE/TIMEVALUE / full-day `24:00` cases
 4. **Wildcard/criteria matching** (#295) — COUNTIF/SUMIF wrong results and perf issues
 
 ### P1 — Causes incorrect data after user edits
 
 5. **MATCH blank→0 coercion** (#319)
-6. **COUNTBLANK on sparse ranges** (#285)
+6. **COUNTBLANK on sparse ranges** (#285) — Partial arithmetic blank counting in 0.9.3; not all semantics
 7. **Date text in COUNTIF/SUMIF criteria** (#291)
 8. **Row insert invalidation for MATCH/INDEX** (#313)
 
@@ -180,13 +176,17 @@ This means imported worksheets display correctly, but editing an imported formul
 
 ## 9. Upgrade Path
 
+Current pin:
+
 ```bash
-npm install @ocean8219/formualizer@^0.8.4
+# already in package.json
+"@ocean8219/formualizer": "^0.9.3"
 ```
 
-After upgrading, re-test:
-- Date arithmetic formulas
-- VLOOKUP with approximate matching
-- COUNTIF/SUMIF with wildcard criteria
-- Named range references across sheets
-- Row/column insert operations with dependent formulas
+Before any further upgrade:
+
+1. Run `npm run test:realengine` (golden set in `formualizer.realengine.test.ts`)
+2. Re-check import honesty warnings on a styled workbook with formulas
+3. Spot-check: date arithmetic (#312), approx VLOOKUP (#283), COUNTIF wildcards (#295)
+
+Do **not** upgrade past 0.9.3 solely because a newer tag exists — require golden-set green + known-risk review.

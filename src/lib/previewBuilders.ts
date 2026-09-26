@@ -2,6 +2,7 @@ import type { CellChange, SheetData } from '@/types'
 import { cellToRef, refToCell, letterToCol } from '@/engine/spreadsheet'
 import { findLastDataRow } from '@/lib/sheetSort'
 import { resolveDeleteRow } from '@/lib/deleteRowPreview'
+import { getColumnDataRows } from '@/lib/sheetRows'
 
 /**
  * Build CellChange[] previews for proposed mutations (Phase 1 grid overlay).
@@ -80,6 +81,45 @@ export function previewModifyColumn(
   return changes
 }
 
+/** Preview a single apply_formula write (cell or column-target). */
+export function previewApplyFormula(
+  sheet: SheetData,
+  params: Record<string, unknown>,
+  getComputedValue: (row: number, col: number) => string,
+): CellChange[] {
+  const target = String((params.cell ?? params.column ?? '')).trim().toUpperCase()
+  if (!target) return []
+
+  let formula = String(params.formula ?? '=SUM')
+  if (!formula.startsWith('=')) formula = `=${formula}`
+
+  let cellId: string
+  let fullFormula = formula
+
+  if (/^[A-Z]{1,3}$/.test(target)) {
+    const colIdx = letterToCol(target)
+    const bounds = getColumnDataRows(sheet, colIdx, getComputedValue)
+    if (!bounds) return []
+    cellId = refToCell(bounds.lastRow + 1, colIdx)
+    fullFormula = formula.includes('(')
+      ? formula
+      : `${formula}(${target}${bounds.firstRow + 1}:${target}${bounds.lastRow + 1})`
+  } else if (/^[A-Z]{1,3}\d+$/.test(target)) {
+    cellId = target
+  } else {
+    return []
+  }
+
+  const current = sheet.cells[cellId]
+  return [{
+    cell: cellId,
+    oldValue: current?.value ?? null,
+    newValue: null,
+    oldFormula: current?.formula,
+    newFormula: fullFormula,
+  }]
+}
+
 /** Attach preview.changes onto an action when the tool supports it. */
 export function buildActionPreview(
   tool: string,
@@ -99,6 +139,10 @@ export function buildActionPreview(
       Number(params.factor),
       getComputedValue,
     )
+    return changes.length ? { changes } : undefined
+  }
+  if (tool === 'apply_formula') {
+    const changes = previewApplyFormula(sheet, params, getComputedValue)
     return changes.length ? { changes } : undefined
   }
   if (tool === 'delete_row') {

@@ -2,6 +2,9 @@
 
 These documents describe the technical architecture of smartsh!t's internal systems.
 
+> **Living forward plan:** [`docs/strategy/2026-09-24-usefulness-first-strategy.md`](../strategy/2026-09-24-usefulness-first-strategy.md)  
+> Useful first, unique second. P0 complete; formatting sandbox is P1.
+
 ## Core Focus
 
 smartsh!t is a **spreadsheet understanding tool**. The AI and tooling exist to help users

@@ -46,7 +46,7 @@ export function applyWorkbookImportEffects(
   set: (fn: (s: ImportEffectAccess) => void) => void,
   get: () => ImportEffectAccess,
   workbook: WorkbookData,
-  meta?: { fileName?: string },
+  meta?: { fileName?: string; warnings?: string[] },
 ): void {
   const sheet = workbook.sheets.find((s) => s.id === workbook.activeSheetId) ?? workbook.sheets[0]
   const sheetLines = summarizeImportedSheets(workbook)
@@ -56,9 +56,13 @@ export function applyWorkbookImportEffects(
   const sheetList = sheetLines
     .map((s) => `**${s.name}** (${s.rows} row${s.rows === 1 ? '' : 's'})`)
     .join(', ')
+  const honestyNotes = (meta?.warnings ?? []).filter(Boolean)
+  const honestyBlock = honestyNotes.length
+    ? `\n\n**Import honesty:** ${honestyNotes.join(' ')}`
+    : ''
   const importMessage = multi
-    ? `Imported **${fileLabel}** with **${workbook.sheets.length} sheets**: ${sheetList}.\n\nYou're on **${sheet?.name ?? 'Sheet1'}**. Use the sheet tabs at the bottom to switch — I analyze the active sheet.`
-    : `Imported **${fileLabel}** — ${activeRows} rows on **${sheet?.name ?? 'Sheet 1'}**. Ready to analyze.\n\nAsk me anything about this data — try *"Explain this spreadsheet"* or *"Where am I overspending?"*`
+    ? `Imported **${fileLabel}** with **${workbook.sheets.length} sheets**: ${sheetList}.\n\nYou're on **${sheet?.name ?? 'Sheet1'}**. Use the sheet tabs at the bottom to switch — I analyze the active sheet.${honestyBlock}`
+    : `Imported **${fileLabel}** — ${activeRows} rows on **${sheet?.name ?? 'Sheet 1'}**. Ready to analyze.\n\nAsk me anything about this data — try *"Explain this spreadsheet"* or *"Where am I overspending?"*${honestyBlock}`
 
   set((s) => {
     s.messages.push({
@@ -75,6 +79,14 @@ export function applyWorkbookImportEffects(
           ],
     })
   })
+
+  if (honestyNotes.length > 0) {
+    get().showToast({
+      type: 'warning',
+      message: honestyNotes[0].length > 120 ? `${honestyNotes[0].slice(0, 117)}…` : honestyNotes[0],
+      duration: 8000,
+    })
+  }
 
   if (activeRows > 5) {
     get().showToast({

@@ -3,11 +3,12 @@
  * immediately after a file import. Surfaces key totals, structure, and
  * audit findings without requiring user initiation.
  *
- * Appears as a dismissible toast-like panel anchored to the bottom-right,
- * auto-dismisses after 30 seconds or on user interaction.
+ * Appears as a dismissible toast-like panel anchored to the bottom-right.
+ * Auto-dismisses after 30 seconds unless critical/high audit findings are
+ * present — those stay until the user dismisses or opens the auditor.
  */
 
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useStore } from '@/store/useStore'
 import { useShallow } from 'zustand/react/shallow'
 import { computeSheetInsights } from '@/ai/sheetInsights'
@@ -24,6 +25,8 @@ import {
 } from 'lucide-react'
 
 const AUTO_DISMISS_MS = 30_000
+/** Wait for post-import audit (~500ms) before arming auto-dismiss. */
+const AUDIT_GRACE_MS = 1_000
 
 function formatCurrency(n: number): string {
   return new Intl.NumberFormat('en-US', {
@@ -48,14 +51,33 @@ export function ImportInsightsOverlay() {
 
   const [visible, setVisible] = useState(false)
   const [dismissed, setDismissed] = useState(false)
+  /** Import bump so grace/audit wait resets per import (not on stale audit). */
+  const [importSeq, setImportSeq] = useState(0)
+  /** True once audit landed for this import, or grace elapsed without critical findings. */
+  const [canAutoDismiss, setCanAutoDismiss] = useState(false)
+  const waitingForAuditRef = useRef(false)
 
   const sheet = getActiveSheet()
   const cellCount = Object.keys(sheet.cells).length
+
+  const hasCriticalIssues = lastAuditResult?.findings?.some(
+    (f) => f.severity === 'critical' || f.severity === 'high',
+  ) ?? false
+
+  const criticalFindings = useMemo(() => {
+    const findings = lastAuditResult?.findings ?? []
+    return findings
+      .filter((f) => f.severity === 'critical' || f.severity === 'high')
+      .slice(0, 3)
+  }, [lastAuditResult])
 
   // Detect when a new import happens via custom event from importOrchestration
   useEffect(() => {
     const handler = () => {
       if (dismissed) return
+      waitingForAuditRef.current = true
+      setCanAutoDismiss(false)
+      setImportSeq((n) => n + 1)
       setVisible(true)
       setDismissed(false)
     }
@@ -63,12 +85,42 @@ export function ImportInsightsOverlay() {
     return () => document.removeEventListener('smartsht:import-complete', handler)
   }, [dismissed])
 
-  // Auto-dismiss timer
+  // Arm auto-dismiss only after audit for this import, or after grace if audit never arrives.
+  // Do not trust lastAuditResult that existed before import-complete (stale prior file).
   useEffect(() => {
-    if (!visible) return
+    if (!visible || importSeq === 0) return
+    waitingForAuditRef.current = true
+    setCanAutoDismiss(false)
+    const grace = setTimeout(() => {
+      if (!waitingForAuditRef.current) return
+      waitingForAuditRef.current = false
+      setCanAutoDismiss(true)
+    }, AUDIT_GRACE_MS)
+    return () => clearTimeout(grace)
+  }, [visible, importSeq])
+
+  // When audit result updates while waiting, settle early (audit path ~500ms).
+  // Only react to lastAuditResult changes — do not settle on the stale pre-import result.
+  useEffect(() => {
+    if (!waitingForAuditRef.current) return
+    waitingForAuditRef.current = false
+    const critical = lastAuditResult?.findings?.some(
+      (f) => f.severity === 'critical' || f.severity === 'high',
+    ) ?? false
+    setCanAutoDismiss(!critical)
+  }, [lastAuditResult])
+
+  // Never auto-dismiss while critical/high findings are present
+  useEffect(() => {
+    if (hasCriticalIssues) setCanAutoDismiss(false)
+  }, [hasCriticalIssues])
+
+  // Auto-dismiss timer — only after audit/grace, and never with critical findings
+  useEffect(() => {
+    if (!visible || !canAutoDismiss || hasCriticalIssues) return
     const timer = setTimeout(() => setVisible(false), AUTO_DISMISS_MS)
     return () => clearTimeout(timer)
-  }, [visible])
+  }, [visible, canAutoDismiss, hasCriticalIssues])
 
   const insights = useMemo(() => {
     if (!visible || cellCount < 5) return null
@@ -98,9 +150,6 @@ export function ImportInsightsOverlay() {
   if (!visible || !insights || !profile) return null
 
   const auditIssueCount = lastAuditResult?.findings?.length ?? 0
-  const hasCriticalIssues = lastAuditResult?.findings?.some(
-    (f) => f.severity === 'critical' || f.severity === 'high',
-  ) ?? false
   const hasFinancialData = (insights.totalIncome ?? 0) > 0 || (insights.totalExpenses ?? 0) > 0
   const hasOutliers = (insights.outliers?.length ?? 0) > 0
 
@@ -119,7 +168,7 @@ export function ImportInsightsOverlay() {
         className="rounded-2xl border overflow-hidden"
         style={{
           background: 'var(--surface-panel)',
-          borderColor: 'var(--neutral-200)',
+          borderColor: hasCriticalIssues ? 'var(--danger, #dc2626)' : 'var(--neutral-200)',
           boxShadow: '0 12px 40px oklch(0.1 0 0 / 0.12), 0 4px 12px oklch(0.1 0 0 / 0.06)',
         }}
       >
@@ -194,24 +243,36 @@ export function ImportInsightsOverlay() {
           </div>
         )}
 
-        {/* Audit findings callout */}
+        {/* Audit findings callout — surface critical titles without requiring chat */}
         {auditIssueCount > 0 && (
           <button
             type="button"
             onClick={handleOpenAuditor}
-            className="w-full px-4 py-2.5 border-b flex items-center justify-between transition-colors hover:bg-amber-50/50"
+            className="w-full px-4 py-2.5 border-b flex flex-col gap-1.5 transition-colors hover:bg-amber-50/50 text-left"
             style={{ borderColor: 'var(--neutral-100)' }}
           >
-            <div className="flex items-center gap-2">
-              <ShieldCheck size={13} className={hasCriticalIssues ? 'text-red-500' : 'text-amber-500'} />
-              <span className={`text-xs font-medium ${hasCriticalIssues ? 'text-red-700' : 'text-amber-700'}`}>
-                {auditIssueCount} issue{auditIssueCount === 1 ? '' : 's'} found
-              </span>
+            <div className="flex items-center justify-between w-full">
+              <div className="flex items-center gap-2">
+                <ShieldCheck size={13} className={hasCriticalIssues ? 'text-red-500' : 'text-amber-500'} />
+                <span className={`text-xs font-medium ${hasCriticalIssues ? 'text-red-700' : 'text-amber-700'}`}>
+                  {auditIssueCount} issue{auditIssueCount === 1 ? '' : 's'} found
+                  {hasCriticalIssues ? ' (critical)' : ''}
+                </span>
+              </div>
+              <div className="flex items-center gap-1 text-[10px]" style={{ color: 'var(--accent-600)' }}>
+                <span>Open Auditor</span>
+                <ChevronRight size={10} />
+              </div>
             </div>
-            <div className="flex items-center gap-1 text-[10px]" style={{ color: 'var(--accent-600)' }}>
-              <span>Open Auditor</span>
-              <ChevronRight size={10} />
-            </div>
+            {criticalFindings.length > 0 && (
+              <ul className="pl-5 list-disc space-y-0.5">
+                {criticalFindings.map((f) => (
+                  <li key={f.id} className="text-[11px] text-red-700/90 line-clamp-1">
+                    {f.title}
+                  </li>
+                ))}
+              </ul>
+            )}
           </button>
         )}
 
@@ -240,7 +301,11 @@ export function ImportInsightsOverlay() {
             <ChevronRight size={10} />
           </button>
           <span className="text-[10px]" style={{ color: 'var(--ink-muted)' }}>
-            Auto-dismisses in 30s
+            {hasCriticalIssues
+              ? 'Stays open until dismissed'
+              : canAutoDismiss
+                ? 'Auto-dismisses in 30s'
+                : 'Checking for issues…'}
           </span>
         </div>
       </div>

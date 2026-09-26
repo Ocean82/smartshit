@@ -3,6 +3,7 @@
 These documents are historical — they describe plans that have been executed, reviews whose findings have been addressed, or assessments of a prior state of the codebase. They are retained for context and decision history.
 
 **For current documentation, see:**
+- `strategy/2026-09-24-usefulness-first-strategy.md` — Living forward plan (useful first, unique second)
 - `MAJOR_CHANGES.md` — Running log of substantive changes
 - `DEPLOY.md` — Production deployment guide
 - `ENV.md` — Environment variable reference

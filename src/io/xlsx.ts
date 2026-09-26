@@ -203,6 +203,20 @@ function mapBorderStyle(border: { style?: string; color?: { rgb?: string; argb?:
 }
 
 /**
+ * SheetJS often attaches empty stubs like `{ patternType: "none" }` even on
+ * unstyled cells. Those are not evidence the workbook had styles to recover.
+ */
+function isMeaningfulStyleObject(style: Record<string, unknown>): boolean {
+  if (!style || typeof style !== 'object') return false
+  if (style.fgColor || style.bgColor || style.fill || style.font || style.border || style.alignment)
+    return true
+  if (style.numFmt && typeof style.numFmt === 'object') return true
+  // patternType alone (e.g. "none") is a default stub, not real styling
+  const keys = Object.keys(style).filter((k) => k !== 'patternType')
+  return keys.length > 0
+}
+
+/**
  * Strip prototype-polluting keys from a parsed workbook.
  *
  * The pinned `xlsx@0.18.5` carries an unpatched prototype-pollution advisory
@@ -236,6 +250,10 @@ export async function importWorkbookFromFileWithMeta(file: File): Promise<Workbo
   const maxCols = AI_ANALYSIS_CONFIG.maxImportCols
 
   const sheetLimitHits: WorkbookImportMeta['sheetLimitHits'] = []
+  let formulaCellsWithCachedValue = 0
+  let formulaCellsWithoutCachedValue = 0
+  let styleObjectsSeen = 0
+  let visualStylesApplied = 0
 
   const sheets: SheetData[] = book.SheetNames.map((name) => {
     const sheet = createEmptySheet(name.slice(0, 31))
@@ -266,6 +284,11 @@ export async function importWorkbookFromFileWithMeta(file: File): Promise<Workbo
             const formula = '=' + rawCell.f
             // rawCell.v holds the value Excel computed before saving
             const computedValue = rawCell.v ?? null
+            if (computedValue !== null && computedValue !== undefined) {
+              formulaCellsWithCachedValue += 1
+            } else {
+              formulaCellsWithoutCachedValue += 1
+            }
             if (!sheet.cells[cellId]) {
               sheet.cells[cellId] = { value: computedValue, formula }
             } else {
@@ -301,7 +324,8 @@ export async function importWorkbookFromFileWithMeta(file: File): Promise<Workbo
           }
 
           // Extract styles (background color, borders)
-          if (rawCell.s) {
+          if (rawCell.s && isMeaningfulStyleObject(rawCell.s)) {
+            styleObjectsSeen += 1
             const style = rawCell.s
             const format: Record<string, unknown> = {}
 
@@ -366,6 +390,8 @@ export async function importWorkbookFromFileWithMeta(file: File): Promise<Workbo
 
             // Apply format to cell
             if (Object.keys(format).length > 0) {
+              const visualKeys = ['bgColor', 'fontColor', 'bold', 'italic', 'strikethrough', 'borders', 'fontFamily']
+              if (visualKeys.some((k) => k in format)) visualStylesApplied += 1
               if (!sheet.cells[cellId]) {
                 sheet.cells[cellId] = { value: null, format: format as CellData['format'] }
               } else {
@@ -465,6 +491,24 @@ export async function importWorkbookFromFileWithMeta(file: File): Promise<Workbo
   const warnings: string[] = sheetLimitHits.map((hit) => (
     `Imported sheet "${hit.sheetName}" with limits ${hit.importedRows}/${hit.originalRows} rows and ${hit.importedCols}/${hit.originalCols} columns.`
   ))
+
+  if (formulaCellsWithCachedValue > 0) {
+    warnings.push(
+      `${formulaCellsWithCachedValue} formula${formulaCellsWithCachedValue === 1 ? '' : 's'} imported with Excel's saved values — they will not live-recalculate until you edit them.`,
+    )
+  }
+  if (formulaCellsWithoutCachedValue > 0) {
+    warnings.push(
+      `${formulaCellsWithoutCachedValue} formula${formulaCellsWithoutCachedValue === 1 ? '' : 's'} had no Excel cached value; live evaluation may differ from Excel.`,
+    )
+  }
+  // Only warn when style objects were present but no visual styles applied —
+  // do not warn merely because styleObjectsSeen === 0 (plain unstyled files).
+  if (styleObjectsSeen > 0 && visualStylesApplied === 0) {
+    warnings.push(
+      'Style metadata was present but no visual styles (fill/font/borders) could be applied.',
+    )
+  }
 
   if (!sheets.length) {
     return {
