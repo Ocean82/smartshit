@@ -98,15 +98,10 @@ export function Toolbar() {
     if (file.name.match(/\.(xlsx?|csv)$/i)) {
       pushHistory('Import file');
       const { workbook, meta } = await importWorkbookFromFileWithMeta(file);
-      useStore.getState().importWorkbook(workbook, { fileName: file.name });
+      useStore.getState().importWorkbook(workbook, { fileName: file.name, warnings: meta.warnings });
       if (meta.warnings.length) {
         recordTelemetry('importTruncationEvents', `Toolbar import: ${file.name}`);
-        useStore.getState().addMessage({
-          id: uuid(),
-          role: 'assistant',
-          content: `Import note: ${meta.warnings.join(' ')}`,
-          timestamp: Date.now(),
-        });
+        // Warnings are also appended to the import chat message via importOrchestration.
       }
       // Post-import nudge: suggest the auditor on first import
       const hasSeenAuditorNudge = localStorage.getItem('smartsht-auditor-nudge-seen');

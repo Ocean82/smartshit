@@ -111,3 +111,77 @@ describe('real formualizer WASM — error propagation', () => {
     expect(String(wb.evaluateCell('Sheet1', 1, 1))).toBe('#NAME?')
   })
 })
+
+/**
+ * Small Excel-parity golden set — keep cases cheap and high-signal.
+ * Expand from real customer workbooks; do not grow unbounded.
+ */
+describe('real formualizer WASM — excel parity golden set', () => {
+  const cases: Array<{
+    name: string
+    setup: (wb: ReturnType<typeof newSheet>) => void
+    expect: (wb: ReturnType<typeof newSheet>) => void
+  }> = [
+    {
+      name: 'SUM + IF + arithmetic',
+      setup: (wb) => {
+        wb.setValue('Sheet1', 1, 1, 10)
+        wb.setValue('Sheet1', 2, 1, 20)
+        wb.setValue('Sheet1', 3, 1, 30)
+        wb.setFormula('Sheet1', 4, 1, '=SUM(A1:A3)')
+        wb.setFormula('Sheet1', 5, 1, '=IF(A4>50, A4*2, A4)')
+      },
+      expect: (wb) => {
+        expect(Number(wb.evaluateCell('Sheet1', 4, 1))).toBe(60)
+        expect(Number(wb.evaluateCell('Sheet1', 5, 1))).toBe(120)
+      },
+    },
+    {
+      name: 'AVERAGE and COUNT',
+      setup: (wb) => {
+        wb.setValue('Sheet1', 1, 1, 2)
+        wb.setValue('Sheet1', 2, 1, 4)
+        wb.setValue('Sheet1', 3, 1, 6)
+        wb.setFormula('Sheet1', 4, 1, '=AVERAGE(A1:A3)')
+        wb.setFormula('Sheet1', 5, 1, '=COUNT(A1:A3)')
+      },
+      expect: (wb) => {
+        expect(Number(wb.evaluateCell('Sheet1', 4, 1))).toBe(4)
+        expect(Number(wb.evaluateCell('Sheet1', 5, 1))).toBe(3)
+      },
+    },
+    {
+      name: 'VLOOKUP exact match',
+      setup: (wb) => {
+        wb.setValue('Sheet1', 1, 1, 'Rent')
+        wb.setValue('Sheet1', 1, 2, 1200)
+        wb.setValue('Sheet1', 2, 1, 'Food')
+        wb.setValue('Sheet1', 2, 2, 400)
+        wb.setFormula('Sheet1', 3, 1, '=VLOOKUP("Food",A1:B2,2,FALSE)')
+      },
+      expect: (wb) => {
+        expect(Number(wb.evaluateCell('Sheet1', 3, 1))).toBe(400)
+      },
+    },
+    {
+      name: 'IFERROR wraps #DIV/0!',
+      setup: (wb) => {
+        wb.setValue('Sheet1', 1, 1, 10)
+        wb.setValue('Sheet1', 2, 1, 0)
+        wb.setFormula('Sheet1', 3, 1, '=IFERROR(A1/A2, 0)')
+      },
+      expect: (wb) => {
+        expect(Number(wb.evaluateCell('Sheet1', 3, 1))).toBe(0)
+      },
+    },
+  ]
+
+  for (const tc of cases) {
+    it(tc.name, () => {
+      const wb = newSheet()
+      tc.setup(wb)
+      wb.evaluateAll()
+      tc.expect(wb)
+    })
+  }
+})

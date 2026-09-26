@@ -53,4 +53,20 @@ describe('previewBuilders', () => {
     )
     expect(preview?.changes.length).toBeGreaterThan(0)
   })
+
+  it('buildActionPreview wires apply_formula', () => {
+    const sheet = sheetWithColB()
+    const preview = buildActionPreview(
+      'apply_formula',
+      { cell: 'B4', formula: '=SUM(B2:B3)' },
+      sheet,
+      () => '',
+    )
+    expect(preview?.changes).toEqual([
+      expect.objectContaining({
+        cell: 'B4',
+        newFormula: '=SUM(B2:B3)',
+      }),
+    ])
+  })
 })
