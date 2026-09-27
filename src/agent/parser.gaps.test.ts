@@ -205,4 +205,26 @@ describe('reported agent gap regressions', () => {
       tool: 'auto_fit',
     })
   })
+
+  it('routes style-recipe phrases and leaves plain bold/table phrasing intact (P1.4)', () => {
+    expect(parseMessage('style the header row', expenseContext).calls[0]).toMatchObject({
+      tool: 'style_recipe',
+      params: { recipe: 'header' },
+    })
+    expect(parseMessage('add a total row', expenseContext).calls[0]).toMatchObject({
+      tool: 'style_recipe',
+      params: { recipe: 'total_row' },
+    })
+    expect(parseMessage('polish this table', expenseContext).calls[0]).toMatchObject({
+      tool: 'style_recipe',
+      params: { recipe: 'table_polish' },
+    })
+    // Plain "bold the headers" stays a simple format_cells bold, not the recipe.
+    expect(parseMessage('bold the headers', expenseContext).calls[0]).toMatchObject({
+      tool: 'format_cells',
+      params: { bold: true },
+    })
+    // "make it a table" still routes to format_as_table.
+    expect(parseMessage('make it a table', expenseContext).calls[0]?.tool).toBe('format_as_table')
+  })
 })

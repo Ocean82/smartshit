@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { createEmptySheet, refToCell } from '@/engine/spreadsheet'
-import { detectApplyFormulaRangeGapRisk, handleApplyFormula } from './columnOps'
+import { handleApplyFormula } from './columnOps'
+import { detectFormulaRangeGapRisk } from '@/lib/formulaGapRisk'
 import type { ExecutionContext } from '../executor'
 
 function makeCtx(sheet: ReturnType<typeof createEmptySheet>): ExecutionContext {
@@ -30,7 +31,7 @@ function makeCtx(sheet: ReturnType<typeof createEmptySheet>): ExecutionContext {
   }
 }
 
-describe('detectApplyFormulaRangeGapRisk', () => {
+describe('detectFormulaRangeGapRisk', () => {
   it('flags SUM ranges that exclude an adjacent numeric cell', () => {
     const sheet = createEmptySheet('S')
     sheet.cells = {
@@ -39,7 +40,7 @@ describe('detectApplyFormulaRangeGapRisk', () => {
       A3: { value: 30 },
       A4: { value: 40 },
     }
-    const risk = detectApplyFormulaRangeGapRisk(
+    const risk = detectFormulaRangeGapRisk(
       '=SUM(A1:A3)',
       sheet,
       (row, col) => String(sheet.cells[refToCell(row, col)]?.value ?? ''),
@@ -55,7 +56,7 @@ describe('detectApplyFormulaRangeGapRisk', () => {
       A2: { value: 20 },
       A3: { value: 30 },
     }
-    const risk = detectApplyFormulaRangeGapRisk(
+    const risk = detectFormulaRangeGapRisk(
       '=SUM(A1:A3)',
       sheet,
       () => '',

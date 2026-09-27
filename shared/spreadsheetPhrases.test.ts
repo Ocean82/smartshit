@@ -5,6 +5,7 @@ import {
   parseMultiSortPhrase,
   parseFormatAsTablePhrase,
   parseLayoutPhrase,
+  parseStyleRecipePhrase,
   isMultiSortPhrase,
 } from './spreadsheetPhrases'
 import { extractCellContainsValue } from './formatContains'
@@ -175,5 +176,43 @@ describe('parseLayoutPhrase', () => {
     expect(parseLayoutPhrase('set this as the header')).toBeNull()
     expect(parseLayoutPhrase('delete row 5')).toBeNull()
     expect(parseLayoutPhrase('format column B as currency')).toBeNull()
+  })
+})
+
+describe('parseStyleRecipePhrase', () => {
+  it('routes header styling requests', () => {
+    expect(parseStyleRecipePhrase('style the header row')).toEqual({ recipe: 'header' })
+    expect(parseStyleRecipePhrase('make the header stand out')).toEqual({ recipe: 'header' })
+    expect(parseStyleRecipePhrase('format the headers')).toEqual({ recipe: 'header' })
+  })
+
+  it('routes total-row requests', () => {
+    expect(parseStyleRecipePhrase('add a total row')).toEqual({ recipe: 'total_row' })
+    expect(parseStyleRecipePhrase('add totals at the bottom')).toEqual({ recipe: 'total_row' })
+  })
+
+  it('routes table-polish requests', () => {
+    expect(parseStyleRecipePhrase('polish this table')).toEqual({ recipe: 'table_polish' })
+    expect(parseStyleRecipePhrase('make this table look nice')).toEqual({ recipe: 'table_polish' })
+  })
+
+  it('does not steal plain "bold the headers" or "make it a table"', () => {
+    expect(parseStyleRecipePhrase('bold the headers')).toBeNull()
+    expect(parseStyleRecipePhrase('make it a table')).toBeNull()
+    expect(parseStyleRecipePhrase('add a row')).toBeNull()
+  })
+})
+
+describe('resolveActTemplates — style recipes', () => {
+  it('routes recipe phrases through the act path', () => {
+    expect(resolveActTemplates('style the header row').actions[0]).toMatchObject({
+      tool: 'style_recipe',
+      params: { recipe: 'header' },
+    })
+    expect(resolveActTemplates('add a total row').actions[0]).toMatchObject({
+      tool: 'style_recipe',
+      params: { recipe: 'total_row' },
+    })
+    expect(resolveActTemplates('polish this table').actions[0]?.tool).toBe('style_recipe')
   })
 })

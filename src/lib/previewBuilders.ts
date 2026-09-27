@@ -3,6 +3,7 @@ import { cellToRef, refToCell, letterToCol } from '@/engine/spreadsheet'
 import { findLastDataRow } from '@/lib/sheetSort'
 import { resolveDeleteRow } from '@/lib/deleteRowPreview'
 import { getColumnDataRows } from '@/lib/sheetRows'
+import { buildRecipePlan, isStyleRecipe, planToPreviewChanges } from '@/lib/styleRecipes'
 
 /**
  * Build CellChange[] previews for proposed mutations (Phase 1 grid overlay).
@@ -126,7 +127,7 @@ export function buildActionPreview(
   params: Record<string, unknown>,
   sheet: SheetData,
   getComputedValue: (row: number, col: number) => string,
-): { changes: CellChange[] } | undefined {
+): { changes: CellChange[]; warnings?: string[] } | undefined {
   if (tool === 'set_range' && Array.isArray(params.values) && typeof params.startCell === 'string') {
     const changes = previewSetRange(sheet, params.startCell, params.values as unknown[][])
     return changes.length ? { changes } : undefined
@@ -143,6 +144,18 @@ export function buildActionPreview(
   }
   if (tool === 'apply_formula') {
     const changes = previewApplyFormula(sheet, params, getComputedValue)
+    if (!changes.length) return undefined
+    const [change] = changes
+    const gapRisk = change.newFormula
+      ? detectFormulaRangeGapRisk(change.newFormula, sheet, getComputedValue, change.cell)
+      : null
+    return gapRisk ? { changes, warnings: [gapRisk] } : { changes }
+  }
+  if (tool === 'style_recipe' && isStyleRecipe(params.recipe)) {
+    const theme = typeof params.theme === 'string' ? params.theme : 'blue'
+    const plan = buildRecipePlan(params.recipe, sheet, getComputedValue, theme)
+    if (!plan) return undefined
+    const changes = planToPreviewChanges(plan, sheet)
     return changes.length ? { changes } : undefined
   }
   if (tool === 'delete_row') {

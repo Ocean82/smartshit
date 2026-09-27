@@ -37,6 +37,8 @@ export interface AgentAction {
   status: 'pending' | 'applied' | 'rejected' | 'preview';
   preview?: {
     changes: CellChange[];
+    /** Risks the user should see before clicking Apply (Apply confirms them). */
+    warnings?: string[];
   };
 }
 

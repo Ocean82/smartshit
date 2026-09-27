@@ -230,6 +230,16 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
     ],
     examples: ['highlight negatives in red', 'color expenses over 500 orange'],
   },
+  {
+    name: 'style_recipe',
+    category: 'mutate',
+    description: 'Apply a bounded styling preset to the detected table: "header" (style the header row), "total_row" (add a totals row with SUM formulas), or "table_polish" (full banded table styling with filters).',
+    params: [
+      { name: 'recipe', type: 'string', description: 'One of: header, total_row, table_polish', required: true },
+      { name: 'theme', type: 'string', description: 'Color theme: blue, green, purple, orange, slate, minimal (default blue)' },
+    ],
+    examples: ['style the header row', 'add a total row', 'polish this table', 'make the header stand out', 'add totals at the bottom'],
+  },
   // ─── Layout (column width / row height / auto-fit) ────────────────────────
   {
     name: 'set_column_width',

@@ -7,6 +7,7 @@ import {
   parseLayoutPhrase,
   parseMultiSortPhrase,
   parseNumberFormatPhrase,
+  parseStyleRecipePhrase,
 } from './spreadsheetPhrases.js'
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -202,6 +203,22 @@ const RULES: TemplateRule[] = [
       return {
         message: `I will format the data as a ${phrase.theme} table. Click Apply to confirm.`,
         actions: [{ tool: 'format_as_table', params: { theme: phrase.theme }, description: `Format as table (${phrase.theme})` }],
+      }
+    },
+  },
+
+  // Style recipes: header / total_row / table_polish
+  {
+    id: 'style_recipe',
+    match: (l) => parseStyleRecipePhrase(l) != null,
+    resolve: (_l, original) => {
+      const phrase = parseStyleRecipePhrase(original)!
+      const label = phrase.recipe === 'header' ? 'header row'
+        : phrase.recipe === 'total_row' ? 'total row'
+        : 'table polish'
+      return {
+        message: `I will apply ${label} styling. Click Apply to confirm.`,
+        actions: [{ tool: 'style_recipe', params: { recipe: phrase.recipe }, description: `Apply ${label} styling` }],
       }
     },
   },

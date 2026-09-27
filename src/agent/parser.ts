@@ -12,6 +12,7 @@ import {
   parseLayoutPhrase,
   parseMultiSortPhrase,
   parseNumberFormatPhrase,
+  parseStyleRecipePhrase,
 } from '../../shared/spreadsheetPhrases'
 import type { ColumnProfile } from '@/ai/types'
 import { parseAdvancedFormula } from './formulaPatterns'
@@ -239,6 +240,20 @@ function parseMessageInternal(message: string, sheetContext?: SheetContext): Par
       description: `Format as table (${tablePhrase.theme})`,
     })
     return { calls, understood: true, explanation: `Formatting the data range as a ${tablePhrase.theme} table.` }
+  }
+
+  // ─── Style recipes (header / total_row / table_polish) ───────────────────────
+  const recipePhrase = parseStyleRecipePhrase(message)
+  if (recipePhrase) {
+    const label = recipePhrase.recipe === 'header' ? 'header row'
+      : recipePhrase.recipe === 'total_row' ? 'total row'
+      : 'table polish'
+    calls.push({
+      tool: 'style_recipe',
+      params: { recipe: recipePhrase.recipe },
+      description: `Apply ${label} styling`,
+    })
+    return { calls, understood: true, explanation: `Applying the ${label} styling recipe.` }
   }
 
   // ─── Layout (column width / row height / auto-fit) ───────────────────────────

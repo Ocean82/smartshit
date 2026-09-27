@@ -60,6 +60,12 @@ export type LayoutPhrase =
   | { kind: 'height'; row: string; height: number }
   | { kind: 'autofit'; row?: string }
 
+export type StyleRecipeName = 'header' | 'total_row' | 'table_polish'
+
+export interface StyleRecipePhrase {
+  recipe: StyleRecipeName
+}
+
 /** Default target width (px) for "wider"/"widen" with no explicit number. */
 const WIDER_DEFAULT = 200
 /** Default target height (px) for "taller" with no explicit number. */
@@ -262,6 +268,42 @@ export function parseLayoutPhrase(text: string): LayoutPhrase | null {
   const tallerMatch = t.match(/\b(?:make\s+)?(?:the\s+)?rows?\s+(\d+(?::\d+)?)\s+taller\b/i)
   if (tallerMatch) {
     return { kind: 'height', row: tallerMatch[1], height: TALLER_DEFAULT }
+  }
+
+  return null
+}
+
+/**
+ * Style-recipe phrases → style_recipe tool.
+ *
+ * header:      "style the header row", "make the header stand out", "format the headers"
+ * total_row:   "add a total row", "add totals at the bottom", "add a totals row"
+ * table_polish:"polish this table", "make this table look nice"
+ *
+ * NOTE: kept distinct from the simpler "bold the headers" (plain bold via
+ * format_cells) and "format as table" (format_as_table) so those keep working.
+ */
+export function parseStyleRecipePhrase(text: string): StyleRecipePhrase | null {
+  const lower = text.toLowerCase().trim()
+
+  // total_row — a totals row with formulas
+  if (/\badd\s+(?:a\s+)?(?:grand\s+)?total(?:s)?\s+row\b/.test(lower)
+    || /\badd\s+(?:a\s+)?(?:grand\s+)?totals?\s+(?:at\s+the\s+bottom|to\s+the\s+bottom)\b/.test(lower)) {
+    return { recipe: 'total_row' }
+  }
+
+  // header — styled header row (not just bold). Require "header" + a styling verb.
+  if (/\b(?:style|format|design)\s+(?:the\s+)?header(?:s|\s+row)?\b/.test(lower)
+    || /\bmake\s+(?:the\s+)?headers?\s+stand\s+out\b/.test(lower)
+    || /\bstyle\s+(?:the\s+)?header\s+row\b/.test(lower)) {
+    return { recipe: 'header' }
+  }
+
+  // table_polish — full table styling via the "polish" verb (format-as-table
+  // owns "make it a table"; this owns explicit polish requests).
+  if (/\bpolish\s+(?:this|the|my)?\s*table\b/.test(lower)
+    || /\bmake\s+(?:this|the|my)\s+table\s+look\s+(?:nice|good|better|polished)\b/.test(lower)) {
+    return { recipe: 'table_polish' }
   }
 
   return null

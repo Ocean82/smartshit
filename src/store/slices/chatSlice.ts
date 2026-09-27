@@ -300,6 +300,7 @@ export function createChatActions(
         'modify_column',
         'apply_formula',
         'execute_script',
+        'style_recipe',
       ])
       for (const msg of state.messages) {
         if (!msg.actions) continue
