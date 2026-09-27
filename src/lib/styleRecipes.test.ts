@@ -57,6 +57,48 @@ describe('buildRecipePlan — total_row', () => {
     // Total row is bolded.
     expect(plan.formatUpdates.B5?.bold).toBe(true)
   })
+
+  it('is idempotent — re-applying refreshes the same row instead of stacking', () => {
+    const sheet = makeTable()
+    const get = getComputed(sheet)
+    const first = buildRecipePlan('total_row', sheet, get)!
+    // Apply the first plan the way the executor does.
+    for (const [cellId, data] of Object.entries(first.cellUpdates)) {
+      sheet.cells[cellId] = { value: data.value ?? null, formula: data.formula }
+    }
+
+    const second = buildRecipePlan('total_row', sheet, get)!
+    // Same cells, not a new row below.
+    expect(Object.keys(second.cellUpdates).sort()).toEqual(['A5', 'B5', 'C5'])
+    // The SUM must not span the row it just wrote, or the total doubles.
+    expect(second.cellUpdates.B5?.formula).toBe('=SUM(B2:B4)')
+    expect(second.cellUpdates.C5?.formula).toBe('=SUM(C2:C4)')
+  })
+
+  it('does not clobber a data row that reads "Total" but holds plain values', () => {
+    const sheet = makeTable()
+    sheet.cells.A4 = { value: 'Total' } // B4/C4 stay literal numbers
+    const plan = buildRecipePlan('total_row', sheet, getComputed(sheet))!
+    // No SUM formula on row 4, so it is data — the totals row is appended below it.
+    expect(plan.cellUpdates.A4?.value).toBeUndefined()
+    expect(plan.cellUpdates.A5?.value).toBe('Total')
+    expect(plan.cellUpdates.B5?.formula).toBe('=SUM(B2:B4)')
+  })
+
+  it('refreshes the totals in place after a data value changes', () => {
+    const sheet = makeTable()
+    const get = getComputed(sheet)
+    for (const [cellId, data] of Object.entries(
+      buildRecipePlan('total_row', sheet, get)!.cellUpdates,
+    )) {
+      sheet.cells[cellId] = { value: data.value ?? null, formula: data.formula }
+    }
+    sheet.cells.C3 = { value: 500 }
+
+    const plan = buildRecipePlan('total_row', sheet, get)!
+    expect(Object.keys(plan.cellUpdates).sort()).toEqual(['A5', 'B5', 'C5'])
+    expect(plan.cellUpdates.C5?.formula).toBe('=SUM(C2:C4)')
+  })
 })
 
 describe('buildRecipePlan — table_polish', () => {

@@ -66,7 +66,7 @@ export function buildRecipePlan(
     filters = result.filters.map((f) => f.column)
   } else {
     // total_row
-    const totals = generateTableTotals(sheet, range, getComputedValue)
+    const totals = generateTableTotals(sheet, totalsTargetRange(sheet, getComputedValue, range), getComputedValue)
     if (!totals) return null
     const t = TABLE_THEMES[theme] ?? TABLE_THEMES.blue
     for (const [cellId, data] of Object.entries(totals)) {
@@ -76,6 +76,37 @@ export function buildRecipePlan(
   }
 
   return { formatUpdates, cellUpdates, filters, range }
+}
+
+/** Labels generateTableTotals writes, used to recognise our own output. */
+const TOTALS_LABELS = new Set(['total', 'totals', 'sum'])
+
+/**
+ * Make the total_row recipe idempotent.
+ *
+ * detectTableRange derives `endRow` from every non-empty cell, so a totals row
+ * written by a previous run becomes part of the "data". Appending blindly would
+ * therefore stack a second Total row and widen the SUM range to include the
+ * first one — silently doubling the reported total, and inflating it further on
+ * every re-apply.
+ *
+ * When the last detected row is already a totals row we treat it as the target
+ * and exclude it from the data instead, so re-running refreshes that row in
+ * place. Detection needs both our label *and* at least one SUM formula on the
+ * row, so a genuine data row that happens to say "Total" is left alone.
+ */
+function totalsTargetRange(
+  sheet: SheetData,
+  getComputedValue: (row: number, col: number) => string,
+  range: DetectedTableRange,
+): DetectedTableRange {
+  if (range.endRow - 1 <= range.headerRow) return range
+  const label = getComputedValue(range.endRow, range.startCol).trim().toLowerCase()
+  if (!TOTALS_LABELS.has(label)) return range
+  for (let c = range.startCol; c <= range.endCol; c++) {
+    if (sheet.cells[refToCell(range.endRow, c)]?.formula) return { ...range, endRow: range.endRow - 1 }
+  }
+  return range
 }
 
 /** Flatten a plan into CellChange[] for the Apply/Reject preview. */
