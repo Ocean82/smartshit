@@ -22,6 +22,12 @@ export interface ExecutionContext {
   setCellValidation?: (cellId: string, validation: import('@/types').DataValidation | null) => void
   /** Batched cell write — strongly preferred over looping setCellValue. */
   bulkSetCells: (cells: Record<string, { value: string | number | boolean | null; formula?: string }>) => void
+  /** Set a column's pixel width (0-indexed). Clamped; does not push history. */
+  setColumnWidth?: (col: number, width: number) => void
+  /** Set a row's pixel height (0-indexed). Clamped; does not push history. */
+  setRowHeight?: (row: number, height: number) => void
+  /** Autofit the given 0-indexed rows to wrapped content. Returns rows changed. */
+  autoFitRows?: (rows: number[]) => number
   applySortPatch: (patch: SortPatch) => void
   setFilters: (filters: FilterConfig[]) => void
   deleteRow: (row: number) => void

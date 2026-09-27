@@ -230,6 +230,36 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
     ],
     examples: ['highlight negatives in red', 'color expenses over 500 orange'],
   },
+  // ─── Layout (column width / row height / auto-fit) ────────────────────────
+  {
+    name: 'set_column_width',
+    category: 'mutate',
+    description: 'Set the pixel width of one or more columns.',
+    params: [
+      { name: 'column', type: 'string', description: 'Column letter ("B"), range ("B:D"), or comma list ("B,D,F")', required: true },
+      { name: 'width', type: 'number', description: 'Width in pixels (clamped to 40–400)', required: true },
+    ],
+    examples: ['make column B wider', 'set column C width to 200', 'widen columns B:D'],
+  },
+  {
+    name: 'set_row_height',
+    category: 'mutate',
+    description: 'Set the pixel height of one or more rows.',
+    params: [
+      { name: 'row', type: 'string', description: 'Row number ("2"), range ("2:5"), or comma list ("2,4"); 1-indexed', required: true },
+      { name: 'height', type: 'number', description: 'Height in pixels (clamped to 20–400)', required: true },
+    ],
+    examples: ['make row 1 taller', 'set row 2 height to 40', 'set rows 2:10 height to 32'],
+  },
+  {
+    name: 'auto_fit',
+    category: 'mutate',
+    description: 'Auto-fit row heights to wrapped cell content. Omit "row" to fit all populated rows.',
+    params: [
+      { name: 'row', type: 'string', description: 'Row number, range, or comma list to fit. Omit for all populated rows.' },
+    ],
+    examples: ['auto-fit the rows', 'resize rows to fit content', 'auto fit row heights'],
+  },
   // ─── Cell operations ──────────────────────────────────────────────────────
   {
     name: 'set_cell',
