@@ -4,6 +4,7 @@ import { findLastDataRow } from '@/lib/sheetSort'
 import { resolveDeleteRow } from '@/lib/deleteRowPreview'
 import { getColumnDataRows } from '@/lib/sheetRows'
 import { buildRecipePlan, isStyleRecipe, planToPreviewChanges } from '@/lib/styleRecipes'
+import { detectFormulaRangeGapRisk } from '@/lib/formulaGapRisk'
 
 /**
  * Build CellChange[] previews for proposed mutations (Phase 1 grid overlay).

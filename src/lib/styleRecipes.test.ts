@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { SheetData } from '@/types'
-import { cellToRef } from '@/engine/spreadsheet'
+import { refToCell } from '@/engine/spreadsheet'
 import {
   buildRecipePlan,
   isStyleRecipe,
@@ -20,7 +20,7 @@ function makeTable(): SheetData {
 }
 
 const getComputed = (sheet: SheetData) => (row: number, col: number) => {
-  const c = sheet.cells[cellToRef(row, col)]
+  const c = sheet.cells[refToCell(row, col)]
   return c?.value == null ? '' : String(c.value)
 }
 

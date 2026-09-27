@@ -68,7 +68,6 @@ export function buildRecipePlan(
     // total_row
     const totals = generateTableTotals(sheet, range, getComputedValue)
     if (!totals) return null
-    const totalsRow = range.endRow + 1
     const t = TABLE_THEMES[theme] ?? TABLE_THEMES.blue
     for (const [cellId, data] of Object.entries(totals)) {
       cellUpdates[cellId] = { value: data.value ?? null, formula: data.formula }

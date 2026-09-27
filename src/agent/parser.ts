@@ -61,13 +61,20 @@ const NON_ROW_DELETE_TARGETS = [
 const QUESTION_PREFIXES_RE = /^(?:can\s+(?:i|you|we)|should\s+(?:i|we|the)|would\s+(?:it|you)|could\s+(?:i|you|we)|do\s+you(?:\s+(?:think|recommend|suggest))?|how\s+(?:do|can|should)\s+(?:i|we)|is\s+(?:it|there)|what\s+(?:if|happens))\b/i
 
 /**
- * Tools that mutate or reorder data irreversibly enough that firing them from
- * a question phrasing is a destructive surprise. If the raw message is phrased
- * as a question (ends with `?`), a parse resolving to one of these is vetoed
- * and handed to the LLM instead. Read-only tools are intentionally excluded.
+ * Tools that mutate or reorder the sheet in bulk, or irreversibly enough that
+ * firing them from a question phrasing is a surprise. If the raw message is
+ * phrased as a question (ends with `?`, or opens with an interrogative stem), a
+ * parse resolving to one of these is vetoed and handed to the LLM instead.
+ * Read-only tools are intentionally excluded.
+ *
+ * Bulk-formatting tools are included even though they are undoable: restyling a
+ * whole detected range in reply to "should I…?" is exactly the false positive
+ * the veto exists to prevent. Targeted tools are intentionally excluded — the
+ * polite-framing path treats "can you highlight X" as a real command.
  */
 const DESTRUCTIVE_TOOLS = new Set([
   'delete_row', 'clear_sheet', 'modify_column', 'sort_sheet', 'multi_sort', 'find_and_replace',
+  'format_as_table', 'style_recipe',
 ])
 
 /**
