@@ -55,6 +55,22 @@ export interface FormatAsTablePhrase {
   theme: string
 }
 
+export type LayoutPhrase =
+  | { kind: 'width'; column: string; width: number }
+  | { kind: 'height'; row: string; height: number }
+  | { kind: 'autofit'; row?: string }
+
+export type StyleRecipeName = 'header' | 'total_row' | 'table_polish'
+
+export interface StyleRecipePhrase {
+  recipe: StyleRecipeName
+}
+
+/** Default target width (px) for "wider"/"widen" with no explicit number. */
+const WIDER_DEFAULT = 200
+/** Default target height (px) for "taller" with no explicit number. */
+const TALLER_DEFAULT = 44
+
 function resolveNumberFormatKey(raw: string): string | null {
   const key = raw.toLowerCase().replace(/percentage/, 'percent')
   return NUMBER_FORMAT_ALIASES[key] ?? null
@@ -195,4 +211,100 @@ export function parseFormatAsTablePhrase(text: string): FormatAsTablePhrase | nu
 
   const theme = lower.match(/\b(blue|green|purple|orange|slate|minimal)\b/)?.[1] ?? 'blue'
   return { theme }
+}
+
+/** Normalize a column token to "B" or a range "B:D" (uppercased); null if not column-like. */
+function normalizeColumnSpec(raw: string): string | null {
+  const t = raw.trim().toUpperCase().replace(/\s+/g, '')
+  if (/^[A-Z]{1,3}(:[A-Z]{1,3})?$/.test(t)) return t
+  return null
+}
+
+/**
+ * Layout phrases → set_column_width / set_row_height / auto_fit.
+ *
+ * Width:  "set column C width to 200", "make column B wider", "widen columns B:D"
+ * Height: "set row 2 height to 40", "make row 1 taller"
+ * Autofit:"auto-fit the rows", "resize rows to fit content", "auto fit row heights"
+ */
+export function parseLayoutPhrase(text: string): LayoutPhrase | null {
+  const t = text.trim()
+  const lower = t.toLowerCase()
+
+  // Auto-fit — checked first so "resize rows to fit" doesn't fall into height.
+  if (/\bauto[-\s]?fit\b/.test(lower) || /\bresize\s+rows?\s+to\s+fit\b/.test(lower) || /\bfit\s+rows?\s+to\s+(?:the\s+)?content\b/.test(lower)) {
+    const rowSpec = lower.match(/\brows?\s+(\d+(?::\d+)?)\b/)?.[1]
+    return rowSpec ? { kind: 'autofit', row: rowSpec } : { kind: 'autofit' }
+  }
+
+  // Explicit width: "... column B width to 200", "set width of column B to 200"
+  const widthTo = t.match(/\bcolumns?\s+([a-z]{1,3}(?::[a-z]{1,3})?)\b[^\d]*?\bwidth\b[^\d]*?(\d{1,4})\b/i)
+    ?? t.match(/\bwidth\s+of\s+columns?\s+([a-z]{1,3}(?::[a-z]{1,3})?)\b[^\d]*?(\d{1,4})\b/i)
+    ?? t.match(/\bset\s+columns?\s+([a-z]{1,3}(?::[a-z]{1,3})?)\b[^\d]*?(\d{1,4})\s*px\b/i)
+  if (widthTo) {
+    const column = normalizeColumnSpec(widthTo[1])
+    const width = parseInt(widthTo[2], 10)
+    if (column && Number.isFinite(width)) return { kind: 'width', column, width }
+  }
+
+  // Relative width: "make column B wider", "widen columns B:D"
+  const widerMatch = t.match(/\b(?:make\s+)?(?:the\s+)?columns?\s+([a-z]{1,3}(?::[a-z]{1,3})?)\s+wider\b/i)
+    ?? t.match(/\bwiden\s+(?:the\s+)?columns?\s+([a-z]{1,3}(?::[a-z]{1,3})?)\b/i)
+  if (widerMatch) {
+    const column = normalizeColumnSpec(widerMatch[1])
+    if (column) return { kind: 'width', column, width: WIDER_DEFAULT }
+  }
+
+  // Explicit height: "set row 2 height to 40", "row 2:5 height 32"
+  const heightTo = t.match(/\brows?\s+(\d+(?::\d+)?)\b[^\d]*?\bheight\b[^\d]*?(\d{1,4})\b/i)
+    ?? t.match(/\bheight\s+of\s+rows?\s+(\d+(?::\d+)?)\b[^\d]*?(\d{1,4})\b/i)
+  if (heightTo) {
+    const row = heightTo[1]
+    const height = parseInt(heightTo[2], 10)
+    if (Number.isFinite(height)) return { kind: 'height', row, height }
+  }
+
+  // Relative height: "make row 1 taller"
+  const tallerMatch = t.match(/\b(?:make\s+)?(?:the\s+)?rows?\s+(\d+(?::\d+)?)\s+taller\b/i)
+  if (tallerMatch) {
+    return { kind: 'height', row: tallerMatch[1], height: TALLER_DEFAULT }
+  }
+
+  return null
+}
+
+/**
+ * Style-recipe phrases → style_recipe tool.
+ *
+ * header:      "style the header row", "make the header stand out", "format the headers"
+ * total_row:   "add a total row", "add totals at the bottom", "add a totals row"
+ * table_polish:"polish this table", "make this table look nice"
+ *
+ * NOTE: kept distinct from the simpler "bold the headers" (plain bold via
+ * format_cells) and "format as table" (format_as_table) so those keep working.
+ */
+export function parseStyleRecipePhrase(text: string): StyleRecipePhrase | null {
+  const lower = text.toLowerCase().trim()
+
+  // total_row — a totals row with formulas
+  if (/\badd\s+(?:a\s+)?(?:grand\s+)?total(?:s)?\s+row\b/.test(lower)
+    || /\badd\s+(?:a\s+)?(?:grand\s+)?totals?\s+(?:at\s+the\s+bottom|to\s+the\s+bottom)\b/.test(lower)) {
+    return { recipe: 'total_row' }
+  }
+
+  // header — styled header row (not just bold). Require "header" + a styling verb.
+  if (/\b(?:style|format|design)\s+(?:the\s+)?header(?:s|\s+row)?\b/.test(lower)
+    || /\bmake\s+(?:the\s+)?headers?\s+stand\s+out\b/.test(lower)
+    || /\bstyle\s+(?:the\s+)?header\s+row\b/.test(lower)) {
+    return { recipe: 'header' }
+  }
+
+  // table_polish — full table styling via the "polish" verb (format-as-table
+  // owns "make it a table"; this owns explicit polish requests).
+  if (/\bpolish\s+(?:this|the|my)?\s*table\b/.test(lower)
+    || /\bmake\s+(?:this|the|my)\s+table\s+look\s+(?:nice|good|better|polished)\b/.test(lower)) {
+    return { recipe: 'table_polish' }
+  }
+
+  return null
 }

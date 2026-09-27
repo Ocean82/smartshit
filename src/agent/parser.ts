@@ -9,8 +9,10 @@ import {
   isMultiSortPhrase,
   parseFilterPhrase,
   parseFormatAsTablePhrase,
+  parseLayoutPhrase,
   parseMultiSortPhrase,
   parseNumberFormatPhrase,
+  parseStyleRecipePhrase,
 } from '../../shared/spreadsheetPhrases'
 import type { ColumnProfile } from '@/ai/types'
 import { parseAdvancedFormula } from './formulaPatterns'
@@ -72,7 +74,7 @@ const QUESTION_PREFIXES_RE = /^(?:can\s+(?:i|you|we)|should\s+(?:i|we|the)|would
  */
 const DESTRUCTIVE_TOOLS = new Set([
   'delete_row', 'clear_sheet', 'modify_column', 'sort_sheet', 'multi_sort', 'find_and_replace',
-  'format_as_table',
+  'format_as_table', 'style_recipe',
 ])
 
 /**
@@ -245,6 +247,50 @@ function parseMessageInternal(message: string, sheetContext?: SheetContext): Par
       description: `Format as table (${tablePhrase.theme})`,
     })
     return { calls, understood: true, explanation: `Formatting the data range as a ${tablePhrase.theme} table.` }
+  }
+
+  // ─── Style recipes (header / total_row / table_polish) ───────────────────────
+  const recipePhrase = parseStyleRecipePhrase(message)
+  if (recipePhrase) {
+    const label = recipePhrase.recipe === 'header' ? 'header row'
+      : recipePhrase.recipe === 'total_row' ? 'total row'
+      : 'table polish'
+    calls.push({
+      tool: 'style_recipe',
+      params: { recipe: recipePhrase.recipe },
+      description: `Apply ${label} styling`,
+    })
+    return { calls, understood: true, explanation: `Applying the ${label} styling recipe.` }
+  }
+
+  // ─── Layout (column width / row height / auto-fit) ───────────────────────────
+  const layoutPhrase = parseLayoutPhrase(message)
+  if (layoutPhrase) {
+    if (layoutPhrase.kind === 'width') {
+      calls.push({
+        tool: 'set_column_width',
+        params: { column: layoutPhrase.column, width: layoutPhrase.width },
+        description: `Set column ${layoutPhrase.column} width to ${layoutPhrase.width}px`,
+      })
+      return { calls, understood: true, explanation: `Setting column ${layoutPhrase.column} width to ${layoutPhrase.width}px.` }
+    }
+    if (layoutPhrase.kind === 'height') {
+      calls.push({
+        tool: 'set_row_height',
+        params: { row: layoutPhrase.row, height: layoutPhrase.height },
+        description: `Set row ${layoutPhrase.row} height to ${layoutPhrase.height}px`,
+      })
+      return { calls, understood: true, explanation: `Setting row ${layoutPhrase.row} height to ${layoutPhrase.height}px.` }
+    }
+    // autofit
+    const params: Record<string, unknown> = {}
+    if (layoutPhrase.row) params.row = layoutPhrase.row
+    calls.push({
+      tool: 'auto_fit',
+      params,
+      description: layoutPhrase.row ? `Auto-fit rows ${layoutPhrase.row}` : 'Auto-fit rows to content',
+    })
+    return { calls, understood: true, explanation: 'Auto-fitting row heights to content.' }
   }
 
   // ─── Number format (currency / percent / date) ──────────────────────────────

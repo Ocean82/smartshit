@@ -187,4 +187,44 @@ describe('reported agent gap regressions', () => {
       params: { values: ['groceries', 400] },
     })
   })
+
+  it('routes layout phrases to the width/height/auto-fit tools (P1.3)', () => {
+    expect(parseMessage('set column C width to 200', expenseContext).calls[0]).toMatchObject({
+      tool: 'set_column_width',
+      params: { column: 'C', width: 200 },
+    })
+    expect(parseMessage('make column B wider', expenseContext).calls[0]).toMatchObject({
+      tool: 'set_column_width',
+      params: { column: 'B', width: 200 },
+    })
+    expect(parseMessage('set row 2 height to 40', expenseContext).calls[0]).toMatchObject({
+      tool: 'set_row_height',
+      params: { row: '2', height: 40 },
+    })
+    expect(parseMessage('auto-fit the rows', expenseContext).calls[0]).toMatchObject({
+      tool: 'auto_fit',
+    })
+  })
+
+  it('routes style-recipe phrases and leaves plain bold/table phrasing intact (P1.4)', () => {
+    expect(parseMessage('style the header row', expenseContext).calls[0]).toMatchObject({
+      tool: 'style_recipe',
+      params: { recipe: 'header' },
+    })
+    expect(parseMessage('add a total row', expenseContext).calls[0]).toMatchObject({
+      tool: 'style_recipe',
+      params: { recipe: 'total_row' },
+    })
+    expect(parseMessage('polish this table', expenseContext).calls[0]).toMatchObject({
+      tool: 'style_recipe',
+      params: { recipe: 'table_polish' },
+    })
+    // Plain "bold the headers" stays a simple format_cells bold, not the recipe.
+    expect(parseMessage('bold the headers', expenseContext).calls[0]).toMatchObject({
+      tool: 'format_cells',
+      params: { bold: true },
+    })
+    // "make it a table" still routes to format_as_table.
+    expect(parseMessage('make it a table', expenseContext).calls[0]?.tool).toBe('format_as_table')
+  })
 })

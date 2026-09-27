@@ -166,14 +166,21 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
     name: 'format_cells',
     category: 'mutate',
     description:
-      'Format cells: bold, background color, font color, font size, number format. Optional "range" (e.g. "A1:D1", "B", "B2:B10"); defaults to selection or populated cells. Optional "condition" targets cells by value.',
+      'Format cells: bold, italic, underline, strikethrough, font family/size, text/background color, horizontal & vertical alignment, text wrap, borders, number format. Optional "range" (e.g. "A1:D1", "B", "B2:B10"); defaults to selection or populated cells. Optional "condition" targets cells by value.',
     params: [
       { name: 'range', type: 'string', description: 'A1-style range, column letter, or single cell. Omit to use selection/whole sheet.' },
       { name: 'bold', type: 'boolean', description: 'Make text bold' },
       { name: 'italic', type: 'boolean', description: 'Make text italic' },
+      { name: 'underline', type: 'boolean', description: 'Underline text' },
+      { name: 'strikethrough', type: 'boolean', description: 'Strike through text' },
       { name: 'fontSize', type: 'number', description: 'Font size in px' },
+      { name: 'fontFamily', type: 'string', description: 'Font family name, e.g. "Arial", "Times New Roman", "Courier New"' },
       { name: 'bgColor', type: 'string', description: 'Background color hex, e.g. "#FFF9C4"' },
       { name: 'fontColor', type: 'string', description: 'Font color hex, e.g. "#FF0000"' },
+      { name: 'textAlign', type: 'string', description: 'Horizontal alignment: "left" | "center" | "right"' },
+      { name: 'verticalAlign', type: 'string', description: 'Vertical alignment: "top" | "middle" | "bottom"' },
+      { name: 'textWrap', type: 'boolean', description: 'Wrap long text within the cell instead of truncating' },
+      { name: 'borders', type: 'object', description: 'Border style applied to all sides (string, e.g. "thin") or per-side {top,right,bottom,left}' },
       { name: 'numberFormat', type: 'string', description: 'Number format: number, number-int, currency, currency-int, currency-gbp, currency-eur, currency-jpy, accounting, accounting-neg, percent, percent-int, date, date-iso, date-long, date-short-eu, time, time-24, datetime, fraction, scientific, text' },
       {
         name: 'condition',
@@ -222,6 +229,46 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
       { name: 'color', type: 'string', description: 'Highlight color hex' },
     ],
     examples: ['highlight negatives in red', 'color expenses over 500 orange'],
+  },
+  {
+    name: 'style_recipe',
+    category: 'mutate',
+    description: 'Apply a bounded styling preset to the detected table: "header" (style the header row), "total_row" (add a totals row with SUM formulas), or "table_polish" (full banded table styling with filters).',
+    params: [
+      { name: 'recipe', type: 'string', description: 'One of: header, total_row, table_polish', required: true },
+      { name: 'theme', type: 'string', description: 'Color theme: blue, green, purple, orange, slate, minimal (default blue)' },
+    ],
+    examples: ['style the header row', 'add a total row', 'polish this table', 'make the header stand out', 'add totals at the bottom'],
+  },
+  // ─── Layout (column width / row height / auto-fit) ────────────────────────
+  {
+    name: 'set_column_width',
+    category: 'mutate',
+    description: 'Set the pixel width of one or more columns.',
+    params: [
+      { name: 'column', type: 'string', description: 'Column letter ("B"), range ("B:D"), or comma list ("B,D,F")', required: true },
+      { name: 'width', type: 'number', description: 'Width in pixels (clamped to 40–400)', required: true },
+    ],
+    examples: ['make column B wider', 'set column C width to 200', 'widen columns B:D'],
+  },
+  {
+    name: 'set_row_height',
+    category: 'mutate',
+    description: 'Set the pixel height of one or more rows.',
+    params: [
+      { name: 'row', type: 'string', description: 'Row number ("2"), range ("2:5"), or comma list ("2,4"); 1-indexed', required: true },
+      { name: 'height', type: 'number', description: 'Height in pixels (clamped to 20–400)', required: true },
+    ],
+    examples: ['make row 1 taller', 'set row 2 height to 40', 'set rows 2:10 height to 32'],
+  },
+  {
+    name: 'auto_fit',
+    category: 'mutate',
+    description: 'Auto-fit row heights to wrapped cell content. Omit "row" to fit all populated rows.',
+    params: [
+      { name: 'row', type: 'string', description: 'Row number, range, or comma list to fit. Omit for all populated rows.' },
+    ],
+    examples: ['auto-fit the rows', 'resize rows to fit content', 'auto fit row heights'],
   },
   // ─── Cell operations ──────────────────────────────────────────────────────
   {

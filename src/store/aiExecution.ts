@@ -5,6 +5,9 @@
 
 import type { ChatMessage, AgentAction, Selection } from '@/types'
 import { refToCell } from '@/engine/spreadsheet'
+import { setColAt } from '@/lib/colLayout'
+import { setRowAt, getRowHeight } from '@/lib/rowLayout'
+import { autoFitRowHeights, createCanvasTextMeasurer } from '@/lib/rowAutoFit'
 import { executeTool, executeToolAsync, type ExecutionContext, type ExecutionResult } from '@/agent'
 import { executeTemplateTool, resolveGalleryTemplate } from '@/templates'
 import { MUTATION_TOOL_NAMES } from '@shared/toolRegistry'
@@ -246,6 +249,45 @@ export function buildExecutionContext(
       });
     },
     bulkSetCells: (cells) => get().bulkSetCells(cells),
+    // Layout hooks mutate directly and do NOT push history — the tool handler
+    // owns the single undo point (suppressed here in the LLM Apply path, where
+    // applyAction already pushed one; active in the fast/parser path).
+    setColumnWidth: (col, width) => {
+      if (col < 0) return;
+      set((s: AppState) => {
+        const sh = s.workbook.sheets.find((x) => x.id === s.activeSheetId);
+        if (!sh) return;
+        sh.columnWidths = setColAt(sh.columnWidths, col, width);
+        s.workbook.updatedAt = Date.now();
+      });
+    },
+    setRowHeight: (row, height) => {
+      if (row < 0) return;
+      set((s: AppState) => {
+        const sh = s.workbook.sheets.find((x) => x.id === s.activeSheetId);
+        if (!sh) return;
+        sh.rowHeights = setRowAt(sh.rowHeights, row, height);
+        s.workbook.updatedAt = Date.now();
+      });
+    },
+    autoFitRows: (rows) => {
+      const unique = [...new Set(rows.filter((r) => r >= 0 && Number.isFinite(r)))];
+      if (unique.length === 0) return 0;
+      const sheet = get().getActiveSheet();
+      const next = autoFitRowHeights(sheet, unique, (row, col) => {
+        const computed = get().getComputedValue(row, col);
+        return computed || String(sheet.cells[refToCell(row, col)]?.value ?? '');
+      }, createCanvasTextMeasurer());
+      const changed = unique.filter((r) => getRowHeight(next, r) !== getRowHeight(sheet.rowHeights, r));
+      if (changed.length === 0) return 0;
+      set((s: AppState) => {
+        const sh = s.workbook.sheets.find((x) => x.id === s.activeSheetId);
+        if (!sh) return;
+        sh.rowHeights = next;
+        s.workbook.updatedAt = Date.now();
+      });
+      return changed.length;
+    },
     applySortPatch: (patch) => get().applySortPatch(patch),
     setFilters: (filters) => get().setFilters(filters),
     deleteRow: (row) => get().deleteRow(row),
