@@ -67,7 +67,7 @@ Gate before uniqueness spend (smoke-test after sync):
 |----|------|---------|
 | P1.1 | Extend `format_cells` | **DONE** — `CellFormat` surface (underline, strikethrough, fontFamily, textAlign, verticalAlign, textWrap, borders) wired through `buildFormatPatch`, `FormatCellsParams`, and the tool registry schema. |
 | P1.2 | Layout tools | **DONE** — `set_column_width`, `set_row_height`, `auto_fit` agent tools + ExecutionContext hooks delegating to the existing undoable store methods. |
-| P1.3 | Parser phrases | NL coverage for borders, auto-fit, row height, fonts |
+| P1.3 | Parser phrases | **DONE** — `parseLayoutPhrase` routes column width / row height / auto-fit through both the client parser and server `actTemplates`; false-positive corpus green. |
 | P1.4 | Style recipes | Bounded macros: `header`, `total_row`, `table_polish` (preview once) |
 | P1.5 | Free-tier alignment | Gate auto-fix depth, not first understanding |
 

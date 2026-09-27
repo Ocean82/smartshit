@@ -187,4 +187,22 @@ describe('reported agent gap regressions', () => {
       params: { values: ['groceries', 400] },
     })
   })
+
+  it('routes layout phrases to the width/height/auto-fit tools (P1.3)', () => {
+    expect(parseMessage('set column C width to 200', expenseContext).calls[0]).toMatchObject({
+      tool: 'set_column_width',
+      params: { column: 'C', width: 200 },
+    })
+    expect(parseMessage('make column B wider', expenseContext).calls[0]).toMatchObject({
+      tool: 'set_column_width',
+      params: { column: 'B', width: 200 },
+    })
+    expect(parseMessage('set row 2 height to 40', expenseContext).calls[0]).toMatchObject({
+      tool: 'set_row_height',
+      params: { row: '2', height: 40 },
+    })
+    expect(parseMessage('auto-fit the rows', expenseContext).calls[0]).toMatchObject({
+      tool: 'auto_fit',
+    })
+  })
 })

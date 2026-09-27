@@ -9,6 +9,7 @@ import {
   isMultiSortPhrase,
   parseFilterPhrase,
   parseFormatAsTablePhrase,
+  parseLayoutPhrase,
   parseMultiSortPhrase,
   parseNumberFormatPhrase,
 } from '../../shared/spreadsheetPhrases'
@@ -238,6 +239,36 @@ function parseMessageInternal(message: string, sheetContext?: SheetContext): Par
       description: `Format as table (${tablePhrase.theme})`,
     })
     return { calls, understood: true, explanation: `Formatting the data range as a ${tablePhrase.theme} table.` }
+  }
+
+  // ─── Layout (column width / row height / auto-fit) ───────────────────────────
+  const layoutPhrase = parseLayoutPhrase(message)
+  if (layoutPhrase) {
+    if (layoutPhrase.kind === 'width') {
+      calls.push({
+        tool: 'set_column_width',
+        params: { column: layoutPhrase.column, width: layoutPhrase.width },
+        description: `Set column ${layoutPhrase.column} width to ${layoutPhrase.width}px`,
+      })
+      return { calls, understood: true, explanation: `Setting column ${layoutPhrase.column} width to ${layoutPhrase.width}px.` }
+    }
+    if (layoutPhrase.kind === 'height') {
+      calls.push({
+        tool: 'set_row_height',
+        params: { row: layoutPhrase.row, height: layoutPhrase.height },
+        description: `Set row ${layoutPhrase.row} height to ${layoutPhrase.height}px`,
+      })
+      return { calls, understood: true, explanation: `Setting row ${layoutPhrase.row} height to ${layoutPhrase.height}px.` }
+    }
+    // autofit
+    const params: Record<string, unknown> = {}
+    if (layoutPhrase.row) params.row = layoutPhrase.row
+    calls.push({
+      tool: 'auto_fit',
+      params,
+      description: layoutPhrase.row ? `Auto-fit rows ${layoutPhrase.row}` : 'Auto-fit rows to content',
+    })
+    return { calls, understood: true, explanation: 'Auto-fitting row heights to content.' }
   }
 
   // ─── Number format (currency / percent / date) ──────────────────────────────

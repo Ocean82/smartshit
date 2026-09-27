@@ -4,6 +4,7 @@ import { extractCellContainsValue } from './formatContains.js'
 import {
   parseFilterPhrase,
   parseFormatAsTablePhrase,
+  parseLayoutPhrase,
   parseMultiSortPhrase,
   parseNumberFormatPhrase,
 } from './spreadsheetPhrases.js'
@@ -201,6 +202,33 @@ const RULES: TemplateRule[] = [
       return {
         message: `I will format the data as a ${phrase.theme} table. Click Apply to confirm.`,
         actions: [{ tool: 'format_as_table', params: { theme: phrase.theme }, description: `Format as table (${phrase.theme})` }],
+      }
+    },
+  },
+
+  // Layout: column width / row height / auto-fit
+  {
+    id: 'layout',
+    match: (l) => parseLayoutPhrase(l) != null,
+    resolve: (_l, original) => {
+      const phrase = parseLayoutPhrase(original)!
+      if (phrase.kind === 'width') {
+        return {
+          message: `I will set column ${phrase.column} width to ${phrase.width}px. Click Apply to confirm.`,
+          actions: [{ tool: 'set_column_width', params: { column: phrase.column, width: phrase.width }, description: `Set column ${phrase.column} width to ${phrase.width}px` }],
+        }
+      }
+      if (phrase.kind === 'height') {
+        return {
+          message: `I will set row ${phrase.row} height to ${phrase.height}px. Click Apply to confirm.`,
+          actions: [{ tool: 'set_row_height', params: { row: phrase.row, height: phrase.height }, description: `Set row ${phrase.row} height to ${phrase.height}px` }],
+        }
+      }
+      const params: Record<string, unknown> = {}
+      if (phrase.row) params.row = phrase.row
+      return {
+        message: 'I will auto-fit row heights to content. Click Apply to confirm.',
+        actions: [{ tool: 'auto_fit', params, description: phrase.row ? `Auto-fit rows ${phrase.row}` : 'Auto-fit rows to content' }],
       }
     },
   },
