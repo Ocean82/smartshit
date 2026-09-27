@@ -34,7 +34,7 @@ Import → Trust numbers → Understand structure → Ask grounded questions →
 | **P0.2** | Import honesty | **DONE** | Warn when formulas use Excel cached values / styles appear dropped. Surfaced via import meta → chat/toast. |
 | **P0.3** | Act-path safety | **DONE** | `apply_formula` gap detection + Apply/Reject preview; `confirmGaps` override. |
 | **P0.4** | Activation UI | **DONE** | Overlay waits for audit/grace; never auto-dismisses on critical/high; lists finding titles. |
-| **P0.5** | AI quality loop (foundation) | **DONE** | Thumbs + optional detail on thumbs-down for failover analysis. |
+| **P0.5** | AI quality loop (foundation) | **DONE** | Thumbs + user-entered detail on thumbs-down (inline comment field) for failover analysis. |
 
 ### Implementation paths
 
@@ -65,7 +65,7 @@ Gate before uniqueness spend (smoke-test after sync):
 
 | ID | Work | Outcome |
 |----|------|---------|
-| P1.1 | Extend `format_cells` | Expose `CellFormat`: underline, strikethrough, fontFamily, align, wrap, borders |
+| P1.1 | Extend `format_cells` | **DONE** — `CellFormat` surface (underline, strikethrough, fontFamily, textAlign, verticalAlign, textWrap, borders) wired through `buildFormatPatch`, `FormatCellsParams`, and the tool registry schema. |
 | P1.2 | Layout tools | Agent + sandbox: column width / row height |
 | P1.3 | Parser phrases | NL coverage for borders, auto-fit, row height, fonts |
 | P1.4 | Style recipes | Bounded macros: `header`, `total_row`, `table_polish` (preview once) |

@@ -170,11 +170,15 @@ export function ChatPanel({ isMobileOpen, onCloseMobile, embedded }: ChatPanelPr
     else { setConfirmClear(true); setTimeout(() => setConfirmClear(false), 3000) }
   }
 
-  const handleFeedback = (messageId: string, rating: ChatFeedbackRating) => {
+  const handleFeedback = (messageId: string, rating: ChatFeedbackRating, userDetail?: string) => {
     const msg = messages.find((m) => m.id === messageId)
-    const detail = msg
-      ? `${msg.toolUsed ?? 'assistant'}:${String(msg.content ?? '').slice(0, 80)}`
-      : undefined
+    // Prefer the user's own words (thumbs-down explanation) over the
+    // auto-derived message fingerprint used for failover analysis.
+    const detail = userDetail?.trim()
+      ? userDetail.trim()
+      : msg
+        ? `${msg.toolUsed ?? 'assistant'}:${String(msg.content ?? '').slice(0, 80)}`
+        : undefined
     recordChatFeedback(messageId, rating, detail)
     setFeedbackById((prev) => ({ ...prev, [messageId]: rating }))
   }
@@ -425,7 +429,7 @@ interface ChatBubbleProps {
   msg: ChatMessageType
   isStreaming: boolean
   feedback?: ChatFeedbackRating
-  onFeedback: (id: string, rating: ChatFeedbackRating) => void
+  onFeedback: (id: string, rating: ChatFeedbackRating, userDetail?: string) => void
   onPin: (id: string) => void
   onSuggestionClick: (text: string) => void
   onApplyAction: (id: string) => void
@@ -519,13 +523,24 @@ interface MessageToolbarProps {
   content: string
   pinned?: boolean
   feedback?: ChatFeedbackRating
-  onFeedback: (id: string, rating: ChatFeedbackRating) => void
+  onFeedback: (id: string, rating: ChatFeedbackRating, userDetail?: string) => void
   onPin: (id: string) => void
 }
 
 function MessageToolbar({ messageId, content, pinned, feedback, onFeedback, onPin }: MessageToolbarProps) {
+  // Thumbs-down opens an optional "what went wrong?" field. The rating is
+  // recorded immediately on click; submitting the note re-records it with the
+  // user's own words (recordChatFeedback dedupes by messageId).
+  const [showDetail, setShowDetail] = useState(false)
+  const [detail, setDetail] = useState('')
+
+  const submitDetail = () => {
+    onFeedback(messageId, 'down', detail)
+    setShowDetail(false)
+  }
   return (
-    <div className="mt-2 flex items-center gap-2 px-1">
+    <div className="mt-2 px-1">
+    <div className="flex items-center gap-2">
       <button
         type="button"
         title="Copy message"
@@ -558,11 +573,50 @@ function MessageToolbar({ messageId, content, pinned, feedback, onFeedback, onPi
         type="button"
         title="Not helpful"
         aria-label="Mark response not helpful"
-        onClick={() => onFeedback(messageId, 'down')}
+        aria-expanded={showDetail}
+        onClick={() => { onFeedback(messageId, 'down'); setShowDetail((v) => !v) }}
         className={`p-1.5 rounded-lg hover:bg-rose-50 transition-colors ${feedback === 'down' ? 'text-rose-600 bg-rose-50' : 'text-slate-400 hover:text-rose-500'}`}
       >
         <ThumbsDown size={12} />
       </button>
+    </div>
+      {showDetail && (
+        <div className="mt-2 flex flex-col gap-1.5">
+          <label htmlFor={`fb-${messageId}`} className="text-[11px] text-slate-500 font-medium">
+            What went wrong? (optional)
+          </label>
+          <textarea
+            id={`fb-${messageId}`}
+            value={detail}
+            onChange={(e) => setDetail(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); submitDetail() }
+              if (e.key === 'Escape') setShowDetail(false)
+            }}
+            rows={2}
+            maxLength={200}
+            autoFocus
+            placeholder="Wrong numbers, misunderstood the request, bad formatting…"
+            className="w-full resize-none rounded-lg border border-slate-200 px-2 py-1.5 text-[12px] text-slate-700 placeholder:text-slate-400 focus:border-rose-300 focus:outline-none focus:ring-1 focus:ring-rose-200"
+          />
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={submitDetail}
+              className="rounded-lg bg-slate-900 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-slate-700 transition-colors"
+            >
+              Send feedback
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowDetail(false)}
+              className="rounded-lg px-2 py-1 text-[11px] font-medium text-slate-500 hover:text-slate-700 transition-colors"
+            >
+              Skip
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

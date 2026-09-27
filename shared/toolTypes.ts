@@ -31,9 +31,22 @@ export interface FormatCellsParams {
   range?: string
   bold?: boolean
   italic?: boolean
+  underline?: boolean
+  strikethrough?: boolean
   fontSize?: number
+  /** Font family name, e.g. "Arial", "Times New Roman", "Courier New". */
+  fontFamily?: string
   bgColor?: string
   fontColor?: string
+  /** Horizontal text alignment. */
+  textAlign?: 'left' | 'center' | 'right'
+  /** Vertical alignment of cell content. */
+  verticalAlign?: 'top' | 'middle' | 'bottom'
+  /** When true, long text wraps within the cell instead of truncating. */
+  textWrap?: boolean
+  /** Cell borders: a single style string applied to all four sides
+   *  (e.g. "thin", "1px solid #000"), or a per-side object. */
+  borders?: string | { top?: string; right?: string; bottom?: string; left?: string }
   /** Number format key (e.g. "currency", "percent", "date-iso", "accounting-neg"). */
   numberFormat?: string
   /** When present, only cells matching the condition are formatted. */

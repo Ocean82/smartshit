@@ -213,6 +213,42 @@ describe('applyFormatCells', () => {
     expect(buildFormatPatch({})).toBeNull()
   })
 
+  it('buildFormatPatch maps the full CellFormat surface (P1.1)', () => {
+    expect(buildFormatPatch({
+      underline: true,
+      strikethrough: true,
+      textWrap: true,
+      fontFamily: 'Courier New',
+      textAlign: 'center',
+      verticalAlign: 'middle',
+    })).toEqual({
+      underline: true,
+      strikethrough: true,
+      textWrap: true,
+      fontFamily: 'Courier New',
+      textAlign: 'center',
+      verticalAlign: 'middle',
+    })
+  })
+
+  it('buildFormatPatch rejects out-of-enum align values', () => {
+    expect(buildFormatPatch({ textAlign: 'justify' as never })).toBeNull()
+    expect(buildFormatPatch({ verticalAlign: 'baseline' as never })).toBeNull()
+  })
+
+  it('buildFormatPatch expands a shared border string to all four sides', () => {
+    expect(buildFormatPatch({ borders: 'thin' })).toEqual({
+      borders: { top: 'thin', right: 'thin', bottom: 'thin', left: 'thin' },
+    })
+  })
+
+  it('buildFormatPatch keeps a per-side border object and drops empty sides', () => {
+    expect(buildFormatPatch({ borders: { top: 'thin', bottom: '' } })).toEqual({
+      borders: { top: 'thin' },
+    })
+    expect(buildFormatPatch({ borders: {} })).toBeNull()
+  })
+
   it('findMatchingCellIds filters candidates by computed value', () => {
     const sheet = makeSheet({ A1: 4, A2: 5 })
     const { ctx } = makeContext(sheet)

@@ -166,14 +166,21 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
     name: 'format_cells',
     category: 'mutate',
     description:
-      'Format cells: bold, background color, font color, font size, number format. Optional "range" (e.g. "A1:D1", "B", "B2:B10"); defaults to selection or populated cells. Optional "condition" targets cells by value.',
+      'Format cells: bold, italic, underline, strikethrough, font family/size, text/background color, horizontal & vertical alignment, text wrap, borders, number format. Optional "range" (e.g. "A1:D1", "B", "B2:B10"); defaults to selection or populated cells. Optional "condition" targets cells by value.',
     params: [
       { name: 'range', type: 'string', description: 'A1-style range, column letter, or single cell. Omit to use selection/whole sheet.' },
       { name: 'bold', type: 'boolean', description: 'Make text bold' },
       { name: 'italic', type: 'boolean', description: 'Make text italic' },
+      { name: 'underline', type: 'boolean', description: 'Underline text' },
+      { name: 'strikethrough', type: 'boolean', description: 'Strike through text' },
       { name: 'fontSize', type: 'number', description: 'Font size in px' },
+      { name: 'fontFamily', type: 'string', description: 'Font family name, e.g. "Arial", "Times New Roman", "Courier New"' },
       { name: 'bgColor', type: 'string', description: 'Background color hex, e.g. "#FFF9C4"' },
       { name: 'fontColor', type: 'string', description: 'Font color hex, e.g. "#FF0000"' },
+      { name: 'textAlign', type: 'string', description: 'Horizontal alignment: "left" | "center" | "right"' },
+      { name: 'verticalAlign', type: 'string', description: 'Vertical alignment: "top" | "middle" | "bottom"' },
+      { name: 'textWrap', type: 'boolean', description: 'Wrap long text within the cell instead of truncating' },
+      { name: 'borders', type: 'object', description: 'Border style applied to all sides (string, e.g. "thin") or per-side {top,right,bottom,left}' },
       { name: 'numberFormat', type: 'string', description: 'Number format: number, number-int, currency, currency-int, currency-gbp, currency-eur, currency-jpy, accounting, accounting-neg, percent, percent-int, date, date-iso, date-long, date-short-eu, time, time-24, datetime, fraction, scientific, text' },
       {
         name: 'condition',
