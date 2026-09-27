@@ -3,6 +3,7 @@ import { cellToRef, refToCell, letterToCol } from '@/engine/spreadsheet'
 import { findLastDataRow } from '@/lib/sheetSort'
 import { resolveDeleteRow } from '@/lib/deleteRowPreview'
 import { getColumnDataRows } from '@/lib/sheetRows'
+import { buildRecipePlan, isStyleRecipe, planToPreviewChanges } from '@/lib/styleRecipes'
 import { detectFormulaRangeGapRisk } from '@/lib/formulaGapRisk'
 
 /**
@@ -150,6 +151,13 @@ export function buildActionPreview(
       ? detectFormulaRangeGapRisk(change.newFormula, sheet, getComputedValue, change.cell)
       : null
     return gapRisk ? { changes, warnings: [gapRisk] } : { changes }
+  }
+  if (tool === 'style_recipe' && isStyleRecipe(params.recipe)) {
+    const theme = typeof params.theme === 'string' ? params.theme : 'blue'
+    const plan = buildRecipePlan(params.recipe, sheet, getComputedValue, theme)
+    if (!plan) return undefined
+    const changes = planToPreviewChanges(plan, sheet)
+    return changes.length ? { changes } : undefined
   }
   if (tool === 'delete_row') {
     const resolved = resolveDeleteRow(sheet, params, getComputedValue)

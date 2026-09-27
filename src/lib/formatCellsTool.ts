@@ -171,15 +171,51 @@ export function findMatchingCellIds(
   })
 }
 
+const BORDER_SIDES = ['top', 'right', 'bottom', 'left'] as const
+const VALID_TEXT_ALIGN = ['left', 'center', 'right'] as const
+const VALID_VERTICAL_ALIGN = ['top', 'middle', 'bottom'] as const
+
+/** Build the borders patch from `borders` param. Accepts a shared string
+ *  (applied to all four sides) or a per-side object. Returns undefined when
+ *  nothing usable was provided. */
+function buildBordersPatch(raw: unknown): CellFormat['borders'] | undefined {
+  if (typeof raw === 'string' && raw.trim()) {
+    const style = raw.trim()
+    return { top: style, right: style, bottom: style, left: style }
+  }
+  if (raw && typeof raw === 'object') {
+    const obj = raw as Record<string, unknown>
+    const borders: NonNullable<CellFormat['borders']> = {}
+    for (const side of BORDER_SIDES) {
+      const v = obj[side]
+      if (typeof v === 'string' && v.trim()) borders[side] = v.trim()
+    }
+    return Object.keys(borders).length > 0 ? borders : undefined
+  }
+  return undefined
+}
+
 /** Build the CellFormat patch from style params. Returns null when no style was requested. */
 export function buildFormatPatch(params: FormatCellsParams): Partial<CellFormat> | null {
   const patch: Partial<CellFormat> = {}
   if (params.bold != null) patch.bold = params.bold
   if (params.italic != null) patch.italic = params.italic
+  if (params.underline != null) patch.underline = params.underline
+  if (params.strikethrough != null) patch.strikethrough = params.strikethrough
+  if (params.textWrap != null) patch.textWrap = params.textWrap
   if (typeof params.fontSize === 'number') patch.fontSize = params.fontSize
+  if (typeof params.fontFamily === 'string' && params.fontFamily) patch.fontFamily = params.fontFamily
   if (typeof params.bgColor === 'string' && params.bgColor) patch.bgColor = params.bgColor
   if (typeof params.fontColor === 'string' && params.fontColor) patch.fontColor = params.fontColor
   if (typeof params.numberFormat === 'string' && params.numberFormat) patch.numberFormat = params.numberFormat
+  if (typeof params.textAlign === 'string' && (VALID_TEXT_ALIGN as readonly string[]).includes(params.textAlign)) {
+    patch.textAlign = params.textAlign as CellFormat['textAlign']
+  }
+  if (typeof params.verticalAlign === 'string' && (VALID_VERTICAL_ALIGN as readonly string[]).includes(params.verticalAlign)) {
+    patch.verticalAlign = params.verticalAlign as CellFormat['verticalAlign']
+  }
+  const borders = buildBordersPatch(params.borders)
+  if (borders) patch.borders = borders
   return Object.keys(patch).length > 0 ? patch : null
 }
 
