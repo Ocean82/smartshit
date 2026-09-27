@@ -151,7 +151,7 @@ export const useStore = create<AppState>()(
       // Wrap data-only import with chat/insights/audit orchestration.
       // Imported content is a new local workbook, not the file's existing cloud
       // workbook, so clear the cloud binding to avoid overwriting it on autosave.
-      importWorkbook: (workbook: WorkbookData, meta?: { fileName?: string }) => {
+      importWorkbook: (workbook: WorkbookData, meta?: { fileName?: string; warnings?: string[] }) => {
         workbookActions.importWorkbook(workbook, meta)
         useStore.getState().setActiveFileCloudId(null)
         applyWorkbookImportEffects(

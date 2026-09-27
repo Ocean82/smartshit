@@ -58,7 +58,7 @@ export interface ChatStoreAccess extends ChatState {
   setActivePanel: (panel: 'chat' | 'insights' | 'auditor' | 'inspector' | null) => void
   showToast: (toast: Omit<import('@/types').Toast, 'id'>) => void
   pushHistory: (desc: string) => void
-  importWorkbook: (workbook: WorkbookData, meta?: { fileName?: string }) => void
+  importWorkbook: (workbook: WorkbookData, meta?: { fileName?: string; warnings?: string[] }) => void
   setCellValue: (cellId: string, value: string | number | boolean | null, formula?: string) => void
   setCellFormat: (cellId: string, format: Partial<import('@/types').CellFormat>) => void
   bulkSetCells: (cells: Record<string, { value: string | number | boolean | null; formula?: string }>) => void
@@ -274,7 +274,10 @@ export function createChatActions(
     importAttachedFile: async () => {
       const preview = get().attachedFilePreview
       if (!preview) return
-      get().importWorkbook(preview.workbook, { fileName: preview.fileName })
+      get().importWorkbook(preview.workbook, {
+        fileName: preview.fileName,
+        warnings: preview.importWarnings,
+      })
       set((s) => {
         s.attachedFilePreview = null
         s.messages.push({
@@ -295,6 +298,7 @@ export function createChatActions(
         'clean_sheet_data',
         'delete_row',
         'modify_column',
+        'apply_formula',
         'execute_script',
       ])
       for (const msg of state.messages) {
@@ -403,7 +407,14 @@ export function createChatActions(
           })
         }
 
-        const execution = executeAction(action, get as never, set as never)
+        // An explicit Apply after a preview was shown is the user's confirmation.
+        // apply_formula blocks on range-gap risk unless confirmGaps is set, so an
+        // action the user has reviewed and approved must carry that override —
+        // otherwise the reviewed formula is silently rejected on Apply.
+        const confirmedAction = action.tool === 'apply_formula' && action.preview
+          ? { ...action, params: { ...action.params, confirmGaps: true } }
+          : action
+        const execution = executeAction(confirmedAction, get as never, set as never)
         if (execution instanceof Promise) {
           void execution
             .then(finishAction)

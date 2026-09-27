@@ -75,6 +75,37 @@ describe('workbook import', () => {
     expect(Array.isArray(meta.warnings)).toBe(true)
   })
 
+  it('warns when formulas are imported with Excel cached values (not live-eval)', async () => {
+    const book = XLSX.utils.book_new()
+    const ws = XLSX.utils.aoa_to_sheet([
+      ['Item', 'Amount'],
+      ['Rent', 100],
+      ['Food', 50],
+      ['Total', 150],
+    ])
+    // Attach a formula + cached Excel value the way SheetJS stores them
+    ws['B4'] = { t: 'n', v: 150, f: 'SUM(B2:B3)' }
+    XLSX.utils.book_append_sheet(book, ws, 'Sheet1')
+    const buffer = XLSX.write(book, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer
+
+    const { workbook, meta } = await importWorkbookFromFileWithMeta(fakeFile('formulas.xlsx', buffer))
+    expect(workbook.sheets[0].cells.B4?.formula).toMatch(/SUM/i)
+    expect(meta.warnings.some((w) => /live-recalculate|cached|saved values/i.test(w))).toBe(true)
+  })
+
+  it('does not warn about styles on a plain unstyled workbook', async () => {
+    // Plain SheetJS write yields no rawCell.s — that is not "dropped styles".
+    const buffer = xlsxBuffer([
+      ['A', 'B', 'C'],
+      [1, 2, 3],
+      [4, 5, 6],
+      [7, 8, 9],
+      [10, 11, 12],
+    ])
+    const { meta } = await importWorkbookFromFileWithMeta(fakeFile('plain.xlsx', buffer))
+    expect(meta.warnings.some((w) => /styles/i.test(w))).toBe(false)
+  })
+
   it('preserves merged cell regions as canonical range refs', async () => {
     const book = XLSX.utils.book_new()
     const ws = XLSX.utils.aoa_to_sheet([['Header', 'B', 'C'], [1, 2, 3]])

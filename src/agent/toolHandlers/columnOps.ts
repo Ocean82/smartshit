@@ -5,9 +5,12 @@ import type { SheetData } from '@/types'
 import { refToCell, cellToRef, letterToCol } from '@/engine/spreadsheet'
 import { findHeaderRow } from '@/lib/sheetSort'
 import { getColumnDataRows } from '@/lib/sheetRows'
+import { extractRangeRefs } from '@/auditor/utils'
 import type { ToolHandler, BulkUpdates } from './types'
 import { applyBulk, requireColumn } from './types'
-import type { ExecutionContext } from '../executor'
+import type { ExecutionContext, ExecutionResult } from '../executor'
+
+const AGGREGATE_PATTERN = /\b(SUM|AVERAGE|COUNT|COUNTA|MIN|MAX|SUBTOTAL)\b/i
 
 export const handleRenameHeader: ToolHandler = (params, ctx, sheet) => {
   const col = requireColumn(params.column, sheet, ctx, 'rename_header')
@@ -76,15 +79,98 @@ export const handleApplyFormula: ToolHandler = (params, ctx, sheet) => {
 
   // Bare column letter — place formula below last populated cell
   if (/^[A-Z]{1,3}$/.test(target)) {
-    return applyFormulaToColumn(target, formula, sheet, ctx)
+    return applyFormulaToColumn(target, formula, sheet, ctx, params)
   }
 
   // Explicit cell reference
   if (/^[A-Z]{1,3}\d+$/.test(target)) {
-    return applyFormulaToCell(target, formula, ctx)
+    return applyFormulaToCell(target, formula, sheet, ctx, params)
   }
 
   return { success: false, message: `"${target}" is not a valid cell or column reference`, modified: 0 }
+}
+
+/**
+ * Detect classic auditor "range gap" risk: an aggregate range that excludes an
+ * immediately adjacent numeric cell. Returns a human-readable warning or null.
+ */
+export function detectApplyFormulaRangeGapRisk(
+  formula: string,
+  sheet: SheetData,
+  getComputedValue: (row: number, col: number) => string,
+  formulaCellId?: string,
+): string | null {
+  if (!AGGREGATE_PATTERN.test(formula)) return null
+  const ranges = extractRangeRefs(formula.replace(/^=/, ''))
+  const formulaRef = formulaCellId ? cellToRef(formulaCellId) : null
+
+  for (const { range, start, end } of ranges) {
+    const startRef = cellToRef(start)
+    const endRef = cellToRef(end)
+    if (startRef.col === endRef.col) {
+      const col = startRef.col
+      const minRow = Math.min(startRef.row, endRef.row)
+      const maxRow = Math.max(startRef.row, endRef.row)
+      if (minRow > 0) {
+        const aboveId = refToCell(minRow - 1, col)
+        if (!formulaRef || aboveId !== formulaCellId) {
+          const num = parseNumericCell(sheet, aboveId, minRow - 1, col, getComputedValue)
+          if (num != null) {
+            return `Range ${range} excludes adjacent ${aboveId} (${num}). Extend the range or pass confirmGaps=true to apply anyway.`
+          }
+        }
+      }
+      const belowId = refToCell(maxRow + 1, col)
+      if (!formulaRef || belowId !== formulaCellId) {
+        const num = parseNumericCell(sheet, belowId, maxRow + 1, col, getComputedValue)
+        if (num != null) {
+          return `Range ${range} excludes adjacent ${belowId} (${num}). Extend the range or pass confirmGaps=true to apply anyway.`
+        }
+      }
+    }
+    if (startRef.row === endRef.row) {
+      const row = startRef.row
+      const minCol = Math.min(startRef.col, endRef.col)
+      const maxCol = Math.max(startRef.col, endRef.col)
+      if (minCol > 0) {
+        const leftId = refToCell(row, minCol - 1)
+        if (!formulaRef || leftId !== formulaCellId) {
+          const num = parseNumericCell(sheet, leftId, row, minCol - 1, getComputedValue)
+          if (num != null) {
+            return `Range ${range} excludes adjacent ${leftId} (${num}). Extend the range or pass confirmGaps=true to apply anyway.`
+          }
+        }
+      }
+      const rightId = refToCell(row, maxCol + 1)
+      if (!formulaRef || rightId !== formulaCellId) {
+        const num = parseNumericCell(sheet, rightId, row, maxCol + 1, getComputedValue)
+        if (num != null) {
+          return `Range ${range} excludes adjacent ${rightId} (${num}). Extend the range or pass confirmGaps=true to apply anyway.`
+        }
+      }
+    }
+  }
+  return null
+}
+
+function parseNumericCell(
+  sheet: SheetData,
+  cellId: string,
+  row: number,
+  col: number,
+  getComputedValue: (row: number, col: number) => string,
+): number | null {
+  const cell = sheet.cells[cellId]
+  if (!cell && !getComputedValue(row, col)) return null
+  const raw = cell?.value
+  if (typeof raw === 'number' && Number.isFinite(raw)) return raw
+  const computed = getComputedValue(row, col).replace(/[$,]/g, '')
+  const num = parseFloat(computed)
+  return Number.isFinite(num) && computed.trim() !== '' ? num : null
+}
+
+function confirmGapsRequested(params: Record<string, unknown>): boolean {
+  return params.confirmGaps === true || params.confirmGaps === 'true' || params.force === true
 }
 
 /** Apply a formula below the last data row in a column. */
@@ -93,7 +179,8 @@ function applyFormulaToColumn(
   formula: string,
   sheet: SheetData,
   ctx: ExecutionContext,
-) {
+  params: Record<string, unknown>,
+): ExecutionResult {
   const colIdx = letterToCol(colLetter)
 
   // Use unified row bounds that exclude summary rows
@@ -108,14 +195,40 @@ function applyFormulaToColumn(
     ? formula
     : `${formula}(${colLetter}${bounds.firstRow + 1}:${colLetter}${bounds.lastRow + 1})`
 
+  const gapRisk = detectApplyFormulaRangeGapRisk(fullFormula, sheet, ctx.getComputedValue, cellId)
+  if (gapRisk && !confirmGapsRequested(params)) {
+    return {
+      success: false,
+      message: `Blocked apply_formula (range gap risk): ${gapRisk}`,
+      modified: 0,
+    }
+  }
+
   ctx.pushHistory('Apply formula')
   ctx.setCellValue(cellId, null, fullFormula)
-  return { success: true, message: `Added ${formula} formula in ${cellId}`, modified: 1 }
+  const warn = gapRisk ? ` Warning: ${gapRisk}` : ''
+  return { success: true, message: `Added ${fullFormula} formula in ${cellId}.${warn}`, modified: 1 }
 }
 
 /** Apply a formula directly to a named cell. */
-function applyFormulaToCell(cellRef: string, formula: string, ctx: ExecutionContext) {
+function applyFormulaToCell(
+  cellRef: string,
+  formula: string,
+  sheet: SheetData,
+  ctx: ExecutionContext,
+  params: Record<string, unknown>,
+): ExecutionResult {
+  const gapRisk = detectApplyFormulaRangeGapRisk(formula, sheet, ctx.getComputedValue, cellRef)
+  if (gapRisk && !confirmGapsRequested(params)) {
+    return {
+      success: false,
+      message: `Blocked apply_formula (range gap risk): ${gapRisk}`,
+      modified: 0,
+    }
+  }
+
   ctx.pushHistory('Apply formula')
   ctx.setCellValue(cellRef, null, formula)
-  return { success: true, message: `Set formula in ${cellRef}`, modified: 1 }
+  const warn = gapRisk ? ` Warning: ${gapRisk}` : ''
+  return { success: true, message: `Set formula in ${cellRef}.${warn}`, modified: 1 }
 }

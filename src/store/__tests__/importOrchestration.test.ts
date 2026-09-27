@@ -49,6 +49,26 @@ describe('importOrchestration', () => {
     expect(access.messages[0].content).toContain('budget.xlsx')
   })
 
+  it('surfaces import honesty warnings in chat and toast', () => {
+    const wb = createEmptyWorkbook('Budget')
+    wb.sheets[0].cells = { A1: { value: 'x' } }
+    const access = makeAccess(wb)
+    applyWorkbookImportEffects(
+      (fn) => { fn(access) },
+      () => access,
+      wb,
+      {
+        fileName: 'budget.xlsx',
+        warnings: ['2 formulas imported with Excel\'s saved values — they will not live-recalculate until you edit them.'],
+      },
+    )
+    expect(access.messages[0].content).toContain('Import honesty')
+    expect(access.messages[0].content).toContain('live-recalculate')
+    expect(access.showToast).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'warning' }),
+    )
+  })
+
   it('stays on the sheet and toasts instead of opening insights', () => {
     vi.useFakeTimers()
     const wb = createEmptyWorkbook('Big')

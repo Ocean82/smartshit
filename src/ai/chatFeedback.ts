@@ -6,6 +6,8 @@ export interface ChatFeedbackEntry {
   messageId: string
   rating: ChatFeedbackRating
   timestamp: string
+  /** Optional short context for quality/failover analysis (not sent remotely). */
+  detail?: string
 }
 
 // amazonq-ignore-next-line
@@ -27,13 +29,26 @@ export function getFeedbackForMessage(messageId: string): ChatFeedbackRating | n
   return loadChatFeedback().find((e) => e.messageId === messageId)?.rating ?? null
 }
 
-export function recordChatFeedback(messageId: string, rating: ChatFeedbackRating): void {
+export function recordChatFeedback(
+  messageId: string,
+  rating: ChatFeedbackRating,
+  detail?: string,
+): void {
+  const trimmedDetail = detail?.trim().slice(0, 200) || undefined
   const entries = loadChatFeedback().filter((e) => e.messageId !== messageId)
-  entries.push({ messageId, rating, timestamp: new Date().toISOString() })
+  entries.push({
+    messageId,
+    rating,
+    timestamp: new Date().toISOString(),
+    detail: trimmedDetail,
+  })
   try {
     localStorage.setItem(STORAGE_NS, JSON.stringify(entries.slice(-200)))
   } catch {
     // ignore quota errors
   }
-  recordTelemetry(rating === 'up' ? 'feedbackUp' : 'feedbackDown', messageId)
+  const telemetryDetail = trimmedDetail
+    ? `${messageId}|${trimmedDetail}`
+    : messageId
+  recordTelemetry(rating === 'up' ? 'feedbackUp' : 'feedbackDown', telemetryDetail)
 }

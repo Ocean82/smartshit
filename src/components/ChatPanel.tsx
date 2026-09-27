@@ -171,7 +171,11 @@ export function ChatPanel({ isMobileOpen, onCloseMobile, embedded }: ChatPanelPr
   }
 
   const handleFeedback = (messageId: string, rating: ChatFeedbackRating) => {
-    recordChatFeedback(messageId, rating)
+    const msg = messages.find((m) => m.id === messageId)
+    const detail = msg
+      ? `${msg.toolUsed ?? 'assistant'}:${String(msg.content ?? '').slice(0, 80)}`
+      : undefined
+    recordChatFeedback(messageId, rating, detail)
     setFeedbackById((prev) => ({ ...prev, [messageId]: rating }))
   }
 
