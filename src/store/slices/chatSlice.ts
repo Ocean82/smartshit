@@ -407,7 +407,14 @@ export function createChatActions(
           })
         }
 
-        const execution = executeAction(action, get as never, set as never)
+        // An explicit Apply after a preview was shown is the user's confirmation.
+        // apply_formula blocks on range-gap risk unless confirmGaps is set, so an
+        // action the user has reviewed and approved must carry that override —
+        // otherwise the reviewed formula is silently rejected on Apply.
+        const confirmedAction = action.tool === 'apply_formula' && action.preview
+          ? { ...action, params: { ...action.params, confirmGaps: true } }
+          : action
+        const execution = executeAction(confirmedAction, get as never, set as never)
         if (execution instanceof Promise) {
           void execution
             .then(finishAction)

@@ -254,6 +254,10 @@ export async function importWorkbookFromFileWithMeta(file: File): Promise<Workbo
   let formulaCellsWithoutCachedValue = 0
   let styleObjectsSeen = 0
   let visualStylesApplied = 0
+  // Number formats are valid, intentionally non-visual styling. Tracked
+  // separately so a number-format-only workbook does not trigger the
+  // "no visual styles could be applied" warning.
+  let numberFormatsApplied = 0
 
   const sheets: SheetData[] = book.SheetNames.map((name) => {
     const sheet = createEmptySheet(name.slice(0, 31))
@@ -392,6 +396,7 @@ export async function importWorkbookFromFileWithMeta(file: File): Promise<Workbo
             if (Object.keys(format).length > 0) {
               const visualKeys = ['bgColor', 'fontColor', 'bold', 'italic', 'strikethrough', 'borders', 'fontFamily']
               if (visualKeys.some((k) => k in format)) visualStylesApplied += 1
+              if ('numberFormat' in format) numberFormatsApplied += 1
               if (!sheet.cells[cellId]) {
                 sheet.cells[cellId] = { value: null, format: format as CellData['format'] }
               } else {
@@ -502,9 +507,11 @@ export async function importWorkbookFromFileWithMeta(file: File): Promise<Workbo
       `${formulaCellsWithoutCachedValue} formula${formulaCellsWithoutCachedValue === 1 ? '' : 's'} had no Excel cached value; live evaluation may differ from Excel.`,
     )
   }
-  // Only warn when style objects were present but no visual styles applied —
-  // do not warn merely because styleObjectsSeen === 0 (plain unstyled files).
-  if (styleObjectsSeen > 0 && visualStylesApplied === 0) {
+  // Only warn when style objects were present but nothing at all could be
+  // applied — do not warn for plain unstyled files (styleObjectsSeen === 0),
+  // nor for workbooks whose only styling is number formats, which are valid
+  // but intentionally non-visual.
+  if (styleObjectsSeen > 0 && visualStylesApplied === 0 && numberFormatsApplied === 0) {
     warnings.push(
       'Style metadata was present but no visual styles (fill/font/borders) could be applied.',
     )
