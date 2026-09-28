@@ -18,6 +18,11 @@ Items are added as local development work creates production requirements. Check
 
 ## Completed
 
+- [x] **Parser captured the article, not the value, in `contains` conditions** — Fixed 2026-09-07 (PR #36, `007283e`)
+  - Goal: `"highlight cells that contain a 4"` must set `{operator:'contains', value:'4'}` — the captured token is the *value*, never a leading article or descriptor noun.
+  - **Why:** the regex allowed only one optional filler (`the` / `number` / `value` / `text`), so `"contain a 4"` captured the literal `a` and `"contain the number 4"` failed to reach the value. The condition silently matched the wrong string, so the user highlighted nothing (or the wrong cells) with no error surfaced.
+  - **Fix (PR #36):** the optional filler group now repeats, over an explicit filler set (`a|an|the|any|some|each|every|number|numbers|value|values|text|digit|digits|letter|letters|char|character|characters`), so the first non-filler token is the captured value. Guarded by two regression tests in `src/agent/parser.test.ts` (plain `containing 4`, and the `the number 4` framing).
+
 - [x] **Lazy JS chunks + WASM 404'd (dead build config) — ROOT CAUSE fix** — Fixed 2026-09-06 (PR #34, deployed `34cc9d5→69f20e5`)
   - Symptoms: `Failed to fetch dynamically imported module` 404s for every lazy chunk (`ChartDialog`, `VersionHistoryPanel`, `TemplateGallery`, `WorkbookPicker`, `intentEmbeddings`, all dialogs) and the earlier WASM `expected magic word` error — all served as `/app/<name>.js|wasm` (bare, no `assets/`) → 404 → SPA HTML → import/compile failure. Any lazy feature (dialogs, template gallery, ONNX intent classification, version history) crashed the app.
   - **Actual root cause:** `vite-plugin-singlefile` inlined the entry into `/app/index.html` and (with `deleteInlinedFiles: true`) **deleted the emitted code-split chunks** from `dist/`. But the app code-splits heavily, so the inlined bundle still contained `import('./Chunk-<hash>.js')` and `new URL('…wasm', import.meta.url)` references to files that no longer existed, resolved against the document at `/app/`. Confirmed: `dist/assets/` had only the 2 worker chunks + wasm; all ~20 lazy chunks were gone. The plugin is for apps with NO code splitting.

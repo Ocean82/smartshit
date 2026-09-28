@@ -109,3 +109,24 @@ we don't re-derive it.
 - **Decide/verify:** keep strict for the committed config; document the
   `allowedHosts` override for sandboxed/preview/tunnel dev (ngrok, e2b). Verify
   `npm run dev` behind a common tunnel with the override.
+
+## 11. P0 usefulness gate — never smoke-tested against a real workbook
+
+- **Why:** `docs/strategy/2026-09-24-usefulness-first-strategy.md` §3 defines a
+  6-step smoke-test gate for P0 and marks P0 **COMPLETE (2026-09-25)**, but the
+  gate has no recorded result. P0 and P1 are both now in production
+  (`67dfe4a` then `c4bf3e6`); CI covers unit/realengine tiers only, and none of
+  the 6 steps can be exercised without a human and a real `.xlsx`.
+- **Verify (unchanged from the strategy doc):**
+  1. Import a representative budget `.xlsx`.
+  2. Key totals match Excel — or the user is explicitly warned.
+  3. Insights + critical audit findings are visible without using chat.
+  4. ≥5 grounded Q&A turns with no nonsense answers.
+  5. Safe edits work with preview and undo.
+  6. No marketing claims are made for stub surfaces.
+- **Also unverified from P1:** the `total_row` recipe is now idempotent in code
+  (`src/lib/styleRecipes.ts` `totalsTargetRange`, covered by 3 unit tests), but
+  the cross-session caveat stands — a recipe applied in a saved workbook and
+  reopened later has no undo, because `ctx.pushHistory` only spans the current
+  session. Decide whether that needs a written caveat in the UI before we
+  consider P1 fully verified.
