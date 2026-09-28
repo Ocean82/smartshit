@@ -173,4 +173,27 @@ describe('resolveUserIdByEmail', () => {
     await expect(resolveUserIdByEmail('', lookup)).resolves.toBeNull()
     expect(called).toBe(false)
   })
+
+  it('trims and lowercases before the lookup, since Clerk matches on equality', async () => {
+    // Load-bearing: Stripe stores whatever case the customer typed, and the webhook
+    // feeds that address straight in. Without normalization the lookup silently
+    // misses and a paying customer never gets Pro.
+    const seen: string[] = []
+    const lookup = async (email: string) => {
+      seen.push(email)
+      return 'user_9'
+    }
+    await expect(resolveUserIdByEmail('  Owner@Example.COM  ', lookup)).resolves.toBe('user_9')
+    expect(seen).toEqual(['owner@example.com'])
+  })
+
+  it('treats a whitespace-only email as blank', async () => {
+    let called = false
+    const lookup = async () => {
+      called = true
+      return 'user_x'
+    }
+    await expect(resolveUserIdByEmail('   ', lookup)).resolves.toBeNull()
+    expect(called).toBe(false)
+  })
 })
