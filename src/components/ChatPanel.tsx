@@ -10,6 +10,7 @@ import type { AgentAction, ChatMessage as ChatMessageType } from '@/types'
 import { getFeedbackForMessage, recordChatFeedback, type ChatFeedbackRating } from '@/ai/chatFeedback'
 import { suggestionChipLabel } from '@/ai/capabilities/clarifyChips'
 import { exportChatAsReport } from '@/lib/exportChat'
+import { persistenceCaveat } from '@/lib/styleRecipes'
 import { useUsage, UpgradePrompt } from '@/auth'
 import { ApiKeySettings } from './ApiKeySettings'
 import { ChatMarkdown } from './ChatMarkdown'
@@ -852,6 +853,7 @@ const ACTION_STATUS_STYLES: Record<string, string> = {
 }
 
 function ActionCard({ action, onApply, onReject }: { action: AgentAction; onApply: () => void; onReject: () => void }) {
+  const caveat = action.status === 'pending' ? persistenceCaveat(action.tool) : null
   return (
     <div className={`rounded-xl border-2 ${ACTION_STATUS_STYLES[action.status] ?? ''} p-3`}>
       <div className="flex items-start justify-between gap-2">
@@ -900,6 +902,12 @@ function ActionCard({ action, onApply, onReject }: { action: AgentAction; onAppl
             )}
           </div>
         </div>
+      )}
+
+      {caveat && (
+        <p className="mt-2 text-[10px] leading-relaxed text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-2 py-1">
+          {caveat}
+        </p>
       )}
 
       {action.status === 'pending' && (

@@ -124,9 +124,14 @@ we don't re-derive it.
   4. ≥5 grounded Q&A turns with no nonsense answers.
   5. Safe edits work with preview and undo.
   6. No marketing claims are made for stub surfaces.
-- **Also unverified from P1:** the `total_row` recipe is now idempotent in code
-  (`src/lib/styleRecipes.ts` `totalsTargetRange`, covered by 3 unit tests), but
-  the cross-session caveat stands — a recipe applied in a saved workbook and
-  reopened later has no undo, because `ctx.pushHistory` only spans the current
-  session. Decide whether that needs a written caveat in the UI before we
-  consider P1 fully verified.
+- **Resolved in code (2026-09-28):** the cross-session caveat is now surfaced to
+  the user rather than left implicit. `persistenceCaveat()` in
+  `src/lib/styleRecipes.ts` returns a warning for `style_recipe`, and
+  `ActionCard` in `ChatPanel.tsx` renders it above Apply/Reject. It states that
+  undo covers the session only and that the writes are permanent once the file is
+  saved and reopened. Two unit tests pin the mapping and the default-off
+  behaviour for other tools. `total_row` idempotency is covered separately by
+  `totalsTargetRange` (3 tests).
+- **Still a human check:** the caveat's wording and placement have not been seen
+  rendered in the browser, and the underlying undo behaviour has not been
+  exercised end-to-end (apply a recipe → undo → confirm the sheet is restored).

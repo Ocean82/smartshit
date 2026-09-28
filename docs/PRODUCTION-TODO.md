@@ -8,15 +8,20 @@ Items are added as local development work creates production requirements. Check
 
 ## Pending
 
-- [ ] **Suppress reasoning output on OpenRouter/HuggingFace fallbacks (Option 2)** — added 2026-09-05
-  - Context: `qwen/qwen3.6-27b` is a reasoning model. On Groq we send `reasoning_effort:'none'` so it returns clean content (no `<think>` dump). On the OpenRouter/HF fallbacks (the `openaiCompatible` client) we do NOT send an equivalent, so those providers stream a reasoning phase first.
-  - Already fixed (Option 1, PR #25): the client now emits one empty liveness ping on the first `delta.reasoning` chunk so the caller's 30s first-byte timeout no longer trips during reasoning. Timeouts are resolved.
-  - Still TODO (polish): actually **suppress** the reasoning on these providers so fallback output matches Groq's clean output and we don't waste tokens/latency generating reasoning we discard. OpenRouter accepts `reasoning: { exclude: true }` (or `{ effort: ... }`) in the request body; HuggingFace router support varies. Plumb a provider-appropriate "no reasoning" flag through `chatWithOpenAiCompatibleStream` / `chatWithOpenAiCompatible`. Verify against each provider's live API before shipping (the param differs from Groq's `reasoning_effort`).
-  - Priority: low — Groq is primary and works; this only affects the rarely-hit fallback path.
+- [ ] **Confirm OpenRouter `reasoning.exclude` against the live API** — added 2026-09-28
+  - Context: the plumbing shipped (see Completed below), but only against a mocked `fetch`. Nobody has watched a real OpenRouter response come back without a reasoning phase.
+  - Verify: one live streaming call through the OpenRouter fallback (temporarily point the primary provider at an invalid key to force failover, or call `chatWithOpenAiCompatibleStream` directly against the production key) with `qwen/qwen3.6-27b`. Confirm no `delta.reasoning` arrives, output matches Groq's clean shape, and `usage.completion_tokens` drops versus the same call without the flag.
+  - Priority: low. If OpenRouter silently ignores the field the only cost is the tokens we already pay today — nothing regresses. If it *rejects* the field, the fallback errors and the failover chain breaks, which is the real risk worth 5 minutes of testing.
 
 ---
 
 ## Completed
+
+- [x] **Suppress reasoning on the OpenRouter fallback (Option 2)** — Fixed 2026-09-28
+  - Goal: the OpenRouter/HF fallback should produce output as clean as Groq's `reasoning_effort: 'none'`, without paying for a reasoning phase we discard.
+  - **Fix:** new opt-in `suppressReasoning` on `OpenAICompatibleCallOptions`, which adds `reasoning: { exclude: true }` to the request body in both `chatWithOpenAiCompatible` and `chatWithOpenAiCompatibleStream`. Enabled at the two OpenRouter call sites in `server/src/providers.ts` (streaming + non-streaming).
+  - **Deliberately NOT enabled for HuggingFace:** router support for the field is inconsistent, and an unrecognised key can fail the request outright — which would take out the fallback path this exists to protect. Also left off for BYOK (`server/src/index.ts`), where the provider is unknown by definition. Two regression tests pin the default-off behaviour so a future edit can't leak the field to an unknown provider.
+  - **Not yet verified live** — see the Pending entry above. The 5 new tests assert the request body against a mocked `fetch` only.
 
 - [x] **Parser captured the article, not the value, in `contains` conditions** — Fixed 2026-09-07 (PR #36, `007283e`)
   - Goal: `"highlight cells that contain a 4"` must set `{operator:'contains', value:'4'}` — the captured token is the *value*, never a leading article or descriptor noun.

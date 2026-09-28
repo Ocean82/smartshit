@@ -261,7 +261,7 @@ export async function callProviderStream(
         messages,
         wrappedOnChunk,
         signal,
-        { jsonMode: options.jsonMode, maxTokens: options.maxTokens },
+        { jsonMode: options.jsonMode, maxTokens: options.maxTokens, suppressReasoning: true },
       )
     } else if (provider === 'huggingface') {
       innerPromise = chatWithOpenAiCompatibleStream(
@@ -327,7 +327,7 @@ export async function callProvider(
         baseUrl: config.openRouterBaseUrl,
       },
       messages,
-      { jsonMode: options.jsonMode, maxTokens: options.maxTokens },
+      { jsonMode: options.jsonMode, maxTokens: options.maxTokens, suppressReasoning: true },
     )
   } else if (provider === 'huggingface') {
     text = await chatWithOpenAiCompatible(

@@ -22,6 +22,18 @@ export interface OpenAICompatibleCallOptions {
   jsonMode?: boolean
   /** Override max_tokens (default: 768, raised for tool/act calls). */
   maxTokens?: number
+  /**
+   * Ask the provider to skip its reasoning phase — OpenRouter honours
+   * `reasoning: { exclude: true }`, which keeps fallback output as clean as
+   * Groq's `reasoning_effort: 'none'` and stops us paying for tokens we
+   * discard.
+   *
+   * Opt-in and off by default. HuggingFace's router support for this field is
+   * inconsistent, and an unrecognised key can fail the request outright — which
+   * would take down the fallback path itself, the exact thing this exists to
+   * prevent. BYOK callers must also leave it off: the provider is unknown there.
+   */
+  suppressReasoning?: boolean
 }
 
 function buildUrl(baseUrl: string): string {
@@ -37,7 +49,7 @@ export async function chatWithOpenAiCompatible(
   messages: ChatMessageInput[],
   options: OpenAICompatibleCallOptions = {},
 ): Promise<string> {
-  const { jsonMode = false, maxTokens = 768 } = options
+  const { jsonMode = false, maxTokens = 768, suppressReasoning = false } = options
 
   const body: Record<string, unknown> = {
     model: params.model,
@@ -49,6 +61,10 @@ export async function chatWithOpenAiCompatible(
 
   if (jsonMode) {
     body.response_format = { type: 'json_object' }
+  }
+
+  if (suppressReasoning) {
+    body.reasoning = { exclude: true }
   }
 
   const res = await fetch(buildUrl(params.baseUrl), {
@@ -87,7 +103,7 @@ export async function chatWithOpenAiCompatibleStream(
   signal?: AbortSignal,
   options: OpenAICompatibleCallOptions = {},
 ): Promise<string> {
-  const { jsonMode = false, maxTokens = 768 } = options
+  const { jsonMode = false, maxTokens = 768, suppressReasoning = false } = options
 
   const body: Record<string, unknown> = {
     model: params.model,
@@ -99,6 +115,10 @@ export async function chatWithOpenAiCompatibleStream(
 
   if (jsonMode) {
     body.response_format = { type: 'json_object' }
+  }
+
+  if (suppressReasoning) {
+    body.reasoning = { exclude: true }
   }
 
   const res = await fetch(buildUrl(params.baseUrl), {

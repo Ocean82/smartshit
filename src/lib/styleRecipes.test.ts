@@ -4,6 +4,7 @@ import { refToCell } from '@/engine/spreadsheet'
 import {
   buildRecipePlan,
   isStyleRecipe,
+  persistenceCaveat,
   planChangeCount,
   planToPreviewChanges,
 } from './styleRecipes'
@@ -31,6 +32,21 @@ describe('isStyleRecipe', () => {
     expect(isStyleRecipe('table_polish')).toBe(true)
     expect(isStyleRecipe('bananas')).toBe(false)
     expect(isStyleRecipe(undefined)).toBe(false)
+  })
+})
+
+describe('persistenceCaveat', () => {
+  it('warns for style_recipe, which writes values and formulas', () => {
+    const caveat = persistenceCaveat('style_recipe')
+    expect(caveat).toBeTruthy()
+    expect(caveat).toMatch(/permanent/i)
+    expect(caveat).toMatch(/undo/i)
+  })
+
+  it('stays silent for tools that only change transient formatting', () => {
+    expect(persistenceCaveat('format_cells')).toBeNull()
+    expect(persistenceCaveat('format_as_table')).toBeNull()
+    expect(persistenceCaveat('set_column_width')).toBeNull()
   })
 })
 

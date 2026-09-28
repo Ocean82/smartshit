@@ -25,6 +25,20 @@ export function isStyleRecipe(v: unknown): v is StyleRecipe {
   return typeof v === 'string' && (STYLE_RECIPES as string[]).includes(v)
 }
 
+/**
+ * Warning shown on the Apply/Reject card for tools whose effects are written
+ * into the workbook as values and formulas rather than as transient styling.
+ *
+ * Undo history is in-memory only (`ctx.pushHistory`), so it covers the current
+ * session. Once the user saves and reopens the file there is nothing left to
+ * roll back — a revert cannot repair it, because the earlier release never
+ * touched the user's data. Worth saying out loud before they confirm.
+ */
+export function persistenceCaveat(tool: string): string | null {
+  if (tool !== 'style_recipe') return null
+  return 'Writes values and formulas into your sheet. Undo covers this session only — once you save and reopen the file, these changes are permanent.'
+}
+
 export interface RecipePlan {
   /** Format-only updates keyed by cell id. */
   formatUpdates: Record<string, Partial<CellFormat>>

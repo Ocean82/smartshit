@@ -15,6 +15,21 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
+/** Build a mock SSE Response body from an array of delta objects. */
+function sseResponse(deltas: Array<Record<string, unknown>>): Response {
+  const lines = deltas
+    .map((d) => `data: ${JSON.stringify({ choices: [{ delta: d }] })}\n`)
+    .concat('data: [DONE]\n')
+    .join('')
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode(lines))
+      controller.close()
+    },
+  })
+  return new Response(stream, { status: 200, headers: { 'Content-Type': 'text/event-stream' } })
+}
+
 describe('openaiCompatible SSRF redirect handling', () => {
   it('passes redirect: "manual" to fetch', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
@@ -49,21 +64,6 @@ describe('openaiCompatible SSRF redirect handling', () => {
 })
 
 describe('openaiCompatible streaming — reasoning models', () => {
-  /** Build a mock SSE Response body from an array of delta objects. */
-  function sseResponse(deltas: Array<Record<string, unknown>>): Response {
-    const lines = deltas
-      .map((d) => `data: ${JSON.stringify({ choices: [{ delta: d }] })}\n`)
-      .concat('data: [DONE]\n')
-      .join('')
-    const stream = new ReadableStream<Uint8Array>({
-      start(controller) {
-        controller.enqueue(new TextEncoder().encode(lines))
-        controller.close()
-      },
-    })
-    return new Response(stream, { status: 200, headers: { 'Content-Type': 'text/event-stream' } })
-  }
-
   it('emits one empty liveness ping when reasoning arrives before content', async () => {
     // qwen3-style stream: reasoning tokens first, then real content.
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
@@ -94,5 +94,70 @@ describe('openaiCompatible streaming — reasoning models', () => {
     const result = await chatWithOpenAiCompatibleStream(params, messages, (c) => chunks.push(c))
     expect(chunks.some((c) => c === '')).toBe(false)
     expect(result).toBe('Hi there')
+  })
+})
+
+/**
+ * Reasoning suppression (PRODUCTION-TODO Option 2).
+ *
+ * OpenRouter honours `reasoning: { exclude: true }`, which stops the fallback
+ * path paying for a reasoning phase it would otherwise discard. It must be
+ * opt-in: HuggingFace's router support is inconsistent and an unrecognised key
+ * can fail the request, taking down the very fallback this protects.
+ */
+describe('openaiCompatible reasoning suppression', () => {
+  function sentBody(fetchMock: ReturnType<typeof vi.spyOn>): Record<string, unknown> {
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit
+    return JSON.parse(init.body as string) as Record<string, unknown>
+  }
+
+  it('sends reasoning.exclude when suppressReasoning is set (non-streaming)', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'ok' } }] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    )
+    await chatWithOpenAiCompatible(params, messages, { suppressReasoning: true })
+    expect(sentBody(fetchMock)).toMatchObject({ reasoning: { exclude: true } })
+  })
+
+  it('sends reasoning.exclude when suppressReasoning is set (streaming)', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(sseResponse([{ content: 'ok' }]))
+    await chatWithOpenAiCompatibleStream(params, messages, () => {}, undefined, {
+      suppressReasoning: true,
+    })
+    expect(sentBody(fetchMock)).toMatchObject({ reasoning: { exclude: true } })
+  })
+
+  it('omits the field by default, so unknown providers are never sent it', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'ok' } }] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    )
+    await chatWithOpenAiCompatible(params, messages)
+    expect(sentBody(fetchMock)).not.toHaveProperty('reasoning')
+  })
+
+  it('omits the field for a default streaming call (BYOK path)', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(sseResponse([{ content: 'ok' }]))
+    await chatWithOpenAiCompatibleStream(params, messages, () => {})
+    expect(sentBody(fetchMock)).not.toHaveProperty('reasoning')
+  })
+
+  it('combines with jsonMode without dropping either flag', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ choices: [{ message: { role: 'assistant', content: '{}' } }] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    )
+    await chatWithOpenAiCompatible(params, messages, { jsonMode: true, suppressReasoning: true })
+    expect(sentBody(fetchMock)).toMatchObject({
+      response_format: { type: 'json_object' },
+      reasoning: { exclude: true },
+    })
   })
 })
