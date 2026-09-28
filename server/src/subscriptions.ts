@@ -70,3 +70,41 @@ export function reasonForStatus(status: string | undefined | null): Subscription
   if (status === 'active' || status === 'trialing' || status === 'past_due') return status
   return 'lapsed'
 }
+
+/** Minimal shape of a Stripe subscription this module needs. */
+export type StripeSubList = {
+  id: string
+  status?: string | null
+  created?: number | null
+}
+
+/**
+ * Extract a Clerk user id from a Stripe payload.
+ *
+ * Checkout Sessions carry `client_reference_id`; subscription objects carry
+ * `metadata.userId`, which createCheckoutSession sets via
+ * `subscription_data[metadata][userId]`. Both are absent for subscriptions created
+ * outside Checkout, which is why an email fallback exists.
+ */
+export function resolveUserIdFromPayload(obj: Record<string, unknown>): string | null {
+  const ref = obj.client_reference_id
+  if (typeof ref === 'string' && ref.trim()) return ref
+  const metadata = obj.metadata as Record<string, unknown> | undefined
+  const fromMeta = metadata?.userId
+  if (typeof fromMeta === 'string' && fromMeta.trim()) return fromMeta
+  return null
+}
+
+/**
+ * Resolve a Clerk user id by email, for subscriptions that carry no metadata.
+ *
+ * The lookup is injected so this stays unit-testable without a Clerk client. Callers
+ * must only pass a primary email they have already verified belongs to the user.
+ */
+export async function resolveUserIdByEmail(
+  email: string,
+  lookup: (email: string) => Promise<string | null>,
+): Promise<string | null> {
+  if (!email || !email.trim()) return null
+  return lookup(email.trim().toLowerCase())
+}

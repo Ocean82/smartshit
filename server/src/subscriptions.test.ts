@@ -3,7 +3,12 @@
  * These functions carry the entire entitlement policy, so every branch is pinned.
  */
 import { describe, it, expect } from 'vitest'
-import { mapStatusToPlan, pickSubscription } from './subscriptions.js'
+import {
+  mapStatusToPlan,
+  pickSubscription,
+  resolveUserIdFromPayload,
+  resolveUserIdByEmail,
+} from './subscriptions.js'
 
 describe('mapStatusToPlan', () => {
   it('grants pro for active', () => {
@@ -126,5 +131,46 @@ describe('pickSubscription', () => {
     const snapshot = [...input]
     pickSubscription(input)
     expect(input).toEqual(snapshot)
+  })
+})
+
+describe('resolveUserIdFromPayload', () => {
+  it('reads client_reference_id from a Checkout Session', () => {
+    const obj = { client_reference_id: 'user_123', metadata: { userId: 'user_other' } }
+    expect(resolveUserIdFromPayload(obj)).toBe('user_123')
+  })
+
+  it('falls back to metadata.userId when client_reference_id is absent', () => {
+    expect(resolveUserIdFromPayload({ metadata: { userId: 'user_456' } })).toBe('user_456')
+  })
+
+  it('returns null for a payload with no identity', () => {
+    expect(resolveUserIdFromPayload({ metadata: {} })).toBeNull()
+  })
+
+  it('ignores an empty client_reference_id', () => {
+    expect(resolveUserIdFromPayload({ client_reference_id: '', metadata: { userId: 'user_7' } })).toBe('user_7')
+  })
+})
+
+describe('resolveUserIdByEmail', () => {
+  it('returns the id the lookup resolves', async () => {
+    const lookup = async (email: string) => (email === 'a@b.com' ? 'user_9' : null)
+    await expect(resolveUserIdByEmail('a@b.com', lookup)).resolves.toBe('user_9')
+  })
+
+  it('returns null when the email has no subscription', async () => {
+    const lookup = async () => null
+    await expect(resolveUserIdByEmail('nobody@nowhere.com', lookup)).resolves.toBeNull()
+  })
+
+  it('does not call the lookup for a blank email', async () => {
+    let called = false
+    const lookup = async () => {
+      called = true
+      return 'user_x'
+    }
+    await expect(resolveUserIdByEmail('', lookup)).resolves.toBeNull()
+    expect(called).toBe(false)
   })
 })
