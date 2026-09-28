@@ -30,6 +30,7 @@ import {
   callProvider,
   callProviderStream,
   getModelName,
+  isUsableCompletion,
   isCircuitOpen,
   recordSuccess,
   recordFailure,
@@ -51,6 +52,17 @@ import { validateBody } from './middleware/validate.js'
 import { chatStreamBodySchema, chatBodySchema } from './schemas/index.js'
 import { assertPublicByokHost } from './schemas/byok.js'
 import { chatRateLimiter, checkoutRateLimiter, globalRateLimiter, sharedAccessRateLimiter } from './middleware/rateLimit.js'
+
+/**
+ * Output-token budget for a single provider call.
+ *
+ * Set explicitly rather than left undefined. When it was undefined in explain
+ * mode, each client applied its own default — Groq 2048, the OpenAI-compatible
+ * clients 768 — so failing over to OpenRouter silently cut the budget by 63%.
+ * On a reasoning model that is the difference between a real answer and an empty
+ * completion. One number for all providers keeps the failover path honest.
+ */
+const MAX_TOKENS_PER_CALL = 2048
 
 // ─── Validate critical configuration at startup ──────────────────────────────
 validateConfig()
@@ -298,7 +310,7 @@ async function callServerProviders(
   signal?: AbortSignal,
 ): Promise<{ result: ServerProviderResult | null; errors: string[] }> {
   const providerErrors: string[] = []
-  const providerOpts = { jsonMode: !llmOnly, maxTokens: llmOnly ? undefined : 2048 }
+  const providerOpts = { jsonMode: !llmOnly, maxTokens: MAX_TOKENS_PER_CALL }
 
   for (const provider of providers) {
     if (isCircuitOpen(provider)) {
@@ -314,6 +326,16 @@ async function callServerProviders(
       } else {
         const response = await callProvider(provider, messages, providerOpts)
         text = response.text
+      }
+
+      // An empty completion is a provider failure, not an answer. Skipping it
+      // lets the failover chain continue instead of blaming the user's wording.
+      if (!isUsableCompletion(text)) {
+        const msg = 'empty completion (no content returned)'
+        providerErrors.push(`${provider}: ${msg}`)
+        console.warn(`[llm] provider ${provider} returned ${msg}`)
+        recordFailure(provider)
+        continue
       }
 
       recordSuccess(provider)
@@ -484,7 +506,10 @@ async function runLlmChat(params: {
   if (llmOnly) {
     const text = fullText.trim()
     return {
-      message: text || 'I could not generate a response. Try rephrasing your question.',
+      // Empty text should now be unreachable — the provider loop skips empty
+      // completions, which routes us to Phase 3's "AI unavailable" copy. If we
+      // still land here it was the BYOK path, so don't blame the user's wording.
+      message: text || '⚠️ The AI provider returned an empty response. Please try again in a moment.',
       actions: [],
       source: 'llm',
       meta: providerMeta ?? undefined,

@@ -135,3 +135,38 @@ we don't re-derive it.
 - **Still a human check:** the caveat's wording and placement have not been seen
   rendered in the browser, and the underlying undo behaviour has not been
   exercised end-to-end (apply a recipe → undo → confirm the sheet is restored).
+
+### First live smoke test — partial, failed on Q&A (2026-09-28)
+
+A real `Budget.xlsx` was imported. 11 sheets, all data present and correct: row
+counts are computed from actual cells (`maxRow + 1` in `src/ai/sheetProfile.ts`)
+and the import ceiling is `maxImportRows: 5_000` — the four sheets showing exactly
+1000 rows genuinely contain 1000 populated rows each, so **step 1 passes and
+nothing was silently truncated**.
+
+**Step 4 failed.** Five consecutive explain requests (`Sheet1`, `Budget`,
+`Tax_Estimates`, `Labor_Model`, then "explain this to me") returned blank or the
+message *"I could not generate a response. Try rephrasing your question."* Root
+cause was two server bugs, both in the provider failover path:
+
+1. **An empty completion was accepted as success.** `callServerProviders`
+   returned the first provider's result unconditionally, so a provider answering
+   HTTP 200 with no content ended the chain. The user was then told to rephrase —
+   advice that cannot help, because the cause was never their wording.
+2. **Failing over silently cut the output-token budget by 63%.** Explain mode
+   passed `maxTokens: undefined`, so each client applied its own default: Groq
+   2048, but `openaiCompatible` only **768**. Repeated explain requests trip
+   Groq rate limiting, which fails over to OpenRouter — exactly where the budget
+   collapses. On a reasoning model, 768 output tokens can be spent entirely on
+   reasoning, leaving `content` empty, which is the observed failure.
+
+Fixed by `MAX_TOKENS_PER_CALL = 2048` for every provider (`server/src/index.ts`)
+and by skipping empty completions via `isUsableCompletion()` in
+`server/src/providers.ts` (5 tests), so the chain keeps failing over and a total
+wipeout reports "AI unavailable" rather than blaming the user.
+
+Also confirmed while investigating: the *"I analyze the active sheet"* line is
+part of the import confirmation (`src/store/importOrchestration.ts`), not a
+refusal to answer — named-sheet questions were blank for the reason above.
+
+Steps 2, 3, 5, and 6 remain unexercised and still require a human pass.

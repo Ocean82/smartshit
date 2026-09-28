@@ -203,6 +203,20 @@ export function getModelName(provider: ProviderName): string {
   }
 }
 
+/**
+ * Whether a provider's completion is usable as an answer.
+ *
+ * A call can succeed at the HTTP level and still carry no content: a reasoning
+ * model that spends its entire output budget on reasoning, or a provider that
+ * stops before emitting anything. Such a completion is a provider failure, not
+ * an answer. Accepting it ends the failover chain and leaves the user with
+ * "try rephrasing" — advice that cannot help, because the cause was never the
+ * user's wording.
+ */
+export function isUsableCompletion(text: unknown): text is string {
+  return typeof text === 'string' && text.trim().length > 0
+}
+
 export async function callProviderStream(
   provider: ProviderName,
   messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
