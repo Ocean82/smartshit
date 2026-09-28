@@ -5,8 +5,11 @@ interface CheckoutSession {
   url: string | null
 }
 
-/** Lazy Stripe client — checkout still uses raw fetch; webhooks use the SDK. */
-function getStripe(): Stripe {
+/**
+ * Shared Stripe client. Exported so the reconciler can read subscriptions without
+ * constructing a second client with a different API version.
+ */
+export function getStripeClient(): Stripe {
   if (!config.stripeSecretKey) {
     throw new Error('STRIPE_SECRET_KEY not configured')
   }
@@ -96,7 +99,7 @@ export function verifyWebhookSignature(
     throw new Error('Missing stripe-signature header')
   }
 
-  const stripe = getStripe()
+  const stripe = getStripeClient()
   const event = stripe.webhooks.constructEvent(
     payload,
     signatureHeader,

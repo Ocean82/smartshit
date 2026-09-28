@@ -9,6 +9,8 @@ import {
   resolveUserIdFromPayload,
   resolveUserIdByEmail,
   revocationReasonFor,
+  verifySubscriptionForUser,
+  isMissingResource,
   writeClerkPlan,
 } from './subscriptions.js'
 
@@ -421,5 +423,210 @@ describe('writeClerkPlan', () => {
     // The cache holds the value that was never persisted, so invalidating it would
     // only serve a stale read on the next request.
     expect(invalidateCache).not.toHaveBeenCalled()
+  })
+})
+
+describe('verifySubscriptionForUser', () => {
+  const user = { id: 'user_1', email: 'owner@example.com', subscriptionId: 'sub_1' }
+
+  it('returns pro for a live subscription', async () => {
+    const deps = {
+      retrieveSubscription: async () => ({ id: 'sub_1', status: 'active', created: 10 }),
+      listSubscriptionsByEmail: async () => [],
+    }
+    const result = await verifySubscriptionForUser(user, deps)
+    expect(result).toEqual({ isPro: true, reason: 'active', status: 'active', subscriptionId: 'sub_1' })
+  })
+
+  it('returns free with reason lapsed for a canceled subscription', async () => {
+    const deps = {
+      retrieveSubscription: async () => ({ id: 'sub_1', status: 'canceled', created: 10 }),
+      listSubscriptionsByEmail: async () => [],
+    }
+    const result = await verifySubscriptionForUser(user, deps)
+    expect(result.isPro).toBe(false)
+    expect(result.reason).toBe('lapsed')
+  })
+
+  it('falls back to email when no subscription id is stored', async () => {
+    const deps = {
+      retrieveSubscription: async () => {
+        throw new Error('should not be called')
+      },
+      listSubscriptionsByEmail: async () => [{ id: 'sub_email', status: 'active', created: 5 }],
+    }
+    const result = await verifySubscriptionForUser({ ...user, subscriptionId: null }, deps)
+    expect(result).toEqual({ isPro: true, reason: 'active', status: 'active', subscriptionId: 'sub_email' })
+  })
+
+  it('falls back to email when the stored subscription id no longer exists', async () => {
+    const deps = {
+      retrieveSubscription: async () => {
+        throw Object.assign(new Error('No such subscription'), { statusCode: 404 })
+      },
+      listSubscriptionsByEmail: async () => [{ id: 'sub_resub', status: 'active', created: 90 }],
+    }
+    const result = await verifySubscriptionForUser(user, deps)
+    expect(result).toEqual({ isPro: true, reason: 'active', status: 'active', subscriptionId: 'sub_resub' })
+  })
+
+  it('returns no_subscription when the id is gone and email finds nothing', async () => {
+    const deps = {
+      retrieveSubscription: async () => {
+        throw Object.assign(new Error('No such subscription'), { statusCode: 404 })
+      },
+      listSubscriptionsByEmail: async () => [],
+    }
+    const result = await verifySubscriptionForUser(user, deps)
+    expect(result).toEqual({ isPro: false, reason: 'no_subscription', status: null, subscriptionId: null })
+  })
+
+  it('returns no_subscription when neither id nor email finds anything', async () => {
+    const deps = {
+      retrieveSubscription: async () => {
+        throw new Error('not called')
+      },
+      listSubscriptionsByEmail: async () => [],
+    }
+    const result = await verifySubscriptionForUser({ ...user, subscriptionId: null }, deps)
+    expect(result).toEqual({ isPro: false, reason: 'no_subscription', status: null, subscriptionId: null })
+  })
+
+  it('returns unknown, never false, when Stripe throws a non-404 error', async () => {
+    const deps = {
+      retrieveSubscription: async () => {
+        throw new Error('Stripe timeout')
+      },
+      listSubscriptionsByEmail: async () => [],
+    }
+    const result = await verifySubscriptionForUser(user, deps)
+    expect(result).toEqual({ isPro: false, reason: 'unknown', status: null, subscriptionId: null })
+  })
+
+  it.each([500, 429])(
+    'returns unknown, never false, when Stripe fails with status %i',
+    async (statusCode) => {
+      // A real Stripe outage arrives as a statusCode, not a bare Error. Only a 404 is a
+      // definite answer, so anything else must fail open rather than demote a payer.
+      const deps = {
+        retrieveSubscription: async () => {
+          throw Object.assign(new Error('Stripe API error'), { statusCode })
+        },
+        listSubscriptionsByEmail: async () => [],
+      }
+      const result = await verifySubscriptionForUser(user, deps)
+      expect(result).toEqual({ isPro: false, reason: 'unknown', status: null, subscriptionId: null })
+    },
+  )
+
+  it('treats a past_due subscription as still pro', async () => {
+    const deps = {
+      retrieveSubscription: async () => ({ id: 'sub_1', status: 'past_due', created: 10 }),
+      listSubscriptionsByEmail: async () => [],
+    }
+    const result = await verifySubscriptionForUser(user, deps)
+    expect(result).toEqual({ isPro: true, reason: 'past_due', status: 'past_due', subscriptionId: 'sub_1' })
+  })
+
+  it('keeps pro for an active subscription flagged cancel_at_period_end', async () => {
+    const deps = {
+      retrieveSubscription: async () => ({ id: 'sub_1', status: 'active', created: 10, cancel_at_period_end: true }),
+      listSubscriptionsByEmail: async () => [],
+    }
+    const result = await verifySubscriptionForUser(user, deps)
+    expect(result.isPro).toBe(true)
+  })
+
+  it('prefers a live resubscription when the stored id is dead but present', async () => {
+    // The missed-cancellation-webhook case. Clerk still holds canceled sub_1 while the
+    // user resubscribed as sub_2. Trusting the stored id alone demotes a paying
+    // customer — precisely the failure the reconciler exists to prevent.
+    const deps = {
+      retrieveSubscription: async () => ({ id: 'sub_1', status: 'canceled', created: 10 }),
+      listSubscriptionsByEmail: async () => [{ id: 'sub_2', status: 'active', created: 90 }],
+    }
+    const result = await verifySubscriptionForUser(user, deps)
+    expect(result).toEqual({ isPro: true, reason: 'active', status: 'active', subscriptionId: 'sub_2' })
+  })
+
+  it('does not consult email when the stored subscription is already pro', async () => {
+    // Saves a Stripe call on the common path, and pins that the fallback cannot
+    // downgrade a confirmed live subscription.
+    const listSubscriptionsByEmail = vi.fn(async () => [
+      { id: 'sub_other', status: 'canceled', created: 999 },
+    ])
+    const deps = {
+      retrieveSubscription: async () => ({ id: 'sub_1', status: 'active', created: 10 }),
+      listSubscriptionsByEmail,
+    }
+    const result = await verifySubscriptionForUser(user, deps)
+    expect(result.subscriptionId).toBe('sub_1')
+    expect(listSubscriptionsByEmail).not.toHaveBeenCalled()
+  })
+
+  it('returns unknown when the email fallback throws, since a resubscription may be missed', async () => {
+    const deps = {
+      retrieveSubscription: async () => ({ id: 'sub_1', status: 'canceled', created: 10 }),
+      listSubscriptionsByEmail: async () => {
+        throw new Error('Stripe list timeout')
+      },
+    }
+    const result = await verifySubscriptionForUser(user, deps)
+    // Not 'lapsed': without the email lookup we cannot rule out a live sub_2, and
+    // a wrong demotion is far worse than a delayed one.
+    expect(result).toEqual({ isPro: false, reason: 'unknown', status: null, subscriptionId: null })
+  })
+
+  it('reports no_subscription for a 404 when the user has no email to search by', async () => {
+    const listSubscriptionsByEmail = vi.fn(async () => [])
+    const deps = {
+      retrieveSubscription: async () => {
+        throw Object.assign(new Error('No such subscription'), { statusCode: 404 })
+      },
+      listSubscriptionsByEmail,
+    }
+    const result = await verifySubscriptionForUser({ ...user, email: null }, deps)
+    expect(result).toEqual({ isPro: false, reason: 'no_subscription', status: null, subscriptionId: null })
+    expect(listSubscriptionsByEmail).not.toHaveBeenCalled()
+  })
+
+  it('keeps the stored subscription when email finds only dead ones too', async () => {
+    // A dead email result must never overwrite a real direct answer, or a lapsed
+    // customer's revocation would be recorded against an unrelated id.
+    const deps = {
+      retrieveSubscription: async () => ({ id: 'sub_1', status: 'canceled', created: 10 }),
+      listSubscriptionsByEmail: async () => [{ id: 'sub_old', status: 'unpaid', created: 5 }],
+    }
+    const result = await verifySubscriptionForUser(user, deps)
+    expect(result).toEqual({ isPro: false, reason: 'lapsed', status: 'canceled', subscriptionId: 'sub_1' })
+  })
+
+  it('reports no_subscription when a 404 turns up only dead subscriptions by email', async () => {
+    // The other side of the same rule: a canceled sub in the email list is not a
+    // substitute for a live one, so a long-gone subscriber is definitely not paying.
+    const deps = {
+      retrieveSubscription: async () => {
+        throw Object.assign(new Error('No such subscription'), { statusCode: 404 })
+      },
+      listSubscriptionsByEmail: async () => [{ id: 'sub_old', status: 'canceled', created: 5 }],
+    }
+    const result = await verifySubscriptionForUser(user, deps)
+    expect(result).toEqual({ isPro: false, reason: 'no_subscription', status: null, subscriptionId: null })
+  })
+})
+
+describe('isMissingResource', () => {
+  it('is true only for a 404, since only that is a definite answer', () => {
+    expect(isMissingResource({ statusCode: 404 })).toBe(true)
+    expect(isMissingResource({ statusCode: 500 })).toBe(false)
+    expect(isMissingResource({ statusCode: 429 })).toBe(false)
+    expect(isMissingResource({})).toBe(false)
+  })
+
+  it('is false for a thrown non-object, rather than throwing', () => {
+    expect(isMissingResource(null)).toBe(false)
+    expect(isMissingResource(undefined)).toBe(false)
+    expect(isMissingResource('404')).toBe(false)
+    expect(isMissingResource(new Error('boom'))).toBe(false)
   })
 })

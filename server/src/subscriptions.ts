@@ -195,3 +195,81 @@ export async function writeClerkPlan(
   deps.invalidateCache(userId)
   return true
 }
+
+export type VerifyDeps = {
+  retrieveSubscription(id: string): Promise<StripeSubList & { cancel_at_period_end?: boolean }>
+  listSubscriptionsByEmail(email: string): Promise<StripeSubList[]>
+}
+
+/**
+ * True for a Stripe "no such resource" error, which is a definite answer, not an outage.
+ *
+ * Exported because the webhook needs the same distinction: a 404 on a deleted customer
+ * is a no-op, while any other error must propagate so Stripe retries.
+ */
+export function isMissingResource(err: unknown): boolean {
+  if (typeof err !== 'object' || err === null) return false
+  const status = (err as { statusCode?: unknown }).statusCode
+  return status === 404
+}
+
+/**
+ * Determine a user's real subscription state.
+ *
+ * Never throws. A Stripe failure returns `reason: 'unknown'` with `isPro: false`,
+ * which writeClerkPlan refuses to persist — so the caller's stored state survives an
+ * outage untouched.
+ *
+ * A 404 on the stored id is *not* an outage: the subscription genuinely no longer
+ * exists. That is a definite "not paying" answer, so it falls through to the email
+ * lookup to find a resubscription under a new id, and reports `no_subscription` if
+ * there is none. Conflating a 404 with a timeout would either strand a lapsed Pro
+ * user or fail open on a real revocation.
+ *
+ * The email lookup also runs when the stored id resolves to a real but dead
+ * subscription, not only on a 404. A missed cancellation webhook leaves a canceled
+ * `sub_1` in Clerk while the user resubscribed as `sub_2`; trusting the stored id
+ * alone would demote a paying customer, which is the one outcome the reconciler
+ * exists to prevent. A live subscription found by email wins.
+ */
+export async function verifySubscriptionForUser(
+  user: { id: string; email: string | null; subscriptionId: string | null },
+  deps: VerifyDeps,
+): Promise<VerificationResult> {
+  let sub: StripeSubList | null = null
+
+  if (user.subscriptionId) {
+    try {
+      sub = await deps.retrieveSubscription(user.subscriptionId)
+    } catch (err) {
+      // Definite deletion: keep looking by email rather than reporting unknown.
+      if (!isMissingResource(err)) {
+        return { isPro: false, reason: 'unknown', status: null, subscriptionId: null }
+      }
+    }
+  }
+
+  if (user.email && mapStatusToPlan(sub?.status) !== 'pro') {
+    let byEmail: StripeSubList | null
+    try {
+      byEmail = pickSubscription(await deps.listSubscriptionsByEmail(user.email))
+    } catch {
+      // Reached only when no Pro answer is already in hand, so an email outage leaves
+      // us unable to tell whether a resubscription was missed. Report unknown and
+      // write nothing; the next reconcile retries.
+      return { isPro: false, reason: 'unknown', status: null, subscriptionId: null }
+    }
+    if (byEmail && mapStatusToPlan(byEmail.status) === 'pro') sub = byEmail
+  }
+
+  if (!sub) {
+    return { isPro: false, reason: 'no_subscription', status: null, subscriptionId: null }
+  }
+
+  return {
+    isPro: mapStatusToPlan(sub.status) === 'pro',
+    reason: reasonForStatus(sub.status),
+    status: sub.status ?? null,
+    subscriptionId: sub.id,
+  }
+}
