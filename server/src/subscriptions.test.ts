@@ -151,6 +151,35 @@ describe('resolveUserIdFromPayload', () => {
   it('ignores an empty client_reference_id', () => {
     expect(resolveUserIdFromPayload({ client_reference_id: '', metadata: { userId: 'user_7' } })).toBe('user_7')
   })
+
+  it('ignores a whitespace-only client_reference_id', () => {
+    // A dashboard-created Checkout Session can carry this. Returning it would send
+    // updateUserMetadata(' ') and turn a paid checkout into a 400 Stripe retries forever.
+    expect(resolveUserIdFromPayload({ client_reference_id: '   ' })).toBeNull()
+    expect(resolveUserIdFromPayload({ client_reference_id: '  ', metadata: { userId: 'user_7' } })).toBe('user_7')
+  })
+
+  it('trims the returned id rather than returning it padded', () => {
+    expect(resolveUserIdFromPayload({ client_reference_id: '  user_123  ' })).toBe('user_123')
+    expect(resolveUserIdFromPayload({ metadata: { userId: '  user_456  ' } })).toBe('user_456')
+  })
+
+  it('rejects a non-string id, so a number or object cannot become a Clerk id', () => {
+    expect(resolveUserIdFromPayload({ client_reference_id: 12345 })).toBeNull()
+    expect(resolveUserIdFromPayload({ metadata: { userId: 12345 } })).toBeNull()
+    expect(resolveUserIdFromPayload({ metadata: { userId: { id: 'user_x' } } })).toBeNull()
+    expect(resolveUserIdFromPayload({ client_reference_id: 0, metadata: { userId: false } })).toBeNull()
+  })
+
+  it('rejects a whitespace-only metadata userId', () => {
+    expect(resolveUserIdFromPayload({ metadata: { userId: '  ' } })).toBeNull()
+  })
+
+  it('tolerates a missing or non-object metadata', () => {
+    expect(resolveUserIdFromPayload({ metadata: null })).toBeNull()
+    expect(resolveUserIdFromPayload({ metadata: 'user_str' })).toBeNull()
+    expect(resolveUserIdFromPayload({ metadata: [] })).toBeNull()
+  })
 })
 
 describe('resolveUserIdByEmail', () => {
@@ -159,9 +188,37 @@ describe('resolveUserIdByEmail', () => {
     await expect(resolveUserIdByEmail('a@b.com', lookup)).resolves.toBe('user_9')
   })
 
-  it('returns null when the email has no subscription', async () => {
+  it('returns null when the email matches no user', async () => {
     const lookup = async () => null
     await expect(resolveUserIdByEmail('nobody@nowhere.com', lookup)).resolves.toBeNull()
+  })
+
+  it('calls the lookup with exactly one argument', async () => {
+    // Guards against a future caller smuggling extra context into the lookup.
+    const seen: unknown[][] = []
+    const lookup = async (...args: unknown[]) => {
+      seen.push(args)
+      return 'user_9'
+    }
+    await expect(resolveUserIdByEmail('a@b.com', lookup as (email: string) => Promise<string | null>)).resolves.toBe('user_9')
+    expect(seen).toEqual([['a@b.com']])
+  })
+
+  it('propagates a lookup failure instead of reporting no such user', async () => {
+    // A Clerk outage must never read as a negative answer: Task 8 relies on this
+    // propagating so it can 5xx and let Stripe retry, rather than claiming the
+    // event and stranding a paying customer until the daily reconcile.
+    const lookup = async () => {
+      throw new Error('Clerk 500')
+    }
+    await expect(resolveUserIdByEmail('a@b.com', lookup)).rejects.toThrow('Clerk 500')
+  })
+
+  it('does not call a throwing lookup for a blank email', async () => {
+    const lookup = async () => {
+      throw new Error('must not be called')
+    }
+    await expect(resolveUserIdByEmail('   ', lookup)).resolves.toBeNull()
   })
 
   it('does not call the lookup for a blank email', async () => {

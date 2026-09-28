@@ -85,21 +85,35 @@ export type StripeSubList = {
  * `metadata.userId`, which createCheckoutSession sets via
  * `subscription_data[metadata][userId]`. Both are absent for subscriptions created
  * outside Checkout, which is why an email fallback exists.
+ *
+ * Every candidate is type-checked and trimmed before it is returned. A dashboard-created
+ * Checkout Session can carry `client_reference_id: ' '`, and returning that would send
+ * `updateUserMetadata(' ')`, which Clerk rejects — turning a paid checkout into a 400
+ * that Stripe retries until it gives up, with nothing in the logs but a bad id.
  */
 export function resolveUserIdFromPayload(obj: Record<string, unknown>): string | null {
   const ref = obj.client_reference_id
-  if (typeof ref === 'string' && ref.trim()) return ref
+  if (typeof ref === 'string' && ref.trim()) return ref.trim()
   const metadata = obj.metadata as Record<string, unknown> | undefined
   const fromMeta = metadata?.userId
-  if (typeof fromMeta === 'string' && fromMeta.trim()) return fromMeta
+  if (typeof fromMeta === 'string' && fromMeta.trim()) return fromMeta.trim()
   return null
 }
 
 /**
  * Resolve a Clerk user id by email, for subscriptions that carry no metadata.
  *
- * The lookup is injected so this stays unit-testable without a Clerk client. Callers
- * must only pass a primary email they have already verified belongs to the user.
+ * The lookup is injected so this stays unit-testable without a Clerk client. It is
+ * called with exactly one argument — the trimmed, lowercased address — because Clerk's
+ * email filter is a plain equality match, and it must only ever be passed an address
+ * that identifies the user in question (in practice, the email on the Stripe customer
+ * record, which is whatever a human typed at checkout).
+ *
+ * **Propagates whatever the lookup throws.** "Clerk was unreachable" must not be
+ * flattened into "no such user", which would read as a negative answer and could strand
+ * a paying customer. A caller that wants to tolerate the failure must rethrow or return
+ * a 5xx so the event is retried — never swallow it and answer 200. A blank email is the
+ * one case answered here, and it never reaches the lookup.
  */
 export async function resolveUserIdByEmail(
   email: string,
