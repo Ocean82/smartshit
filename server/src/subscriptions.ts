@@ -136,18 +136,27 @@ export type PlanWriterDeps = {
 /**
  * The reason to persist alongside a plan write, or null for none.
  *
- * A banner is only correct for a user who *had* Pro and no longer does. A user who
- * was always free and is still free has not been revoked, so recording a reason
- * would alarm them about a plan they never had. `unknown` and `no_subscription`
- * are also silent: the first means Stripe was unreachable, the second means there
- * was never a subscription to lapse.
+ * A banner is only correct for a user who *had* Pro and no longer does, so a user who
+ * was always free records nothing — they have not been revoked, and alarming them about
+ * a plan they never had is worse than saying nothing. `unknown` is also silent, because
+ * it means Stripe was unreachable and nothing was actually learned.
+ *
+ * `no_subscription` is deliberately NOT silent. A stored `pro` with no subscription
+ * found means the subscription genuinely went away, so that user is being demoted and
+ * deserves to be told why. Never-Pro users reach here too and record nothing, via the
+ * `currentPlan` check below.
+ *
+ * Callers depend on `isPro: false` implying a real lapse reason: `verifySubscriptionForUser`
+ * derives both from the same Stripe status, so an `isPro: false` result never carries
+ * reason `active`. That coupling is what keeps a pro-flavoured string out of the
+ * revocation slot.
  */
 export function revocationReasonFor(
   result: VerificationResult,
   currentPlan: 'free' | 'pro',
 ): string | null {
   if (result.isPro) return null
-  if (result.reason === 'unknown' || result.reason === 'no_subscription') return null
+  if (result.reason === 'unknown') return null
   if (currentPlan !== 'pro') return null
   return result.status ?? 'lapsed'
 }
@@ -157,7 +166,13 @@ export function revocationReasonFor(
  *
  * An `unknown` result means Stripe could not be reached, so the previously known
  * value stands. Writing here would revoke access because of a network blip, which is
- * the one outcome this whole design exists to prevent.
+ * the one outcome this whole design exists to prevent. The `isPro` value is deliberately
+ * not consulted: a result that says "unknown" but claims Pro is still unknown, and
+ * trusting it would write an unverified grant.
+ *
+ * Throws if the Clerk write fails, so a caller can retry rather than record a purchase
+ * that was never persisted. The cache is invalidated only after a successful write, so a
+ * failure leaves the cached entry matching what is actually stored in Clerk.
  */
 export async function writeClerkPlan(
   userId: string,

@@ -281,7 +281,15 @@ describe('revocationReasonFor', () => {
 
   it('is null when there is no subscription at all', () => {
     const result = { isPro: false, reason: 'no_subscription', status: null, subscriptionId: null } as const
-    expect(revocationReasonFor(result, 'pro')).toBeNull()
+    expect(revocationReasonFor(result, 'free')).toBeNull()
+  })
+
+  it('still records a reason when a pro user subscription has vanished entirely', () => {
+    // Silent demotion is the failure mode worth avoiding: a stored pro whose
+    // subscription no longer exists in Stripe has lost access, and gets no
+    // explanation unless the reconciler records why.
+    const result = { isPro: false, reason: 'no_subscription', status: null, subscriptionId: null } as const
+    expect(revocationReasonFor(result, 'pro')).toBe('lapsed')
   })
 })
 
@@ -318,8 +326,36 @@ describe('writeClerkPlan', () => {
     expect(invalidateCache).not.toHaveBeenCalled()
   })
 
-  it('writes free, records why, and clears the subscription id when a pro user is demoted', async () => {
+  it('refuses to write an unknown result that claims pro', async () => {
+    // An `unknown` reason means nothing was learned, whatever `isPro` claims. Honouring
+    // the claim would grant paid access on the strength of a failed lookup.
+    const { updatePublicMetadata, invalidateCache, deps } = makeDeps()
+    const wrote = await writeClerkPlan(
+      'user_1b',
+      { isPro: true, reason: 'unknown', status: null, subscriptionId: 'sub_1b' },
+      'free',
+      deps,
+    )
+    expect(wrote).toBe(false)
+    expect(updatePublicMetadata).not.toHaveBeenCalled()
+    expect(invalidateCache).not.toHaveBeenCalled()
+  })
+
+  it('records no reason for a free user who is demoted from nothing', async () => {
+    // Pins that the writer actually passes its `currentPlan` through. Hardcoding 'pro'
+    // at the call site instead would banner every free user the reconciler sweeps.
     const { updatePublicMetadata, deps } = makeDeps()
+    await writeClerkPlan(
+      'user_1c',
+      { isPro: false, reason: 'lapsed', status: 'canceled', subscriptionId: 'sub_1c' },
+      'free',
+      deps,
+    )
+    expect(updatePublicMetadata).toHaveBeenCalledWith('user_1c', 'free', null, null)
+  })
+
+  it('writes free, records why, and clears the subscription id when a pro user is demoted', async () => {
+    const { updatePublicMetadata, invalidateCache, deps } = makeDeps()
     await writeClerkPlan(
       'user_2',
       { isPro: false, reason: 'lapsed', status: 'unpaid', subscriptionId: 'sub_2' },
@@ -330,6 +366,9 @@ describe('writeClerkPlan', () => {
     // stripeSubscriptionId is set, so persisting it alongside plan 'free' would
     // silently re-grant Pro on the next read — see Task 3a.
     expect(updatePublicMetadata).toHaveBeenCalledWith('user_2', 'free', null, 'unpaid')
+    // The cache must be dropped on the demotion path too, not just on promotion:
+    // the cached entry is 5 minutes of live Pro for a customer who just got revoked.
+    expect(invalidateCache).toHaveBeenCalledWith('user_2')
   })
 
   it('never leaves a subscription id on a free plan', async () => {
