@@ -34,7 +34,9 @@ describe('mapStatusToPlan', () => {
 })
 
 describe('pickSubscription', () => {
-  const sub = (id: string, status: string, created: number) => ({ id, status, created })
+  // status is optional because Stripe may omit it, which is what
+  // statusRank(undefined) has to cope with.
+  const sub = (id: string, status: string | undefined, created: number) => ({ id, status, created })
 
   it('returns null for an empty list', () => {
     expect(pickSubscription([])).toBeNull()
