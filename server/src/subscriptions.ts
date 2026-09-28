@@ -122,3 +122,61 @@ export async function resolveUserIdByEmail(
   if (!email || !email.trim()) return null
   return lookup(email.trim().toLowerCase())
 }
+
+export type PlanWriterDeps = {
+  updatePublicMetadata(
+    userId: string,
+    plan: 'free' | 'pro',
+    subscriptionId: string | null,
+    revocationReason: string | null,
+  ): Promise<void>
+  invalidateCache(userId: string): void
+}
+
+/**
+ * The reason to persist alongside a plan write, or null for none.
+ *
+ * A banner is only correct for a user who *had* Pro and no longer does. A user who
+ * was always free and is still free has not been revoked, so recording a reason
+ * would alarm them about a plan they never had. `unknown` and `no_subscription`
+ * are also silent: the first means Stripe was unreachable, the second means there
+ * was never a subscription to lapse.
+ */
+export function revocationReasonFor(
+  result: VerificationResult,
+  currentPlan: 'free' | 'pro',
+): string | null {
+  if (result.isPro) return null
+  if (result.reason === 'unknown' || result.reason === 'no_subscription') return null
+  if (currentPlan !== 'pro') return null
+  return result.status ?? 'lapsed'
+}
+
+/**
+ * The only place plan state is written.
+ *
+ * An `unknown` result means Stripe could not be reached, so the previously known
+ * value stands. Writing here would revoke access because of a network blip, which is
+ * the one outcome this whole design exists to prevent.
+ */
+export async function writeClerkPlan(
+  userId: string,
+  result: VerificationResult,
+  currentPlan: 'free' | 'pro',
+  deps: PlanWriterDeps,
+): Promise<boolean> {
+  if (result.reason === 'unknown') return false
+  const plan = result.isPro ? 'pro' : 'free'
+  // planFromPublicMetadata grants pro whenever stripeSubscriptionId is set, so a
+  // demotion must clear it or the very next read re-grants Pro and the write is
+  // a no-op in practice.
+  const subscriptionId = result.isPro ? result.subscriptionId : null
+  await deps.updatePublicMetadata(
+    userId,
+    plan,
+    subscriptionId,
+    revocationReasonFor(result, currentPlan),
+  )
+  deps.invalidateCache(userId)
+  return true
+}

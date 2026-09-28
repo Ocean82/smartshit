@@ -20,6 +20,14 @@ describe('planFromPublicMetadata', () => {
     expect(planFromPublicMetadata({})).toBe('free')
     expect(planFromPublicMetadata(undefined)).toBe('free')
   })
+  it('denies pro when the plan is free and no subscription id is stored', () => {
+    // The exact shape writeClerkPlan persists on a demotion. A non-null id here would
+    // re-grant Pro on the next read and make the write a no-op in practice.
+    expect(planFromPublicMetadata({ plan: 'free', stripeSubscriptionId: null })).toBe('free')
+  })
+  it('denies pro when the plan is free even if a reason is recorded', () => {
+    expect(planFromPublicMetadata({ plan: 'free', revocationReason: 'canceled' })).toBe('free')
+  })
 })
 
 describe('hasClerkUserId', () => {

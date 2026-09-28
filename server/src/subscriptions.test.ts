@@ -2,12 +2,14 @@
  * Pure policy tests for subscription status mapping and selection.
  * These functions carry the entire entitlement policy, so every branch is pinned.
  */
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import {
   mapStatusToPlan,
   pickSubscription,
   resolveUserIdFromPayload,
   resolveUserIdByEmail,
+  revocationReasonFor,
+  writeClerkPlan,
 } from './subscriptions.js'
 
 describe('mapStatusToPlan', () => {
@@ -252,5 +254,133 @@ describe('resolveUserIdByEmail', () => {
     }
     await expect(resolveUserIdByEmail('   ', lookup)).resolves.toBeNull()
     expect(called).toBe(false)
+  })
+})
+
+describe('revocationReasonFor', () => {
+  it('is null when the result is pro', () => {
+    const result = { isPro: true, reason: 'active', status: 'active', subscriptionId: 'sub_1' } as const
+    expect(revocationReasonFor(result, 'free')).toBeNull()
+    expect(revocationReasonFor(result, 'pro')).toBeNull()
+  })
+
+  it('records the stripe status when a pro user is demoted', () => {
+    const result = { isPro: false, reason: 'lapsed', status: 'canceled', subscriptionId: 'sub_1' } as const
+    expect(revocationReasonFor(result, 'pro')).toBe('canceled')
+  })
+
+  it('falls back to lapsed when the status is missing', () => {
+    const result = { isPro: false, reason: 'lapsed', status: null, subscriptionId: 'sub_1' } as const
+    expect(revocationReasonFor(result, 'pro')).toBe('lapsed')
+  })
+
+  it('is null for a user who was already free, so no banner is shown', () => {
+    const result = { isPro: false, reason: 'lapsed', status: 'canceled', subscriptionId: null } as const
+    expect(revocationReasonFor(result, 'free')).toBeNull()
+  })
+
+  it('is null when there is no subscription at all', () => {
+    const result = { isPro: false, reason: 'no_subscription', status: null, subscriptionId: null } as const
+    expect(revocationReasonFor(result, 'pro')).toBeNull()
+  })
+})
+
+describe('writeClerkPlan', () => {
+  const makeDeps = () => {
+    const updatePublicMetadata = vi.fn(async () => {})
+    const invalidateCache = vi.fn()
+    return { updatePublicMetadata, invalidateCache, deps: { updatePublicMetadata, invalidateCache } }
+  }
+
+  it('writes pro, clears any revocation reason, and invalidates the cache', async () => {
+    const { updatePublicMetadata, invalidateCache, deps } = makeDeps()
+    const wrote = await writeClerkPlan(
+      'user_1',
+      { isPro: true, reason: 'active', status: 'active', subscriptionId: 'sub_1' },
+      'free',
+      deps,
+    )
+    expect(wrote).toBe(true)
+    expect(updatePublicMetadata).toHaveBeenCalledWith('user_1', 'pro', 'sub_1', null)
+    expect(invalidateCache).toHaveBeenCalledWith('user_1')
+  })
+
+  it('refuses to write when the reason is unknown', async () => {
+    const { updatePublicMetadata, invalidateCache, deps } = makeDeps()
+    const wrote = await writeClerkPlan(
+      'user_1',
+      { isPro: false, reason: 'unknown', status: null, subscriptionId: null },
+      'pro',
+      deps,
+    )
+    expect(wrote).toBe(false)
+    expect(updatePublicMetadata).not.toHaveBeenCalled()
+    expect(invalidateCache).not.toHaveBeenCalled()
+  })
+
+  it('writes free, records why, and clears the subscription id when a pro user is demoted', async () => {
+    const { updatePublicMetadata, deps } = makeDeps()
+    await writeClerkPlan(
+      'user_2',
+      { isPro: false, reason: 'lapsed', status: 'unpaid', subscriptionId: 'sub_2' },
+      'pro',
+      deps,
+    )
+    // subscriptionId MUST be null here. planFromPublicMetadata grants pro when
+    // stripeSubscriptionId is set, so persisting it alongside plan 'free' would
+    // silently re-grant Pro on the next read — see Task 3a.
+    expect(updatePublicMetadata).toHaveBeenCalledWith('user_2', 'free', null, 'unpaid')
+  })
+
+  it('never leaves a subscription id on a free plan', async () => {
+    const { updatePublicMetadata, deps } = makeDeps()
+    await writeClerkPlan(
+      'user_3',
+      { isPro: false, reason: 'lapsed', status: 'canceled', subscriptionId: 'sub_9' },
+      'pro',
+      deps,
+    )
+    const [, plan, subscriptionId] = updatePublicMetadata.mock.calls[0] as unknown as [
+      string,
+      string,
+      string | null,
+      string | null,
+    ]
+    expect(plan).toBe('free')
+    expect(subscriptionId).toBeNull()
+  })
+
+  it('keeps the subscription id on a pro plan, so the rule is not applied twice', async () => {
+    // The mirror of the demotion rule. A blanket "null the id" would strip pro of its
+    // only cross-check and make a later revocation undetectable.
+    const { updatePublicMetadata, deps } = makeDeps()
+    await writeClerkPlan(
+      'user_4',
+      { isPro: true, reason: 'active', status: 'active', subscriptionId: 'sub_4' },
+      'pro',
+      deps,
+    )
+    expect(updatePublicMetadata).toHaveBeenCalledWith('user_4', 'pro', 'sub_4', null)
+  })
+
+  it('propagates a write failure instead of reporting a write that never happened', async () => {
+    // Task 8 depends on this. The webhook route answers 200 once the event is claimed,
+    // so a swallowed Clerk error would discard a purchase with no retry and no log.
+    const updatePublicMetadata = vi.fn(async () => {
+      throw new Error('Clerk 500')
+    })
+    const invalidateCache = vi.fn()
+    const deps = { updatePublicMetadata, invalidateCache }
+    await expect(
+      writeClerkPlan(
+        'user_5',
+        { isPro: true, reason: 'active', status: 'active', subscriptionId: 'sub_5' },
+        'free',
+        deps,
+      ),
+    ).rejects.toThrow('Clerk 500')
+    // The cache holds the value that was never persisted, so invalidating it would
+    // only serve a stale read on the next request.
+    expect(invalidateCache).not.toHaveBeenCalled()
   })
 })
