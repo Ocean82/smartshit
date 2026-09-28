@@ -1,0 +1,90 @@
+/**
+ * Pure policy tests for subscription status mapping and selection.
+ * These functions carry the entire entitlement policy, so every branch is pinned.
+ */
+import { describe, it, expect } from 'vitest'
+import { mapStatusToPlan, pickSubscription } from './subscriptions.js'
+
+describe('mapStatusToPlan', () => {
+  it('grants pro for active', () => {
+    expect(mapStatusToPlan('active')).toBe('pro')
+  })
+
+  it('grants pro for trialing', () => {
+    expect(mapStatusToPlan('trialing')).toBe('pro')
+  })
+
+  it('grants pro for past_due so Stripe dunning can retry', () => {
+    expect(mapStatusToPlan('past_due')).toBe('pro')
+  })
+
+  it.each(['canceled', 'unpaid', 'incomplete', 'incomplete_expired', 'paused'])(
+    'revokes pro for %s',
+    (status) => {
+      expect(mapStatusToPlan(status)).toBe('free')
+    },
+  )
+
+  it.each([undefined, null, '', 'something_new_from_stripe'])(
+    'revokes pro for unknown status %s',
+    (status) => {
+      expect(mapStatusToPlan(status)).toBe('free')
+    },
+  )
+})
+
+describe('pickSubscription', () => {
+  const sub = (id: string, status: string, created: number) => ({ id, status, created })
+
+  it('returns null for an empty list', () => {
+    expect(pickSubscription([])).toBeNull()
+  })
+
+  it('prefers active over past_due even when past_due is newer', () => {
+    const chosen = pickSubscription([
+      sub('a', 'past_due', 200),
+      sub('b', 'active', 100),
+    ])
+    expect(chosen?.id).toBe('b')
+  })
+
+  it('prefers trialing over past_due', () => {
+    const chosen = pickSubscription([
+      sub('a', 'past_due', 200),
+      sub('b', 'trialing', 100),
+    ])
+    expect(chosen?.id).toBe('b')
+  })
+
+  it('falls back to the newest when nothing is pro-eligible', () => {
+    const chosen = pickSubscription([
+      sub('a', 'canceled', 100),
+      sub('b', 'unpaid', 200),
+    ])
+    expect(chosen?.id).toBe('b')
+  })
+
+  it('breaks ties within a class by newest first', () => {
+    const chosen = pickSubscription([
+      sub('a', 'active', 100),
+      sub('b', 'active', 300),
+    ])
+    expect(chosen?.id).toBe('b')
+  })
+
+  it('prefers active over a brand-new canceled subscription', () => {
+    const chosen = pickSubscription([
+      sub('a', 'canceled', 500),
+      sub('b', 'active', 100),
+    ])
+    expect(chosen?.id).toBe('b')
+  })
+
+  it('treats a missing status as the weakest class', () => {
+    const chosen = pickSubscription([
+      sub('a', undefined, 500),
+      sub('b', 'unpaid', 100),
+    ])
+    expect(chosen?.id).toBe('a')
+  })
+})
