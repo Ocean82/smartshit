@@ -89,4 +89,42 @@ describe('pickSubscription', () => {
     ])
     expect(chosen?.id).toBe('a')
   })
+
+  it('prefers a real timestamp over a null created', () => {
+    const chosen = pickSubscription([
+      { id: 'nullish', status: 'active', created: null },
+      { id: 'dated', status: 'active', created: 100 },
+    ])
+    expect(chosen?.id).toBe('dated')
+  })
+
+  it('still prefers a higher status class when both created values are null', () => {
+    const chosen = pickSubscription([
+      { id: 'canceled', status: 'canceled', created: null },
+      { id: 'active', status: 'active', created: null },
+    ])
+    expect(chosen?.id).toBe('active')
+  })
+
+  it('is stable across calls when rank and created are identical', () => {
+    // Stripe's list ordering is not guaranteed, so a full tie could arrive in either
+    // order between runs. Both subs map to the same plan, so the winner may differ —
+    // what must not differ is the entitlement. Pin that both orders agree on plan.
+    const orders = [
+      [sub('a', 'canceled', 100), sub('b', 'canceled', 100)],
+      [sub('b', 'canceled', 100), sub('a', 'canceled', 100)],
+    ]
+    const plans = orders.map(
+      (list) => mapStatusToPlan(pickSubscription(list)?.status),
+    )
+    expect(plans[0]).toBe('free')
+    expect(plans[1]).toBe('free')
+  })
+
+  it('does not mutate the caller array', () => {
+    const input = [sub('a', 'past_due', 200), sub('b', 'active', 100)]
+    const snapshot = [...input]
+    pickSubscription(input)
+    expect(input).toEqual(snapshot)
+  })
 })
