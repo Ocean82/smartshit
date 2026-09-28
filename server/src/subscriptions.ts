@@ -202,7 +202,18 @@ export type VerifyDeps = {
 }
 
 /**
- * True for a Stripe "no such resource" error, which is a definite answer, not an outage.
+ * True for a Stripe "no such resource" 404 — a definite answer, not an outage.
+ *
+ * Matched on `statusCode === 404` because the installed SDK exposes the HTTP status as
+ * `err.statusCode` for these errors (there is no `err.status` in stripe@17). `code ===
+ * 'resource_missing'` is a second marker but a strict subset of the 404s, so it is not
+ * consulted: a proxy/CDN 404 with an HTML body surfaces as a `StripeAPIError` with no
+ * statusCode, which this correctly reads as an outage.
+ *
+ * This assumes the Stripe secret key is live and points at the right account. With a
+ * test-mode key in production (or a wrong account), *every* retrieve 404s, so every
+ * user resolves to `no_subscription` — a mass demotion the reconciler would happily
+ * perform. Key wiring in index.ts must fail startup rather than run half-configured.
  *
  * Exported because the webhook needs the same distinction: a 404 on a deleted customer
  * is a no-op, while any other error must propagate so Stripe retries.
@@ -216,9 +227,9 @@ export function isMissingResource(err: unknown): boolean {
 /**
  * Determine a user's real subscription state.
  *
- * Never throws. A Stripe failure returns `reason: 'unknown'` with `isPro: false`,
- * which writeClerkPlan refuses to persist — so the caller's stored state survives an
- * outage untouched.
+ * Never throws for a well-formed user. A Stripe failure returns `reason: 'unknown'`
+ * with `isPro: false`, which writeClerkPlan refuses to persist — so the caller's
+ * stored state survives an outage untouched.
  *
  * A 404 on the stored id is *not* an outage: the subscription genuinely no longer
  * exists. That is a definite "not paying" answer, so it falls through to the email
@@ -231,6 +242,11 @@ export function isMissingResource(err: unknown): boolean {
  * `sub_1` in Clerk while the user resubscribed as `sub_2`; trusting the stored id
  * alone would demote a paying customer, which is the one outcome the reconciler
  * exists to prevent. A live subscription found by email wins.
+ *
+ * Preferring the best of several subscriptions by email is a deliberate bias toward
+ * granting: because email is identity here (any live sub on the address is a probative
+ * claim) and a wrong grant self-heals on the next reconcile while a wrong revoke does
+ * not, resolving ties in the user's favour is the safe error direction.
  */
 export async function verifySubscriptionForUser(
   user: { id: string; email: string | null; subscriptionId: string | null },
@@ -269,7 +285,7 @@ export async function verifySubscriptionForUser(
   return {
     isPro: mapStatusToPlan(sub.status) === 'pro',
     reason: reasonForStatus(sub.status),
-    status: sub.status ?? null,
+    status: typeof sub.status === 'string' ? sub.status : null,
     subscriptionId: sub.id,
   }
 }

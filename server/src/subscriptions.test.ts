@@ -613,6 +613,46 @@ describe('verifySubscriptionForUser', () => {
     const result = await verifySubscriptionForUser(user, deps)
     expect(result).toEqual({ isPro: false, reason: 'no_subscription', status: null, subscriptionId: null })
   })
+
+  it('picks the best of several email subscriptions, newest-first', async () => {
+    // Stripe's list endpoint returns newest-first, so [0] is a freshly canceled sub
+    // while an older yearly sub is still paying. Taking list[0] or sorting by date
+    // alone would demote a paying customer whose other subscription survives.
+    const deps = {
+      retrieveSubscription: async () => ({ id: 'sub_canceled', status: 'canceled', created: 900 }),
+      listSubscriptionsByEmail: async () => [
+        { id: 'sub_canceled_new', status: 'canceled', created: 900 },
+        { id: 'sub_live', status: 'active', created: 100 },
+      ],
+    }
+    const result = await verifySubscriptionForUser(user, deps)
+    expect(result).toEqual({ isPro: true, reason: 'active', status: 'active', subscriptionId: 'sub_live' })
+  })
+
+  it('prefers a live over a past_due subscription regardless of recency', async () => {
+    // plan-change overlap: a new monthly sub lapsed while an older one is still in
+    // its grace period. Status class must outweigh recency or the live month is lost.
+    const deps = {
+      retrieveSubscription: async () => ({ id: 'sub_unpaid', status: 'unpaid', created: 900 }),
+      listSubscriptionsByEmail: async () => [
+        { id: 'sub_unpaid_new', status: 'unpaid', created: 900 },
+        { id: 'sub_past_due', status: 'past_due', created: 100 },
+      ],
+    }
+    const result = await verifySubscriptionForUser(user, deps)
+    expect(result).toEqual({ isPro: true, reason: 'past_due', status: 'past_due', subscriptionId: 'sub_past_due' })
+  })
+
+  it('normalizes a missing status to null rather than leaking undefined', async () => {
+    // The result type says `status: string | null`, and the revocation banner keys on
+    // it. A statusless sub must not smuggle `undefined` out of the type boundary.
+    const deps = {
+      retrieveSubscription: async () => ({ id: 'sub_nostatus' }),
+      listSubscriptionsByEmail: async () => [],
+    }
+    const result = await verifySubscriptionForUser(user, deps)
+    expect(result).toEqual({ isPro: false, reason: 'lapsed', status: null, subscriptionId: 'sub_nostatus' })
+  })
 })
 
 describe('isMissingResource', () => {
@@ -621,6 +661,17 @@ describe('isMissingResource', () => {
     expect(isMissingResource({ statusCode: 500 })).toBe(false)
     expect(isMissingResource({ statusCode: 429 })).toBe(false)
     expect(isMissingResource({})).toBe(false)
+  })
+
+  it('matches the real stripe@17 error shape, on statusCode and not on its siblings', () => {
+    // The installed SDK exposes the HTTP status as `err.statusCode` and the subtype as
+    // `err.code === 'resource_missing'`; `err.status` does not exist. The resolver is
+    // used by the webhook too, so this contract is shared: code alone and status alone
+    // must each read as an outage, not a missing resource.
+    expect(isMissingResource({ statusCode: 404, code: 'resource_missing' })).toBe(true)
+    expect(isMissingResource({ code: 'resource_missing' })).toBe(false)
+    expect(isMissingResource({ status: 404 })).toBe(false)
+    expect(isMissingResource({ statusCode: '404' })).toBe(false)
   })
 
   it('is false for a thrown non-object, rather than throwing', () => {
