@@ -203,3 +203,28 @@ Steps 2, 3, 5, and 6 remain unexercised and still require a human pass.
   and a test pins that. `UpgradeGate` keeps its own call because it passes an
   `interval`. **Still a human check:** click the CTA in the browser and confirm the
   redirect lands on Stripe.
+
+## 13. A failed deploy used to wedge the box (2026-09-29, fixed)
+
+- **What happened:** shipping the revocation-CTA fix (`5b18d43`), the Deploy run
+  died at `npm ci --prefix server`. Because `deploy.sh` pulls with
+  `git reset --hard` *before* installing, the box was left checked out at
+  `5b18d43` with the **previous** build still serving. The skip guard compared git
+  HEAD against the pull result, saw "no change", and exited 0 — so every
+  subsequent deploy was a silent no-op and the fix could not be shipped without a
+  manual reset on the box. A rerun and a `workflow_dispatch` both "succeeded" while
+  deploying nothing; the health check was checking the *old* release.
+- **Fixed (this commit):** `scripts/deploy.sh` now records
+  `/opt/smartsht/.deployed-commit` **only** at the end of a successful run, and
+  skips only when that marker *and* the box HEAD both equal the target. A failed
+  run therefore always re-deploys, and a box reset behind origin always rebuilds.
+  Verified against the extracted decision block: wedged box → deploys, already
+  deployed → skips, manual reset → deploys, fresh box (no marker) → deploys.
+- **Also fixed:** `npm ci ... | tail -3` printed three useless lines on failure
+  (just npm's banner and the Node version), which is why the original error was
+  undiagnosable from the Actions log. Installs now run through `npm_step`, which
+  keeps full output and prints the last 40 lines only on failure.
+- **Still a human check:** none for the fix itself (the deploy that ships it is
+  the proof — it must show a real build, a PM2 restart, and HTTP 200). The
+  underlying `npm ci` failure on the box was transient and its cause was never
+  observed; if it recurs, `npm_step` will now show the real error.
