@@ -228,3 +228,14 @@ Steps 2, 3, 5, and 6 remain unexercised and still require a human pass.
   the proof — it must show a real build, a PM2 restart, and HTTP 200). The
   underlying `npm ci` failure on the box was transient and its cause was never
   observed; if it recurs, `npm_step` will now show the real error.
+- **Operational trap found while landing that fix:** `deploy.sh` replaces *itself*
+  on the first line of every run (`git reset --hard origin/main`), but bash has
+  already read the script into its buffer — so a run always executes the **old**
+  version of the script even though the new one is on disk afterwards. Any change
+  to `deploy.sh` therefore only takes effect from the *next* deploy, and the first
+  deploy after the change can be blocked by the very bug being fixed (observed:
+  three consecutive dispatches logging the old "No changes detected" line). The
+  fix needed two extra dispatches to become live. Worth moving the pull into the
+  workflow (check out the commit, then run *that commit's* script) or having
+  `deploy.sh` `exec` itself after the reset; deferred, as it changes the pipeline
+  shape and deserves its own review.
