@@ -195,6 +195,12 @@ describe('stripeKeyModeWarning', () => {
     expect(stripeKeyModeWarning('sk_live_abc123', 'production')).toBeNull()
   })
 
+  it('warns for a sk_live-prefixed key without the underscore', async () => {
+    const stripeKeyModeWarning = await loadStripeKeyModeWarning()
+    expect(stripeKeyModeWarning('sk_live', 'production')).not.toBeNull()
+    expect(stripeKeyModeWarning('sk_liveX', 'production')).not.toBeNull()
+  })
+
   it('stays silent for a test key outside production', async () => {
     const stripeKeyModeWarning = await loadStripeKeyModeWarning()
     expect(stripeKeyModeWarning('sk_test_abc123', 'development')).toBeNull()

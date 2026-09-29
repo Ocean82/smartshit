@@ -988,6 +988,11 @@ describe('msUntilNextDailyRun', () => {
     expect(msUntilNextDailyRun(now)).toBe(23 * 60 * 60 * 1000)
   })
 
+  it('rolls to tomorrow when now is exactly 04:00 UTC', () => {
+    const now = new Date('2026-09-28T04:00:00.000Z')
+    expect(msUntilNextDailyRun(now)).toBe(24 * 60 * 60 * 1000)
+  })
+
   it('lands exactly on 04:00 UTC from a non-UTC local clock', () => {
     const now = new Date('2026-09-28T22:30:00.000Z')
     const delta = msUntilNextDailyRun(now)
