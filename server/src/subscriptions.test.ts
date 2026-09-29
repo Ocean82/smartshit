@@ -12,6 +12,7 @@ import {
   verifySubscriptionForUser,
   isMissingResource,
   writeClerkPlan,
+  reconcileAllUsers,
 } from './subscriptions.js'
 
 describe('mapStatusToPlan', () => {
@@ -679,5 +680,127 @@ describe('isMissingResource', () => {
     expect(isMissingResource(undefined)).toBe(false)
     expect(isMissingResource('404')).toBe(false)
     expect(isMissingResource(new Error('boom'))).toBe(false)
+  })
+})
+
+describe('reconcileAllUsers', () => {
+  const makeUser = (id: string, plan: 'free' | 'pro', subscriptionId: string | null) => ({
+    id,
+    email: `${id}@example.com`,
+    plan,
+    subscriptionId,
+  })
+
+  it('upgrades a free user whose subscription was never recorded', async () => {
+    const write = vi.fn(async () => true)
+    const deps = {
+      listUsers: async function* () {
+        yield makeUser('user_a', 'free', null)
+      },
+      verify: async () => ({ isPro: true, reason: 'active' as const, status: 'active', subscriptionId: 'sub_x' }),
+      write,
+    }
+    const summary = await reconcileAllUsers(deps)
+    expect(summary).toEqual({ verified: 1, changed: 1, unknown: 0 })
+    expect(write).toHaveBeenCalledWith('user_a', expect.objectContaining({ isPro: true }), 'free')
+  })
+
+  it('records a revocation reason when a pro user is demoted', async () => {
+    const write = vi.fn(async () => true)
+    const deps = {
+      listUsers: async function* () {
+        yield makeUser('user_a', 'pro', 'sub_1')
+      },
+      verify: async () => ({ isPro: false, reason: 'lapsed' as const, status: 'canceled', subscriptionId: 'sub_1' }),
+      write,
+    }
+    await reconcileAllUsers(deps)
+    expect(write).toHaveBeenCalledWith('user_a', expect.objectContaining({ isPro: false }), 'pro')
+  })
+
+  it('adopts a changed subscription id even when the plan itself is unchanged', async () => {
+    const write = vi.fn(async () => true)
+    const deps = {
+      listUsers: async function* () {
+        yield makeUser('user_a', 'pro', 'sub_old')
+      },
+      verify: async () => ({ isPro: true, reason: 'active' as const, status: 'active', subscriptionId: 'sub_new' }),
+      write,
+    }
+    const summary = await reconcileAllUsers(deps)
+    expect(summary.changed).toBe(1)
+    expect(write).toHaveBeenCalledWith('user_a', expect.objectContaining({ subscriptionId: 'sub_new' }), 'pro')
+  })
+
+  it('counts unknown without writing, and keeps going', async () => {
+    const write = vi.fn(async () => true)
+    const deps = {
+      listUsers: async function* () {
+        yield makeUser('user_a', 'pro', 'sub_1')
+        yield makeUser('user_b', 'pro', 'sub_2')
+      },
+      verify: async (u) =>
+        u.id === 'user_a'
+          ? { isPro: false, reason: 'unknown' as const, status: null, subscriptionId: null }
+          : { isPro: true, reason: 'active' as const, status: 'active', subscriptionId: 'sub_2' },
+      write,
+    }
+    const summary = await reconcileAllUsers(deps)
+    expect(summary).toEqual({ verified: 2, changed: 0, unknown: 1 })
+    expect(write).not.toHaveBeenCalled()
+  })
+
+  it('does not write when the plan and subscription id are both unchanged', async () => {
+    const write = vi.fn(async () => true)
+    const deps = {
+      listUsers: async function* () {
+        yield makeUser('user_a', 'pro', 'sub_1')
+      },
+      verify: async () => ({ isPro: true, reason: 'active' as const, status: 'active', subscriptionId: 'sub_1' }),
+      write,
+    }
+    const summary = await reconcileAllUsers(deps)
+    expect(summary.changed).toBe(0)
+    expect(write).not.toHaveBeenCalled()
+  })
+
+  it('survives a user whose verify throws', async () => {
+    const deps = {
+      listUsers: async function* () {
+        yield makeUser('user_a', 'pro', 'sub_1')
+        yield makeUser('user_b', 'free', null)
+      },
+      verify: async (u) => {
+        if (u.id === 'user_a') throw new Error('boom')
+        return { isPro: true, reason: 'active' as const, status: 'active', subscriptionId: 'sub_2' }
+      },
+      write: vi.fn(async () => true),
+    }
+    const summary = await reconcileAllUsers(deps)
+    expect(summary.verified).toBe(2)
+    expect(summary.unknown).toBe(1)
+  })
+
+  it('counts a write failure as unknown and keeps sweeping', async () => {
+    // A Clerk outage mid-sweep must not abort the run: every user after the failing
+    // one would stay unverified until the next cycle (boot, or 04:00 UTC daily).
+    const write = vi.fn(async (_u: string, _r: unknown, plan: string) =>
+      plan === 'pro' ? Promise.reject(new Error('Clerk 500')) : Promise.resolve(true),
+    )
+    const deps = {
+      listUsers: async function* () {
+        yield makeUser('user_a', 'pro', 'sub_1')
+        yield makeUser('user_b', 'free', null)
+      },
+      verify: async (u) =>
+        u.id === 'user_a'
+          ? { isPro: false, reason: 'lapsed' as const, status: 'canceled', subscriptionId: 'sub_1' }
+          : { isPro: true, reason: 'active' as const, status: 'active', subscriptionId: 'sub_2' },
+      write,
+    }
+    const summary = await reconcileAllUsers(deps)
+    expect(summary).toEqual({ verified: 2, changed: 1, unknown: 1 })
+    // user_b was still written despite user_a's failure.
+    expect(write).toHaveBeenCalledTimes(2)
   })
 })

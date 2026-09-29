@@ -289,3 +289,76 @@ export async function verifySubscriptionForUser(
     subscriptionId: sub.id,
   }
 }
+
+export type ReconcileUser = {
+  id: string
+  email: string | null
+  plan: 'free' | 'pro'
+  subscriptionId: string | null
+}
+
+export type ReconcileDeps = {
+  listUsers(): AsyncIterable<ReconcileUser>
+  verify(user: ReconcileUser): Promise<VerificationResult>
+  write(userId: string, result: VerificationResult, currentPlan: 'free' | 'pro'): Promise<boolean>
+}
+
+/**
+ * Full reconciliation across every user, free and Pro alike.
+ *
+ * Sweeping all users rather than only known-Pro ones is what heals a subscription
+ * whose webhook was missed entirely: the user never got Pro, so a downgrade-only
+ * sweep would never look at them.
+ *
+ * A write happens on a real difference in stored state — the plan, or the
+ * subscription id. Tracking the id too means a user who resubscribed under a new id
+ * has their record corrected even though they were Pro the whole time; comparing the
+ * plan alone would leave the stale id in place. Only actual changes are written, so a
+ * sweep of every user does not turn into a write to every user.
+ *
+ * Writes only on an actual change, so repeated runs are free of side effects. A
+ * throwing `verify` is counted as unknown and never aborts the sweep.
+ */
+export async function reconcileAllUsers(
+  deps: ReconcileDeps,
+): Promise<{ verified: number; changed: number; unknown: number }> {
+  const summary = { verified: 0, changed: 0, unknown: 0 }
+
+  for await (const user of deps.listUsers()) {
+    let result: VerificationResult
+    try {
+      result = await deps.verify(user)
+    } catch {
+      summary.verified += 1
+      summary.unknown += 1
+      continue
+    }
+
+    summary.verified += 1
+    if (result.reason === 'unknown') {
+      summary.unknown += 1
+      continue
+    }
+
+    const wasPro = user.plan === 'pro'
+    const shouldBePro = result.isPro
+    // A Pro plan implies a stored subscription id, so only a Pro→Pro comparison can
+    // meaningfully differ on the id.
+    const idChanged =
+      wasPro === shouldBePro &&
+      (shouldBePro ? (user.subscriptionId ?? null) !== result.subscriptionId : false)
+    if (shouldBePro === wasPro && !idChanged) continue
+
+    try {
+      const wrote = await deps.write(user.id, result, user.plan)
+      if (wrote) summary.changed += 1
+    } catch {
+      // The verified fact could not be persisted. Count it as unknown so the cycle
+      // reports the truth, and keep going — aborting here would leave every remaining
+      // user unverified until the next run.
+      summary.unknown += 1
+    }
+  }
+
+  return summary
+}
