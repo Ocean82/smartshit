@@ -10,6 +10,10 @@
  * definite non-paying status revokes.
  */
 
+import { getClerkClient, planFromPublicMetadata } from './auth/clerk.js'
+import { invalidateProCache } from './plan.js'
+import { getStripeClient } from './stripe.js'
+
 /** Statuses that entitle the user to Pro. */
 const PRO_STATUSES = new Set(['active', 'trialing', 'past_due'])
 
@@ -385,4 +389,116 @@ export async function reconcileAllUsers(
   }
 
   return summary
+}
+
+const CLERK_PAGE_SIZE = 100
+const MAX_CLERK_PAGES = 200
+
+/** Page through Clerk, yielding the fields reconciliation needs. */
+export async function* listAllClerkUsers(): AsyncIterable<ReconcileUser> {
+  const client = getClerkClient()
+  for (let offset = 0; offset < CLERK_PAGE_SIZE * MAX_CLERK_PAGES; offset += CLERK_PAGE_SIZE) {
+    const page = await client.users.getUserList({ limit: CLERK_PAGE_SIZE, offset })
+    if (page.data.length === 0) return
+    for (const user of page.data) {
+      const meta = (user.publicMetadata ?? {}) as Record<string, unknown>
+      const subId = typeof meta.stripeSubscriptionId === 'string' ? meta.stripeSubscriptionId : null
+      // Clerk lists every address a user owns; the Stripe customer email that the
+      // reconciler pairs against is the one the user checked out with, which is their
+      // primary address unless they changed it since. Picking emailAddresses[0] would
+      // silently send a non-primary address to the Stripe lookup on multi-address
+      // accounts and miss a live subscription. Fall back to [0] only when there is no
+      // primary id. Lowercased to match resolveUserIdByEmail's normalization.
+      const email =
+        user.emailAddresses.find((e) => e.id === user.primaryEmailAddressId)?.emailAddress ??
+        user.emailAddresses[0]?.emailAddress
+      yield {
+        id: user.id,
+        email: email ? email.toLowerCase() : null,
+        plan: planFromPublicMetadata(meta),
+        subscriptionId: subId,
+      }
+    }
+    if (offset + CLERK_PAGE_SIZE >= page.totalCount) return
+  }
+}
+
+/**
+ * Find a Clerk user id by email. Used for subscriptions with no metadata.
+ *
+ * The filter is an exact match, so the lookup cannot fuzzy-match a different person.
+ * Note that Clerk matches the address against a user's primary *and* secondary emails,
+ * not the primary alone — so this returns the account that owns the address, whichever
+ * slot it occupies. That is the correct answer (the person who entered the address at
+ * checkout is the one who paid), but it does mean the address must identify the payer
+ * and no one else.
+ */
+export async function findClerkUserIdByEmail(email: string): Promise<string | null> {
+  const client = getClerkClient()
+  const page = await client.users.getUserList({ emailAddress: [email], limit: 1 })
+  return page.data[0]?.id ?? null
+}
+
+/** List every subscription belonging to the Stripe customer with this email. */
+export async function listStripeSubscriptionsByEmail(email: string): Promise<StripeSubList[]> {
+  const stripe = getStripeClient()
+  const customers = await stripe.customers.list({ email, limit: 1 })
+  const customer = customers.data[0]
+  if (!customer) return []
+  const subs = await stripe.subscriptions.list({
+    customer: customer.id,
+    status: 'all',
+    limit: 10,
+  })
+  return subs.data.map((s) => ({ id: s.id, status: s.status, created: s.created }))
+}
+
+/**
+ * Read a Stripe customer's email from its `cus_…` id.
+ *
+ * The webhook path needs this because a subscription object carries only the customer
+ * id, never the address. A deleted customer is a definite "no such customer" — a
+ * no-op, never a retry — so the 404 returns null. Anything else must FAIL, not
+ * return null: the webhook turns a propagated error into a 5xx so Stripe retries,
+ * while a swallowed outage would answer 200 and silently discard a paying customer's
+ * purchase (the reconciler is its only recovery, up to 24h later). isMissingResource
+ * is the same 404-only filter the reconciler uses, so the two paths agree.
+ */
+export async function getStripeCustomerEmail(customerId: string): Promise<string | null> {
+  try {
+    const customer = await getStripeClient().customers.retrieve(customerId)
+    return customer.deleted ? null : (customer.email ?? null)
+  } catch (err) {
+    if (isMissingResource(err)) return null
+    throw err
+  }
+}
+
+/** Production dependency wiring for the reconciler. */
+export function createProductionDeps(): ReconcileDeps {
+  return {
+    listUsers: listAllClerkUsers,
+    verify: (user) =>
+      verifySubscriptionForUser(user, {
+        retrieveSubscription: async (id) => {
+          const sub = await getStripeClient().subscriptions.retrieve(id)
+          return {
+            id: sub.id,
+            status: sub.status,
+            created: sub.created,
+            cancel_at_period_end: sub.cancel_at_period_end,
+          }
+        },
+        listSubscriptionsByEmail: listStripeSubscriptionsByEmail,
+      }),
+    write: (userId, result, currentPlan) =>
+      writeClerkPlan(userId, result, currentPlan, {
+        updatePublicMetadata: async (id, plan, subscriptionId, revocationReason) => {
+          await getClerkClient().users.updateUserMetadata(id, {
+            publicMetadata: { plan, stripeSubscriptionId: subscriptionId, revocationReason },
+          })
+        },
+        invalidateCache: invalidateProCache,
+      }),
+  }
 }
