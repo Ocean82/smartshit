@@ -310,54 +310,78 @@ export type ReconcileDeps = {
  * whose webhook was missed entirely: the user never got Pro, so a downgrade-only
  * sweep would never look at them.
  *
- * A write happens on a real difference in stored state — the plan, or the
+ * A write happens only on a real difference in stored state — the plan, or the
  * subscription id. Tracking the id too means a user who resubscribed under a new id
  * has their record corrected even though they were Pro the whole time; comparing the
- * plan alone would leave the stale id in place. Only actual changes are written, so a
- * sweep of every user does not turn into a write to every user.
+ * plan alone would leave the stale id in place. Change-only writes are what keep a
+ * sweep of every user from becoming a write to every user, so a boot or daily run
+ * does not hammer Clerk's API.
  *
- * Writes only on an actual change, so repeated runs are free of side effects. A
- * throwing `verify` is counted as unknown and never aborts the sweep.
+ * The summary's `unknown` counts every user whose verified state could not be
+ * established or persisted: a throwing `verify` (Stripe/Clerk outage), a
+ * `reason: 'unknown'` result, or a `write` that throws or returns `false`. It does
+ * not cover a `listUsers` failure — see below.
+ *
+ * Per-user failures never abort the sweep; every later user is still visited. The
+ * one thing that does abort it is `listUsers` itself throwing mid-iteration — the
+ * online read path is down, not one user's verification — and that rejects with an
+ * Error whose message carries the partial counts, so the scheduler's log both shows
+ * the failure and says how many users were done before it.
  */
 export async function reconcileAllUsers(
   deps: ReconcileDeps,
 ): Promise<{ verified: number; changed: number; unknown: number }> {
   const summary = { verified: 0, changed: 0, unknown: 0 }
 
-  for await (const user of deps.listUsers()) {
-    let result: VerificationResult
-    try {
-      result = await deps.verify(user)
-    } catch {
+  try {
+    for await (const user of deps.listUsers()) {
+      let result: VerificationResult
+      try {
+        result = await deps.verify(user)
+      } catch {
+        summary.verified += 1
+        summary.unknown += 1
+        continue
+      }
+
       summary.verified += 1
-      summary.unknown += 1
-      continue
-    }
+      if (result.reason === 'unknown') {
+        // writeClerkPlan would refuse this anyway; this guard keeps the accounting
+        // straight (a refused write is counted as unknown, not as changed).
+        summary.unknown += 1
+        continue
+      }
 
-    summary.verified += 1
-    if (result.reason === 'unknown') {
-      summary.unknown += 1
-      continue
-    }
+      const wasPro = user.plan === 'pro'
+      const shouldBePro = result.isPro
+      // A Pro plan implies a stored subscription id, so only a Pro→Pro comparison can
+      // meaningfully differ on the id.
+      const idChanged =
+        wasPro === shouldBePro &&
+        (shouldBePro ? (user.subscriptionId ?? null) !== result.subscriptionId : false)
+      if (shouldBePro === wasPro && !idChanged) continue
 
-    const wasPro = user.plan === 'pro'
-    const shouldBePro = result.isPro
-    // A Pro plan implies a stored subscription id, so only a Pro→Pro comparison can
-    // meaningfully differ on the id.
-    const idChanged =
-      wasPro === shouldBePro &&
-      (shouldBePro ? (user.subscriptionId ?? null) !== result.subscriptionId : false)
-    if (shouldBePro === wasPro && !idChanged) continue
-
-    try {
-      const wrote = await deps.write(user.id, result, user.plan)
-      if (wrote) summary.changed += 1
-    } catch {
-      // The verified fact could not be persisted. Count it as unknown so the cycle
-      // reports the truth, and keep going — aborting here would leave every remaining
-      // user unverified until the next run.
-      summary.unknown += 1
+      try {
+        const wrote = await deps.write(user.id, result, user.plan)
+        if (wrote) summary.changed += 1
+        else {
+          // The verified fact could not be persisted. Count it as unknown so the
+          // cycle reports the truth, and keep going — aborting here would leave
+          // every remaining user unverified until the next run.
+          summary.unknown += 1
+        }
+      } catch {
+        // Mirror of the false-return case above.
+        summary.unknown += 1
+      }
     }
+  } catch (err) {
+    throw new Error(
+      `reconcile aborted mid-sweep (listUsers failed) after verifying ${summary.verified}, changing ${summary.changed}, unknown ${summary.unknown}: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+      { cause: err },
+    )
   }
 
   return summary

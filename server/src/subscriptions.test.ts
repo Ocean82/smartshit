@@ -803,4 +803,97 @@ describe('reconcileAllUsers', () => {
     // user_b was still written despite user_a's failure.
     expect(write).toHaveBeenCalledTimes(2)
   })
+
+  it('does not write to a free user who is still free with no subscription', async () => {
+    const write = vi.fn(async () => true)
+    const deps = {
+      listUsers: async function* () {
+        yield makeUser('user_a', 'free', null)
+      },
+      verify: async () => ({ isPro: false, reason: 'no_subscription' as const, status: null, subscriptionId: null }),
+      write,
+    }
+    const summary = await reconcileAllUsers(deps)
+    expect(summary).toEqual({ verified: 1, changed: 0, unknown: 0 })
+    expect(write).not.toHaveBeenCalled()
+  })
+
+  it('does not write to a free user whose dead subscription surfaces an id', async () => {
+    // A canceled-but-present subscription resolves (isPro: false) with a non-null
+    // subscriptionId. The plan is unchanged free→free, so no write — the id-change
+    // rule only fires when the stored state should actually differ.
+    const write = vi.fn(async () => true)
+    const deps = {
+      listUsers: async function* () {
+        yield makeUser('user_a', 'free', null)
+      },
+      verify: async () => ({ isPro: false, reason: 'canceled' as const, status: 'canceled', subscriptionId: 'sub_dead' }),
+      write,
+    }
+    const summary = await reconcileAllUsers(deps)
+    expect(summary).toEqual({ verified: 1, changed: 0, unknown: 0 })
+    expect(write).not.toHaveBeenCalled()
+  })
+
+  it('demotes a stored-pro ghost (plan pro, no subscription id) whose sub is gone', async () => {
+    // planFromPublicMetadata grants pro on a truthy stripeSubscriptionId, but a
+    // checkout.session.completed webhook without a subscription string stores
+    // plan: 'pro' with no id. That ghost must still be demoted at reconcile time.
+    const write = vi.fn(async () => true)
+    const deps = {
+      listUsers: async function* () {
+        yield makeUser('user_a', 'pro', null)
+      },
+      verify: async () => ({ isPro: false, reason: 'lapsed' as const, status: 'canceled', subscriptionId: 'sub_old' }),
+      write,
+    }
+    const summary = await reconcileAllUsers(deps)
+    expect(summary).toEqual({ verified: 1, changed: 1, unknown: 0 })
+    expect(write).toHaveBeenCalledWith('user_a', expect.objectContaining({ isPro: false }), 'pro')
+  })
+
+  it('adopts a live id for a stored-pro ghost whose sub is found by email', async () => {
+    const write = vi.fn(async () => true)
+    const deps = {
+      listUsers: async function* () {
+        yield makeUser('user_a', 'pro', null)
+      },
+      verify: async () => ({ isPro: true, reason: 'active' as const, status: 'active', subscriptionId: 'sub_2' }),
+      write,
+    }
+    const summary = await reconcileAllUsers(deps)
+    expect(summary).toEqual({ verified: 1, changed: 1, unknown: 0 })
+    expect(write).toHaveBeenCalledWith('user_a', expect.objectContaining({ subscriptionId: 'sub_2' }), 'pro')
+  })
+
+  it('counts a write that refuses as unknown, not as changed', async () => {
+    const write = vi.fn(async () => false)
+    const deps = {
+      listUsers: async function* () {
+        yield makeUser('user_a', 'free', null)
+      },
+      verify: async () => ({ isPro: true, reason: 'active' as const, status: 'active', subscriptionId: 'sub_2' }),
+      write,
+    }
+    const summary = await reconcileAllUsers(deps)
+    expect(summary).toEqual({ verified: 1, changed: 0, unknown: 1 })
+    expect(write).toHaveBeenCalledTimes(1)
+  })
+
+  it('rejects with the partial summary when listUsers itself fails', async () => {
+    // A page-fetch failure is the read path going down, not one user's verify: it
+    // must reject so the scheduler logs an error, and the message carries the counts
+    // of the users who were already reconciled before the failure.
+    const deps = {
+      listUsers: async function* () {
+        yield makeUser('user_a', 'free', null)
+        throw new Error('Clerk page 500')
+      },
+      verify: async () => ({ isPro: true, reason: 'active' as const, status: 'active', subscriptionId: 'sub_2' }),
+      write: vi.fn(async () => true),
+    }
+    await expect(reconcileAllUsers(deps)).rejects.toThrow(
+      /after verifying 1, changing 1, unknown 0: Clerk page 500/,
+    )
+  })
 })
