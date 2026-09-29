@@ -195,7 +195,11 @@ Steps 2, 3, 5, and 6 remain unexercised and still require a human pass.
   banner → resubscribe → Pro returns. This is the real proof and cannot be
   automated from CI. Optionally subscribe `customer.subscription.created` in the
   Stripe dashboard.
-- **Known gap flagged during implementation:** the banner's "Resubscribe" CTA
-  links to `/app#upgrade`, but the app has no `#upgrade` hash handler (the working
-  upgrade CTAs POST `/api/checkout` directly), so that link is currently inert.
-  Decide whether to wire the hash or point the CTA at the checkout call.
+- **Closed (2026-09-29, `5b18d43`):** the banner's CTA was a dead link to
+  `/app#upgrade` (no such hash handler). It is now a button that calls the same
+  `POST /api/checkout` the working upgrade CTAs use, single-sourced in
+  `startCheckout()` (`src/auth/startCheckout.ts`, 4 tests, 7 mutants killed) and
+  reused by `UpgradePrompt`; `subscriptionNoticeCopy` no longer returns an `href`,
+  and a test pins that. `UpgradeGate` keeps its own call because it passes an
+  `interval`. **Still a human check:** click the CTA in the browser and confirm the
+  redirect lands on Stripe.
