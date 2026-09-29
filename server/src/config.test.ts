@@ -176,3 +176,32 @@ describe('requiresDbSsl', () => {
     expect(requiresDbSsl('not a url')).toBe(false)
   })
 })
+
+describe('stripeKeyModeWarning', () => {
+  async function loadStripeKeyModeWarning() {
+    const mod = await import('./config.js')
+    return mod.stripeKeyModeWarning
+  }
+
+  it('warns when a production Stripe key is not a live key', async () => {
+    const stripeKeyModeWarning = await loadStripeKeyModeWarning()
+    const message = stripeKeyModeWarning('sk_test_should_not_be_used_in_prod', 'production')
+    expect(message).toContain('STRIPE_SECRET_KEY')
+    expect(message).toContain('sk_live_')
+  })
+
+  it('stays silent for a live key in production', async () => {
+    const stripeKeyModeWarning = await loadStripeKeyModeWarning()
+    expect(stripeKeyModeWarning('sk_live_abc123', 'production')).toBeNull()
+  })
+
+  it('stays silent for a test key outside production', async () => {
+    const stripeKeyModeWarning = await loadStripeKeyModeWarning()
+    expect(stripeKeyModeWarning('sk_test_abc123', 'development')).toBeNull()
+  })
+
+  it('stays silent when no key is set at all', async () => {
+    const stripeKeyModeWarning = await loadStripeKeyModeWarning()
+    expect(stripeKeyModeWarning(undefined, 'production')).toBeNull()
+  })
+})

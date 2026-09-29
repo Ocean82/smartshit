@@ -13,6 +13,7 @@
 import { getClerkClient, planFromPublicMetadata } from './auth/clerk.js'
 import { invalidateProCache } from './plan.js'
 import { getStripeClient } from './stripe.js'
+import { config } from './config.js'
 
 /** Statuses that entitle the user to Pro. */
 const PRO_STATUSES = new Set(['active', 'trialing', 'past_due'])
@@ -535,4 +536,56 @@ export function createProductionDeps(): ReconcileDeps {
         invalidateCache: invalidateProCache,
       }),
   }
+}
+
+const BOOT_RECONCILE_DELAY_MS = 60_000
+const DAILY_RECONCILE_HOUR_UTC = 4
+const MS_PER_DAY = 24 * 60 * 60 * 1000
+
+/** Milliseconds from `now` until the next 04:00 UTC, always at least one minute out. */
+export function msUntilNextDailyRun(now: Date = new Date()): number {
+  const next = new Date(now)
+  next.setUTCHours(DAILY_RECONCILE_HOUR_UTC, 0, 0, 0)
+  let delta = next.getTime() - now.getTime()
+  if (delta <= 0) delta += MS_PER_DAY
+  return delta
+}
+
+/**
+ * Run reconciliation once shortly after boot, then daily at 04:00 UTC.
+ *
+ * The boot run is what heals pre-existing state without adding a privileged
+ * "reconcile now" endpoint, so there is no new attack surface. It is offset by 60s
+ * so it never competes with startup work.
+ *
+ * Each daily run schedules the next from the moment it fires, so a run that is
+ * delayed cannot cascade into a drifting schedule.
+ */
+export function startReconciler(): void {
+  const run = async (trigger: string) => {
+    const started = Date.now()
+    try {
+      const summary = await reconcileAllUsers(createProductionDeps())
+      console.log(
+        `[reconcile] ${trigger}: verified ${summary.verified}, changed ${summary.changed}, unknown ${summary.unknown} (${Date.now() - started}ms)`,
+      )
+    } catch (err) {
+      console.error(`[reconcile] ${trigger} failed:`, err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  if (!config.stripeSecretKey) {
+    console.warn('[reconcile] skipped — STRIPE_SECRET_KEY is not set')
+    return
+  }
+
+  setTimeout(() => void run('boot'), BOOT_RECONCILE_DELAY_MS).unref?.()
+
+  const scheduleDaily = (): void => {
+    setTimeout(() => {
+      void run('daily').finally(scheduleDaily)
+    }, msUntilNextDailyRun()).unref?.()
+  }
+  scheduleDaily()
+  console.log(`[reconcile] scheduled: boot +60s, then daily at 0${DAILY_RECONCILE_HOUR_UTC}:00 UTC`)
 }

@@ -316,6 +316,24 @@ export function requiresDbSsl(databaseUrl: string): boolean {
   return !enforcesSsl
 }
 
+/**
+ * Warn when a production Stripe key is not a live key.
+ *
+ * Returns the message rather than logging, so the rule is unit-testable without
+ * spying on `console`. A test key in production silently finds no live
+ * subscriptions, which looks identical to "the user never paid" — this makes the
+ * difference visible at boot.
+ */
+export function stripeKeyModeWarning(
+  stripeSecretKey: string | undefined,
+  nodeEnv: string | undefined,
+): string | null {
+  if (!stripeSecretKey) return null
+  if (nodeEnv !== 'production') return null
+  if (stripeSecretKey.startsWith('sk_live_')) return null
+  return 'STRIPE_SECRET_KEY is not a live key (sk_live_…) in production — live subscriptions will not be found, so Pro will not be granted'
+}
+
 export function validateConfig(): void {
   const warnings: ConfigWarning[] = []
 
@@ -327,6 +345,10 @@ export function validateConfig(): void {
   // Required for payments — warn but don't crash (app works without payments)
   if (!config.stripeSecretKey) {
     warnings.push({ level: 'warn', message: 'STRIPE_SECRET_KEY is not set — checkout and subscription management disabled' })
+  }
+  const stripeKeyMode = stripeKeyModeWarning(config.stripeSecretKey, process.env.NODE_ENV)
+  if (stripeKeyMode) {
+    warnings.push({ level: 'warn', message: stripeKeyMode })
   }
   if (!config.stripePriceId) {
     warnings.push({ level: 'warn', message: 'STRIPE_PRICE_ID is not set — checkout will fail' })

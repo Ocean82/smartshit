@@ -48,6 +48,7 @@ import { templatesRouter } from './routes/templates.js'
 import { aiFunctionRouter } from './routes/aiFunction.js'
 import { requireAuth, getRequestUserId, getClerkClient, getClerkMiddlewareOptions } from './auth/clerk.js'
 import { resolveIsPro, invalidateProCache } from './plan.js'
+import { startReconciler } from './subscriptions.js'
 import { validateBody } from './middleware/validate.js'
 import { chatStreamBodySchema, chatBodySchema } from './schemas/index.js'
 import { assertPublicByokHost } from './schemas/byok.js'
@@ -66,6 +67,7 @@ const MAX_TOKENS_PER_CALL = 2048
 
 // ─── Validate critical configuration at startup ──────────────────────────────
 validateConfig()
+startReconciler()
 
 const app = express()
 
