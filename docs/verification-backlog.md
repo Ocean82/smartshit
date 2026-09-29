@@ -170,3 +170,32 @@ part of the import confirmation (`src/store/importOrchestration.ts`), not a
 refusal to answer — named-sheet questions were blank for the reason above.
 
 Steps 2, 3, 5, and 6 remain unexercised and still require a human pass.
+
+## 12. Subscription entitlement — webhook-authoritative (2026-09-28)
+
+- **What changed (unit-covered):** Pro recognition is now driven by Stripe webhooks
+  plus a boot/daily reconciler, both writing a single source of truth in Clerk
+  `publicMetadata` via `writeClerkPlan` — nothing on the request path decides
+  entitlement. `handleStripeWebhook` handles `customer.subscription.created` and
+  reconciles identity by email; the reconciler fails open (`unknown` never
+  persists/revokes). `/api/usage` reports the *stored* `revocationReason` (from
+  `resolveSubscriptionStatus`, normalized so `unknown` → `null`) — deliberately
+  **no live Stripe call per request**. The client revocation banner
+  (`SubscriptionNotice`) is driven by that stored state, so it is silent on an
+  outage and never alarms spuriously.
+- **Live-verified:** the webhook endpoint was exercised with a signed synthetic
+  event returning 200 (the live signing secret was confirmed already matching; no
+  change needed).
+- **The owner's out-of-band subscription** (created outside Checkout) is healed by
+  the email-identity fallback on the boot reconcile, ~60s after deploy. Watch the
+  line `[reconcile] boot: verified N, changed M, unknown K` — `changed` should be
+  ≥ 1 and Pro should surface in the app.
+- **Still a human check:** the live cancel-and-resubscribe round trip — cancel in
+  Stripe → the webhook revokes within seconds and the app shows the revocation
+  banner → resubscribe → Pro returns. This is the real proof and cannot be
+  automated from CI. Optionally subscribe `customer.subscription.created` in the
+  Stripe dashboard.
+- **Known gap flagged during implementation:** the banner's "Resubscribe" CTA
+  links to `/app#upgrade`, but the app has no `#upgrade` hash handler (the working
+  upgrade CTAs POST `/api/checkout` directly), so that link is currently inert.
+  Decide whether to wire the hash or point the CTA at the checkout call.
