@@ -26,12 +26,32 @@ PM2_PROCESS="smartsht-api"
 HEALTH_URL="http://127.0.0.1:8787/health?strict=1"
 HEALTH_TIMEOUT=30
 DEPLOY_LOG="${LOGS_DIR}/deploy.log"
+# Records the commit that finished deploying (build + restart + health OK). It is
+# written ONLY at the end of a successful run, so it survives `git reset --hard`
+# and is the honest answer to "what is actually running?".
+DEPLOYED_FILE="/opt/smartsht/.deployed-commit"
 
 # ─── Utilities ────────────────────────────────────────────────────────────────
 
 timestamp() { date '+%Y-%m-%d %H:%M:%S'; }
 log() { echo "[$(timestamp)] $*" | tee -a "$DEPLOY_LOG"; }
 die() { log "FATAL: $*"; exit 1; }
+
+# `npm ci ... | tail -3` prints three lines even on failure, and those lines were
+# just npm's banner: a failed install reported only "npm error / Node.js vX". Keep
+# the whole output, but show it only when the command actually fails.
+npm_step() {
+  local label="$1"; shift
+  local out
+  if ! out=$(npm "$@" 2>&1); then
+    log "FATAL: ${label} failed (npm $*)"
+    printf '%s
+' "$out" | tail -40 | tee -a "$DEPLOY_LOG"
+    exit 1
+  fi
+  printf '%s
+' "$out" | tail -3 | tee -a "$DEPLOY_LOG"
+}
 
 # ─── Argument Parsing ─────────────────────────────────────────────────────────
 
@@ -78,7 +98,14 @@ git reset --hard origin/main --quiet
 NEW_COMMIT=$(git rev-parse HEAD)
 log "Updated to: ${NEW_COMMIT:0:8}"
 
-# If nothing changed and model assets are already present, there is nothing to do.
+# "Nothing to do" must mean the target commit is the one that last finished
+# deploying — NOT merely the commit the box happens to have checked out. A deploy
+# that dies after `git reset --hard` (e.g. during `npm ci`) leaves HEAD on the new
+# commit with the old build still running; keying the skip off HEAD made that box
+# permanently un-deployable, silently, until someone forced a rollback by hand.
+DEPLOYED_COMMIT=""
+[ -f "$DEPLOYED_FILE" ] && DEPLOYED_COMMIT=$(cat "$DEPLOYED_FILE")
+
 # Missing models should still trigger a repair pass (fresh checkout / wiped server).
 MISSING_MODELS=""
 if [ "$DEPLOY_SERVER" = true ] && [ ! -f server/models/minilm/model.onnx ]; then
@@ -88,9 +115,15 @@ if [ "$DEPLOY_FRONTEND" = true ] && [ ! -f public/models/minilm/model.onnx ]; th
   MISSING_MODELS="$MISSING_MODELS client-model"
 fi
 
-if [ "$PREV_COMMIT" = "$NEW_COMMIT" ] && [ -z "$MISSING_MODELS" ]; then
-  log "No changes detected — nothing to deploy."
+if [ "$DEPLOYED_COMMIT" = "$NEW_COMMIT" ] && [ "$PREV_COMMIT" = "$NEW_COMMIT" ] && [ -z "$MISSING_MODELS" ]; then
+  log "Already at deployed commit ${NEW_COMMIT:0:8} — nothing to deploy."
   exit 0
+fi
+
+if [ "$DEPLOYED_COMMIT" != "$NEW_COMMIT" ]; then
+  # The common case after a failed run: the box checked the target out but never
+  # finished deploying it, so deploy it now instead of skipping.
+  log "Last completed deploy: ${DEPLOYED_COMMIT:-<none recorded>}; target: ${NEW_COMMIT:0:8}"
 fi
 
 if [ "$PREV_COMMIT" = "$NEW_COMMIT" ] && [ -n "$MISSING_MODELS" ]; then
@@ -109,11 +142,11 @@ fi
 # above must keep vendor/ intact — if npm ci errors on that path, the tarball
 # was dropped in transit; restore vendor/xlsx-0.20.3.tgz and retry.
 log "Installing root dependencies..."
-npm ci --loglevel=warn 2>&1 | tail -3
+npm_step "root npm ci" ci --loglevel=warn
 
 if [ "$DEPLOY_SERVER" = true ]; then
   log "Installing server dependencies (including build tools)..."
-  npm ci --prefix server --loglevel=warn 2>&1 | tail -3
+  npm_step "server npm ci" ci --prefix server --loglevel=warn
 fi
 
 # ─── Sync Environment ─────────────────────────────────────────────────────────
@@ -336,6 +369,12 @@ if [ "$DEPLOY_SERVER" = true ]; then
 fi
 
 # ─── Finalize ─────────────────────────────────────────────────────────────────
+
+# Record success LAST: everything above can abort, and an aborted run must not
+# leave behind a marker claiming this commit is live.
+printf '%s
+' "$NEW_COMMIT" > "$DEPLOYED_FILE"
+log "Recorded deployed commit: ${NEW_COMMIT:0:8} → $DEPLOYED_FILE"
 
 log "═══ Deploy complete: ${PREV_COMMIT:0:8} → ${NEW_COMMIT:0:8} ═══"
 echo ""
