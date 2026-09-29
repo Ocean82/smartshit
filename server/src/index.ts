@@ -93,6 +93,7 @@ app.use((_req, res, next) => {
 app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
   try {
     const { verifyWebhookSignature, handleStripeWebhook, claimWebhookEvent } = await import('./stripe.js')
+    const { findClerkUserIdByEmail } = await import('./subscriptions.js')
     const signatureHeader = req.headers['stripe-signature'] as string | undefined
 
     const event = verifyWebhookSignature(req.body, signatureHeader)
@@ -101,7 +102,7 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
       res.json({ received: true, duplicate: true })
       return
     }
-    const result = handleStripeWebhook(event)
+    const result = await handleStripeWebhook(event, findClerkUserIdByEmail)
 
     if (result) {
       const client = getClerkClient()

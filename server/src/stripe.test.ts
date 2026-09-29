@@ -121,8 +121,8 @@ describe('claimWebhookEvent', () => {
 
 describe('handleStripeWebhook', () => {
   describe('checkout.session.completed', () => {
-    it('upgrades user to Pro using client_reference_id', () => {
-      const result = handleStripeWebhook({
+    it('upgrades user to Pro using client_reference_id', async () => {
+      const result = await handleStripeWebhook({
         type: 'checkout.session.completed',
         data: {
           object: {
@@ -139,8 +139,8 @@ describe('handleStripeWebhook', () => {
       })
     })
 
-    it('falls back to metadata.userId when client_reference_id is absent', () => {
-      const result = handleStripeWebhook({
+    it('falls back to metadata.userId when client_reference_id is absent', async () => {
+      const result = await handleStripeWebhook({
         type: 'checkout.session.completed',
         data: {
           object: {
@@ -156,18 +156,34 @@ describe('handleStripeWebhook', () => {
       })
     })
 
-    it('returns null when no user identifier is present', () => {
-      const result = handleStripeWebhook({
+    it('returns null when no user identifier is present', async () => {
+      const result = await handleStripeWebhook({
         type: 'checkout.session.completed',
         data: { object: { metadata: {} } },
       })
       expect(result).toBeNull()
     })
+
+    it('ignores a whitespace-only client_reference_id', async () => {
+      const result = await handleStripeWebhook({
+        type: 'checkout.session.completed',
+        data: {
+          object: {
+            client_reference_id: ' ',
+            subscription: 'sub_a',
+            metadata: {},
+          },
+        },
+      })
+      // The raw payload would surface a ' ' userId (Clerk rejects that with a 400);
+      // resolveUserIdFromPayload trims and treats it as absent.
+      expect(result).toBeNull()
+    })
   })
 
   describe('customer.subscription.deleted', () => {
-    it('downgrades user to free plan', () => {
-      const result = handleStripeWebhook({
+    it('downgrades user to free plan', async () => {
+      const result = await handleStripeWebhook({
         type: 'customer.subscription.deleted',
         data: {
           object: {
@@ -182,8 +198,8 @@ describe('handleStripeWebhook', () => {
       })
     })
 
-    it('returns null when metadata has no userId', () => {
-      const result = handleStripeWebhook({
+    it('returns null when metadata has no userId', async () => {
+      const result = await handleStripeWebhook({
         type: 'customer.subscription.deleted',
         data: { object: { metadata: {} } },
       })
@@ -192,8 +208,8 @@ describe('handleStripeWebhook', () => {
   })
 
   describe('customer.subscription.updated', () => {
-    it('downgrades on past_due status', () => {
-      const result = handleStripeWebhook({
+    it('downgrades on past_due status', async () => {
+      const result = await handleStripeWebhook({
         type: 'customer.subscription.updated',
         data: {
           object: {
@@ -209,8 +225,8 @@ describe('handleStripeWebhook', () => {
       })
     })
 
-    it('downgrades on canceled status', () => {
-      const result = handleStripeWebhook({
+    it('downgrades on canceled status', async () => {
+      const result = await handleStripeWebhook({
         type: 'customer.subscription.updated',
         data: {
           object: {
@@ -226,8 +242,8 @@ describe('handleStripeWebhook', () => {
       })
     })
 
-    it('downgrades on unpaid status', () => {
-      const result = handleStripeWebhook({
+    it('downgrades on unpaid status', async () => {
+      const result = await handleStripeWebhook({
         type: 'customer.subscription.updated',
         data: {
           object: {
@@ -243,8 +259,8 @@ describe('handleStripeWebhook', () => {
       })
     })
 
-    it('restores Pro on active status', () => {
-      const result = handleStripeWebhook({
+    it('restores Pro on active status', async () => {
+      const result = await handleStripeWebhook({
         type: 'customer.subscription.updated',
         data: {
           object: {
@@ -261,8 +277,8 @@ describe('handleStripeWebhook', () => {
       })
     })
 
-    it('returns null for trialing status (no action needed)', () => {
-      const result = handleStripeWebhook({
+    it('returns null for trialing status (no action needed)', async () => {
+      const result = await handleStripeWebhook({
         type: 'customer.subscription.updated',
         data: {
           object: {
@@ -274,8 +290,8 @@ describe('handleStripeWebhook', () => {
       expect(result).toBeNull()
     })
 
-    it('returns null when metadata has no userId', () => {
-      const result = handleStripeWebhook({
+    it('returns null when metadata has no userId', async () => {
+      const result = await handleStripeWebhook({
         type: 'customer.subscription.updated',
         data: {
           object: {
@@ -289,22 +305,140 @@ describe('handleStripeWebhook', () => {
   })
 
   describe('irrelevant events', () => {
-    it('returns null for unhandled event types', () => {
-      expect(
+    it('returns null for unhandled event types', async () => {
+      await expect(
         handleStripeWebhook({
           type: 'invoice.paid',
           data: { object: {} },
         }),
-      ).toBeNull()
+      ).resolves.toBeNull()
     })
 
-    it('returns null for charge.succeeded', () => {
-      expect(
+    it('returns null for charge.succeeded', async () => {
+      await expect(
         handleStripeWebhook({
           type: 'charge.succeeded',
           data: { object: {} },
         }),
-      ).toBeNull()
+      ).resolves.toBeNull()
+    })
+  })
+
+  describe('customer.subscription.created', () => {
+    it('grants pro for a new subscription carrying userId metadata', async () => {
+      const result = await handleStripeWebhook({
+        type: 'customer.subscription.created',
+        data: { object: { id: 'sub_1', status: 'active', metadata: { userId: 'user_1' } } },
+      })
+      expect(result).toEqual({ userId: 'user_1', plan: 'pro', stripeSubscriptionId: 'sub_1' })
+    })
+
+    it('prefers a client_reference_id over the email fallback', async () => {
+      const fallback = vi.fn(async () => 'user_email')
+      const result = await handleStripeWebhook(
+        {
+          type: 'customer.subscription.created',
+          data: {
+            object: {
+              id: 'sub_1',
+              status: 'active',
+              client_reference_id: 'user_ref',
+              customer_details: { email: 'Owner@Example.com' },
+              metadata: {},
+            },
+          },
+        },
+        fallback,
+      )
+      expect(fallback).not.toHaveBeenCalled()
+      expect(result).toEqual({ userId: 'user_ref', plan: 'pro', stripeSubscriptionId: 'sub_1' })
+    })
+
+    it('returns null with no userId when there is no fallback', async () => {
+      const result = await handleStripeWebhook({
+        type: 'customer.subscription.created',
+        data: {
+          object: {
+            id: 'sub_1',
+            status: 'active',
+            customer_details: { email: 'Owner@Example.com' },
+            metadata: {},
+          },
+        },
+      })
+      expect(result).toBeNull()
+    })
+
+    it('uses the email fallback when no userId is present', async () => {
+      const fallback = vi.fn(async () => 'user_email')
+      const result = await handleStripeWebhook(
+        {
+          type: 'customer.subscription.created',
+          data: {
+            object: {
+              id: 'sub_1',
+              status: 'active',
+              customer_details: { email: 'Owner@Example.com' },
+              metadata: {},
+            },
+          },
+        },
+        fallback,
+      )
+      expect(fallback).toHaveBeenCalledWith('owner@example.com')
+      expect(result).toEqual({ userId: 'user_email', plan: 'pro', stripeSubscriptionId: 'sub_1' })
+    })
+
+    it('grants pro on created even when the subscription status is not yet active', async () => {
+      // A brand-new subscription event catches a user before Stripe flips it to
+      // active; the webhook grants immediately rather than waiting for `updated`.
+      const result = await handleStripeWebhook({
+        type: 'customer.subscription.created',
+        data: {
+          object: { id: 'sub_1', status: 'incomplete', metadata: { userId: 'user_created' } },
+        },
+      })
+      expect(result).toEqual({ userId: 'user_created', plan: 'pro', stripeSubscriptionId: 'sub_1' })
+    })
+
+    it('propagates a lookup failure instead of swallowing it', async () => {
+      const fallback = vi.fn(() => Promise.reject(new Error('Clerk unreachable')))
+      await expect(
+        handleStripeWebhook(
+          {
+            type: 'customer.subscription.created',
+            data: {
+              object: {
+                id: 'sub_1',
+                status: 'active',
+                customer_details: { email: 'Owner@Example.com' },
+                metadata: {},
+              },
+            },
+          },
+          fallback,
+        ),
+      ).rejects.toThrow('Clerk unreachable')
+    })
+
+    it('returns null when the email fallback finds no user', async () => {
+      const fallback = vi.fn(async () => null)
+      const result = await handleStripeWebhook(
+        {
+          type: 'customer.subscription.created',
+          data: {
+            object: {
+              id: 'sub_1',
+              status: 'active',
+              customer_details: { email: 'Owner@Example.com' },
+              metadata: {},
+            },
+          },
+        },
+        fallback,
+      )
+      expect(fallback).toHaveBeenCalledWith('owner@example.com')
+      expect(result).toBeNull()
     })
   })
 })

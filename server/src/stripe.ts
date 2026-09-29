@@ -1,5 +1,6 @@
 import Stripe from 'stripe'
 import { config } from './config.js'
+import { resolveUserIdFromPayload, resolveUserIdByEmail } from './subscriptions.js'
 
 interface CheckoutSession {
   url: string | null
@@ -144,20 +145,41 @@ export function resetWebhookEventDedupe(): void {
 /**
  * Handle Stripe webhook event (subscription created/updated/deleted).
  * Returns user plan update info, or null if event is irrelevant.
+ *
+ * Subscriptions created outside Checkout carry no `userId` metadata, so their
+ * events fall back to the payer's email — `resolveUserIdByEmail` lower-cases the
+ * address before asking the injected fallback lookup (Clerk's search is a plain
+ * case-sensitive equality match).
  */
-export function handleStripeWebhook(event: {
-  type: string
-  data: { object: Record<string, unknown> }
-}): { userId: string; plan: 'pro' | 'free'; stripeSubscriptionId?: string | null } | null {
+export async function handleStripeWebhook(
+  event: {
+    type: string
+    data: { object: Record<string, unknown> }
+  },
+  fallback?: (email: string) => Promise<string | null>,
+): Promise<{ userId: string; plan: 'pro' | 'free'; stripeSubscriptionId?: string | null } | null> {
   const obj = event.data.object
 
   if (event.type === 'checkout.session.completed' || event.type === 'checkout.session.async_payment_succeeded') {
     const metadata = obj.metadata as Record<string, string> | undefined
-    const userId = (obj.client_reference_id as string) ?? metadata?.userId
+    const userId = resolveUserIdFromPayload(obj)
     const stripeSubscriptionId =
       typeof obj.subscription === 'string' ? obj.subscription : metadata?.stripeSubscriptionId
     if (userId) {
       return { userId, plan: 'pro', stripeSubscriptionId: stripeSubscriptionId ?? null }
+    }
+  }
+
+  if (event.type === 'customer.subscription.created') {
+    const subId = typeof obj.id === 'string' ? obj.id : null
+    const userId =
+      resolveUserIdFromPayload(obj) ??
+      (await resolveUserIdByEmail(
+        (obj.customer_details as { email?: string } | undefined)?.email ?? '',
+        fallback ?? (async () => null),
+      ))
+    if (userId) {
+      return { userId, plan: 'pro', stripeSubscriptionId: subId }
     }
   }
 
