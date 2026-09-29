@@ -1,4 +1,6 @@
 export { AuthProvider, AuthGate, UserNav } from './AuthProvider'
 export { ClerkUserSync } from './ClerkUserSync'
 export { useUsage } from './useUsage'
+export { useSubscriptionStatus } from './useSubscriptionStatus'
 export { UpgradePrompt, ProBadge } from './UpgradePrompt'
+export { SubscriptionNotice } from './SubscriptionNotice'
