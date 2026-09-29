@@ -1,6 +1,7 @@
 import { useAuth } from '@clerk/react'
 import { useEffect, type ReactNode } from 'react'
 import { setAuthTokenProvider, setUserId } from '@/lib/cloudSync'
+import { useSubscriptionStatus } from './useSubscriptionStatus'
 
 const CLERK_PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ?? ''
 
@@ -25,6 +26,9 @@ function ClerkUserSyncInner() {
     if (!isLoaded) return
     setUserId(isSignedIn && userId ? userId : null)
   }, [isLoaded, isSignedIn, userId])
+
+  // Authoritative plan check at sign-on.
+  useSubscriptionStatus()
 
   return null as ReactNode
 }
