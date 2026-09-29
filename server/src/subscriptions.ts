@@ -539,10 +539,15 @@ export function createProductionDeps(): ReconcileDeps {
 }
 
 const BOOT_RECONCILE_DELAY_MS = 60_000
+const BOOT_RECONCILE_RETRY_DELAY_MS = 5 * 60_000
+const BOOT_RECONCILE_MAX_ATTEMPTS = 3
 const DAILY_RECONCILE_HOUR_UTC = 4
 const MS_PER_DAY = 24 * 60 * 60 * 1000
 
-/** Milliseconds from `now` until the next 04:00 UTC, always at least one minute out. */
+/**
+ * Milliseconds from `now` until the next 04:00 UTC. Can be seconds away when
+ * `now` is just before the hour; is `MS_PER_DAY` when `now` is exactly on it.
+ */
 export function msUntilNextDailyRun(now: Date = new Date()): number {
   const next = new Date(now)
   next.setUTCHours(DAILY_RECONCILE_HOUR_UTC, 0, 0, 0)
@@ -560,17 +565,23 @@ export function msUntilNextDailyRun(now: Date = new Date()): number {
  *
  * Each daily run schedules the next from the moment it fires, so a run that is
  * delayed cannot cascade into a drifting schedule.
+ *
+ * A failing boot run is retried on a fixed backoff up to `BOOT_RECONCILE_MAX_ATTEMPTS`
+ * total, then given up so a permanently broken backend cannot pile up unbounded
+ * timers — the daily chain keeps trying forever regardless.
  */
 export function startReconciler(): void {
-  const run = async (trigger: string) => {
+  const run = async (trigger: string): Promise<boolean> => {
     const started = Date.now()
     try {
       const summary = await reconcileAllUsers(createProductionDeps())
       console.log(
         `[reconcile] ${trigger}: verified ${summary.verified}, changed ${summary.changed}, unknown ${summary.unknown} (${Date.now() - started}ms)`,
       )
+      return true
     } catch (err) {
       console.error(`[reconcile] ${trigger} failed:`, err instanceof Error ? err.message : String(err))
+      return false
     }
   }
 
@@ -579,13 +590,22 @@ export function startReconciler(): void {
     return
   }
 
-  setTimeout(() => void run('boot'), BOOT_RECONCILE_DELAY_MS).unref?.()
+  const scheduleBoot = (attempt: number): void => {
+    setTimeout(() => {
+      void run('boot').then((ok) => {
+        if (!ok && attempt < BOOT_RECONCILE_MAX_ATTEMPTS) scheduleBoot(attempt + 1)
+      })
+    }, attempt === 1 ? BOOT_RECONCILE_DELAY_MS : BOOT_RECONCILE_RETRY_DELAY_MS).unref?.()
+  }
+  scheduleBoot(1)
 
   const scheduleDaily = (): void => {
     setTimeout(() => {
-      void run('daily').finally(scheduleDaily)
+      void run('daily').then(scheduleDaily, scheduleDaily)
     }, msUntilNextDailyRun()).unref?.()
   }
   scheduleDaily()
-  console.log(`[reconcile] scheduled: boot +60s, then daily at 0${DAILY_RECONCILE_HOUR_UTC}:00 UTC`)
+  console.log(
+    `[reconcile] scheduled: boot +60s (${BOOT_RECONCILE_MAX_ATTEMPTS} attempts), then daily at 0${DAILY_RECONCILE_HOUR_UTC}:00 UTC`,
+  )
 }

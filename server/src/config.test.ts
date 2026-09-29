@@ -210,4 +210,58 @@ describe('stripeKeyModeWarning', () => {
     const stripeKeyModeWarning = await loadStripeKeyModeWarning()
     expect(stripeKeyModeWarning(undefined, 'production')).toBeNull()
   })
+
+  it('stays silent for an empty-string key, the actual unset value', async () => {
+    const stripeKeyModeWarning = await loadStripeKeyModeWarning()
+    expect(stripeKeyModeWarning('', 'production')).toBeNull()
+  })
+})
+
+describe('validateConfig', () => {
+  async function loadValidateConfig() {
+    vi.resetModules()
+    const mod = await import('./config.js')
+    return { config: mod.config, validateConfig: mod.validateConfig }
+  }
+
+  it('logs the non-live-key warning it computes (the wiring is not dead code)', async () => {
+    process.env.NODE_ENV = 'production'
+    process.env.CLERK_SECRET_KEY = 'sk_test_clerk_secret_key'
+    process.env.STRIPE_SECRET_KEY = 'sk_test_should_not_be_used_in_prod'
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const { validateConfig } = await loadValidateConfig()
+      validateConfig()
+      const logged = warn.mock.calls
+        .map((c) => c.join(' '))
+        .filter((m) => m.includes('STRIPE_SECRET_KEY') && m.includes('sk_live_'))
+      expect(logged.length).toBeGreaterThan(0)
+      // It is a warning (startup continues), never a hard error.
+      const failed = error.mock.calls
+        .map((c) => c.join(' '))
+        .filter((m) => m.includes('STRIPE_SECRET_KEY') && m.includes('sk_live_'))
+      expect(failed.length).toBe(0)
+    } finally {
+      warn.mockRestore()
+      error.mockRestore()
+    }
+  })
+
+  it('keeps the non-live-key warning out of production when the key is live', async () => {
+    process.env.NODE_ENV = 'production'
+    process.env.CLERK_SECRET_KEY = 'sk_test_clerk_secret_key'
+    process.env.STRIPE_SECRET_KEY = 'sk_live_abc123'
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      const { validateConfig } = await loadValidateConfig()
+      validateConfig()
+      const logged = warn.mock.calls
+        .map((c) => c.join(' '))
+        .filter((m) => m.includes('STRIPE_SECRET_KEY') && m.includes('sk_live_'))
+      expect(logged.length).toBe(0)
+    } finally {
+      warn.mockRestore()
+    }
+  })
 })

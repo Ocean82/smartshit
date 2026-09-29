@@ -4,7 +4,7 @@ import path from 'node:path'
 import cors from 'cors'
 import express from 'express'
 import { clerkMiddleware } from '@clerk/express'
-import { config, validateConfig, getRuntimeDiagnostics } from './config.js'
+import { config, getRuntimeDiagnostics } from './config.js'
 import { createOnnxRouter } from './api/onnx-infer.js'
 import { SessionPool } from './onnx/sessionPool.js'
 import { getOnnxModelSize, resolveOnnxModelPath } from './onnx/modelPaths.js'
@@ -48,7 +48,7 @@ import { templatesRouter } from './routes/templates.js'
 import { aiFunctionRouter } from './routes/aiFunction.js'
 import { requireAuth, getRequestUserId, getClerkClient, getClerkMiddlewareOptions } from './auth/clerk.js'
 import { resolveIsPro, invalidateProCache } from './plan.js'
-import { startReconciler } from './subscriptions.js'
+import { startBackgroundServices } from './startup.js'
 import { validateBody } from './middleware/validate.js'
 import { chatStreamBodySchema, chatBodySchema } from './schemas/index.js'
 import { assertPublicByokHost } from './schemas/byok.js'
@@ -65,9 +65,8 @@ import { chatRateLimiter, checkoutRateLimiter, globalRateLimiter, sharedAccessRa
  */
 const MAX_TOKENS_PER_CALL = 2048
 
-// ─── Validate critical configuration at startup ──────────────────────────────
-validateConfig()
-startReconciler()
+// ─── Validate critical configuration + start background services ───────────
+startBackgroundServices()
 
 const app = express()
 

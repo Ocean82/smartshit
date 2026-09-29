@@ -2,7 +2,7 @@
  * Pure policy tests for subscription status mapping and selection.
  * These functions carry the entire entitlement policy, so every branch is pinned.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { getStripeClient } from './stripe.js'
 import {
   mapStatusToPlan,
@@ -17,8 +17,10 @@ import {
   listStripeSubscriptionsByEmail,
   listAllClerkUsers,
   msUntilNextDailyRun,
+  startReconciler,
 } from './subscriptions.js'
 import { getClerkClient, planFromPublicMetadata } from './auth/clerk.js'
+import { config } from './config.js'
 
 vi.mock('./stripe.js', () => ({ getStripeClient: vi.fn() }))
 vi.mock('./auth/clerk.js', () => ({ getClerkClient: vi.fn(), planFromPublicMetadata: vi.fn() }))
@@ -1000,5 +1002,147 @@ describe('msUntilNextDailyRun', () => {
     expect(target.getUTCHours()).toBe(4)
     expect(target.getUTCMinutes()).toBe(0)
     expect(target.getUTCSeconds()).toBe(0)
+  })
+})
+
+describe('startReconciler', () => {
+  const originalStripeSecretKey = config.stripeSecretKey
+
+  // A reconcile run that finds nothing to do: empty Clerk directory, no Stripe
+  // calls needed, resolves with a clean zero summary.
+  const emptySweep = () => {
+    vi.mocked(getClerkClient).mockReturnValue({
+      users: { getUserList: vi.fn().mockResolvedValue({ data: [], totalCount: 0 }) },
+    } as unknown as ReturnType<typeof getClerkClient>)
+  }
+
+  afterEach(() => {
+    config.stripeSecretKey = originalStripeSecretKey
+    vi.useRealTimers()
+    vi.restoreAllMocks()
+  })
+
+  it('warns and schedules nothing when STRIPE_SECRET_KEY is unset', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'))
+    config.stripeSecretKey = ''
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    startReconciler()
+
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('skipped'))
+    expect(vi.getTimerCount()).toBe(0)
+    vi.advanceTimersByTime(24 * 60 * 60 * 1000)
+    expect(log).not.toHaveBeenCalled()
+    expect(error).not.toHaveBeenCalled()
+  })
+
+  it('runs the boot sweep exactly 60s after start, once, not before', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'))
+    config.stripeSecretKey = 'sk_test_abc'
+    emptySweep()
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    startReconciler()
+
+    await vi.advanceTimersByTimeAsync(59_999)
+    expect(log.mock.calls.filter((c) => c[0]?.includes('[reconcile] boot:')).length).toBe(0)
+
+    await vi.advanceTimersByTimeAsync(1)
+    expect(log).toHaveBeenCalledWith(expect.stringContaining('[reconcile] boot:'))
+    expect(log.mock.calls.filter((c) => c[0]?.includes('[reconcile] boot:')).length).toBe(1)
+    expect(error).not.toHaveBeenCalledWith(expect.stringContaining('[reconcile] boot failed:'))
+
+    // A successful boot fires no retries.
+    await vi.advanceTimersByTimeAsync(10 * 60_000)
+    expect(log.mock.calls.filter((c) => c[0]?.includes('[reconcile] boot:')).length).toBe(1)
+  })
+
+  it('runs the daily sweep at 04:00 UTC and re-arms for the next day', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'))
+    config.stripeSecretKey = 'sk_test_abc'
+    emptySweep()
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    startReconciler()
+    const daily = () => log.mock.calls.filter((c) => c[0]?.includes('[reconcile] daily:'))
+
+    // Boot fires at +60s; just short of 04:00 UTC nothing daily has fired yet.
+    await vi.advanceTimersByTimeAsync(4 * 60 * 60 * 1000 - 1)
+    expect(daily().length).toBe(0)
+
+    // On the hour the daily run fires and re-arms for tomorrow's 04:00 UTC.
+    await vi.advanceTimersByTimeAsync(1)
+    expect(daily().length).toBe(1)
+    await vi.advanceTimersByTimeAsync(24 * 60 * 60 * 1000)
+    expect(daily().length).toBe(2)
+  })
+
+  it('schedules the next daily run even when a sweep fails', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'))
+    config.stripeSecretKey = 'sk_test_abc'
+    // No getClerkClient stub: it returns undefined, so the sweep throws at once.
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    startReconciler()
+
+    await vi.advanceTimersByTimeAsync(60_000 + 4 * 60 * 60 * 1000)
+    expect(error.mock.calls.filter((c) => c[0]?.includes('[reconcile] daily failed:')).length).toBe(1)
+
+    await vi.advanceTimersByTimeAsync(24 * 60 * 60 * 1000)
+    expect(error.mock.calls.filter((c) => c[0]?.includes('[reconcile] daily failed:')).length).toBe(2)
+  })
+
+  it('retries a failing boot sweep a bounded number of times, then stops', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'))
+    config.stripeSecretKey = 'sk_test_abc'
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    startReconciler()
+    const bootFailures = () =>
+      error.mock.calls.filter((c) => c[0]?.includes('[reconcile] boot failed:')).length
+
+    // Attempt 1 is the delayed boot: 60s.
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(bootFailures()).toBe(1)
+
+    // Attempts 2 and 3 retry on the 5-minute backoff.
+    await vi.advanceTimersByTimeAsync(10 * 60_000)
+    expect(bootFailures()).toBe(3)
+
+    // Exhausted: no further boot attempts, even days later.
+    await vi.advanceTimersByTimeAsync(24 * 60 * 60 * 1000)
+    expect(bootFailures()).toBe(3)
+  })
+
+  it('unrefs its scheduler timers so none can keep the process alive', () => {
+    config.stripeSecretKey = 'sk_test_abc'
+    // Use real timers and record the handles startReconciler creates. A stripped
+    // .unref would leave them ref'd (hasRef() === true) and pin the process.
+    const handles: NodeJS.Timeout[] = []
+    const realSetTimeout = globalThis.setTimeout
+    const wrapped = vi.fn((cb: (...args: unknown[]) => void, ms?: number) => {
+      const handle = realSetTimeout(cb, ms)
+      handles.push(handle)
+      return handle
+    }) as unknown as typeof setTimeout
+    vi.stubGlobal('setTimeout', wrapped)
+    try {
+      startReconciler()
+      expect(handles.length).toBeGreaterThanOrEqual(2)
+      for (const handle of handles) {
+        expect(handle.hasRef()).toBe(false)
+      }
+    } finally {
+      vi.unstubAllGlobals()
+      for (const handle of handles) clearTimeout(handle)
+    }
   })
 })
