@@ -419,7 +419,16 @@ export async function* listAllClerkUsers(): AsyncIterable<ReconcileUser> {
         subscriptionId: subId,
       }
     }
+    // The only way out of the loop without hitting the cap is exhausting the listing.
+    // Falling through the last page means the sweep silently stopped 200 pages short
+    // of the full account — anyone beyond the cap was never reconciled, so say so.
     if (offset + CLERK_PAGE_SIZE >= page.totalCount) return
+    if (offset + CLERK_PAGE_SIZE >= CLERK_PAGE_SIZE * MAX_CLERK_PAGES) {
+      console.warn(
+        `[reconcile] user sweep stopped after ${CLERK_PAGE_SIZE * MAX_CLERK_PAGES} users; ` +
+          'raise MAX_CLERK_PAGES to reconcile the whole account',
+      )
+    }
   }
 }
 
@@ -439,18 +448,39 @@ export async function findClerkUserIdByEmail(email: string): Promise<string | nu
   return page.data[0]?.id ?? null
 }
 
-/** List every subscription belonging to the Stripe customer with this email. */
+/** List every subscription belonging to any Stripe customer with this email. */
 export async function listStripeSubscriptionsByEmail(email: string): Promise<StripeSubList[]> {
-  const stripe = getStripeClient()
-  const customers = await stripe.customers.list({ email, limit: 1 })
-  const customer = customers.data[0]
-  if (!customer) return []
-  const subs = await stripe.subscriptions.list({
-    customer: customer.id,
-    status: 'all',
-    limit: 10,
-  })
-  return subs.data.map((s) => ({ id: s.id, status: s.status, created: s.created }))
+  return listStripeSubscriptionsByEmailWith(getStripeClient(), email)
+}
+
+/** Stripe subs across every customer on an address, shared so one client serves a sweep. */
+async function listStripeSubscriptionsByEmailWith(
+  stripe: ReturnType<typeof getStripeClient>,
+  email: string,
+): Promise<StripeSubList[]> {
+  // The `email` filter on customers.list is case-sensitive (stripe@17). The address
+  // arriving here is the lowercased primary from listAllClerkUsers, but Stripe stores
+  // whatever case a human typed at checkout. An exact-case miss returns [] and the
+  // reconciler reads that as `no_subscription` — a *definite* demotion of a paying
+  // user whose Clerk/Stripe casings differ. Try the exact match first (cheap, not
+  // rate-limited); on the miss, fall back to customers.search, whose string
+  // exact-match is case-insensitive (search is rate-limited to 20 reads/s, so only
+  // the colder miss path pays that cost).
+  let customers = (await stripe.customers.list({ email, limit: 10 })).data
+  if (customers.length === 0) {
+    const escaped = email.replace(/["\\]/g, '\\$&')
+    customers = (await stripe.customers.search({ query: `email:"${escaped}"`, limit: 10 })).data
+  }
+
+  // A repeat subscriber can hold a fresh cus_… record alongside an older dead one; the
+  // live subscription may sit on either. Union every customer on the address instead
+  // of trusting customers.data[0].
+  const subscriptions: StripeSubList[] = []
+  for (const customer of customers) {
+    const page = await stripe.subscriptions.list({ customer: customer.id, status: 'all', limit: 10 })
+    subscriptions.push(...page.data.map((s) => ({ id: s.id, status: s.status, created: s.created })))
+  }
+  return subscriptions
 }
 
 /**
@@ -476,12 +506,16 @@ export async function getStripeCustomerEmail(customerId: string): Promise<string
 
 /** Production dependency wiring for the reconciler. */
 export function createProductionDeps(): ReconcileDeps {
+  // One client instance for the whole sweep. Stripe's SDK builds an https agent per
+  // client, so a fresh getStripeClient() per user across 5,000 pages would churn
+  // thousands of sockets. A single instance holds one pooled agent for all calls.
+  const stripe = getStripeClient()
   return {
     listUsers: listAllClerkUsers,
     verify: (user) =>
       verifySubscriptionForUser(user, {
         retrieveSubscription: async (id) => {
-          const sub = await getStripeClient().subscriptions.retrieve(id)
+          const sub = await stripe.subscriptions.retrieve(id)
           return {
             id: sub.id,
             status: sub.status,
@@ -489,7 +523,7 @@ export function createProductionDeps(): ReconcileDeps {
             cancel_at_period_end: sub.cancel_at_period_end,
           }
         },
-        listSubscriptionsByEmail: listStripeSubscriptionsByEmail,
+        listSubscriptionsByEmail: (email) => listStripeSubscriptionsByEmailWith(stripe, email),
       }),
     write: (userId, result, currentPlan) =>
       writeClerkPlan(userId, result, currentPlan, {

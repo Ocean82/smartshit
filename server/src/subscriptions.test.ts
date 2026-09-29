@@ -2,7 +2,8 @@
  * Pure policy tests for subscription status mapping and selection.
  * These functions carry the entire entitlement policy, so every branch is pinned.
  */
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { getStripeClient } from './stripe.js'
 import {
   mapStatusToPlan,
   pickSubscription,
@@ -13,7 +14,13 @@ import {
   isMissingResource,
   writeClerkPlan,
   reconcileAllUsers,
+  listStripeSubscriptionsByEmail,
+  listAllClerkUsers,
 } from './subscriptions.js'
+import { getClerkClient, planFromPublicMetadata } from './auth/clerk.js'
+
+vi.mock('./stripe.js', () => ({ getStripeClient: vi.fn() }))
+vi.mock('./auth/clerk.js', () => ({ getClerkClient: vi.fn(), planFromPublicMetadata: vi.fn() }))
 
 describe('mapStatusToPlan', () => {
   it('grants pro for active', () => {
@@ -895,5 +902,76 @@ describe('reconcileAllUsers', () => {
     await expect(reconcileAllUsers(deps)).rejects.toThrow(
       /after verifying 1, changing 1, unknown 0: Clerk page 500/,
     )
+  })
+})
+
+describe('listStripeSubscriptionsByEmail', () => {
+  beforeEach(() => {
+    vi.mocked(getStripeClient).mockReturnValue({
+      customers: {
+        list: vi.fn(),
+        search: vi.fn(),
+      },
+      subscriptions: {
+        list: vi.fn(),
+      },
+    } as unknown as ReturnType<typeof getStripeClient>)
+  })
+
+  it('falls back to a case-insensitive search when the exact-case list misses', async () => {
+    const stripe = vi.mocked(getStripeClient)()
+    vi.mocked(stripe.customers.list).mockResolvedValue({ data: [] } as never)
+    vi.mocked(stripe.customers.search).mockResolvedValue({ data: [{ id: 'cus_owner' }] } as never)
+    vi.mocked(stripe.subscriptions.list).mockResolvedValue({
+      data: [{ id: 'sub_1', status: 'active', created: 10 }],
+    } as never)
+
+    const result = await listStripeSubscriptionsByEmail('owner@example.com')
+
+    expect(stripe.customers.search).toHaveBeenCalledWith({
+      query: 'email:"owner@example.com"',
+      limit: 10,
+    })
+    expect(result).toEqual([{ id: 'sub_1', status: 'active', created: 10 }])
+  })
+
+  it('unions subscriptions across every customer on the address', async () => {
+    const stripe = vi.mocked(getStripeClient)()
+    vi.mocked(stripe.customers.list).mockResolvedValue({
+      data: [{ id: 'cus_old' }, { id: 'cus_new' }],
+    } as never)
+    vi.mocked(stripe.subscriptions.list)
+      .mockResolvedValueOnce({ data: [{ id: 'sub_old', status: 'canceled', created: 5 }] } as never)
+      .mockResolvedValueOnce({ data: [{ id: 'sub_new', status: 'active', created: 9 }] } as never)
+
+    const result = await listStripeSubscriptionsByEmail('owner@example.com')
+
+    expect(stripe.customers.search).not.toHaveBeenCalled()
+    expect(stripe.subscriptions.list).toHaveBeenCalledTimes(2)
+    expect(result).toEqual([
+      { id: 'sub_old', status: 'canceled', created: 5 },
+      { id: 'sub_new', status: 'active', created: 9 },
+    ])
+  })
+})
+
+describe('listAllClerkUsers', () => {
+  it('warns when the sweep hits the page cap with users still left', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const fakeUser = { id: 'user', emailAddresses: [], primaryEmailAddressId: null, publicMetadata: {} }
+    const getUserList = vi.fn(async ({ offset }) => ({
+      data: offset < 20000 ? [fakeUser] : [],
+      totalCount: 25000,
+    }))
+    vi.mocked(getClerkClient).mockReturnValue({
+      users: { getUserList },
+    } as unknown as ReturnType<typeof getClerkClient>)
+    vi.mocked(planFromPublicMetadata as unknown as ReturnType<typeof vi.fn>).mockReturnValue('free')
+
+    const users = []
+    for await (const user of listAllClerkUsers()) users.push(user)
+
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('stopped after'))
+    warn.mockRestore()
   })
 })
