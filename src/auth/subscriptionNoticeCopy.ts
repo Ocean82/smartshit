@@ -1,10 +1,9 @@
 export type SubscriptionNoticeCopy = {
   message: string
   action: string
-  href: string
 }
 
-const COPY: Record<string, Omit<SubscriptionNoticeCopy, 'href'>> = {
+const COPY: Record<string, SubscriptionNoticeCopy> = {
   canceled: {
     message: 'Your Pro subscription was canceled, so Pro features are paused.',
     action: 'Resubscribe',
@@ -31,8 +30,6 @@ const COPY: Record<string, Omit<SubscriptionNoticeCopy, 'href'>> = {
   },
 }
 
-const UPGRADE_HREF = '/app#upgrade'
-
 /**
  * Copy for the revocation banner. Returns null for unknown or missing reasons:
  * an `unknown` reason means Stripe could not be reached, and a banner implying
@@ -43,5 +40,5 @@ export function subscriptionNoticeCopy(
 ): SubscriptionNoticeCopy | null {
   const copy = reason ? COPY[reason] : undefined
   if (!copy) return null
-  return { ...copy, href: UPGRADE_HREF }
+  return copy
 }

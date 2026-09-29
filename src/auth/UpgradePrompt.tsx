@@ -1,8 +1,7 @@
 import { useAuth } from '@clerk/react'
-import { getAuthHeaders } from '@/lib/cloudSync'
+import { startCheckout } from './startCheckout'
 
 const CLERK_PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ?? ''
-const API_BASE = import.meta.env.VITE_AI_API_URL ?? ''
 
 interface UpgradePromptProps {
   remaining: number
@@ -33,24 +32,10 @@ export function UpgradePrompt({ remaining, dailyLimit }: UpgradePromptProps) {
 function UpgradeCard() {
   const { isSignedIn } = useAuth()
 
-  const handleUpgrade = async () => {
+  const handleUpgrade = () => {
     if (!isSignedIn) return
-
-    try {
-      const headers = await getAuthHeaders()
-      const res = await fetch(`${API_BASE}/api/checkout`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ email: '' }),
-      })
-
-      if (res.ok) {
-        const { url } = await res.json()
-        if (url) window.location.href = url
-      }
-    } catch {
-      // Silent fail — user can retry
-    }
+    // Same call the revocation banner's CTA makes; it never rejects.
+    void startCheckout()
   }
 
   return (

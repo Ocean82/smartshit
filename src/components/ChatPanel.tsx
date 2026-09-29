@@ -11,7 +11,7 @@ import { getFeedbackForMessage, recordChatFeedback, type ChatFeedbackRating } fr
 import { suggestionChipLabel } from '@/ai/capabilities/clarifyChips'
 import { exportChatAsReport } from '@/lib/exportChat'
 import { persistenceCaveat } from '@/lib/styleRecipes'
-import { useUsage, UpgradePrompt, useSubscriptionStatus, SubscriptionNotice } from '@/auth'
+import { useUsage, UpgradePrompt, useSubscriptionStatus, SubscriptionNotice, startCheckout } from '@/auth'
 import { ApiKeySettings } from './ApiKeySettings'
 import { ChatMarkdown } from './ChatMarkdown'
 import {
@@ -681,7 +681,13 @@ function RevocationBanner() {
 
 function RevocationBannerInner() {
   const { revocationReason, dismissNotice } = useSubscriptionStatus()
-  return <SubscriptionNotice reason={revocationReason} onDismiss={dismissNotice} />
+  return (
+    <SubscriptionNotice
+      reason={revocationReason}
+      onResubscribe={startCheckout}
+      onDismiss={dismissNotice}
+    />
+  )
 }
 
 interface ChatInputAreaProps {

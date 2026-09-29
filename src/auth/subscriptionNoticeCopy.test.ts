@@ -6,8 +6,15 @@ describe('subscriptionNoticeCopy', () => {
     expect(subscriptionNoticeCopy('canceled')).toMatchObject({
       message: expect.stringMatching(/canceled/i),
       action: 'Resubscribe',
-      href: '/app#upgrade',
     })
+  })
+
+  it('returns no href, so the CTA cannot be a dead link', () => {
+    // The action used to point at `/app#upgrade`, which nothing handles. It is now
+    // a button that calls the real checkout endpoint, so copy carries no link.
+    for (const reason of ['canceled', 'unpaid', 'incomplete', 'paused', 'lapsed']) {
+      expect(subscriptionNoticeCopy(reason), reason).not.toHaveProperty('href')
+    }
   })
 
   it('explains a failed payment', () => {

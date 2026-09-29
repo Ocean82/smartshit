@@ -11,9 +11,11 @@ import { subscriptionNoticeCopy } from './subscriptionNoticeCopy'
  */
 export function SubscriptionNotice({
   reason,
+  onResubscribe,
   onDismiss,
 }: {
   reason: string | null
+  onResubscribe: () => void
   onDismiss: () => void
 }) {
   const copy = subscriptionNoticeCopy(reason)
@@ -35,9 +37,20 @@ export function SubscriptionNotice({
       }}
     >
       <span style={{ flex: 1, color: 'var(--ink-primary, #1a1a1a)' }}>{copy.message}</span>
-      <a href={copy.href} style={{ color: 'var(--accent, #2563eb)', fontWeight: 600 }}>
+      <button
+        type="button"
+        onClick={onResubscribe}
+        style={{
+          background: 'none',
+          border: 'none',
+          padding: 0,
+          cursor: 'pointer',
+          color: 'var(--accent, #2563eb)',
+          fontWeight: 600,
+        }}
+      >
         {copy.action}
-      </a>
+      </button>
       <button
         type="button"
         onClick={onDismiss}
