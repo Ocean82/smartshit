@@ -16,6 +16,7 @@ import {
   reconcileAllUsers,
   listStripeSubscriptionsByEmail,
   listAllClerkUsers,
+  msUntilNextDailyRun,
 } from './subscriptions.js'
 import { getClerkClient, planFromPublicMetadata } from './auth/clerk.js'
 
@@ -973,5 +974,26 @@ describe('listAllClerkUsers', () => {
 
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('stopped after'))
     warn.mockRestore()
+  })
+})
+
+describe('msUntilNextDailyRun', () => {
+  it('waits until 04:00 UTC later the same day', () => {
+    const now = new Date('2026-09-28T01:00:00.000Z')
+    expect(msUntilNextDailyRun(now)).toBe(3 * 60 * 60 * 1000)
+  })
+
+  it('waits until tomorrow when 04:00 UTC has passed', () => {
+    const now = new Date('2026-09-28T05:00:00.000Z')
+    expect(msUntilNextDailyRun(now)).toBe(23 * 60 * 60 * 1000)
+  })
+
+  it('lands exactly on 04:00 UTC from a non-UTC local clock', () => {
+    const now = new Date('2026-09-28T22:30:00.000Z')
+    const delta = msUntilNextDailyRun(now)
+    const target = new Date(now.getTime() + delta)
+    expect(target.getUTCHours()).toBe(4)
+    expect(target.getUTCMinutes()).toBe(0)
+    expect(target.getUTCSeconds()).toBe(0)
   })
 })
