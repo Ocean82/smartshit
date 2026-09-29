@@ -47,7 +47,7 @@ import { sharesRouter, publicSharesRouter } from './routes/shares.js'
 import { templatesRouter } from './routes/templates.js'
 import { aiFunctionRouter } from './routes/aiFunction.js'
 import { requireAuth, getRequestUserId, getClerkClient, getClerkMiddlewareOptions } from './auth/clerk.js'
-import { resolveIsPro, invalidateProCache } from './plan.js'
+import { resolveIsPro, resolveSubscriptionStatus, invalidateProCache } from './plan.js'
 import { startBackgroundServices } from './startup.js'
 import { validateBody } from './middleware/validate.js'
 import { chatStreamBodySchema, chatBodySchema } from './schemas/index.js'
@@ -933,8 +933,8 @@ app.post('/api/chat', requireAuth, chatRateLimiter, validateBody(chatBodySchema)
 
 app.post('/api/usage', requireAuth, async (req, res) => {
   const userId = getRequestUserId(req)
-  const isPro = await resolveIsPro(userId)
-  const stats = await getUsageStats(userId ?? undefined, isPro)
+  const status = await resolveSubscriptionStatus(userId)
+  const stats = await getUsageStats(userId ?? undefined, status.isPro, status.revocationReason)
   res.json(stats)
 })
 

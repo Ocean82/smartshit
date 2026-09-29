@@ -38,4 +38,19 @@ describe('usage metering', () => {
     const result = await checkUsage('user-record-fail', false)
     expect(result.used).toBe(1)
   })
+
+  it('getUsageStats reports the stored revocation reason', async () => {
+    const { getUsageStats } = await import('./usage.js')
+    const stats = await getUsageStats('user-1', false, 'canceled')
+    expect(stats.revocationReason).toBe('canceled')
+    expect(stats.isPro).toBe(false)
+  })
+
+  it('getUsageStats is silent when no reason is stored', async () => {
+    const { getUsageStats } = await import('./usage.js')
+    const stats = await getUsageStats('user-1', true, null)
+    expect(stats.revocationReason).toBeNull()
+    expect(stats.isPro).toBe(true)
+    expect(stats.allowed).toBe(true)
+  })
 })

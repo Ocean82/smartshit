@@ -12,37 +12,70 @@ import { getClerkClient, planFromPublicMetadata } from './auth/clerk.js'
 
 const PRO_CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
 
-const proCache = new Map<string, { isPro: boolean; expiresAt: number }>()
+export type SubscriptionStatus = {
+  isPro: boolean
+  /** Persisted by writeClerkPlan on demotion; never 'unknown' (that never persists). */
+  revocationReason: string | null
+}
+
+const statusCache = new Map<string, { status: SubscriptionStatus; expiresAt: number }>()
+
+function emptyStatus(): SubscriptionStatus {
+  return { isPro: false, revocationReason: null }
+}
+
+/**
+ * Normalize a stored reason at the API boundary. `unknown` means Stripe could
+ * not be reached at write time; writeClerkPlan refuses to persist it, but a
+ * stale/wrong value must never surface as a revocation either.
+ */
+function storedRevocationReason(metadata: Record<string, unknown>): string | null {
+  const reason = metadata.revocationReason
+  if (typeof reason !== 'string' || reason === '' || reason === 'unknown') return null
+  return reason
+}
+
+/**
+ * Resolve a user's plan state (pro flag plus the stored revocation reason) from
+ * Clerk publicMetadata, hitting the API at most once per TTL window per user.
+ */
+export async function resolveSubscriptionStatus(userId: string | null | undefined): Promise<SubscriptionStatus> {
+  if (!userId || !config.clerkSecretKey) return emptyStatus()
+
+  const cached = statusCache.get(userId)
+  if (cached && Date.now() < cached.expiresAt) {
+    return cached.status
+  }
+
+  try {
+    const user = await getClerkClient().users.getUser(userId)
+    const metadata = (user.publicMetadata ?? {}) as Record<string, unknown>
+    const status: SubscriptionStatus = {
+      isPro: planFromPublicMetadata(metadata) === 'pro',
+      revocationReason: storedRevocationReason(metadata),
+    }
+    statusCache.set(userId, { status, expiresAt: Date.now() + PRO_CACHE_TTL_MS })
+    return status
+  } catch {
+    // On error, fall back to the cached value if we have one (even if expired)
+    return cached?.status ?? emptyStatus()
+  }
+}
 
 /**
  * Resolve whether a user is on the Pro plan, hitting Clerk at most once per
  * TTL window per user.
  */
 export async function resolveIsPro(userId: string | null | undefined): Promise<boolean> {
-  if (!userId || !config.clerkSecretKey) return false
-
-  const cached = proCache.get(userId)
-  if (cached && Date.now() < cached.expiresAt) {
-    return cached.isPro
-  }
-
-  try {
-    const user = await getClerkClient().users.getUser(userId)
-    const isPro = planFromPublicMetadata(user.publicMetadata as Record<string, unknown>) === 'pro'
-    proCache.set(userId, { isPro, expiresAt: Date.now() + PRO_CACHE_TTL_MS })
-    return isPro
-  } catch {
-    // On error, fall back to the cached value if we have one (even if expired)
-    return cached?.isPro ?? false
-  }
+  return (await resolveSubscriptionStatus(userId)).isPro
 }
 
 /** Drop a user's cached plan so a change takes effect immediately. */
 export function invalidateProCache(userId: string): void {
-  proCache.delete(userId)
+  statusCache.delete(userId)
 }
 
 /** Clear the entire cache (test helper). */
 export function clearProCache(): void {
-  proCache.clear()
+  statusCache.clear()
 }

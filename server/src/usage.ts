@@ -133,8 +133,10 @@ export async function recordUsage(userId: string | undefined): Promise<void> {
 export async function getUsageStats(
   userId: string | undefined,
   isPro: boolean,
-): Promise<UsageCheckResult> {
-  return checkUsage(userId, isPro)
+  revocationReason: string | null,
+): Promise<UsageCheckResult & { revocationReason: string | null }> {
+  const base = await checkUsage(userId, isPro)
+  return { ...base, revocationReason }
 }
 
 /** Remove counters older than the retention window. */
