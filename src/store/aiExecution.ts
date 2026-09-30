@@ -3,7 +3,7 @@
  * Extracted from useStore to keep the composed store thin.
  */
 
-import type { ChatMessage, AgentAction, Selection } from '@/types'
+import type { ChatMessage, AgentAction, Selection, WorkbookData } from '@/types'
 import { refToCell } from '@/engine/spreadsheet'
 import { setColAt } from '@/lib/colLayout'
 import { setRowAt, getRowHeight } from '@/lib/rowLayout'
@@ -17,12 +17,19 @@ import { createToolStepExecutor } from '@/ai/macro/toolStepExecutor'
 import type { ActionStep, MacroPlan } from '@/ai/nlp/types'
 import { buildSpreadsheetContext } from '@/ai/buildContext'
 import { toolResultToMessage } from '@/ai/responseBuilder'
+import { recordTelemetry } from '@/ai/telemetry'
 import { classifyMode, isLlmOnlyMode, isBudgetExplainQuery } from '@/ai/mode'
 import { analyzeBudget, budgetAnalysisToToolResult, savingsRecommendation } from '@/ai/analysis/budget'
 import { parseUserIntent } from '@shared/intentParser'
 import { resolveActTemplates } from '@shared/actTemplates'
 import { buildActionPreview } from '@/lib/previewBuilders'
 import { capUndoStack, diffWorkbooks, newHistoryEntryId } from '@/lib/historyDiff'
+import {
+  isScriptPatchEmpty,
+  scriptPatchOperationCount,
+  scriptPatchSignature,
+  type ScriptPatch,
+} from '@/lib/scriptPatch'
 import { exportSheetToCsv, exportWorkbookToXlsx } from '@/io/xlsx'
 import { exportWorkbookToJson } from '@/io/workbookJson'
 import { v4 as uuid } from 'uuid'
@@ -346,6 +353,99 @@ export function executeAction(
     return executeTool({ tool: action.tool, params: action.params, description: action.description }, ctx);
   }
   return executeTemplateTool(action.tool, action.params, ctx);
+}
+
+/**
+ * Restore a whole-workbook snapshot. Used to roll back a failed commit so a
+ * partially applied action never leaves the sheet half-changed.
+ */
+function restoreWorkbookSnapshot(snapshot: WorkbookData, get: StoreGet, set: StoreSet): void {
+  get().engine.loadWorkbook(snapshot)
+  set((s: AppState) => {
+    s.workbook = snapshot
+    s.activeSheetId = snapshot.activeSheetId
+  })
+}
+
+/**
+ * Commit a locally prepared, user-reviewed script patch.
+ *
+ * This deliberately does NOT re-run the script: the dry-run already collected
+ * the exact mutation set the user approved, so re-executing could produce
+ * different values if the sheet moved underneath us. It also does NOT rely on
+ * `pushHistory()`'s microtask diff — the mutation happens here, synchronously,
+ * between two explicit snapshots, so undo/redo get one correct entry.
+ *
+ * On any failure the whole commit is rolled back.
+ */
+export async function applyPreparedScriptAction(
+  action: AgentAction,
+  get: StoreGet,
+  set: StoreSet,
+): Promise<ExecutionResult> {
+  const prepared = action.prepared
+  if (!prepared || prepared.kind !== 'script') {
+    return {
+      success: false,
+      message: 'This action has no reviewed changes to apply. Ask me to regenerate it.',
+      modified: 0,
+    }
+  }
+
+  const patch: ScriptPatch = prepared.patch
+  if (scriptPatchSignature(patch) !== prepared.signature) {
+    return {
+      success: false,
+      message: 'The reviewed changes no longer match this action. Ask me to regenerate it.',
+      modified: 0,
+    }
+  }
+
+  if (isScriptPatchEmpty(patch)) {
+    return { success: true, message: 'Nothing to change — the reviewed script made no edits.', modified: 0 }
+  }
+
+  const before = structuredClone(get().workbook)
+  const ctx = buildExecutionContext(get, set, { suppressHistory: true })
+
+  try {
+    if (Object.keys(patch.cellUpdates).length > 0) ctx.bulkSetCells(patch.cellUpdates)
+    for (const [cellId, format] of Object.entries(patch.formatUpdates)) {
+      ctx.setCellFormat(cellId, format)
+    }
+    for (const row of patch.rowDeletions) ctx.deleteRow(row)
+    for (const afterRow of patch.rowInsertions) ctx.insertRow(afterRow)
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err)
+    restoreWorkbookSnapshot(before, get, set)
+    return {
+      success: false,
+      message: `The script changes could not be applied and were rolled back: ${detail}`,
+      modified: 0,
+    }
+  }
+
+  const after = get().workbook
+  const diff = diffWorkbooks(before, after)
+  const description = action.description || 'AI script changes'
+  set((s: AppState) => {
+    s.undoStack.push({ id: newHistoryEntryId(), patch: diff, description })
+    capUndoStack(s.undoStack, {
+      maxEntries: MAX_UNDO_STACK,
+      maxBytes: MAX_UNDO_STACK_BYTES,
+      minEntries: MIN_UNDO_STACK_ENTRIES,
+    })
+    s.redoStack = []
+  })
+
+  const modified = scriptPatchOperationCount(patch)
+  recordTelemetry('sandboxExecutions', `${modified} committed changes from reviewed patch`)
+
+  return {
+    success: true,
+    message: `Applied the reviewed changes (${modified} operation${modified === 1 ? '' : 's'}).`,
+    modified,
+  }
 }
 
 /**

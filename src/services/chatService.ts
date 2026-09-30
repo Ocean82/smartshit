@@ -17,13 +17,16 @@
  * without spinning up the full Zustand store.
  */
 
-import type { ChatMessage, ProviderMeta, SheetData, Selection, WorkbookData } from '@/types'
+import type { ChatMessage, ProviderMeta, SheetData, Selection, WorkbookData, ActionScope } from '@/types'
 import type { ExecutionContext } from '@/agent/executor'
 import { toolResultToChatMessage } from '@/ai/responseBuilder'
 import { buildSpreadsheetContext } from '@/ai/buildContext'
 import { classifyMode, isLlmOnlyMode } from '@/ai/mode'
 import type { SheetInsights } from '@/ai/sheetInsights'
 import type { AttachedFilePreview } from '@/ai/types'
+import { captureActionScope } from '@/lib/actionScope'
+import { classifyRequestSafety } from '@shared/requestSafety'
+import { sanitizeActionParams } from '@shared/actionParams'
 import {
   createPipelineRouter,
   createGoalRouterStage,
@@ -35,6 +38,7 @@ import {
   createDeterministicDispatcherStage,
   createLLMGatewayStage,
   type PipelineContext,
+  type PipelineStage,
   type StageResult,
 } from '@/ai/pipeline'
 
@@ -53,6 +57,8 @@ export interface ChatServiceDeps {
   getSelection: () => Selection | null
   /** Get the active sheet ID */
   getActiveSheetId: () => string
+  /** Get the monotonic workbook revision counter */
+  getWorkbookRevision: () => number
   /** Get the attached file preview */
   getAttachedPreview: () => AttachedFilePreview | null
   /** Get the chat messages for history */
@@ -91,6 +97,40 @@ export interface ChatServiceDeps {
  * 7. DeterministicDispatcher — local skills (may claim or pass)
  * 8. LLMGateway — server LLM (always claims)
  */
+/** Store snapshot `captureActionScope` needs, derived from the deps callbacks. */
+function getScopeSource(deps: ChatServiceDeps) {
+  return {
+    workbook: deps.getWorkbook(),
+    activeSheetId: deps.getActiveSheetId(),
+    selection: deps.getSelection(),
+    workbookRevision: deps.getWorkbookRevision(),
+  }
+}
+
+/**
+ * Build the stage chain.
+ *
+ * `isNonCommand` drops the three stages that mutate immediately (goal router,
+ * agent parser, template resolver) so a negated / explanatory / hypothetical /
+ * quoted utterance can never change the sheet, no matter which command
+ * fragments it contains. Explicit direct commands keep their existing
+ * immediate-execution behaviour.
+ */
+function buildStages(deps: ChatServiceDeps, isNonCommand: boolean): PipelineStage[] {
+  const stages: PipelineStage[] = []
+  if (!isNonCommand) {
+    stages.push(createGoalRouterStage({ buildExecContext: deps.buildExecContext, pushHistory: deps.pushHistory }))
+    stages.push(createAgentParserStage({ buildExecContext: deps.buildExecContext, pushHistory: deps.pushHistory }))
+    stages.push(createTemplateResolverStage({ buildExecContext: deps.buildExecContext, pushHistory: deps.pushHistory }))
+  }
+  stages.push(createIntentClassifierStage())
+  stages.push(createSemanticCapabilityRouterStage({ buildExecContext: deps.buildExecContext, pushHistory: deps.pushHistory }))
+  stages.push(createMacroPlannerStage())
+  stages.push(createDeterministicDispatcherStage())
+  stages.push(createLLMGatewayStage())
+  return stages
+}
+
 export async function processChatMessage(
   input: string,
   streamingMsgId: string,
@@ -106,8 +146,6 @@ export async function processChatMessage(
     getAttachedPreview,
     getMessages,
     setActiveSheet,
-    pushHistory,
-    buildExecContext,
     appendToken,
     finalizeMessage,
     setProcessing,
@@ -143,6 +181,11 @@ export async function processChatMessage(
       .filter((m) => m.role === 'assistant' && m.insightsSnapshot)
       .at(-1)?.insightsSnapshot as SheetInsights | undefined
 
+    // Scope captured once, before any stage runs. Every proposal this turn
+    // produces is bound to it, so it can be rejected if the workbook, sheet,
+    // selection or revision moves before the user clicks Apply.
+    const scope: ActionScope = captureActionScope(getScopeSource(deps))
+
     const pipelineContext: PipelineContext = {
       message: input,
       workbook: getWorkbook(),
@@ -160,16 +203,11 @@ export async function processChatMessage(
     }
 
     // ─── Create and run pipeline ─────────────────────────────────────────
-    const router = createPipelineRouter([
-      createGoalRouterStage({ buildExecContext, pushHistory }),
-      createAgentParserStage({ buildExecContext, pushHistory }),
-      createTemplateResolverStage({ buildExecContext, pushHistory }),
-      createIntentClassifierStage(),
-      createSemanticCapabilityRouterStage({ buildExecContext, pushHistory }),
-      createMacroPlannerStage(),
-      createDeterministicDispatcherStage(),
-      createLLMGatewayStage(),
-    ])
+    // A non-command (negation, explanation, hypothetical, quoted example) is
+    // never allowed to reach a stage that mutates immediately. Those stages are
+    // simply not in the chain, so the request falls through to the
+    // proposal-only and explanatory stages.
+    const router = createPipelineRouter(buildStages(deps, classifyRequestSafety(input).isNonCommand))
 
     const result = await router.process(pipelineContext)
 
@@ -178,6 +216,7 @@ export async function processChatMessage(
       sheet,
       getComputedValue,
       input,
+      scope,
       processLocalFallback,
       insightsSnapshot: buildSpreadsheetContext(getWorkbook(), sheet, getSelection(), getComputedValue).insights as unknown as Record<string, unknown>,
     })
@@ -203,8 +242,19 @@ interface ConversionContext {
   sheet: SheetData
   getComputedValue: (row: number, col: number) => string
   input: string
+  /** Scope every emitted action is bound to. */
+  scope: ActionScope
   processLocalFallback: (input: string) => ChatMessage
   insightsSnapshot?: Record<string, unknown>
+}
+
+/**
+ * A server refusal (auth / rate limit / quota) is a real, actionable answer.
+ * It must survive to the user instead of being replaced by a local fallback
+ * that pretends the request was handled.
+ */
+function isServerRefusal(result: StageResult): boolean {
+  return result.metadata?.source === 'ai-server-refused'
 }
 
 /**
@@ -233,6 +283,14 @@ function stageResultToChatMessage(
   ctx: ConversionContext,
 ): ChatMessage {
   if (result.stageName === 'llm-gateway' || result.stageName === 'deterministic-dispatcher') {
+    // Actions that came back from the model are untrusted input: strip anything
+    // that would let the model decide whether a change is safe to apply.
+    const actions = result.actions?.map((a) => ({
+      tool: a.tool,
+      params: sanitizeActionParams(a.params),
+      description: a.description,
+    }))
+
     const toolResult = {
       success: result.success,
       message: result.message,
@@ -242,11 +300,21 @@ function stageResultToChatMessage(
       providerMeta: isProviderMeta(result.metadata?.providerMeta)
         ? result.metadata!.providerMeta as ProviderMeta
         : undefined,
-      actions: result.actions?.map((a) => ({
-        tool: a.tool,
-        params: a.params,
-        description: a.description,
-      })),
+      actions,
+    }
+
+    // An explicit server refusal (sign-in / rate limit / quota) is the answer.
+    // Falling back to local insights here would hide the CTA the server worded
+    // for the user and pretend the request succeeded.
+    if (isServerRefusal(result)) {
+      return {
+        id: msgId,
+        role: 'assistant',
+        content: `⚠️ ${result.message}`,
+        timestamp: Date.now(),
+        suggestions: result.suggestions,
+        providerMeta: toolResult.providerMeta,
+      }
     }
 
     // If LLM/deterministic failed and mode isn't explain/advise, try local fallback
@@ -257,7 +325,7 @@ function stageResultToChatMessage(
     return toolResultToChatMessage(toolResult, {
       id: msgId,
       insightsSnapshot: ctx.insightsSnapshot,
-      previewContext: { sheet: ctx.sheet, getComputedValue: ctx.getComputedValue },
+      previewContext: { sheet: ctx.sheet, getComputedValue: ctx.getComputedValue, scope: ctx.scope },
     })
   }
 
@@ -282,7 +350,7 @@ function stageResultToChatMessage(
     }
     return toolResultToChatMessage(toolResult, {
       id: msgId,
-      previewContext: { sheet: ctx.sheet, getComputedValue: ctx.getComputedValue },
+      previewContext: { sheet: ctx.sheet, getComputedValue: ctx.getComputedValue, scope: ctx.scope },
     })
   }
 

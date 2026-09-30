@@ -4,7 +4,7 @@
  * Types for external APIs, chat messages, agent actions, and server communication.
  */
 
-import type { CellRef, CellFormat } from './domain';
+import type { CellRef, CellFormat, Selection } from './domain';
 
 /** Which LLM provider/model produced an assistant reply (when known). */
 export interface ProviderMeta {
@@ -34,12 +34,70 @@ export interface AgentAction {
   tool: string;
   params: Record<string, unknown>;
   description: string;
-  status: 'pending' | 'applied' | 'rejected' | 'preview';
+  status: ActionStatus;
   preview?: {
     changes: CellChange[];
     /** Risks the user should see before clicking Apply (Apply confirms them). */
     warnings?: string[];
   };
+  /**
+   * Locally trusted identity of the workbook/sheet/selection/revision this
+   * proposal was prepared against. Never accepted from model output — a stale
+   * action is rejected rather than applied somewhere else.
+   */
+  scope?: ActionScope;
+  /**
+   * Locally prepared, review-bound patch. Apply commits exactly this, so the
+   * applied changes always match the reviewed preview. Generated in trusted
+   * code only (never from model output).
+   */
+  prepared?: PreparedActionData;
+}
+
+/**
+ * Lifecycle of a pending action.
+ *
+ * `previewing` / `applying` make an in-flight action visibly (and
+ * synchronously) un-actionable, so a double click cannot execute twice.
+ * `stale` means the reviewed scope no longer matches; `failed` means the commit
+ * was attempted and rolled back.
+ */
+export type ActionStatus =
+  | 'pending'
+  | 'previewing'
+  | 'applying'
+  | 'applied'
+  | 'rejected'
+  | 'preview'
+  | 'stale'
+  | 'failed';
+
+/** Workbook/sheet/selection/revision a proposal is bound to. */
+export interface ActionScope {
+  workbookId: string;
+  sheetId: string;
+  revision: number;
+  selection: Selection | null;
+  /** Page-load epoch — invalidates actions restored from persisted history. */
+  epoch: string;
+  /** Cheap content fingerprint of the target sheet. */
+  sheetSignature: string;
+}
+
+/** Cell-value / format / row operations produced by a local dry-run. */
+export interface PreparedScriptPatch {
+  cellUpdates: Record<string, { value: string | number | boolean | null; formula?: string }>;
+  formatUpdates: Record<string, Partial<CellFormat>>;
+  rowDeletions: number[];
+  rowInsertions: number[];
+}
+
+/** Trusted, locally prepared payload for an action. */
+export interface PreparedActionData {
+  kind: 'script';
+  patch: PreparedScriptPatch;
+  /** Fingerprint of the reviewed patch — Apply must commit exactly this. */
+  signature: string;
 }
 
 export interface CellChange {

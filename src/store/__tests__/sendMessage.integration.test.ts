@@ -249,7 +249,9 @@ describe('sendMessage integration — local parser path', () => {
     const storedAction = useStore.getState().messages
       .flatMap((message) => message.actions ?? [])
       .find((candidate) => candidate.id === action?.id)
-    expect(storedAction?.status).toBe('rejected')
+    // The scope guard now rejects this before the row-signature check runs —
+    // either way the row must survive and the user must be told why.
+    expect(['rejected', 'stale']).toContain(storedAction?.status)
     expect(useStore.getState().messages.at(-1)?.content).toMatch(/changed after the preview/i)
   })
 })

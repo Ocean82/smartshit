@@ -50,6 +50,13 @@ export interface AppState extends UIState, UIActions, FileActions, ChatActions {
   workbook: WorkbookData
   engine: SpreadsheetEngine
 
+  /**
+   * Monotonically increasing counter bumped on every workbook mutation.
+   * Pending chat actions capture it so a proposal prepared against one state
+   * can be rejected instead of applied against a different one.
+   */
+  workbookRevision: number
+
   // Sheet / selection / edit
   activeSheetId: string
   selection: Selection | null

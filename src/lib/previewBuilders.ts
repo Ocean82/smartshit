@@ -122,6 +122,35 @@ export function previewApplyFormula(
   }]
 }
 
+/**
+ * Preview a `clear_sheet`: every cell that actually holds content would be
+ * emptied. Without this, `clear_sheet` could be proposed but never applied —
+ * Apply demanded a preview that no builder produced.
+ */
+export function previewClearSheet(sheet: SheetData): CellChange[] {
+  const MAX_PREVIEW_CELLS = 200
+  const ids = Object.keys(sheet.cells).sort()
+  const changes: CellChange[] = []
+  for (const cellId of ids) {
+    const cell = sheet.cells[cellId]
+    if (!cell) continue
+    const hasContent =
+      (cell.value != null && cell.value !== '') ||
+      Boolean(cell.formula) ||
+      Boolean(cell.format) ||
+      Boolean(cell.validation)
+    if (!hasContent) continue
+    changes.push({
+      cell: cellId,
+      oldValue: cell.value ?? null,
+      newValue: null,
+      oldFormula: cell.formula,
+    })
+    if (changes.length >= MAX_PREVIEW_CELLS) break
+  }
+  return changes
+}
+
 /** Attach preview.changes onto an action when the tool supports it. */
 export function buildActionPreview(
   tool: string,
@@ -132,6 +161,12 @@ export function buildActionPreview(
   if (tool === 'set_range' && Array.isArray(params.values) && typeof params.startCell === 'string') {
     const changes = previewSetRange(sheet, params.startCell, params.values as unknown[][])
     return changes.length ? { changes } : undefined
+  }
+  if (tool === 'clear_sheet') {
+    // Always return an object (even for an empty sheet) so the high-impact
+    // preview gate is satisfied by a *locally built* preview rather than by
+    // whatever the model happened to send.
+    return { changes: previewClearSheet(sheet) }
   }
   if (tool === 'modify_column' && typeof params.column === 'string') {
     const changes = previewModifyColumn(
@@ -163,8 +198,11 @@ export function buildActionPreview(
     const resolved = resolveDeleteRow(sheet, params, getComputedValue)
     return resolved?.changes.length ? { changes: resolved.changes } : undefined
   }
-  // Cleaning and others may already carry previewChanges in params
-  if (Array.isArray(params.previewChanges) && params.previewChanges.length > 0) {
+  // `clean_sheet_data` is the one tool whose deterministic skill attaches its
+  // own preview rows in params. Anything else carrying `previewChanges` is
+  // treated as untrusted and ignored — model-authored previews must never
+  // satisfy the review gate (see shared/actionParams.ts).
+  if (tool === 'clean_sheet_data' && Array.isArray(params.previewChanges) && params.previewChanges.length > 0) {
     return { changes: params.previewChanges as CellChange[] }
   }
   return undefined

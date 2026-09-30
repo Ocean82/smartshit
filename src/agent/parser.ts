@@ -17,6 +17,7 @@ import {
 import type { ColumnProfile } from '@/ai/types'
 import { parseAdvancedFormula } from './formulaPatterns'
 import { escapeRegex, letterToCol } from '@/lib'
+import { isNonCommandRequest } from '../../shared/requestSafety'
 
 export interface ParsedToolCall {
   tool: string
@@ -177,14 +178,26 @@ function describeColumnChoices(sheetContext?: SheetContext): string {
  * Returns { understood: false } if no patterns match (should fallback to LLM).
  *
  * This is a thin safety wrapper around parseMessageInternal():
- *  1. Compound multi-clause requests are deferred to the macro-planner stage
+ *  1. Negated / explanatory / hypothetical / quoted utterances are not
+ *     commands. "do not set A1 to 100", "explain how to set A1 to 100" and
+ *     `say "set A1 to 100"` all contain the same command fragments but must
+ *     never mutate — they are handed to the LLM instead.
+ *  2. Compound multi-clause requests are deferred to the macro-planner stage
  *     so each clause is parsed independently instead of half-matched here.
- *  2. Polite question prefixes ("can you…") are stripped; clear non-destructive
+ *  3. Polite question prefixes ("can you…") are stripped; clear non-destructive
  *     commands (e.g. highlight/format) still execute, while destructive tools
  *     remain deferred to the LLM.
- *  3. Trailing-`?` messages that resolve to a destructive tool are vetoed.
+ *  4. Trailing-`?` messages that resolve to a destructive tool are vetoed.
  */
 export function parseMessage(message: string, sheetContext?: SheetContext): ParseResult {
+  // ─── Non-command guard ────────────────────────────────────────────────────
+  // The regexes below match fragments, so an utterance that merely *mentions*
+  // an imperative would otherwise fire it. This is the first gate; the routing
+  // pipeline applies the same policy before any mutating stage runs.
+  if (isNonCommandRequest(message)) {
+    return { calls: [], understood: false }
+  }
+
   // ─── Compound-request guard ─────────────────────────────────────────────────
   // "sort by date and then bold the header" must not be half-parsed into a
   // single sort with a garbage column. Defer to the macro-planner, which

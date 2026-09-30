@@ -2,7 +2,7 @@
  * Chat slice — messages, AI send/apply flow, attachments, templates.
  */
 
-import type { ChatMessage, Skill, WorkbookData, Selection, SheetData } from '@/types'
+import type { ChatMessage, Skill, WorkbookData, Selection, SheetData, ActionStatus } from '@/types'
 import type { AttachedFilePreview } from '@/ai/types'
 import type { SpreadsheetEngine } from '@/engine/spreadsheet'
 import { refToCell } from '@/engine/spreadsheet'
@@ -17,12 +17,15 @@ import {
 import { AI_ANALYSIS_CONFIG } from '@/ai/config'
 import type { ExecutionResult } from '@/agent'
 import { buildScriptPreview } from '@/lib/scriptPreview'
+import { scriptPatchSignature } from '@/lib/scriptPatch'
+import { captureActionScope, validateActionScope } from '@/lib/actionScope'
 import { v4 as uuid } from 'uuid'
 import {
   processAICommand,
   estimateActionChangeCount,
   buildExecutionContext,
   executeAction,
+  applyPreparedScriptAction,
 } from '../aiExecution'
 
 export const DEFAULT_WELCOME_CONTENT =
@@ -45,12 +48,28 @@ export interface ChatState {
   skills: Skill[]
 }
 
+/**
+ * Actions currently being previewed or applied. The status flip happens
+ * synchronously in the store, but an in-flight promise can still be resolved by
+ * a stale click handler, so the id set is checked too. Prevents a double Apply
+ * from executing a script (or any async action) twice.
+ */
+const inFlightActions = new Set<string>()
+
+/**
+ * Identity of the newest chat turn. Incremented by `sendMessage` and by
+ * `clearChat` so abandoned work cannot write into a newer turn.
+ */
+let activeTurnId = 0
+
 /** Dependencies chat actions need from the composed store. */
 export interface ChatStoreAccess extends ChatState {
   workbook: WorkbookData
   engine: SpreadsheetEngine
   selection: Selection | null
   activeSheetId: string
+  /** Monotonic workbook revision used to stale-check pending actions. */
+  workbookRevision: number
   showChat: boolean
   getActiveSheet: () => SheetData
   getComputedValue: (row: number, col: number) => string
@@ -96,11 +115,17 @@ export function createChatActions(
 
     addMessage: (msg) => set((s) => { s.messages.push(msg) }),
 
-    clearChat: () => set((s) => {
-      s.messages = [createWelcomeMessage()]
-      s.chatInput = ''
-      s.isAiProcessing = false
-    }),
+    clearChat: () => {
+      // Abandon any in-flight turn: its late tokens must not reappear and its
+      // completion must not clear the processing flag of a newer turn.
+      activeTurnId += 1
+      inFlightActions.clear()
+      set((s) => {
+        s.messages = [createWelcomeMessage()]
+        s.chatInput = ''
+        s.isAiProcessing = false
+      })
+    },
 
     togglePinMessage: (messageId) => set((s) => {
       const msg = s.messages.find((m) => m.id === messageId)
@@ -115,6 +140,12 @@ export function createChatActions(
     getPinnedMessages: () => get().messages.filter((m) => m.pinned),
 
     sendMessage: () => {
+      // Serialize turns at the store boundary. The Send button is disabled
+      // while processing, but the textarea stays enabled and Enter reaches
+      // this action directly — a second concurrent turn would interleave
+      // placeholders, streamed tokens and the processing flag.
+      if (get().isAiProcessing) return Promise.resolve()
+
       let input = get().chatInput.trim()
       if (!input) return Promise.resolve()
 
@@ -168,6 +199,12 @@ export function createChatActions(
       })
       get().setActivePanel('chat')
 
+      // Turn identity: clearing the chat (or a reload) invalidates this turn so
+      // a late token/finalize from abandoned work cannot resurrect it or reset
+      // the processing flag for a newer turn.
+      const turnId = ++activeTurnId
+      const isCurrentTurn = () => turnId === activeTurnId
+
       return import('@/services/chatService').then(({ processChatMessage }) =>
         processChatMessage(input, streamingMsgId, {
           getWorkbook: () => get().workbook,
@@ -184,24 +221,30 @@ export function createChatActions(
           },
           getSelection: () => get().selection,
           getActiveSheetId: () => get().activeSheetId,
+          getWorkbookRevision: () => get().workbookRevision,
           getAttachedPreview: () => get().attachedFilePreview,
           getMessages: () => get().messages,
           setActiveSheet: (sheetId) => set((s) => { s.activeSheetId = sheetId }),
           pushHistory: (desc) => get().pushHistory(desc),
           buildExecContext: (opts) => buildExecutionContext(get as never, set as never, opts),
           appendToken: (msgId, token) => {
+            if (!isCurrentTurn()) return
             set((s) => {
               const msg = s.messages.find((m) => m.id === msgId)
               if (msg) msg.content += token
             })
           },
           finalizeMessage: (msgId, msg) => {
+            if (!isCurrentTurn()) return
             set((s) => {
               const idx = s.messages.findIndex((m) => m.id === msgId)
               if (idx >= 0) s.messages[idx] = msg
             })
           },
-          setProcessing: (v) => set((s) => { s.isAiProcessing = v }),
+          setProcessing: (v) => {
+            if (!isCurrentTurn()) return
+            set((s) => { s.isAiProcessing = v })
+          },
           processLocalFallback: (fallbackInput) => processAICommand(fallbackInput, get as never),
           skipCapabilityRouter,
           resolvedCapabilityId,
@@ -302,67 +345,110 @@ export function createChatActions(
         'execute_script',
         'style_recipe',
       ])
+
+      const markActionStatus = (id: string, status: ActionStatus) => {
+        set((s) => {
+          for (const m of s.messages) {
+            if (!m.actions) continue
+            const target = m.actions.find((act) => act.id === id)
+            if (target) target.status = status
+          }
+        })
+      }
+
+      const pushAssistant = (content: string) => {
+        set((s) => {
+          s.messages.push({
+            id: uuid(),
+            role: 'assistant',
+            content,
+            timestamp: Date.now(),
+          })
+        })
+      }
+
+      const storedStatus = (id: string): ActionStatus | undefined => {
+        for (const m of get().messages) {
+          const target = m.actions?.find((act) => act.id === id)
+          if (target) return target.status
+        }
+        return undefined
+      }
+
       for (const msg of state.messages) {
         if (!msg.actions) continue
         const action = msg.actions.find((a) => a.id === actionId)
-        if (!action || action.status !== 'pending') continue
+        if (!action) continue
+
+        // ─── Duplicate-Apply guard ───────────────────────────────────────────
+        // An action is actionable only while pending. The status flips to
+        // `previewing`/`applying` synchronously below (before any await), so a
+        // second click — or a click landing while an async run is in flight —
+        // can never execute the same action twice.
+        if (action.status !== 'pending' || inFlightActions.has(actionId)) return
+
+        // ─── Scope binding ──────────────────────────────────────────────────
+        // A proposal is a promise about one workbook/sheet/selection/revision.
+        // If any of those moved since it was prepared, applying it would write
+        // the right patch into the wrong place — so reject it instead.
+        const scopeCheck = validateActionScope(action, captureActionScope(get() as never))
+        if (!scopeCheck.ok) {
+          markActionStatus(actionId, 'stale')
+          recordTelemetry('previewDeniedActions', `${action.tool}:stale`)
+          pushAssistant(
+            `⚠️ I did not apply **${action.tool}** because ${scopeCheck.reason}. ` +
+            'Nothing was changed — ask me again and I will re-check the current data.',
+          )
+          return
+        }
 
         // execute_script is the most powerful (and least predictable) tool —
         // its side effects cannot be statically predicted. Before it can be
         // applied we must run a collect-only dry-run and show the exact
         // changes for approval. This mirrors the real sandbox so the preview
-        // reflects precisely what would be written to the sheet.
-        if (action.tool === 'execute_script' && !action.preview) {
+        // reflects precisely what would be written to the sheet, and the
+        // collected patch is what Apply later commits verbatim.
+        if (action.tool === 'execute_script' && !action.prepared) {
           const code = String(action.params.code ?? '')
           if (!code.trim()) {
             recordTelemetry('previewDeniedActions', action.tool)
-            set((s) => {
-              s.messages.push({
-                id: uuid(),
-                role: 'assistant',
-                content: '⚠️ execute_script requires a non-empty `code` parameter before it can run.',
-                timestamp: Date.now(),
-              })
-            })
+            pushAssistant('⚠️ execute_script requires a non-empty `code` parameter before it can run.')
             return
           }
+          markActionStatus(actionId, 'previewing')
+          inFlightActions.add(actionId)
           buildScriptPreview(code, {
             sheet: get().getActiveSheet(),
             getComputedValue: get().getComputedValue,
           }).then((preview) => {
+            inFlightActions.delete(actionId)
             if (!preview.success) {
-              set((s) => {
-                for (const m of s.messages) {
-                  if (m.actions) {
-                    const a = m.actions.find((act) => act.id === actionId)
-                    if (a) {
-                      a.status = 'rejected'
-                    }
-                  }
-                }
-                s.messages.push({
-                  id: uuid(),
-                  role: 'assistant',
-                  content: `⚠️ The script could not be reviewed: ${preview.error ?? 'unknown error'}`,
-                  timestamp: Date.now(),
-                })
-              })
+              markActionStatus(actionId, 'rejected')
+              pushAssistant(`⚠️ The script could not be reviewed: ${preview.error ?? 'unknown error'}`)
               return
             }
+            // The user may have rejected while the dry-run was in flight — do
+            // not resurrect the action with a fresh preview.
+            if (storedStatus(actionId) !== 'previewing') return
             set((s) => {
               for (const m of s.messages) {
-                if (m.actions) {
-                  const a = m.actions.find((act) => act.id === actionId)
-                  if (a) {
-                    a.preview = { changes: preview.changes ?? [] }
-                    const changeLabel = a.preview.changes.length
-                      ? ` (about ${a.preview.changes.length} changes)`
-                      : ''
-                    a.description = `${a.description.replace(/ \(about \d+ changes\)$/, '')}${changeLabel}`
-                  }
-                }
+                if (!m.actions) continue
+                const target = m.actions.find((act) => act.id === actionId)
+                if (!target) continue
+                const changes = preview.changes ?? []
+                target.preview = { changes }
+                target.prepared = preview.patch
+                  ? { kind: 'script', patch: preview.patch, signature: scriptPatchSignature(preview.patch) }
+                  : undefined
+                const changeLabel = changes.length ? ` (about ${changes.length} changes)` : ''
+                target.description = `${target.description.replace(/ \(about \d+ changes\)$/, '')}${changeLabel}`
+                target.status = 'pending'
               }
             })
+          }).catch((err) => {
+            inFlightActions.delete(actionId)
+            markActionStatus(actionId, 'failed')
+            pushAssistant(`⚠️ The script could not be reviewed: ${err instanceof Error ? err.message : 'unknown error'}`)
           })
           return
         }
@@ -371,51 +457,51 @@ export function createChatActions(
         const requiresPreview = highImpactTools.has(action.tool) && !action.preview
         if (requiresPreview) {
           recordTelemetry('previewDeniedActions', action.tool)
-          set((s) => {
-            s.messages.push({
-              id: uuid(),
-              role: 'assistant',
-              content: `I need to show a preview before applying **${action.tool}** because it can affect many cells. Ask me to regenerate this action with a preview.`,
-              timestamp: Date.now(),
-            })
-          })
+          pushAssistant(`I need to show a preview before applying **${action.tool}** because it can affect many cells. Ask me to regenerate this action with a preview.`)
           return
         }
 
-        const historyLabel = estimatedChanges > 0
-          ? `AI Action: ${action.description} (~${estimatedChanges} changes)`
-          : `AI Action: ${action.description}`
-        if (action.tool !== 'execute_macro') {
+        // Reviewed script patches carry their own history entry (an explicit
+        // before/after diff) and their own rollback, so they must not also go
+        // through pushHistory()'s microtask diff.
+        const ownsHistory = action.prepared?.kind === 'script' || action.tool === 'execute_macro'
+        if (!ownsHistory) {
+          const historyLabel = estimatedChanges > 0
+            ? `AI Action: ${action.description} (~${estimatedChanges} changes)`
+            : `AI Action: ${action.description}`
           get().pushHistory(historyLabel)
         }
 
         const finishAction = (result: ExecutionResult) => {
-          set((s) => {
-            for (const m of s.messages) {
-              if (m.actions) {
-                const a = m.actions.find((act) => act.id === actionId)
-                if (a) a.status = result.success ? 'applied' : 'rejected'
-              }
-            }
-            if (!result.success) {
-              s.messages.push({
-                id: uuid(),
-                role: 'assistant',
-                content: `⚠️ ${result.message}`,
-                timestamp: Date.now(),
-              })
-            }
-          })
+          inFlightActions.delete(actionId)
+          // A Reject that landed mid-flight wins: the badge must not flip back
+          // to Applied when the work it cancelled completes anyway.
+          if (storedStatus(actionId) === 'rejected') {
+            if (!result.success) pushAssistant(`⚠️ ${result.message}`)
+            return
+          }
+          markActionStatus(actionId, result.success ? 'applied' : 'failed')
+          if (!result.success) {
+            pushAssistant(`⚠️ ${result.message}`)
+          }
         }
+
+        markActionStatus(actionId, 'applying')
+        inFlightActions.add(actionId)
 
         // An explicit Apply after a preview was shown is the user's confirmation.
         // apply_formula blocks on range-gap risk unless confirmGaps is set, so an
         // action the user has reviewed and approved must carry that override —
-        // otherwise the reviewed formula is silently rejected on Apply.
+        // otherwise the reviewed formula is silently rejected on Apply. The
+        // warning is rendered in the ActionCard, so the click is informed.
         const confirmedAction = action.tool === 'apply_formula' && action.preview
           ? { ...action, params: { ...action.params, confirmGaps: true } }
           : action
-        const execution = executeAction(confirmedAction, get as never, set as never)
+
+        const execution = action.prepared?.kind === 'script'
+          ? applyPreparedScriptAction(action, get as never, set as never)
+          : executeAction(confirmedAction, get as never, set as never)
+
         if (execution instanceof Promise) {
           void execution
             .then(finishAction)
@@ -427,11 +513,12 @@ export function createChatActions(
         } else {
           finishAction(execution)
         }
-        break
+        return
       }
     },
 
     rejectAction: (actionId) => {
+      inFlightActions.delete(actionId)
       set((s) => {
         for (const msg of s.messages) {
           if (msg.actions) {

@@ -1,6 +1,7 @@
 import type { ActTemplateResult } from './intentTypes.js'
 import { FONT_COLOR_HEX, HIGHLIGHT_BG_HEX } from './colorMaps.js'
 import { extractCellContainsValue } from './formatContains.js'
+import { isNonCommandRequest } from './requestSafety.js'
 import {
   parseFilterPhrase,
   parseFormatAsTablePhrase,
@@ -36,6 +37,26 @@ function matchesAny(input: string, keywords: string[]): boolean {
 
 function extractColorWord(input: string): string | undefined {
   return input.match(/\b(red|blue|green|yellow|orange|purple|pink|black|white|gray|grey)\b/)?.[1]
+}
+
+/**
+ * Does this ask to wipe the sheet?
+ *
+ * The old rule matched the bare word `blank` anywhere, so
+ * "create a formula to fill blank cells with zero" resolved to `clear_sheet`.
+ * Only an explicit wipe of the *sheet* counts now: `blank` must be followed by
+ * an explicit "out"/sheet target, and requests that talk about populating blank
+ * cells are never a clear.
+ */
+function isClearSheetRequest(lower: string): boolean {
+  // "fill/replace/set blank cells …" is a formula or cleaning request.
+  if (/\b(?:fill|populate|replace|substitute|set|put|convert|turn|make|keep|find|count|show)\b[^.?!]{0,48}\bblank\b/.test(lower)) {
+    return false
+  }
+  if (/\bstart\s+over\b/.test(lower)) return true
+  if (/\bblank\s+out\b/.test(lower)) return true
+  if (/\bblank\s+(?:the\s+|this\s+|my\s+|whole\s+|entire\s+)*(?:sheet|tab|page|grid|spreadsheet|workbook)\b/.test(lower)) return true
+  return /\b(?:clear|wipe|erase|reset|empty)\b/.test(lower)
 }
 
 // ─── Formatting sub-resolver ─────────────────────────────────────────────────
@@ -108,7 +129,7 @@ const RULES: TemplateRule[] = [
   // Destructive actions — must match first
   {
     id: 'clear_sheet',
-    match: (l) => matchesAny(l, ['clear', 'reset', 'start over', 'blank']),
+    match: (l) => isClearSheetRequest(l),
     resolve: () => ({
       message: 'This will clear all data on the current sheet. Click Apply to confirm.',
       actions: [{ tool: 'clear_sheet', params: {}, description: 'Clear current sheet' }],
@@ -425,6 +446,11 @@ const RULES: TemplateRule[] = [
 export function resolveActTemplates(message: string): ActTemplateResult {
   const original = message.trim()
   const lower = original.toLowerCase()
+
+  // Non-commands ("do not clear the sheet", "explain how to clear the sheet",
+  // "what if I blank the sheet") contain the same keywords as the rules below
+  // but must never produce a mutation proposal.
+  if (isNonCommandRequest(original)) return { message: '', actions: [] }
 
   for (const rule of RULES) {
     if (rule.match(lower)) return rule.resolve(lower, original)

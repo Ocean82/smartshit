@@ -20,6 +20,7 @@ export interface HistoryState {
   workbook: WorkbookData
   activeSheetId: string
   engine: SpreadsheetEngine
+  workbookRevision: number
 }
 
 export interface HistoryActions {

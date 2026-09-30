@@ -1,5 +1,6 @@
 import { resolveIntent, isWeakResponse } from './intent.js'
 import { ACTION_TOOL_NAMES } from '../../shared/toolRegistry.js'
+import { sanitizeActionParams } from '../../shared/actionParams.js'
 import { stripThinkingTags } from './thinkingTagStripper.js'
 
 interface ParsedAgentJson {
@@ -46,7 +47,9 @@ export function parseAgentResponse(raw: string): {
       .filter((a) => a && typeof a.tool === 'string' && ALLOWED_TOOLS.has(a.tool))
       .map((a) => ({
         tool: a.tool,
-        params: (a.params && typeof a.params === 'object' ? a.params : {}) as Record<string, unknown>,
+        // Strip preview / signature / approval / execution-state fields: those
+        // are produced by trusted local code, never by the model.
+        params: sanitizeActionParams(a.params),
         description: typeof a.description === 'string' && a.description.trim()
           ? a.description.trim()
           : `Run ${a.tool}`,

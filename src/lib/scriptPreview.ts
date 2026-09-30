@@ -12,6 +12,7 @@
 import { runScript } from '@/sandbox'
 import type { SheetData, CellChange, CellFormat } from '@/types'
 import type { SandboxSuccess } from '@/sandbox'
+import { extractScriptPatch, type ScriptPatch } from '@/lib/scriptPatch'
 
 export interface ScriptPreviewContext {
   sheet: SheetData
@@ -22,6 +23,12 @@ export interface ScriptPreviewResult {
   success: boolean
   error?: string
   changes?: CellChange[]
+  /**
+   * The exact mutation set the dry-run collected. Apply commits *this*, so the
+   * applied values always match the reviewed preview — the script is not
+   * re-executed.
+   */
+  patch?: ScriptPatch
 }
 
 /** Read the current raw value of a cell from the sheet. */
@@ -117,5 +124,5 @@ export async function buildScriptPreview(
   }
 
   const changes = mutationsToPreview(result, ctx.sheet)
-  return { success: true, changes }
+  return { success: true, changes, patch: extractScriptPatch(result) }
 }
