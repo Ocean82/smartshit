@@ -3,6 +3,9 @@
  */
 
 import type { ChatMessage, Skill, WorkbookData, Selection, SheetData } from '@/types'
+import { captureActionScope, actionScopeMatches, bindMessageActions } from '@/lib/actionScope'
+import type { SandboxSuccess } from '@/sandbox'
+import { cellToRef } from '@/engine/spreadsheet'
 import type { AttachedFilePreview } from '@/ai/types'
 import type { SpreadsheetEngine } from '@/engine/spreadsheet'
 import { refToCell } from '@/engine/spreadsheet'
@@ -23,10 +26,11 @@ import {
   estimateActionChangeCount,
   buildExecutionContext,
   executeAction,
+  applyPreparedScript,
 } from '../aiExecution'
 
 export const DEFAULT_WELCOME_CONTENT =
-  `Welcome to **smartsh!t** — your budgeting copilot.\n\nStart by importing a spreadsheet, then ask:\n- *"Explain this spreadsheet I just loaded"*\n- *"Where am I overspending?"*\n- *"What should I cut first to save more?"*\n\nI only apply changes after you review and approve them.`
+  `Welcome to **smartsh!t** — your budgeting copilot.\n\nStart by importing a spreadsheet, then ask:\n- *"Explain this spreadsheet I just loaded"*\n- *"Where am I overspending?"*\n- *"What should I cut first to save more?"*\n\nDirect commands such as formatting, sorting, and building templates run immediately and can be undone. Proposed actions show Apply/Reject controls. Script changes are previewed before they are applied.`
 
 export function createWelcomeMessage(): ChatMessage {
   return {
@@ -91,12 +95,34 @@ export function createChatActions(
   set: (fn: (s: ChatStoreAccess) => void) => void,
   get: () => ChatStoreAccess,
 ): ChatActions {
+  // Approval proof stays in memory, outside model params and persisted chat.
+  const preparedScripts = new Map<string, { scope: import('@/types').ActionScope; paramsKey: string; mutations: SandboxSuccess }>()
+  const currentScope = () => {
+    const s = get()
+    return captureActionScope(s.workbook, s.activeSheetId, s.selection, s.additionalSelections)
+  }
+  const findAction = (id: string) => get().messages.flatMap(m => m.actions ?? []).find(a => a.id === id)
+  const setActionStatus = (id: string, status: import('@/types').AgentAction['status']) => set(s => {
+    const action = s.messages.flatMap(m => m.actions ?? []).find(a => a.id === id)
+    if (action) action.status = status
+  })
+  const failAction = (id: string, content: string) => {
+    if (!findAction(id)) return
+    preparedScripts.delete(id)
+    setActionStatus(id, 'rejected')
+    set(s => { s.messages.push({ id: uuid(), role: 'assistant', content: `⚠️ ${content}`, timestamp: Date.now() }) })
+  }
+  const staleMessage = 'The workbook, sheet, or selection changed after the preview/request. Nothing was applied. Please ask again to review the current data.'
   return {
     setChatInput: (val) => set((s) => { s.chatInput = val }),
 
-    addMessage: (msg) => set((s) => { s.messages.push(msg) }),
+    addMessage: (msg) => {
+      const scoped = bindMessageActions(msg, currentScope())
+      set((s) => { s.messages.push(scoped) })
+    },
 
     clearChat: () => set((s) => {
+      preparedScripts.clear()
       s.messages = [createWelcomeMessage()]
       s.chatInput = ''
       s.isAiProcessing = false
@@ -115,6 +141,7 @@ export function createChatActions(
     getPinnedMessages: () => get().messages.filter((m) => m.pinned),
 
     sendMessage: () => {
+      if (get().isAiProcessing) return Promise.resolve()
       let input = get().chatInput.trim()
       if (!input) return Promise.resolve()
 
@@ -183,6 +210,7 @@ export function createChatActions(
             return state.engine.getComputedValue(sheetId, row, col)
           },
           getSelection: () => get().selection,
+          getAdditionalSelections: () => get().additionalSelections,
           getActiveSheetId: () => get().activeSheetId,
           getAttachedPreview: () => get().attachedFilePreview,
           getMessages: () => get().messages,
@@ -292,154 +320,123 @@ export function createChatActions(
     clearAttachedFile: () => set((s) => { s.attachedFilePreview = null }),
 
     applyAction: (actionId) => {
-      const state = get()
-      const highImpactTools = new Set([
-        'clear_sheet',
-        'clean_sheet_data',
-        'delete_row',
-        'modify_column',
-        'apply_formula',
-        'execute_script',
-        'style_recipe',
-      ])
-      for (const msg of state.messages) {
-        if (!msg.actions) continue
-        const action = msg.actions.find((a) => a.id === actionId)
-        if (!action || action.status !== 'pending') continue
+      const action = findAction(actionId)
+      if (!action || action.status !== 'pending') return
+      if (!actionScopeMatches(action.scope, currentScope())) {
+        failAction(actionId, staleMessage)
+        return
+      }
 
-        // execute_script is the most powerful (and least predictable) tool —
-        // its side effects cannot be statically predicted. Before it can be
-        // applied we must run a collect-only dry-run and show the exact
-        // changes for approval. This mirrors the real sandbox so the preview
-        // reflects precisely what would be written to the sheet.
-        if (action.tool === 'execute_script' && !action.preview) {
-          const code = String(action.params.code ?? '')
-          if (!code.trim()) {
-            recordTelemetry('previewDeniedActions', action.tool)
-            set((s) => {
-              s.messages.push({
-                id: uuid(),
-                role: 'assistant',
-                content: '⚠️ execute_script requires a non-empty `code` parameter before it can run.',
-                timestamp: Date.now(),
-              })
-            })
+      if (action.tool === 'execute_script') {
+        const paramsKey = JSON.stringify(action.params)
+        const prepared = preparedScripts.get(actionId)
+        if (prepared) {
+          if (prepared.paramsKey !== paramsKey || !actionScopeMatches(prepared.scope, currentScope())) {
+            failAction(actionId, staleMessage)
             return
           }
-          buildScriptPreview(code, {
-            sheet: get().getActiveSheet(),
-            getComputedValue: get().getComputedValue,
-          }).then((preview) => {
-            if (!preview.success) {
-              set((s) => {
-                for (const m of s.messages) {
-                  if (m.actions) {
-                    const a = m.actions.find((act) => act.id === actionId)
-                    if (a) {
-                      a.status = 'rejected'
-                    }
-                  }
-                }
-                s.messages.push({
-                  id: uuid(),
-                  role: 'assistant',
-                  content: `⚠️ The script could not be reviewed: ${preview.error ?? 'unknown error'}`,
-                  timestamp: Date.now(),
-                })
-              })
-              return
-            }
-            set((s) => {
-              for (const m of s.messages) {
-                if (m.actions) {
-                  const a = m.actions.find((act) => act.id === actionId)
-                  if (a) {
-                    a.preview = { changes: preview.changes ?? [] }
-                    const changeLabel = a.preview.changes.length
-                      ? ` (about ${a.preview.changes.length} changes)`
-                      : ''
-                    a.description = `${a.description.replace(/ \(about \d+ changes\)$/, '')}${changeLabel}`
-                  }
-                }
-              }
-            })
-          })
+          // Lock and consume before committing. A repeated click cannot replay.
+          setActionStatus(actionId, 'applying')
+          preparedScripts.delete(actionId)
+          const result = applyPreparedScript(
+            prepared.mutations,
+            `AI Action: ${action.description}`,
+            get as never,
+            set as never,
+          )
+          if (result.success) setActionStatus(actionId, 'applied')
+          else failAction(actionId, result.message)
           return
         }
 
-        const estimatedChanges = estimateActionChangeCount(action)
-        const requiresPreview = highImpactTools.has(action.tool) && !action.preview
-        if (requiresPreview) {
-          recordTelemetry('previewDeniedActions', action.tool)
-          set((s) => {
-            s.messages.push({
-              id: uuid(),
-              role: 'assistant',
-              content: `I need to show a preview before applying **${action.tool}** because it can affect many cells. Ask me to regenerate this action with a preview.`,
-              timestamp: Date.now(),
-            })
-          })
+        const code = action.params.code
+        if (typeof code !== 'string' || !code.trim()) {
+          failAction(actionId, 'execute_script requires a non-empty string code parameter.')
           return
         }
 
-        const historyLabel = estimatedChanges > 0
-          ? `AI Action: ${action.description} (~${estimatedChanges} changes)`
-          : `AI Action: ${action.description}`
-        if (action.tool !== 'execute_macro') {
-          get().pushHistory(historyLabel)
+        const scope = action.scope
+        const sheet = get().getActiveSheet()
+        const paramsSnapshot = JSON.stringify(action.params)
+        // Snapshot computed results up front; preparation must be deterministic
+        // even if formula-engine initialization yields to the event loop.
+        const values = new Map<string, string>()
+        for (const cellId of Object.keys(sheet.cells)) {
+          const { row, col } = cellToRef(cellId)
+          values.set(cellId, get().getComputedValue(row, col))
         }
+        setActionStatus(actionId, 'previewing')
+        set(s => {
+          const current = s.messages.flatMap(m => m.actions ?? []).find(a => a.id === actionId)
+          if (current) delete current.preview
+        })
 
-        const finishAction = (result: ExecutionResult) => {
-          set((s) => {
-            for (const m of s.messages) {
-              if (m.actions) {
-                const a = m.actions.find((act) => act.id === actionId)
-                if (a) a.status = result.success ? 'applied' : 'rejected'
-              }
-            }
-            if (!result.success) {
-              s.messages.push({
-                id: uuid(),
-                role: 'assistant',
-                content: `⚠️ ${result.message}`,
-                timestamp: Date.now(),
-              })
-            }
+        void buildScriptPreview(code, {
+          sheet,
+          getComputedValue: (row, col) => values.get(refToCell(row, col)) ?? '',
+        }).then(preview => {
+          const latest = findAction(actionId)
+          // Clearing/rejecting while preparation is pending must not resurrect it.
+          if (!latest || latest.status !== 'previewing') return
+          if (!scope || !actionScopeMatches(scope, currentScope()) || JSON.stringify(latest.params) !== paramsSnapshot) {
+            failAction(actionId, staleMessage)
+            return
+          }
+          if (!preview.success || !preview.mutations) {
+            failAction(actionId, `The script could not be reviewed: ${preview.error ?? 'unknown error'}`)
+            return
+          }
+          preparedScripts.set(actionId, { scope, paramsKey: paramsSnapshot, mutations: preview.mutations })
+          set(s => {
+            const current = s.messages.flatMap(m => m.actions ?? []).find(a => a.id === actionId)
+            if (!current) return
+            current.preview = { changes: preview.changes ?? [] }
+            current.status = 'pending'
+            const base = current.description.replace(/ \(about \d+ changes\)$/, '')
+            current.description = base + (current.preview.changes.length ? ` (about ${current.preview.changes.length} changes)` : '')
           })
-        }
+        }).catch(err => {
+          if (findAction(actionId)?.status === 'previewing') {
+            failAction(actionId, err instanceof Error ? err.message : 'The script could not be reviewed.')
+          }
+        })
+        return
+      }
 
-        // An explicit Apply after a preview was shown is the user's confirmation.
-        // apply_formula blocks on range-gap risk unless confirmGaps is set, so an
-        // action the user has reviewed and approved must carry that override —
-        // otherwise the reviewed formula is silently rejected on Apply.
-        const confirmedAction = action.tool === 'apply_formula' && action.preview
-          ? { ...action, params: { ...action.params, confirmGaps: true } }
-          : action
+      const highImpactTools = new Set(['clear_sheet', 'clean_sheet_data', 'delete_row', 'modify_column', 'apply_formula', 'style_recipe'])
+      if (highImpactTools.has(action.tool) && !action.preview) {
+        recordTelemetry('previewDeniedActions', action.tool)
+        failAction(actionId, `I need to show a preview before applying **${action.tool}**. Ask me to regenerate the action.`)
+        return
+      }
+
+      const estimatedChanges = estimateActionChangeCount(action)
+      const historyLabel = `AI Action: ${action.description}${estimatedChanges > 0 ? ` (~${estimatedChanges} changes)` : ''}`
+      setActionStatus(actionId, 'applying')
+      if (action.tool !== 'execute_macro') get().pushHistory(historyLabel)
+      const finishAction = (result: ExecutionResult) => {
+        if (result.success) setActionStatus(actionId, 'applied')
+        else failAction(actionId, result.message)
+      }
+      const confirmedAction = action.tool === 'apply_formula' && action.preview
+        ? { ...action, params: { ...action.params, confirmGaps: true } }
+        : action
+      try {
         const execution = executeAction(confirmedAction, get as never, set as never)
         if (execution instanceof Promise) {
-          void execution
-            .then(finishAction)
-            .catch((err) => finishAction({
-              success: false,
-              message: err instanceof Error ? err.message : 'The action failed unexpectedly.',
-              modified: 0,
-            }))
-        } else {
-          finishAction(execution)
-        }
-        break
+          void execution.then(finishAction).catch(err => failAction(actionId,
+            err instanceof Error ? err.message : 'The action failed unexpectedly.'))
+        } else finishAction(execution)
+      } catch (err) {
+        failAction(actionId, err instanceof Error ? err.message : 'The action failed unexpectedly.')
       }
     },
 
     rejectAction: (actionId) => {
-      set((s) => {
-        for (const msg of s.messages) {
-          if (msg.actions) {
-            const action = msg.actions.find((a) => a.id === actionId)
-            if (action) action.status = 'rejected'
-          }
-        }
-      })
+      preparedScripts.delete(actionId)
+      const action = findAction(actionId)
+      if (!action || (action.status !== 'pending' && action.status !== 'previewing')) return
+      setActionStatus(actionId, 'rejected')
     },
   }
 }

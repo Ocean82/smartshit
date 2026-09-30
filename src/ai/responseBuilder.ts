@@ -1,5 +1,6 @@
 import { v4 as uuid } from 'uuid'
-import type { ChatMessage, CellChange } from '@/types'
+import type { ChatMessage } from '@/types'
+import { stripApprovalParams } from '@shared/actionParams'
 import type { SheetInsights } from '@/ai/sheetInsights'
 import type { SheetProfile, ToolResult } from '@/ai/types'
 import { AI_ANALYSIS_CONFIG } from '@/ai/config'
@@ -155,27 +156,22 @@ export function toolResultToChatMessage(
   },
 ): ChatMessage {
   const actions = (result.actions ?? []).map((action) => {
-    let params = action.params
+    // Any approval/preview metadata returned by a model is untrusted. Rebuild
+    // previews locally and locally resolve row identity/signatures.
+    let params = stripApprovalParams(action.params)
     if (action.tool === 'delete_row' && meta?.previewContext) {
       const resolved = resolveDeleteRow(
         meta.previewContext.sheet,
-        action.params,
+        params,
         meta.previewContext.getComputedValue,
       )
       if (resolved) {
-        params = {
-          ...action.params,
-          row: resolved.rowNumber,
-          expectedRowSignature: resolved.signature,
-        }
+        params = { ...params, row: resolved.rowNumber, expectedRowSignature: resolved.signature }
         delete params.match
       }
     }
 
-    const previewChanges = Array.isArray(params.previewChanges)
-      ? params.previewChanges as CellChange[]
-      : undefined
-    const built = !previewChanges && meta?.previewContext
+    const preview = meta?.previewContext
       ? buildActionPreview(
         action.tool,
         params,
@@ -183,9 +179,6 @@ export function toolResultToChatMessage(
         meta.previewContext.getComputedValue,
       )
       : undefined
-    const preview = previewChanges
-      ? { changes: previewChanges }
-      : built
     const changeLabel = preview?.changes.length ? ` (about ${preview.changes.length} changes)` : ''
 
     return {

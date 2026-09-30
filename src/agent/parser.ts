@@ -3,6 +3,7 @@
  * No LLM needed. Handles 80%+ of common spreadsheet operations instantly.
  */
 
+import { isNonMutatingRequest } from '@shared/requestSafety'
 import { FONT_COLOR_HEX, HIGHLIGHT_BG_HEX } from '../../shared/colorMaps'
 import { extractCellContainsValue } from '../../shared/formatContains'
 import {
@@ -185,6 +186,7 @@ function describeColumnChoices(sheetContext?: SheetContext): string {
  *  3. Trailing-`?` messages that resolve to a destructive tool are vetoed.
  */
 export function parseMessage(message: string, sheetContext?: SheetContext): ParseResult {
+  if (isNonMutatingRequest(message)) return { calls: [], understood: false }
   // ─── Compound-request guard ─────────────────────────────────────────────────
   // "sort by date and then bold the header" must not be half-parsed into a
   // single sort with a garbage column. Defer to the macro-planner, which

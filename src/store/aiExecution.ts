@@ -4,11 +4,12 @@
  */
 
 import type { ChatMessage, AgentAction, Selection } from '@/types'
+import type { SandboxSuccess } from '@/sandbox'
 import { refToCell } from '@/engine/spreadsheet'
 import { setColAt } from '@/lib/colLayout'
 import { setRowAt, getRowHeight } from '@/lib/rowLayout'
 import { autoFitRowHeights, createCanvasTextMeasurer } from '@/lib/rowAutoFit'
-import { executeTool, executeToolAsync, type ExecutionContext, type ExecutionResult } from '@/agent'
+import { executeTool, type ExecutionContext, type ExecutionResult } from '@/agent'
 import { executeTemplateTool, resolveGalleryTemplate } from '@/templates'
 import { MUTATION_TOOL_NAMES } from '@shared/toolRegistry'
 import { executeMacro } from '@/ai/macro/macroExecutor'
@@ -330,22 +331,57 @@ export function executeAction(
     return executeMacroAction(action, get, set);
   }
   if (action.tool === 'execute_script') {
-    // Validate that code is a non-empty string before passing to the sandbox.
-    // params.code originates from LLM output and must not be run unsanitized.
-    const rawCode = action.params.code;
-    if (typeof rawCode !== 'string' || !rawCode.trim()) {
-      return { success: false, message: 'execute_script requires a non-empty string code parameter', modified: 0 };
-    }
-    return executeToolAsync(
-      { tool: action.tool, params: { ...action.params, code: rawCode }, description: action.description },
-      ctx,
-    );
+    return { success: false, message: 'Scripts must be prepared and reviewed before applying their collected changes.', modified: 0 }
   }
   if (MUTATION_TOOL_NAMES.includes(action.tool)) {
     // applyAction already pushed a single undo point for this action
     return executeTool({ tool: action.tool, params: action.params, description: action.description }, ctx);
   }
   return executeTemplateTool(action.tool, action.params, ctx);
+}
+
+/** Commit the exact script writes reviewed by the user. No asynchronous work
+ * or script re-execution is allowed between snapshot, commit and history diff. */
+export function applyPreparedScript(
+  result: SandboxSuccess,
+  description: string,
+  get: StoreGet,
+  set: StoreSet,
+): ExecutionResult {
+  const before = structuredClone(get().workbook)
+  const activeSheetId = get().activeSheetId
+  const undoBefore = structuredClone(get().undoStack)
+  const redoBefore = structuredClone(get().redoStack)
+  const ctx = buildExecutionContext(get, set, { suppressHistory: true })
+  try {
+    if (Object.keys(result.cellUpdates).length) ctx.bulkSetCells(result.cellUpdates)
+    for (const [cell, format] of Object.entries(result.formatUpdates)) ctx.setCellFormat(cell, format)
+    for (const row of result.rowDeletions) ctx.deleteRow(row)
+    for (const row of result.rowInsertions) ctx.insertRow(row)
+
+    const modified = Object.keys(result.cellUpdates).length + Object.keys(result.formatUpdates).length
+      + result.rowDeletions.length + result.rowInsertions.length
+    if (modified > 0) {
+      const patch = diffWorkbooks(before, get().workbook)
+      set((s: AppState) => {
+        s.undoStack.push({ id: newHistoryEntryId(), patch, description })
+        capUndoStack(s.undoStack, {
+          maxEntries: MAX_UNDO_STACK, maxBytes: MAX_UNDO_STACK_BYTES, minEntries: MIN_UNDO_STACK_ENTRIES,
+        })
+        s.redoStack = []
+      })
+    }
+    return { success: true, message: result.summary || 'Applied reviewed script changes', modified }
+  } catch (err) {
+    get().engine.loadWorkbook(before)
+    set((s: AppState) => {
+      s.workbook = before
+      s.activeSheetId = activeSheetId
+      s.undoStack = undoBefore
+      s.redoStack = redoBefore
+    })
+    return { success: false, message: err instanceof Error ? err.message : 'Script changes could not be applied.', modified: 0 }
+  }
 }
 
 /**
@@ -368,6 +404,12 @@ export async function executeMacroAction(
 
   if (steps.length === 0) {
     return { success: false, message: 'execute_macro requires a non-empty steps array', modified: 0 };
+  }
+
+  // The current local macro planner emits dedicated synchronous tools only.
+  // Scripts require their own prepared patch, never a nested approval bypass.
+  if (steps.some(step => step.tool === 'execute_script' || step.tool === 'execute_macro')) {
+    return { success: false, message: 'Review scripts separately; nested scripts/macros cannot run inside a macro.', modified: 0 };
   }
 
   const label = action.description || `Macro: ${steps.length} steps`;

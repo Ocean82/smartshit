@@ -29,12 +29,22 @@ export interface ChatMessage {
   providerMeta?: ProviderMeta;
 }
 
+export interface ActionScope {
+  sessionId: string
+  workbookId: string
+  sheetId: string
+  revision: number
+  selectionKey: string
+}
+
 export interface AgentAction {
   id: string;
   tool: string;
   params: Record<string, unknown>;
   description: string;
-  status: 'pending' | 'applied' | 'rejected' | 'preview';
+  status: 'pending' | 'previewing' | 'applying' | 'applied' | 'rejected' | 'preview';
+  /** Locally assigned. Missing or previous-session scope is not executable. */
+  scope?: ActionScope;
   preview?: {
     changes: CellChange[];
     /** Risks the user should see before clicking Apply (Apply confirms them). */

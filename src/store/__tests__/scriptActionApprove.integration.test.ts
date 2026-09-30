@@ -45,18 +45,13 @@ function injectScriptAction(code: string) {
     description: 'Run script',
     status: 'pending' as const,
   }
-  useStore.setState((s) => ({
-    messages: [
-      ...s.messages,
-      {
-        id: uuid(),
-        role: 'assistant' as const,
-        content: 'Here is a script action.',
-        timestamp: Date.now(),
-        actions: [action],
-      },
-    ],
-  }))
+  useStore.getState().addMessage({
+    id: uuid(),
+    role: 'assistant',
+    content: 'Here is a script action.',
+    timestamp: Date.now(),
+    actions: [action],
+  })
   return action.id
 }
 

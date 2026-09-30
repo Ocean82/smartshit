@@ -1,4 +1,5 @@
 import type { CellChange, SheetData } from '@/types'
+import { previewCleaning } from '@/ai/analysis/cleaning'
 import { cellToRef, refToCell, letterToCol } from '@/engine/spreadsheet'
 import { findLastDataRow } from '@/lib/sheetSort'
 import { resolveDeleteRow } from '@/lib/deleteRowPreview'
@@ -163,9 +164,21 @@ export function buildActionPreview(
     const resolved = resolveDeleteRow(sheet, params, getComputedValue)
     return resolved?.changes.length ? { changes: resolved.changes } : undefined
   }
-  // Cleaning and others may already carry previewChanges in params
-  if (Array.isArray(params.previewChanges) && params.previewChanges.length > 0) {
-    return { changes: params.previewChanges as CellChange[] }
+  if (tool === 'clear_sheet') {
+    const changes = Object.entries(sheet.cells)
+      .filter(([, cell]) => cell.value != null || Boolean(cell.formula))
+      .map(([cell, data]) => ({ cell, oldValue: data.value, oldFormula: data.formula, newValue: null }))
+    return { changes }
   }
+  if (tool === 'clean_sheet_data') {
+    const cleaning = previewCleaning(sheet)
+    return { changes: [
+      ...cleaning.changes,
+      ...cleaning.duplicateRows.map(row => ({
+        cell: `Row ${row + 1}`, oldValue: null, newValue: null, description: 'delete duplicate row',
+      })),
+    ] }
+  }
+  // Unknown tools and model-supplied previews are never trusted here.
   return undefined
 }

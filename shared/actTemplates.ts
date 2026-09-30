@@ -108,7 +108,7 @@ const RULES: TemplateRule[] = [
   // Destructive actions — must match first
   {
     id: 'clear_sheet',
-    match: (l) => matchesAny(l, ['clear', 'reset', 'start over', 'blank']),
+    match: (l) => /^(?:please\s+)?(?:clear|reset)(?:\s+(?:(?:all|the|this|current|my)\s+)*(?:sheet|spreadsheet|data|cells|everything))?[.!]?$/i.test(l.trim()) || /^start over[.!]?$/i.test(l.trim()),
     resolve: () => ({
       message: 'This will clear all data on the current sheet. Click Apply to confirm.',
       actions: [{ tool: 'clear_sheet', params: {}, description: 'Clear current sheet' }],

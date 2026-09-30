@@ -3,6 +3,8 @@
  * Determines how a user message should be handled: explain, advise, act, help, or chat.
  */
 
+import { isNonMutatingRequest } from './requestSafety.js'
+
 export type AgentMode = 'explain' | 'advise' | 'act' | 'help' | 'chat'
 
 const HELP_PHRASES = [
@@ -110,6 +112,9 @@ export function classifyMode(message: string): AgentMode {
   if (!lower) return 'chat'
 
   if (isHelpRequest(lower)) return 'help'
+  if (isNonMutatingRequest(message)) {
+    return matchesAny(lower, ADVISE_SIGNALS) ? 'advise' : 'explain'
+  }
 
   const hasAdvise = matchesAny(lower, ADVISE_SIGNALS)
   const hasExplain = matchesAny(lower, EXPLAIN_SIGNALS)

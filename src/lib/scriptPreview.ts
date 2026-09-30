@@ -22,6 +22,8 @@ export interface ScriptPreviewResult {
   success: boolean
   error?: string
   changes?: CellChange[]
+  /** Exact locally collected writes. Never supplied by the model. */
+  mutations?: SandboxSuccess
 }
 
 /** Read the current raw value of a cell from the sheet. */
@@ -117,5 +119,5 @@ export async function buildScriptPreview(
   }
 
   const changes = mutationsToPreview(result, ctx.sheet)
-  return { success: true, changes }
+  return { success: true, changes, mutations: result }
 }

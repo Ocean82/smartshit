@@ -208,8 +208,10 @@ export function ChatPanel({ isMobileOpen, onCloseMobile, embedded }: ChatPanelPr
     setChatWidth(start.width + (e.clientX - start.x))
   }, [setChatWidth, handleResizeEnd])
 
-  const handleSend = () => {
-    if (!canAsk) return
+  const handleSend = (inputOverride?: string) => {
+    if (!canAsk || isAiProcessing) return
+    if (inputOverride !== undefined) setChatInput(inputOverride)
+    else if (!chatInput.trim()) return
     recordUsage()
     sendMessage()
   }
@@ -220,14 +222,12 @@ export function ChatPanel({ isMobileOpen, onCloseMobile, embedded }: ChatPanelPr
 
   const handleSkillClick = (prompt: string) => {
     if (!canAsk) return
-    setChatInput(prompt)
-    requestAnimationFrame(() => handleSend())
+    handleSend(prompt)
   }
 
   const handleSuggestionClick = (suggestion: string) => {
     if (!canAsk || isAiProcessing) return
-    setChatInput(suggestion)
-    requestAnimationFrame(() => handleSend())
+    handleSend(suggestion)
   }
 
   // ─── Render ─────────────────────────────────────────────────────────────────
@@ -870,6 +870,8 @@ function MessageContent({ content, role, isStreaming }: { content: string; role:
 
 const ACTION_STATUS_STYLES: Record<string, string> = {
   pending: 'border-amber-200 bg-amber-50',
+  previewing: 'border-blue-200 bg-blue-50',
+  applying: 'border-blue-200 bg-blue-50',
   applied: 'border-green-200 bg-green-50',
   rejected: 'border-red-200 bg-red-50',
   preview: 'border-blue-200 bg-blue-50',
@@ -883,6 +885,11 @@ function ActionCard({ action, onApply, onReject }: { action: AgentAction; onAppl
         <div>
           <p className="text-xs font-medium text-gray-700">{action.description}</p>
         </div>
+        {(action.status === 'previewing' || action.status === 'applying') && (
+          <span role="status" className="text-[10px] font-medium text-blue-700">
+            {action.status === 'previewing' ? 'Preparing preview…' : 'Applying…'}
+          </span>
+        )}
         {action.status === 'applied' && (
           <span className="text-[10px] font-medium text-green-600 bg-green-100 px-2 py-0.5 rounded-full">Applied</span>
         )}
@@ -905,9 +912,9 @@ function ActionCard({ action, onApply, onReject }: { action: AgentAction; onAppl
                   </>
                 ) : (
                   <>
-                    {change.oldValue != null && (
+                    {(change.oldFormula || change.oldValue != null) && (
                       <span className="font-mono text-gray-400 line-through truncate">
-                        {String(change.oldValue)}
+                        {String(change.oldFormula ?? change.oldValue)}
                       </span>
                     )}
                     <span className="text-gray-400">→</span>
@@ -927,6 +934,14 @@ function ActionCard({ action, onApply, onReject }: { action: AgentAction; onAppl
         </div>
       )}
 
+      {action.status === 'pending' && action.preview?.warnings?.map((warning, index) => (
+        <p key={index} role="alert" className="mt-2 text-xs text-amber-900 bg-amber-100 rounded-md px-2 py-1">
+          {warning}
+        </p>
+      ))}
+      {action.status === 'previewing' && (
+        <button type="button" className="mt-2 text-xs text-gray-600" onClick={onReject}>Cancel review</button>
+      )}
       {caveat && (
         <p className="mt-2 text-[10px] leading-relaxed text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-2 py-1">
           {caveat}
@@ -940,7 +955,7 @@ function ActionCard({ action, onApply, onReject }: { action: AgentAction; onAppl
             className="flex-1 flex items-center justify-center gap-1 px-3 py-1.5 text-xs font-medium bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
             onClick={onApply}
           >
-            <Check size={12} /> Apply
+            <Check size={12} /> {action.tool === 'execute_script' && !action.preview ? 'Review changes' : 'Apply'}
           </button>
           <button
             type="button"

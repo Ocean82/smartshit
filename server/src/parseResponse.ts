@@ -1,4 +1,5 @@
 import { resolveIntent, isWeakResponse } from './intent.js'
+import { stripApprovalParams } from '../../shared/actionParams.js'
 import { ACTION_TOOL_NAMES } from '../../shared/toolRegistry.js'
 import { stripThinkingTags } from './thinkingTagStripper.js'
 
@@ -46,7 +47,7 @@ export function parseAgentResponse(raw: string): {
       .filter((a) => a && typeof a.tool === 'string' && ALLOWED_TOOLS.has(a.tool))
       .map((a) => ({
         tool: a.tool,
-        params: (a.params && typeof a.params === 'object' ? a.params : {}) as Record<string, unknown>,
+        params: stripApprovalParams(a.params && typeof a.params === 'object' && !Array.isArray(a.params) ? a.params : {}),
         description: typeof a.description === 'string' && a.description.trim()
           ? a.description.trim()
           : `Run ${a.tool}`,

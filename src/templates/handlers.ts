@@ -5,7 +5,7 @@
 import { v4 as uuid } from 'uuid';
 import type { ChartConfig, ChartSnapshot } from '@/types';
 import type { ExecutionContext, ExecutionResult } from '@/agent/executor';
-import { applyCleaningChanges, previewCleaning, type CleaningPreview } from '@/ai/analysis/cleaning';
+import { applyCleaningChanges, previewCleaning } from '@/ai/analysis/cleaning';
 import { defaultChartPosition, getChartOverlayBounds } from '@/lib/chartLayout';
 
 export function createChart(params: Record<string, unknown>, ctx: ExecutionContext): ExecutionResult {
@@ -28,9 +28,10 @@ export function createChart(params: Record<string, unknown>, ctx: ExecutionConte
   return { success: true, message: `Created ${chartType} chart`, modified: 0 };
 }
 
-export function cleanSheetData(params: Record<string, unknown>, ctx: ExecutionContext): ExecutionResult {
-  const preview = params.preview as CleaningPreview | undefined;
-  const cleaning = preview ?? previewCleaning(ctx.getActiveSheet());
+export function cleanSheetData(_params: Record<string, unknown>, ctx: ExecutionContext): ExecutionResult {
+  // Never accept a model-authored cleaning preview at execution time. The
+  // approval UI displays its own locally reconstructed preview.
+  const cleaning = previewCleaning(ctx.getActiveSheet());
   const { cellUpdates, rowsToDelete } = applyCleaningChanges(ctx.getActiveSheet(), cleaning);
   ctx.bulkSetCells(cellUpdates);
   for (const row of rowsToDelete) {

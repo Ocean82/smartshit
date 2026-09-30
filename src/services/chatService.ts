@@ -18,6 +18,8 @@
  */
 
 import type { ChatMessage, ProviderMeta, SheetData, Selection, WorkbookData } from '@/types'
+import { isNonMutatingRequest } from '@shared/requestSafety'
+import { captureActionScope, bindMessageActions } from '@/lib/actionScope'
 import type { ExecutionContext } from '@/agent/executor'
 import { toolResultToChatMessage } from '@/ai/responseBuilder'
 import { buildSpreadsheetContext } from '@/ai/buildContext'
@@ -51,6 +53,8 @@ export interface ChatServiceDeps {
   getSheetComputedValue: (sheetId: string, row: number, col: number) => string
   /** Get the current selection */
   getSelection: () => Selection | null
+  /** All additional multi-range selections (if any). */
+  getAdditionalSelections?: () => Selection[]
   /** Get the active sheet ID */
   getActiveSheetId: () => string
   /** Get the attached file preview */
@@ -132,6 +136,8 @@ export async function processChatMessage(
 
     // ─── Build pipeline context ──────────────────────────────────────────
     const sheet = getActiveSheet()
+    const scope = captureActionScope(getWorkbook(), sheet.id, getSelection(), deps.getAdditionalSelections?.())
+    const readOnly = isNonMutatingRequest(input)
     const messages = getMessages()
     const history = messages
       .filter((m) => m.role === 'user' || m.role === 'assistant')
@@ -160,7 +166,13 @@ export async function processChatMessage(
     }
 
     // ─── Create and run pipeline ─────────────────────────────────────────
-    const router = createPipelineRouter([
+    // Requests that explain, negate, hypothesize, or quote a command must not
+    // pass through local mutation-capable routes. This is defense in depth;
+    // returned model actions are suppressed below as well.
+    const router = createPipelineRouter(readOnly ? [
+      createIntentClassifierStage(),
+      createLLMGatewayStage(),
+    ] : [
       createGoalRouterStage({ buildExecContext, pushHistory }),
       createAgentParserStage({ buildExecContext, pushHistory }),
       createTemplateResolverStage({ buildExecContext, pushHistory }),
@@ -172,6 +184,7 @@ export async function processChatMessage(
     ])
 
     const result = await router.process(pipelineContext)
+    if (readOnly) result.actions = []
 
     // ─── Convert StageResult → ChatMessage ───────────────────────────────
     const finalMsg = stageResultToChatMessage(result, streamingMsgId, {
@@ -182,7 +195,7 @@ export async function processChatMessage(
       insightsSnapshot: buildSpreadsheetContext(getWorkbook(), sheet, getSelection(), getComputedValue).insights as unknown as Record<string, unknown>,
     })
 
-    finalizeMessage(streamingMsgId, finalMsg)
+    finalizeMessage(streamingMsgId, bindMessageActions(finalMsg, scope))
     setProcessing(false)
   } catch (err) {
     // On unexpected error, finalize with a generic error message
@@ -250,7 +263,7 @@ function stageResultToChatMessage(
     }
 
     // If LLM/deterministic failed and mode isn't explain/advise, try local fallback
-    if (!result.success && !isLlmOnlyMode(classifyMode(ctx.input))) {
+    if (!result.success && result.metadata?.source !== 'ai-server-refused' && !isLlmOnlyMode(classifyMode(ctx.input))) {
       return { ...ctx.processLocalFallback(ctx.input), id: msgId }
     }
 
