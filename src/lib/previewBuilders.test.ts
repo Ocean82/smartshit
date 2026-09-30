@@ -70,3 +70,60 @@ describe('previewBuilders', () => {
     ])
   })
 })
+
+describe('previewBuilders — clear_sheet', () => {
+  function sheetWithContent(): SheetData {
+    return {
+      id: 's1',
+      name: 'T',
+      cells: {
+        A1: { value: 'Item' },
+        B1: { value: 10 },
+        B2: { value: null, formula: '=B1*2' },
+        C3: { value: null, format: { bold: true } },
+        D4: { value: null },
+      },
+      columnWidths: {},
+      rowHeights: {},
+      charts: [],
+    }
+  }
+
+  it('previews every cell that actually holds content', () => {
+    const preview = buildActionPreview('clear_sheet', {}, sheetWithContent(), () => '')
+    const cells = preview?.changes.map((c) => c.cell)
+    expect(cells).toEqual(['A1', 'B1', 'B2', 'C3'])
+    expect(preview?.changes.find((c) => c.cell === 'B2')).toMatchObject({
+      oldFormula: '=B1*2',
+      newValue: null,
+    })
+  })
+
+  it('always returns a preview object so the review gate can be satisfied', () => {
+    const empty: SheetData = { id: 's1', name: 'T', cells: {}, columnWidths: {}, rowHeights: {}, charts: [] }
+    const preview = buildActionPreview('clear_sheet', {}, empty, () => '')
+    expect(preview).toEqual({ changes: [] })
+  })
+
+  it('ignores model-supplied previewChanges for other tools', () => {
+    const sheet = sheetWithContent()
+    const preview = buildActionPreview(
+      'clear_sheet',
+      { previewChanges: [{ cell: 'A1', oldValue: 'x', newValue: 'y' }] },
+      sheet,
+      () => '',
+    )
+    expect(preview?.changes.map((c) => c.cell)).toEqual(['A1', 'B1', 'B2', 'C3'])
+  })
+
+  it('still honours the locally produced clean_sheet_data preview', () => {
+    const sheet = sheetWithContent()
+    const preview = buildActionPreview(
+      'clean_sheet_data',
+      { previewChanges: [{ cell: 'A1', oldValue: 'x', newValue: 'y' }] },
+      sheet,
+      () => '',
+    )
+    expect(preview?.changes).toEqual([{ cell: 'A1', oldValue: 'x', newValue: 'y' }])
+  })
+})

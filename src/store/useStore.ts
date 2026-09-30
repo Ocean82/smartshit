@@ -90,6 +90,7 @@ export const useStore = create<AppState>()(
       workbook: seeded.workbook,
       engine,
       activeSheetId: seeded.workbook.activeSheetId,
+      workbookRevision: 0,
       selection: null,
       editingCell: null,
       editValue: '',
@@ -183,3 +184,26 @@ export const useStore = create<AppState>()(
     }
   }),
 )
+
+// ─── Workbook revision tracking ──────────────────────────────────────────────
+// `workbookRevision` is the single monotonic counter that pending chat actions
+// are bound to. It is derived here rather than at each mutation site so that
+// *every* workbook change — a typed cell, a paste, a sort, an undo, an import,
+// an async AI-formula result — invalidates proposals that were prepared against
+// an earlier state. Anything that only touches selection or chat state leaves
+// the reference untouched and therefore does not bump it.
+let lastTrackedWorkbook = useStore.getState().workbook
+let trackingRevision = false
+useStore.subscribe((state) => {
+  if (trackingRevision) return
+  if (state.workbook === lastTrackedWorkbook) return
+  lastTrackedWorkbook = state.workbook
+  trackingRevision = true
+  try {
+    // Plain object update, NOT an immer producer: producing here would deep-freeze
+    // the workbook that other code (and tests) still mutate in place.
+    useStore.setState({ workbookRevision: useStore.getState().workbookRevision + 1 })
+  } finally {
+    trackingRevision = false
+  }
+})

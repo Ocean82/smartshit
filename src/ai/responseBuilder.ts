@@ -1,5 +1,5 @@
 import { v4 as uuid } from 'uuid'
-import type { ChatMessage, CellChange } from '@/types'
+import type { ChatMessage } from '@/types'
 import type { SheetInsights } from '@/ai/sheetInsights'
 import type { SheetProfile, ToolResult } from '@/ai/types'
 import { AI_ANALYSIS_CONFIG } from '@/ai/config'
@@ -147,10 +147,16 @@ export function toolResultToChatMessage(
     id?: string
     toolUsed?: string
     insightsSnapshot?: Record<string, unknown>
-    /** When provided, attach cell-level previews for supported mutate tools */
+    /**
+     * When provided, attach cell-level previews for supported mutate tools.
+     * `scope` binds every emitted action to the workbook/sheet/selection/
+     * revision it was prepared against, so a stale proposal is rejected at
+     * Apply time instead of being applied somewhere else.
+     */
     previewContext?: {
       sheet: import('@/types').SheetData
       getComputedValue: (row: number, col: number) => string
+      scope?: import('@/types').ActionScope
     }
   },
 ): ChatMessage {
@@ -172,10 +178,10 @@ export function toolResultToChatMessage(
       }
     }
 
-    const previewChanges = Array.isArray(params.previewChanges)
-      ? params.previewChanges as CellChange[]
-      : undefined
-    const built = !previewChanges && meta?.previewContext
+    // Previews are trusted output, never input: they are rebuilt here from the
+    // live sheet. Model-supplied `previewChanges` is stripped at the LLM
+    // boundary (shared/actionParams.ts) before it can reach this point.
+    const built = meta?.previewContext
       ? buildActionPreview(
         action.tool,
         params,
@@ -183,9 +189,7 @@ export function toolResultToChatMessage(
         meta.previewContext.getComputedValue,
       )
       : undefined
-    const preview = previewChanges
-      ? { changes: previewChanges }
-      : built
+    const preview = built
     const changeLabel = preview?.changes.length ? ` (about ${preview.changes.length} changes)` : ''
 
     return {
@@ -195,6 +199,7 @@ export function toolResultToChatMessage(
       description: `${action.description}${changeLabel}`,
       status: 'pending' as const,
       preview,
+      scope: meta?.previewContext?.scope,
     }
   })
 

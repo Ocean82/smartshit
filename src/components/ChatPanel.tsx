@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState, useCallback } from 'react'
+import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react'
 import { shouldStickChatToBottom } from '@/lib/chatScroll'
 import type { ServerHealth } from '@/ai/agentClient'
 import { useServerHealth } from '@/ai/useServerHealth'
@@ -11,6 +11,7 @@ import { getFeedbackForMessage, recordChatFeedback, type ChatFeedbackRating } fr
 import { suggestionChipLabel } from '@/ai/capabilities/clarifyChips'
 import { exportChatAsReport } from '@/lib/exportChat'
 import { persistenceCaveat } from '@/lib/styleRecipes'
+import { collectStaleActionIds } from '@/lib/actionScope'
 import { useUsage, UpgradePrompt, useSubscriptionStatus, SubscriptionNotice, startCheckout } from '@/auth'
 import { ApiKeySettings } from './ApiKeySettings'
 import { ChatMarkdown } from './ChatMarkdown'
@@ -34,6 +35,7 @@ import {
   useToggleChat,
   useShowChat,
   useTogglePinMessage,
+  useActionScope,
 } from '@/hooks/useSpreadsheet'
 
 // ─── Constants & Helpers ──────────────────────────────────────────────────────
@@ -234,6 +236,15 @@ export function ChatPanel({ isMobileOpen, onCloseMobile, embedded }: ChatPanelPr
 
   const pinnedMessages = messages.filter((m) => m.pinned)
 
+  // A pending proposal is bound to the workbook/sheet/selection/revision it was
+  // prepared against. Once any of those move it is shown as stale instead of
+  // offering an Apply that would write somewhere else.
+  const actionScope = useActionScope()
+  const staleActionIds = useMemo(
+    () => collectStaleActionIds(messages, actionScope),
+    [messages, actionScope],
+  )
+
   return (
     <div
       className={embedded
@@ -272,6 +283,7 @@ export function ChatPanel({ isMobileOpen, onCloseMobile, embedded }: ChatPanelPr
             onSuggestionClick={handleSuggestionClick}
             onApplyAction={applyAction}
             onRejectAction={rejectAction}
+            staleActionIds={staleActionIds}
           />
         ))}
 
@@ -435,9 +447,11 @@ interface ChatBubbleProps {
   onSuggestionClick: (text: string) => void
   onApplyAction: (id: string) => void
   onRejectAction: (id: string) => void
+  /** Ids of pending actions whose reviewed scope no longer matches. */
+  staleActionIds?: ReadonlySet<string>
 }
 
-function ChatBubble({ msg, isStreaming, feedback, onFeedback, onPin, onSuggestionClick, onApplyAction, onRejectAction }: ChatBubbleProps) {
+function ChatBubble({ msg, isStreaming, feedback, onFeedback, onPin, onSuggestionClick, onApplyAction, onRejectAction, staleActionIds }: ChatBubbleProps) {
   const isAssistant = msg.role === 'assistant'
   const isUser = msg.role === 'user'
 
@@ -483,7 +497,13 @@ function ChatBubble({ msg, isStreaming, feedback, onFeedback, onPin, onSuggestio
         {msg.actions && msg.actions.length > 0 && (
           <div className="mt-2 space-y-2">
             {msg.actions.map((action) => (
-              <ActionCard key={action.id} action={action} onApply={() => onApplyAction(action.id)} onReject={() => onRejectAction(action.id)} />
+              <ActionCard
+                key={action.id}
+                action={action}
+                stale={staleActionIds?.has(action.id) ?? false}
+                onApply={() => onApplyAction(action.id)}
+                onReject={() => onRejectAction(action.id)}
+              />
             ))}
           </div>
         )}
@@ -870,26 +890,75 @@ function MessageContent({ content, role, isStreaming }: { content: string; role:
 
 const ACTION_STATUS_STYLES: Record<string, string> = {
   pending: 'border-amber-200 bg-amber-50',
+  previewing: 'border-amber-200 bg-amber-50',
+  applying: 'border-amber-200 bg-amber-50',
   applied: 'border-green-200 bg-green-50',
   rejected: 'border-red-200 bg-red-50',
+  stale: 'border-gray-200 bg-gray-50',
+  failed: 'border-red-200 bg-red-50',
   preview: 'border-blue-200 bg-blue-50',
 }
 
-function ActionCard({ action, onApply, onReject }: { action: AgentAction; onApply: () => void; onReject: () => void }) {
+const ACTION_STATUS_LABELS: Record<string, string> = {
+  applied: 'Applied',
+  rejected: 'Rejected',
+  stale: 'Stale',
+  failed: 'Failed',
+}
+
+function ActionCard({
+  action,
+  stale = false,
+  onApply,
+  onReject,
+}: {
+  action: AgentAction
+  /** True when the reviewed scope no longer matches the current workbook. */
+  stale?: boolean
+  onApply: () => void
+  onReject: () => void
+}) {
   const caveat = action.status === 'pending' ? persistenceCaveat(action.tool) : null
+  const warnings = action.preview?.warnings ?? []
+  const inFlight = action.status === 'previewing' || action.status === 'applying'
+  const isStale = stale || action.status === 'stale'
+  const actionable = action.status === 'pending' && !isStale
+
   return (
     <div className={`rounded-xl border-2 ${ACTION_STATUS_STYLES[action.status] ?? ''} p-3`}>
       <div className="flex items-start justify-between gap-2">
         <div>
           <p className="text-xs font-medium text-gray-700">{action.description}</p>
         </div>
-        {action.status === 'applied' && (
-          <span className="text-[10px] font-medium text-green-600 bg-green-100 px-2 py-0.5 rounded-full">Applied</span>
+        {ACTION_STATUS_LABELS[action.status] && (
+          <span
+            className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${
+              action.status === 'applied'
+                ? 'text-green-600 bg-green-100'
+                : action.status === 'failed'
+                  ? 'text-red-600 bg-red-100'
+                  : action.status === 'stale'
+                    ? 'text-gray-600 bg-gray-200'
+                    : 'text-red-600 bg-red-100'
+            }`}
+          >
+            {ACTION_STATUS_LABELS[action.status]}
+          </span>
         )}
-        {action.status === 'rejected' && (
-          <span className="text-[10px] font-medium text-red-600 bg-red-100 px-2 py-0.5 rounded-full">Rejected</span>
+        {inFlight && (
+          <span className="flex items-center gap-1 text-[10px] font-medium text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">
+            <Loader2 size={10} className="animate-spin" />
+            {action.status === 'previewing' ? 'Reviewing' : 'Applying'}
+          </span>
         )}
       </div>
+
+      {isStale && (
+        <p className="mt-2 text-[10px] leading-relaxed text-gray-700 bg-gray-100 border border-gray-200 rounded-md px-2 py-1">
+          This proposal was prepared against an earlier state of the sheet. Ask me again and I will
+          re-check the current data before changing anything.
+        </p>
+      )}
 
       {action.preview && action.status === 'pending' && (
         <div className="mt-2 bg-white rounded-lg p-2 border border-gray-200">
@@ -927,24 +996,39 @@ function ActionCard({ action, onApply, onReject }: { action: AgentAction; onAppl
         </div>
       )}
 
+      {/* Formula range-gap risks are part of the review, not a footnote: an
+          Apply click is only an informed confirmation if the warning is shown. */}
+      {warnings.length > 0 && actionable && (
+        <div className="mt-2 text-[10px] leading-relaxed text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-2 py-1">
+          <p className="font-medium mb-0.5">⚠️ Check before applying:</p>
+          <ul className="list-disc pl-4 space-y-0.5">
+            {warnings.map((warning, i) => (
+              <li key={i}>{warning}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {caveat && (
         <p className="mt-2 text-[10px] leading-relaxed text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-2 py-1">
           {caveat}
         </p>
       )}
 
-      {action.status === 'pending' && (
+      {actionable && (
         <div className="flex gap-2 mt-2.5">
           <button
             type="button"
-            className="flex-1 flex items-center justify-center gap-1 px-3 py-1.5 text-xs font-medium bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
+            disabled={inFlight}
+            className="flex-1 flex items-center justify-center gap-1 px-3 py-1.5 text-xs font-medium bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
             onClick={onApply}
           >
             <Check size={12} /> Apply
           </button>
           <button
             type="button"
-            className="flex-1 flex items-center justify-center gap-1 px-3 py-1.5 text-xs font-medium bg-white text-gray-600 rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors"
+            disabled={inFlight}
+            className="flex-1 flex items-center justify-center gap-1 px-3 py-1.5 text-xs font-medium bg-white text-gray-600 rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
             onClick={onReject}
           >
             <XCircle size={12} /> Reject

@@ -8,6 +8,7 @@
 import { useStore } from '@/store/useStore';
 import { useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
+import { captureActionScope } from '@/lib/actionScope';
 
 // ─── Core State ────────────────────────────────────────────────────────────────
 
@@ -270,6 +271,30 @@ export function useScrollPosition() {
 /** Chat message list */
 export function useMessages() {
   return useStore((s) => s.messages);
+}
+
+/**
+ * The scope a pending chat action is currently bound against.
+ *
+ * Recomputed only when one of its inputs changes, so a pending proposal goes
+ * visibly stale the moment the workbook, sheet, selection or revision moves —
+ * instead of silently being applied somewhere else.
+ */
+export function useActionScope() {
+  const workbook = useStore((s) => s.workbook);
+  const activeSheetId = useStore((s) => s.activeSheetId);
+  const revision = useStore((s) => s.workbookRevision);
+  const selection = useStore((s) => s.selection);
+  return useMemo(
+    () =>
+      captureActionScope({
+        workbook,
+        activeSheetId,
+        selection,
+        workbookRevision: revision,
+      }),
+    [workbook, activeSheetId, revision, selection],
+  );
 }
 
 /** Current chat input */
