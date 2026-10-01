@@ -110,28 +110,41 @@ export async function chatWithOllamaStream(
 
   const decoder = new TextDecoder()
   let accumulated = ''
+  // Ollama streams newline-delimited JSON. A network chunk can split a record
+  // mid-JSON, so buffer across reads and only parse up to the last newline;
+  // flush any remainder at EOF.
+  let buffer = ''
   const cleanOnChunk = createThinkingTagFilter(onChunk)
+
+  const consumeLine = (line: string): void => {
+    if (!line) return
+    try {
+      const parsed = JSON.parse(line) as { message?: { content?: string }; done?: boolean }
+      const token = parsed.message?.content ?? ''
+      if (token) {
+        accumulated += token
+        cleanOnChunk(token)
+      }
+    } catch {
+      // Skip malformed lines
+    }
+  }
 
   while (true) {
     const { done, value } = await reader.read()
     if (done) break
 
-    const text = decoder.decode(value, { stream: true })
-    // Ollama streams newline-delimited JSON objects
-    const lines = text.split('\n').filter(Boolean)
+    buffer += decoder.decode(value, { stream: true })
+    const newlineIdx = buffer.lastIndexOf('\n')
+    if (newlineIdx === -1) continue
+    const complete = buffer.slice(0, newlineIdx)
+    buffer = buffer.slice(newlineIdx + 1)
+    for (const line of complete.split('\n')) consumeLine(line)
+  }
 
-    for (const line of lines) {
-      try {
-        const parsed = JSON.parse(line) as { message?: { content?: string }; done?: boolean }
-        const token = parsed.message?.content ?? ''
-        if (token) {
-          accumulated += token
-          cleanOnChunk(token)
-        }
-      } catch {
-        // Skip malformed lines
-      }
-    }
+  buffer += decoder.decode()
+  if (buffer.length > 0) {
+    for (const line of buffer.split('\n')) consumeLine(line)
   }
 
   return stripThinkingTags(accumulated)

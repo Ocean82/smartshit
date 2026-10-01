@@ -56,13 +56,17 @@ export function parseCompleteSseEvent(event: SseEventPayload): ServerChatRespons
   }
 }
 
-/** Pull JSON payloads from `data:` lines in one decoded SSE chunk. */
-export function sseJsonPayloadsFromChunk(text: string): string[] {
-  return text
-    .split('\n')
+/** Pull JSON payloads from `data:` lines out of a set of complete lines. */
+function sseJsonPayloadsFromLines(lines: string[]): string[] {
+  return lines
     .filter((line) => line.startsWith(SSE_DATA_PREFIX))
     .map((line) => line.slice(SSE_DATA_PREFIX.length).trim())
     .filter((jsonStr) => jsonStr.length > 0)
+}
+
+/** Pull JSON payloads from `data:` lines in one decoded SSE chunk. */
+export function sseJsonPayloadsFromChunk(text: string): string[] {
+  return sseJsonPayloadsFromLines(text.split('\n'))
 }
 
 function tokenEffect(event: SseEventPayload): SseEventEffect {
@@ -109,18 +113,34 @@ export async function readAgentSseStream(
 ): Promise<ServerChatResponse | null> {
   const decoder = new TextDecoder()
   let finalResponse: ServerChatResponse | null = null
+  // Network chunks do not align to line boundaries, so a `data:` line can be
+  // split across two reads. Keep the trailing partial line in `buffer` and only
+  // parse lines up to the last newline; flush the remainder at EOF.
+  let buffer = ''
 
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-
-    const payloads = sseJsonPayloadsFromChunk(decoder.decode(value, { stream: true }))
-    for (const jsonStr of payloads) {
+  const consume = (lines: string[]): void => {
+    for (const jsonStr of sseJsonPayloadsFromLines(lines)) {
       const event = parseSseEventPayload(jsonStr)
       if (!event) continue
       finalResponse = applySseEvent(event, onToken, finalResponse)
     }
   }
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+
+    buffer += decoder.decode(value, { stream: true })
+    const newlineIdx = buffer.lastIndexOf('\n')
+    if (newlineIdx === -1) continue
+    const complete = buffer.slice(0, newlineIdx)
+    buffer = buffer.slice(newlineIdx + 1)
+    consume(complete.split('\n'))
+  }
+
+  // Flush any trailing decoder state and a final line with no terminating newline.
+  buffer += decoder.decode()
+  if (buffer.length > 0) consume(buffer.split('\n'))
 
   return finalResponse
 }

@@ -120,4 +120,60 @@ describe('readAgentSseStream', () => {
       meta: undefined,
     })
   })
+
+  // Regression for F6: network chunks don't align to line boundaries. A single
+  // SSE event split mid-JSON across two reads must not be dropped.
+  it('reassembles an event split across chunk boundaries', async () => {
+    const encoder = new TextEncoder()
+    const full =
+      'data: {"type":"token","content":"Hi"}\n' +
+      'data: {"type":"complete","message":"Done","actions":[],"source":"llm"}\n'
+
+    // Split at every byte position; each split must still yield the same result.
+    for (let cut = 1; cut < full.length; cut++) {
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(encoder.encode(full.slice(0, cut)))
+          controller.enqueue(encoder.encode(full.slice(cut)))
+          controller.close()
+        },
+      })
+      const tokens: string[] = []
+      const result = await readAgentSseStream(stream.getReader(), (t) => tokens.push(t))
+      expect(tokens, `split at ${cut}`).toEqual(['Hi'])
+      expect(result?.message, `split at ${cut}`).toBe('Done')
+    }
+  })
+
+  // A final event without a trailing newline must still be flushed at EOF.
+  it('flushes a terminal event that has no trailing newline', async () => {
+    const encoder = new TextEncoder()
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode('data: {"type":"complete","message":"End","actions":[],"source":"llm"}'))
+        controller.close()
+      },
+    })
+    const result = await readAgentSseStream(stream.getReader(), () => {})
+    expect(result?.message).toBe('End')
+  })
+
+  // A multibyte UTF-8 character split across chunks must decode intact.
+  it('reassembles a multibyte character split across chunks', async () => {
+    const encoder = new TextEncoder()
+    const bytes = encoder.encode('data: {"type":"complete","message":"café","actions":[],"source":"llm"}\n')
+    // The é is two bytes; find a split inside it. Cut one byte before the newline
+    // region is fine — instead split the whole payload near the middle at a
+    // guaranteed multibyte boundary by cutting one byte short of the end.
+    const cut = bytes.indexOf(0xc3) + 1 // between the two bytes of é
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(bytes.slice(0, cut))
+        controller.enqueue(bytes.slice(cut))
+        controller.close()
+      },
+    })
+    const result = await readAgentSseStream(stream.getReader(), () => {})
+    expect(result?.message).toBe('café')
+  })
 })
