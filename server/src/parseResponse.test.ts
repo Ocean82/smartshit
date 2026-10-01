@@ -53,3 +53,37 @@ describe('parseAgentResponse — parameter sanitising', () => {
     ])
   })
 })
+
+describe('parseAgentResponse — parameter contract validation (F11)', () => {
+  it('drops an action missing a required param', () => {
+    // set_cell requires both cell and value; this one omits value.
+    const { actions } = parse([
+      { tool: 'set_cell', params: { cell: 'A1' }, description: 'Set a cell' },
+    ])
+    expect(actions).toHaveLength(0)
+  })
+
+  it('drops an action whose param has the wrong type', () => {
+    // modify_column.factor must be a number.
+    const { actions } = parse([
+      { tool: 'modify_column', params: { column: 'B', operation: 'multiply', factor: 'two' }, description: 'x2' },
+    ])
+    expect(actions).toHaveLength(0)
+  })
+
+  it('keeps valid actions alongside dropped invalid ones', () => {
+    const { actions } = parse([
+      { tool: 'set_cell', params: { cell: 'A1', value: '100' }, description: 'ok' },
+      { tool: 'set_cell', params: { value: 'orphan' }, description: 'bad' },
+    ])
+    expect(actions).toHaveLength(1)
+    expect(actions[0].params).toEqual({ cell: 'A1', value: '100' })
+  })
+
+  it('still accepts a valid execute_script (description is not a required param)', () => {
+    const { actions } = parse([
+      { tool: 'execute_script', params: { code: 'setCell("A1", 1)' }, description: 'run it' },
+    ])
+    expect(actions).toHaveLength(1)
+  })
+})

@@ -610,7 +610,11 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
     description: 'Execute a JavaScript script against the spreadsheet. Use for complex operations needing loops, conditions, or multi-step logic that cannot be expressed as a single tool call.',
     params: [
       { name: 'code', type: 'string', description: 'JavaScript code to execute in the sandbox', required: true },
-      { name: 'description', type: 'string', description: 'Human-readable description of what the script does', required: true },
+      // Not required as a param: the action's top-level `description` is the
+      // canonical carrier (parseResponse reads it there), and the sandbox
+      // executor falls back to a default. Marking it required here would reject
+      // every valid execute_script proposal.
+      { name: 'description', type: 'string', description: 'Human-readable description of what the script does' },
     ],
     examples: [
       'fill blanks with the value above',
