@@ -39,10 +39,38 @@ export function buildHostAPI(ctx: HostAPIContext) {
 
   // ─── Read Operations ───────────────────────────────────────────────────────
 
+  /**
+   * Current string value of a cell, honouring writes made earlier in THIS
+   * script run (read-your-writes). A pending `setCell` is reflected on the next
+   * `getCell`, so an imperative loop that fills each blank from the cell above
+   * works as written instead of reading only the original snapshot.
+   *
+   * A pending write with a `formula` resolves to '' here: the formula's result
+   * is not computed until the patch is committed, so there is no computed value
+   * to read mid-run. Scripts needing a derived number should compute it in JS.
+   *
+   * ponytail: value writes only. Row insert/delete are collected and applied at
+   * commit time (see runner), so a read after a structural op still sees the
+   * pre-shift snapshot. Upgrade path: maintain a virtual row-index map if a
+   * read-after-insert/delete pattern is ever needed.
+   */
+  function pendingValue(row: number, col: number): string | null {
+    const pending = mutations.cellUpdates[refToCell(row, col)]
+    if (pending === undefined) return null
+    if (pending.formula) return ''
+    return pending.value === null || pending.value === undefined ? '' : String(pending.value)
+  }
+
+  /** Computed value, preferring an uncommitted write from this run. */
+  function currentValue(row: number, col: number): string {
+    const pending = pendingValue(row, col)
+    return pending !== null ? pending : getComputedValue(row, col)
+  }
+
   function getCell(ref: string): string | number | null {
     const normalized = ref.trim().toUpperCase()
     const parsed = cellToRef(normalized)
-    const computed = getComputedValue(parsed.row, parsed.col)
+    const computed = currentValue(parsed.row, parsed.col)
     if (computed === '' || computed === undefined) return null
     const num = Number(computed)
     if (!isNaN(num) && computed.trim() !== '') return num
@@ -68,7 +96,7 @@ export function buildHostAPI(ctx: HostAPIContext) {
     for (let r = minRow; r <= maxR; r++) {
       const row: (string | number | null)[] = []
       for (let c = minCol; c <= maxC; c++) {
-        const computed = getComputedValue(r, c)
+        const computed = currentValue(r, c)
         if (computed === '' || computed === undefined) {
           row.push(null)
         } else {
@@ -84,7 +112,7 @@ export function buildHostAPI(ctx: HostAPIContext) {
   function getHeaders(): string[] {
     const headers: string[] = []
     for (let c = 0; c <= maxCol; c++) {
-      headers.push(getComputedValue(0, c) || '')
+      headers.push(currentValue(0, c) || '')
     }
     return headers
   }
@@ -109,7 +137,7 @@ export function buildHostAPI(ctx: HostAPIContext) {
 
     const matches: string[] = []
     for (let r = 0; r < rowCount; r++) {
-      const computed = getComputedValue(r, colIdx)
+      const computed = currentValue(r, colIdx)
       const cellRef = refToCell(r, colIdx)
       let match = false
 
@@ -222,7 +250,7 @@ export function buildHostAPI(ctx: HostAPIContext) {
   function resolveHeaderCol(name: string): number | null {
     const lowered = name.toLowerCase()
     for (let c = 0; c <= maxCol; c++) {
-      if (getComputedValue(0, c).toLowerCase() === lowered) return c
+      if (currentValue(0, c).toLowerCase() === lowered) return c
     }
     return null
   }
