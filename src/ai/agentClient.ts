@@ -20,6 +20,13 @@ export interface ServerAgentAction {
   description: string
 }
 
+/** Authoritative free-tier usage reported by the server after a billable turn. */
+export interface UsageSnapshot {
+  used: number
+  remaining: number
+  limit: number
+}
+
 export interface ServerChatResponse {
   message: string
   actions: ServerAgentAction[]
@@ -27,6 +34,8 @@ export interface ServerChatResponse {
   reasoning?: string
   suggestions?: string[]
   meta?: ProviderMeta
+  /** Present only when the server metered this turn (free tier, server LLM used). */
+  usage?: UsageSnapshot
 }
 
 /**

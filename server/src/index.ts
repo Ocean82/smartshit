@@ -217,6 +217,25 @@ function sendSseComplete(
 
 type LlmChatResult = ChatResponseBody & { usedServerProvider: boolean }
 
+/**
+ * Record a billable turn and return the authoritative post-request usage to
+ * echo back to the client, so it reconciles its optimistic local counter.
+ * Returns undefined when the turn wasn't metered (not server LLM, or Pro/BYOK).
+ */
+async function meterAndReportUsage(
+  result: LlmChatResult,
+  userId: string | undefined,
+  isPro: boolean,
+): Promise<ChatResponseBody['usage']> {
+  if (result.source !== 'llm' || !shouldRecordServerUsage({ usedServerProvider: result.usedServerProvider, isPro })) {
+    return undefined
+  }
+  await recordUsage(userId)
+  const after = await checkUsage(userId, isPro)
+  if (after.isPro || after.limit === null || after.remaining === null) return undefined
+  return { used: after.used, remaining: after.remaining, limit: after.limit }
+}
+
 // ─── Decomposed Conditionals (business rule predicates) ──────────────────────
 
 /** Whether the request has valid BYOK (Bring Your Own Key) credentials. */
@@ -800,15 +819,13 @@ app.post('/api/chat/stream', requireAuth, chatRateLimiter, validateBody(chatStre
     clearTimeout(llmTimeout)
     clearTimeout(reqTimeout)
 
-    const { usedServerProvider, ...payload } = result
-
-    // Meter only app-funded inference for free users
-    if (result.source === 'llm' && shouldRecordServerUsage({ usedServerProvider, isPro })) {
-      await recordUsage(userId)
-    }
+    // Meter only app-funded inference for free users; echo the authoritative
+    // post-request count so the client reconciles its optimistic local counter.
+    const usage = await meterAndReportUsage(result, userId, isPro)
+    const { usedServerProvider: _used, ...payload } = result
 
     if (!res.writableEnded) {
-      sendSseComplete(res, { ...payload, suggestions })
+      sendSseComplete(res, { ...payload, suggestions, usage })
     }
   } catch (err) {
     clearTimeout(llmTimeout)
@@ -913,11 +930,9 @@ app.post('/api/chat', requireAuth, chatRateLimiter, validateBody(chatBodySchema)
       stream: false,
       byokOnly: access.byokOnly,
     })
-    const { usedServerProvider, ...payload } = result
-    if (result.source === 'llm' && shouldRecordServerUsage({ usedServerProvider, isPro })) {
-      await recordUsage(userId)
-    }
-    res.json({ ...payload, suggestions })
+    const usage = await meterAndReportUsage(result, userId, isPro)
+    const { usedServerProvider: _used, ...payload } = result
+    res.json({ ...payload, suggestions, usage })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error'
     res.json({

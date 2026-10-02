@@ -115,6 +115,12 @@ export interface ChatResponseBody {
   suggestions?: string[]
   /** Provider metadata — included when the response was produced by an LLM. */
   meta?: { provider: string; model: string }
+  /**
+   * Authoritative free-tier usage after this request, so the client reconciles
+   * its optimistic local counter instead of drifting. Present only for metered
+   * free users; omitted for Pro/BYOK (unlimited) and when metering is unknown.
+   */
+  usage?: { used: number; remaining: number; limit: number }
 }
 
 /**

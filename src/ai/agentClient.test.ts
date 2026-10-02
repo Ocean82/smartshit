@@ -46,6 +46,28 @@ describe('parseCompleteSseEvent', () => {
   it('returns null when message is missing', () => {
     expect(parseCompleteSseEvent({ type: 'complete' })).toBeNull()
   })
+
+  it('retains a valid usage snapshot from the complete event (F16)', () => {
+    const parsed = parseCompleteSseEvent({
+      type: 'complete',
+      message: 'Done',
+      actions: [],
+      source: 'llm',
+      usage: { used: 3, remaining: 2, limit: 5 },
+    })
+    expect(parsed!.usage).toEqual({ used: 3, remaining: 2, limit: 5 })
+  })
+
+  it('ignores a malformed usage snapshot', () => {
+    const parsed = parseCompleteSseEvent({
+      type: 'complete',
+      message: 'Done',
+      actions: [],
+      source: 'llm',
+      usage: { used: 'three' } as never,
+    })
+    expect(parsed!.usage).toBeUndefined()
+  })
 })
 
 describe('serverResponseToChatMessage', () => {
