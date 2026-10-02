@@ -281,32 +281,42 @@ export async function chatWithGroqStream(
 
   const decoder = new TextDecoder()
   let accumulated = ''
+  // A network chunk can split an SSE line mid-JSON, so buffer across reads and
+  // only parse up to the last newline; flush any remainder at EOF.
+  let buffer = ''
   const cleanOnChunk = createThinkingTagFilter(onChunk)
+
+  const consumeLine = (line: string): void => {
+    if (!line.startsWith('data: ')) return
+    const jsonStr = line.slice(6).trim()
+    if (jsonStr === '[DONE]' || !jsonStr) return
+    try {
+      const parsed = JSON.parse(jsonStr) as { choices?: Array<{ delta?: { content?: string } }> }
+      const token = parsed.choices?.[0]?.delta?.content ?? ''
+      if (token) {
+        accumulated += token
+        cleanOnChunk(token)
+      }
+    } catch {
+      // Skip malformed chunks
+    }
+  }
 
   while (true) {
     const { done, value } = await reader.read()
     if (done) break
 
-    const text = decoder.decode(value, { stream: true })
-    const lines = text.split('\n')
+    buffer += decoder.decode(value, { stream: true })
+    const newlineIdx = buffer.lastIndexOf('\n')
+    if (newlineIdx === -1) continue
+    const complete = buffer.slice(0, newlineIdx)
+    buffer = buffer.slice(newlineIdx + 1)
+    for (const line of complete.split('\n')) consumeLine(line)
+  }
 
-    for (const line of lines) {
-      if (!line.startsWith('data: ')) continue
-      const jsonStr = line.slice(6).trim()
-      if (jsonStr === '[DONE]') continue
-      if (!jsonStr) continue
-
-      try {
-        const parsed = JSON.parse(jsonStr) as { choices?: Array<{ delta?: { content?: string } }> }
-        const token = parsed.choices?.[0]?.delta?.content ?? ''
-        if (token) {
-          accumulated += token
-          cleanOnChunk(token)
-        }
-      } catch {
-        // Skip malformed chunks
-      }
-    }
+  buffer += decoder.decode()
+  if (buffer.length > 0) {
+    for (const line of buffer.split('\n')) consumeLine(line)
   }
 
   return stripThinkingTags(accumulated)

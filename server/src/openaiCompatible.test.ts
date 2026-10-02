@@ -95,6 +95,33 @@ describe('openaiCompatible streaming — reasoning models', () => {
     expect(chunks.some((c) => c === '')).toBe(false)
     expect(result).toBe('Hi there')
   })
+
+  // Regression for F6: a provider SSE line split mid-JSON across two network
+  // chunks must be reassembled, not dropped.
+  it('reassembles content when an SSE line is split across network chunks', async () => {
+    const body =
+      `data: ${JSON.stringify({ choices: [{ delta: { content: 'Hello' } }] })}\n` +
+      `data: ${JSON.stringify({ choices: [{ delta: { content: ' world' } }] })}\n` +
+      'data: [DONE]\n'
+    const enc = new TextEncoder()
+
+    // Split at every byte position; every split must yield the full content.
+    for (let cut = 1; cut < body.length; cut++) {
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(enc.encode(body.slice(0, cut)))
+          controller.enqueue(enc.encode(body.slice(cut)))
+          controller.close()
+        },
+      })
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        new Response(stream, { status: 200, headers: { 'Content-Type': 'text/event-stream' } }),
+      )
+      const result = await chatWithOpenAiCompatibleStream(params, messages, () => {})
+      expect(result, `split at ${cut}`).toBe('Hello world')
+      vi.restoreAllMocks()
+    }
+  })
 })
 
 /**

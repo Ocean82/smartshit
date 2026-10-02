@@ -155,40 +155,51 @@ export async function chatWithOpenAiCompatibleStream(
   // thinking-tag filter, which swallows empty strings) so the timeout disarms
   // without leaking reasoning text to the user.
   let pingedForReasoning = false
+  // A network chunk can split an SSE line mid-JSON, so buffer across reads and
+  // only parse up to the last newline; flush any remainder at EOF.
+  let buffer = ''
+
+  const consumeLine = (line: string): void => {
+    if (!line.startsWith('data: ')) return
+    const jsonStr = line.slice(6).trim()
+    if (!jsonStr || jsonStr === '[DONE]') return
+    try {
+      const parsed = JSON.parse(jsonStr) as {
+        choices?: Array<{ delta?: { content?: string; reasoning?: string } }>
+      }
+      const delta = parsed.choices?.[0]?.delta
+      const token = delta?.content ?? ''
+      if (token) {
+        accumulated += token
+        cleanOnChunk(token)
+        return
+      }
+      // Reasoning-only chunk: mark the stream live once so the first-byte
+      // timeout doesn't fire during the reasoning phase.
+      if (!pingedForReasoning && delta?.reasoning) {
+        pingedForReasoning = true
+        onChunk('')
+      }
+    } catch {
+      // Skip malformed chunks
+    }
+  }
 
   while (true) {
     const { done, value } = await reader.read()
     if (done) break
 
-    const text = decoder.decode(value, { stream: true })
-    const lines = text.split('\n')
+    buffer += decoder.decode(value, { stream: true })
+    const newlineIdx = buffer.lastIndexOf('\n')
+    if (newlineIdx === -1) continue
+    const complete = buffer.slice(0, newlineIdx)
+    buffer = buffer.slice(newlineIdx + 1)
+    for (const line of complete.split('\n')) consumeLine(line)
+  }
 
-    for (const line of lines) {
-      if (!line.startsWith('data: ')) continue
-      const jsonStr = line.slice(6).trim()
-      if (!jsonStr || jsonStr === '[DONE]') continue
-
-      try {
-        const parsed = JSON.parse(jsonStr) as {
-          choices?: Array<{ delta?: { content?: string; reasoning?: string } }>
-        }
-        const delta = parsed.choices?.[0]?.delta
-        const token = delta?.content ?? ''
-        if (token) {
-          accumulated += token
-          cleanOnChunk(token)
-          continue
-        }
-        // Reasoning-only chunk: mark the stream live once so the first-byte
-        // timeout doesn't fire during the reasoning phase.
-        if (!pingedForReasoning && delta?.reasoning) {
-          pingedForReasoning = true
-          onChunk('')
-        }
-      } catch {
-        // Skip malformed chunks
-      }
-    }
+  buffer += decoder.decode()
+  if (buffer.length > 0) {
+    for (const line of buffer.split('\n')) consumeLine(line)
   }
 
   return stripThinkingTags(accumulated)
