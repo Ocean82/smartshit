@@ -107,6 +107,52 @@ describe('Sandbox Runner', () => {
       }
     })
 
+    // Regression for F12: consecutive blanks where each read depends on a value
+    // written on the previous iteration. Before read-your-writes, B4's read of
+    // B3 saw the original (blank) snapshot and left B4 unfilled.
+    it('fills consecutive blanks using values written earlier in the same run', async () => {
+      const ctx = buildTestContext({
+        A1: { value: 'Val' },
+        A2: { value: 'X' },
+        A3: { value: null },
+        A4: { value: null },
+        A5: { value: null },
+      })
+
+      const code = `
+        const rows = getRowCount()
+        for (let row = 1; row < rows; row++) {
+          const ref = cellRef(row, 0)
+          if (getCell(ref) === null) {
+            setCell(ref, getCell(cellRef(row - 1, 0)))
+          }
+        }
+      `
+      const result = await runScript(code, ctx)
+
+      expect(result.success).toBe(true)
+      if (result.success) {
+        // Every blank below X must become X — only possible if each getCell
+        // sees the setCell from the prior iteration.
+        expect(result.cellUpdates['A3']).toEqual({ value: 'X' })
+        expect(result.cellUpdates['A4']).toEqual({ value: 'X' })
+        expect(result.cellUpdates['A5']).toEqual({ value: 'X' })
+      }
+    })
+
+    it('getRange reflects writes made earlier in the same run', async () => {
+      const ctx = buildTestContext({ A1: { value: 1 }, B1: { value: 2 } })
+      const code = `
+        setCell("A1", 10)
+        log(JSON.stringify(getRange("A1", "B1")))
+      `
+      const result = await runScript(code, ctx)
+      expect(result.success).toBe(true)
+      if (result.success) {
+        expect(JSON.parse(result.logs[0])).toEqual([[10, 2]])
+      }
+    })
+
     it('can calculate a running total', async () => {
       const ctx = buildTestContext({
         A1: { value: 'Amount' },
