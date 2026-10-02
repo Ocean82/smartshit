@@ -4,7 +4,7 @@ import { loadUserApiKey } from '@/lib/userApiKey'
 import { FREE_DAILY_LIMIT } from '../../shared/config'
 
 const CLERK_PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ?? ''
-const STORAGE_KEY = 'smartsht_usage'
+const STORAGE_PREFIX = 'smartsht_usage'
 
 interface UsageData {
   count: number
@@ -15,9 +15,18 @@ function getToday(): string {
   return new Date().toISOString().slice(0, 10)
 }
 
-function getStoredUsage(): UsageData {
+/**
+ * Per-account storage key. The counter used to be a single shared key, so two
+ * accounts on the same browser inherited each other's count. Keying by account
+ * isolates them; the anonymous bucket keeps the old key for continuity.
+ */
+function storageKey(accountId: string | null): string {
+  return accountId ? `${STORAGE_PREFIX}:${accountId}` : STORAGE_PREFIX
+}
+
+function getStoredUsage(accountId: string | null): UsageData {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
+    const raw = localStorage.getItem(storageKey(accountId))
     if (!raw) return { count: 0, date: getToday() }
     const data = JSON.parse(raw) as UsageData
     if (data.date !== getToday()) {
@@ -29,8 +38,46 @@ function getStoredUsage(): UsageData {
   }
 }
 
-function setStoredUsage(data: UsageData): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
+function setStoredUsage(accountId: string | null, data: UsageData): void {
+  try {
+    localStorage.setItem(storageKey(accountId), JSON.stringify(data))
+  } catch {
+    // Storage unavailable (private mode / quota) — in-memory state still gates.
+  }
+}
+
+// ─── Server reconciliation ────────────────────────────────────────────────────
+// The local counter is an optimistic guess bumped on every send. It drifts when
+// a send doesn't actually bill the server (local fallback, failed request,
+// non-LLM source). The server returns the authoritative count after a billable
+// turn; `syncServerUsage` writes that truth and notifies the live hook so the
+// UI stops drifting. Module-level so the store/SSE path can call it without
+// coupling to React.
+
+const usageSubscribers = new Set<(used: number) => void>()
+
+/**
+ * Reconcile the local counter to the server's authoritative post-request count.
+ *
+ * Called from two places: the per-session `/api/usage` fetch (with a known
+ * account id, to persist directly) and the chat response path via
+ * `reportServerUsage` (which has no account context, so it broadcasts to the
+ * live hook — each subscriber knows and persists under its own account key).
+ */
+export function syncServerUsage(accountId: string | null, used: number): void {
+  if (!Number.isFinite(used) || used < 0) return
+  setStoredUsage(accountId, { count: Math.floor(used), date: getToday() })
+}
+
+/** Broadcast an authoritative count from a context that doesn't know the account. */
+export function reportServerUsage(used: number): void {
+  if (!Number.isFinite(used) || used < 0) return
+  for (const notify of usageSubscribers) notify(Math.floor(used))
+}
+
+function subscribeUsage(fn: (used: number) => void): () => void {
+  usageSubscribers.add(fn)
+  return () => usageSubscribers.delete(fn)
 }
 
 /**
@@ -57,13 +104,14 @@ function getUsageState(
 function createRecordUsage(
   isPro: boolean,
   hasByok: boolean,
+  accountId: string | null,
   setUsage: (usage: UsageData) => void,
 ) {
   return () => {
     if (isPro || hasByok) return
-    const current = getStoredUsage()
+    const current = getStoredUsage(accountId)
     const updated: UsageData = { count: current.count + 1, date: getToday() }
-    setStoredUsage(updated)
+    setStoredUsage(accountId, updated)
     setUsage(updated)
   }
 }
@@ -83,7 +131,10 @@ function useUnlimitedUsage() {
 /** Production hook — checks Clerk session metadata for Pro plan */
 function useTrackedUsage() {
   const { sessionClaims, getToken } = useAuth()
-  const [usage, setUsage] = useState<UsageData>(getStoredUsage)
+  const claims = sessionClaims as Record<string, unknown> | undefined
+  const accountId = typeof claims?.sub === 'string' ? claims.sub : null
+
+  const [usage, setUsage] = useState<UsageData>(() => getStoredUsage(accountId))
   const [serverIsPro, setServerIsPro] = useState<boolean | null>(null)
   const [serverLimit, setServerLimit] = useState<number | null>(null)
   const fetchedRef = useRef(false)
@@ -91,9 +142,20 @@ function useTrackedUsage() {
   // BYOK users bypass limits — they're paying for their own tokens
   const hasByok = Boolean(loadUserApiKey()?.apiKey)
 
+  // Re-read storage when the account changes (login/logout/switch) so one user's
+  // count never shows under another, and reconcile when the server reports the
+  // authoritative post-request count.
+  useEffect(() => {
+    setUsage(getStoredUsage(accountId))
+    return subscribeUsage((used) => {
+      const next: UsageData = { count: used, date: getToday() }
+      setStoredUsage(accountId, next)
+      setUsage(next)
+    })
+  }, [accountId])
+
   // Check plan from Clerk session claims (set via webhook -> Clerk Backend API)
   // Clerk exposes publicMetadata in JWT claims — check multiple possible paths
-  const claims = sessionClaims as Record<string, unknown> | undefined
   const metadata = (
     claims?.metadata ??
     claims?.publicMetadata ??
@@ -123,11 +185,16 @@ function useTrackedUsage() {
           } else {
             setServerIsPro(false)
             if (typeof data?.limit === 'number') setServerLimit(data.limit)
+            // Seed the local counter from the server's authoritative count so the
+            // UI starts from truth rather than whatever this browser last guessed.
+            // reportServerUsage (not syncServerUsage) so the live hook updates its
+            // rendered count too, not just storage.
+            if (typeof data?.used === 'number') reportServerUsage(data.used)
           }
         })
         .catch(() => setServerIsPro(false))
     })
-  }, [getToken, claimsPro, hasByok])
+  }, [getToken, claimsPro, hasByok, accountId])
 
   const isPro = claimsPro || serverIsPro === true || hasByok
   const dailyLimit = serverLimit ?? FREE_DAILY_LIMIT
@@ -136,7 +203,10 @@ function useTrackedUsage() {
   // This prevents the flash of "3 questions remaining" before the server responds.
   const isCheckingPro = !claimsPro && !hasByok && serverIsPro === null
   const { canAsk, remaining } = getUsageState(isPro, hasByok, isCheckingPro, usage, dailyLimit)
-  const recordUsage = useCallback(() => createRecordUsage(isPro, hasByok, setUsage)(), [isPro, hasByok, setUsage])
+  const recordUsage = useCallback(
+    () => createRecordUsage(isPro, hasByok, accountId, setUsage)(),
+    [isPro, hasByok, accountId, setUsage],
+  )
 
   return {
     isPro,

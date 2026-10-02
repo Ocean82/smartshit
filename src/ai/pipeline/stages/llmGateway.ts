@@ -18,6 +18,7 @@
 
 import type { PipelineContext, PipelineStage, StageResult } from '../types'
 import { chatWithAgentServerStream, isAgentServerError } from '@/ai/agentClient'
+import { reportServerUsage } from '@/auth/useUsage'
 import { buildAdaptiveContext, getClientContextBudget } from '@/ai/adaptiveContext'
 import { formatInsights, mergeToolResultContent } from '@/ai/responseBuilder'
 import { isLlmOnlyMode } from '@/ai/mode'
@@ -95,6 +96,14 @@ export function createLLMGatewayStage(): PipelineStage {
       }
 
       if (serverResult) {
+        // Reconcile the client's optimistic usage counter to the server's
+        // authoritative post-request count. Present only when the server
+        // actually metered this turn (free tier, server LLM used) — so local
+        // fallbacks and failed turns no longer leave the local count drifting.
+        if (serverResult.usage) {
+          reportServerUsage(serverResult.usage.used)
+        }
+
         // Successful LLM response
         const contextualSuggestions = getContextualSuggestions({
           insights: sheetContext.insights,

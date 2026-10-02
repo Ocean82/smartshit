@@ -1,5 +1,5 @@
 import type { ProviderMeta } from '@/types'
-import type { ServerChatResponse, ServerAgentAction } from '@/ai/agentClient'
+import type { ServerChatResponse, ServerAgentAction, UsageSnapshot } from '@/ai/agentClient'
 
 export interface SseEventPayload {
   type?: string
@@ -10,6 +10,7 @@ export interface SseEventPayload {
   reasoning?: string
   suggestions?: string[]
   meta?: ProviderMeta
+  usage?: UsageSnapshot
 }
 
 type SseEventEffect =
@@ -40,6 +41,16 @@ function isValidProviderMeta(value: unknown): value is ProviderMeta {
   )
 }
 
+function isValidUsage(value: unknown): value is import('@/ai/agentClient').UsageSnapshot {
+  if (typeof value !== 'object' || value === null) return false
+  const u = value as Record<string, unknown>
+  return (
+    typeof u.used === 'number' && Number.isFinite(u.used) &&
+    typeof u.remaining === 'number' && Number.isFinite(u.remaining) &&
+    typeof u.limit === 'number' && Number.isFinite(u.limit)
+  )
+}
+
 /** Map a pre-parsed SSE payload into a ServerChatResponse when type=complete. */
 export function parseCompleteSseEvent(event: SseEventPayload): ServerChatResponse | null {
   if (event.type !== 'complete' || typeof event.message !== 'string') return null
@@ -53,6 +64,7 @@ export function parseCompleteSseEvent(event: SseEventPayload): ServerChatRespons
     reasoning: event.reasoning,
     suggestions: event.suggestions,
     meta: isValidProviderMeta(event.meta) ? event.meta : undefined,
+    usage: isValidUsage(event.usage) ? event.usage : undefined,
   }
 }
 
