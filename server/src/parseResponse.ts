@@ -1,6 +1,7 @@
 import { resolveIntent, isWeakResponse } from './intent.js'
 import { ACTION_TOOL_NAMES } from '../../shared/toolRegistry.js'
 import { sanitizeActionParams } from '../../shared/actionParams.js'
+import { validateToolParams } from '../../shared/validateToolParams.js'
 import { stripThinkingTags } from './thinkingTagStripper.js'
 
 interface ParsedAgentJson {
@@ -54,6 +55,11 @@ export function parseAgentResponse(raw: string): {
           ? a.description.trim()
           : `Run ${a.tool}`,
       }))
+      // Drop actions whose params don't satisfy the tool's declared contract
+      // (missing required param, or wrong value type). An invalid proposal must
+      // not reach the user as something to approve — it would only fail later
+      // inside a handler, after the preview implied it was sound.
+      .filter((a) => validateToolParams(a.tool, a.params).valid)
 
     return { message, actions }
   } catch {
