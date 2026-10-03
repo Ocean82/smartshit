@@ -32,6 +32,8 @@ export interface SpreadsheetContextPayload {
   dimensions: SheetDimensions
   headers: string[]
   sampleRows: string[][]
+  /** Real 0-based sheet row index for each retained sample row (parallel to sampleRows) */
+  sampleRowIndices?: number[]
   sampleRowsTruncated: boolean
   selectionSnapshot: Record<string, string | number | null>
   insights: SheetInsights
@@ -78,8 +80,9 @@ function buildSampleRows(
   maxRow: number,
   maxCol: number,
   getComputedValue: (row: number, col: number) => string,
-): string[][] {
+): { rows: string[][]; indices: number[] } {
   const rows: string[][] = []
+  const indices: number[] = []
   const limit = Math.min(maxRow + 1, MAX_SAMPLE_ROWS)
 
   for (let r = 0; r < limit; r++) {
@@ -88,10 +91,13 @@ function buildSampleRows(
       const val = cellDisplayValue(sheet, r, c, getComputedValue)
       rowValues.push(val === null ? '' : String(val))
     }
-    if (rowValues.some((v) => v !== '')) rows.push(rowValues)
+    if (rowValues.some((v) => v !== '')) {
+      rows.push(rowValues)
+      indices.push(r)
+    }
   }
 
-  return rows
+  return { rows, indices }
 }
 
 /** Cheap per-sheet overview so the model knows about other tabs. */
@@ -145,7 +151,7 @@ export function buildSpreadsheetContext(
   const { maxRow, maxCol } = getSheetBounds(sheet)
   const insights = computeSheetInsights(sheet, getComputedValue)
   const profile = buildSheetProfile(sheet, getComputedValue)
-  const sampleRows = buildSampleRows(sheet, maxRow, maxCol, getComputedValue)
+  const { rows: sampleRows, indices: sampleRowIndices } = buildSampleRows(sheet, maxRow, maxCol, getComputedValue)
   const sampleRowsTruncated = maxRow + 1 > MAX_SAMPLE_ROWS
   const sheetSummaries = workbook.sheets.map((s) => summarizeSheet(s, s.id === sheet.id))
 
@@ -172,6 +178,7 @@ export function buildSpreadsheetContext(
     },
     headers: insights.headers,
     sampleRows,
+    sampleRowIndices,
     sampleRowsTruncated,
     selectionSnapshot,
     insights,

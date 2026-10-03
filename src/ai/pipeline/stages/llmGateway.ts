@@ -17,6 +17,7 @@
  */
 
 import type { PipelineContext, PipelineStage, StageResult } from '../types'
+import { resolveAnalysisTarget } from '@/ai/analysisTarget'
 import { chatWithAgentServerStream, isAgentServerError } from '@/ai/agentClient'
 import { reportServerUsage } from '@/auth/useUsage'
 import { buildAdaptiveContext, getClientContextBudget } from '@/ai/adaptiveContext'
@@ -33,6 +34,17 @@ export function createLLMGatewayStage(): PipelineStage {
       const mode = context.mode ?? 'chat'
       const onToken = context.onToken ?? (() => {})
 
+      // Resolve the analysis target the same way the deterministic path does,
+      // so an attached file/preview is analyzed instead of the active sheet.
+      const target = resolveAnalysisTarget({
+        workbook: context.workbook,
+        sheet: context.sheet,
+        selection: context.selection,
+        getComputedValue: context.getComputedValue,
+        getSheetComputedValue: context.getSheetComputedValue,
+        attachedPreview: context.attachedPreview,
+      })
+
       // Build spreadsheet context payload for the server
       // Use adaptive context for multi-sheet workbooks (budget-aware compression)
       const isCloudAvailable = true // LLM gateway implies cloud/Ollama is available
@@ -40,10 +52,11 @@ export function createLLMGatewayStage(): PipelineStage {
 
       const sheetContext = buildAdaptiveContext({
         tokenBudget,
-        workbook: context.workbook,
-        activeSheet: context.sheet,
+        workbook: target.workbook,
+        activeSheet: target.sheet,
         selection: context.selection,
-        getComputedValue: context.getComputedValue,
+        getComputedValue: target.getComputedValue,
+        getSheetComputedValue: target.getSheetComputedValue,
       })
 
       // Build deterministic summary for LLM context enrichment
@@ -56,7 +69,7 @@ export function createLLMGatewayStage(): PipelineStage {
       let auditBlock = ''
       if (isLlmOnlyMode(mode) || mode === 'advise') {
         try {
-          const auditResult = runAudit(context.sheet, context.getComputedValue)
+          const auditResult = runAudit(target.sheet, target.getComputedValue)
           auditBlock = formatAuditForContext(auditResult)
         } catch {
           // Audit failure is non-fatal — continue without it
@@ -109,8 +122,8 @@ export function createLLMGatewayStage(): PipelineStage {
           insights: sheetContext.insights,
           profile: sheetContext.profile,
           lastUserMessage: context.message,
-          hasMultipleSheets: context.workbook.sheets.length > 1,
-          sheetNames: context.workbook.sheets.map((s) => s.name),
+          hasMultipleSheets: target.workbook.sheets.length > 1,
+          sheetNames: target.workbook.sheets.map((s) => s.name),
         })
 
         return {

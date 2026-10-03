@@ -74,6 +74,8 @@ export interface SpreadsheetContextInput {
   dimensions?: SheetDimensionsInput
   headers?: string[]
   sampleRows?: string[][]
+  /** Real 0-based sheet row index for each retained sample row (parallel to sampleRows) */
+  sampleRowIndices?: number[]
   sampleRowsTruncated?: boolean
   selectionSnapshot?: Record<string, string | number | null>
   insights?: SheetInsightsInput
@@ -286,7 +288,7 @@ function formatContextBlock(context?: SpreadsheetContextInput, maxTokens?: numbe
   if (context.sampleRows?.length) {
     const preview = context.sampleRows
       .slice(0, 50)
-      .map((row, i) => `  Row ${i + 1}: ${(row ?? []).join(' | ')}`)
+      .map((row, i) => `  Row ${(context.sampleRowIndices?.[i] ?? i) + 1}: ${(row ?? []).join(' | ')}`)
       .join('\n')
     let sampleText = `Data preview:\n${preview}`
     if (context.sampleRowsTruncated) {

@@ -61,6 +61,7 @@ function makeContext(overrides: Partial<PipelineContext> = {}): PipelineContext 
     sheet: { cells: {} } as unknown as PipelineContext['sheet'],
     selection: null,
     getComputedValue: () => '',
+    getSheetComputedValue: () => '',
     history: [{ role: 'user', content: 'hello' }],
     onToken: vi.fn(),
     mode: 'chat',

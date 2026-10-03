@@ -25,6 +25,8 @@ export interface AdaptiveContextOptions {
   activeSheet: SheetData
   selection: Selection | null
   getComputedValue: (row: number, col: number) => string
+  /** Sheet-ID-scoped accessor so referenced (non-active) sheets read their own computed values */
+  getSheetComputedValue: (sheetId: string, row: number, col: number) => string
 }
 
 interface SheetPriority {
@@ -103,7 +105,7 @@ function estimateTokens(text: string): number {
 export function buildAdaptiveContext(
   options: AdaptiveContextOptions,
 ): SpreadsheetContextPayload {
-  const { tokenBudget, workbook, activeSheet, selection, getComputedValue } = options
+  const { tokenBudget, workbook, activeSheet, selection, getComputedValue, getSheetComputedValue } = options
 
   // For single-sheet workbooks or generous budgets, use standard builder
   if (workbook.sheets.length <= 1 || tokenBudget > 12_000) {
@@ -146,7 +148,7 @@ export function buildAdaptiveContext(
     const remainingBudget = tokenBudget - baseEstimate
     const enrichments = buildReferencedSheetEncodings(
       priorities.filter((p) => p.priority === 'referenced'),
-      getComputedValue,
+      getSheetComputedValue,
       remainingBudget,
     )
 
@@ -184,7 +186,7 @@ export function buildAdaptiveContext(
  */
 function buildReferencedSheetEncodings(
   referenced: SheetPriority[],
-  getComputedValue: (row: number, col: number) => string,
+  getSheetComputedValue: (sheetId: string, row: number, col: number) => string,
   tokenBudget: number,
 ): string | null {
   if (referenced.length === 0 || tokenBudget < 200) return null
@@ -195,7 +197,7 @@ function buildReferencedSheetEncodings(
   for (const { sheet } of referenced) {
     if (totalUsed >= tokenBudget) break
 
-    const compressed = compressSheet(sheet, getComputedValue, {
+    const compressed = compressSheet(sheet, (row, col) => getSheetComputedValue(sheet.id, row, col), {
       mode: 'structural',
       maxRows: 200,
       maxCols: 20,
