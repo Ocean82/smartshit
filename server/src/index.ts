@@ -43,7 +43,12 @@ import {
   recordSuccess,
   recordFailure,
 } from './providers.js'
-import { allocateBudget, type ProviderName as BudgetProvider } from './tokenBudget.js'
+import {
+  allocateBudget,
+  trimMessagesForProvider,
+  trimMessagesToByteCeiling,
+  type ProviderName as BudgetProvider,
+} from './tokenBudget.js'
 
 import { checkUsage, getUsageStats, reserveUsage, releaseUsage } from './usage.js'
 import { decideAiAccess, shouldRecordServerUsage } from './aiAccess.js'
@@ -309,6 +314,13 @@ async function callByokProvider(
   // unrecognised field can fail the request outright.
   const byokOpts = buildByokOptions(llmOnly)
 
+  // F9: a BYOK endpoint has no declared provider token window, so the token
+  // guard can't apply — but the serialized-byte ceiling is a universal
+  // transport bound and is exactly the gap the review flagged for BYOK ("sends
+  // the same messages with no provider-specific window at all"). Trim once and
+  // reuse the trimmed body for both the initial send and the no-jsonMode retry.
+  const outbound = trimMessagesToByteCeiling(messages, config.maxProviderBodyBytes)
+
   // Run the adapter, retrying ONCE without jsonMode if the endpoint rejects
   // response_format. Any other failure propagates (the caller falls through to
   // server providers when not byokOnly). Terminal-reason gating is intentionally
@@ -316,10 +328,10 @@ async function callByokProvider(
   // hard-failing on that would break JSON-mode-incapable keys. (F11a/F11d)
   const run = async (opts: { jsonMode: boolean; maxTokens: number }): Promise<string> => {
     if (shouldStream(stream, onChunk, signal)) {
-      const completion = await chatWithOpenAiCompatibleStream(byokParams, messages, onChunk!, signal!, opts)
+      const completion = await chatWithOpenAiCompatibleStream(byokParams, outbound, onChunk!, signal!, opts)
       return completion.text
     }
-    const completion = await chatWithOpenAiCompatible(byokParams, messages, opts)
+    const completion = await chatWithOpenAiCompatible(byokParams, outbound, opts)
     return completion.text
   }
 
@@ -333,7 +345,7 @@ async function callByokProvider(
       // client, so the retry is always non-streaming (its text is still parsed
       // for actions downstream; the first attempt streamed nothing usable).
       console.warn('[llm] BYOK endpoint rejected response_format; retrying without jsonMode')
-      const completion = await chatWithOpenAiCompatible(byokParams, messages, { ...byokOpts, jsonMode: false })
+      const completion = await chatWithOpenAiCompatible(byokParams, outbound, { ...byokOpts, jsonMode: false })
       text = completion.text
     } else {
       throw err
@@ -377,15 +389,24 @@ async function callServerProviders(
       continue
     }
 
+    // F9: the up-front assembly was sized for the FIRST configured provider's
+    // window; a failover to a smaller window (e.g. 8K Ollama) must not receive
+    // an oversized payload. Re-budget for THIS candidate before sending: trim
+    // to its token window, then enforce the serialized-byte ceiling. Strictly
+    // additive — the F11 finish-reason/empty-completion gating below is
+    // untouched.
+    let outbound = trimMessagesForProvider(provider, messages)
+    outbound = trimMessagesToByteCeiling(outbound, config.maxProviderBodyBytes)
+
     try {
       let text: string
       let finishReason: string | null
       if (shouldStream(stream, onChunk, signal)) {
-        const response = await callProviderStream(provider, messages, onChunk!, signal!, providerOpts)
+        const response = await callProviderStream(provider, outbound, onChunk!, signal!, providerOpts)
         text = response.text
         finishReason = response.finishReason
       } else {
-        const response = await callProvider(provider, messages, providerOpts)
+        const response = await callProvider(provider, outbound, providerOpts)
         text = response.text
         finishReason = response.finishReason
       }

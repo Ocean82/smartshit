@@ -198,6 +198,15 @@ export const config = {
   /** Max request body for workbook save/update routes (full sheet JSON). */
   workbookBodyLimit: process.env.WORKBOOK_BODY_LIMIT ?? '25mb',
 
+  /**
+   * Serialized-byte ceiling for an outbound provider request body (the chat
+   * `messages` payload we assemble). Sits below the 1 MB inbound express.json
+   * cap, leaving headroom for the provider-side envelope fields the adapters
+   * add around `messages`. On exceed, the F9 byte guard trims lowest-priority
+   * context then history before sending. Env-tunable; conservative default.
+   */
+  maxProviderBodyBytes: Number(process.env.MAX_PROVIDER_BODY_BYTES ?? 900_000),
+
   // Cloud Storage (RDS + S3)
   databaseUrl: process.env.DATABASE_URL ?? '',
   s3Bucket: process.env.S3_BUCKET ?? '',

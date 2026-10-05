@@ -200,3 +200,137 @@ export function maxHistoryForBudget(
 
   return count
 }
+
+// ─── Per-send trim guards (F9) ───────────────────────────────────────────────
+
+export type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string }
+
+/**
+ * Split an assembled messages array into the three regions the F9 guards trim
+ * against, matching how `runLlmChat` assembles them:
+ *   [ systemContext, ...middle (few-shot + summary + history), finalUser ]
+ *
+ * - `systemContext` is the single leading system message carrying the
+ *   spreadsheet context — the lowest-priority payload we shrink/drop first.
+ * - `middle` is everything between it and the final user message (few-shot
+ *   examples, the optional summary system line, and history turns). We drop
+ *   from the FRONT of this region (oldest first), which preserves the most
+ *   recent turns before touching the final user message.
+ * - `finalUser` is the current user message and is NEVER trimmed.
+ *
+ * On a degenerate array (no leading system message, or a single message) the
+ * regions collapse sensibly so the trim loops simply stop early.
+ */
+function splitRegions(messages: ChatMessage[]): {
+  leadingSystem: ChatMessage | null
+  middle: ChatMessage[]
+  finalUser: ChatMessage | null
+} {
+  if (messages.length === 0) return { leadingSystem: null, middle: [], finalUser: null }
+
+  const hasLeadingSystem = messages[0].role === 'system'
+  const leadingSystem = hasLeadingSystem ? messages[0] : null
+  const finalUser = messages[messages.length - 1]
+  const start = hasLeadingSystem ? 1 : 0
+  const end = messages.length - 1 // exclusive — the final user message
+  const middle = start <= end ? messages.slice(start, end) : []
+  return { leadingSystem, middle, finalUser }
+}
+
+/** Reassemble a messages array from the three regions, dropping empties. */
+function joinRegions(
+  leadingSystem: ChatMessage | null,
+  middle: ChatMessage[],
+  finalUser: ChatMessage | null,
+): ChatMessage[] {
+  const out: ChatMessage[] = []
+  if (leadingSystem) out.push(leadingSystem)
+  out.push(...middle)
+  if (finalUser) out.push(finalUser)
+  return out
+}
+
+/**
+ * Perform ONE trim step toward a smaller payload, in priority order:
+ *   1. Drop the leading system context message (lowest-priority payload).
+ *   2. Otherwise drop the oldest message in the middle region (oldest history
+ *      / few-shot turn first).
+ * The final user message is never touched. Returns the new regions and whether
+ * anything could be trimmed (false = nothing left but scaffold + user message).
+ */
+function trimOneStep(
+  leadingSystem: ChatMessage | null,
+  middle: ChatMessage[],
+): { leadingSystem: ChatMessage | null; middle: ChatMessage[]; trimmed: boolean } {
+  if (leadingSystem) {
+    // Drop the whole context message. (The system scaffolding is already
+    // context-capped up-front via maxContextTokens; here we remove the
+    // lowest-priority payload entirely rather than mangle it mid-string.)
+    return { leadingSystem: null, middle, trimmed: true }
+  }
+  if (middle.length > 0) {
+    return { leadingSystem: null, middle: middle.slice(1), trimmed: true }
+  }
+  return { leadingSystem: null, middle, trimmed: false }
+}
+
+/**
+ * F9(1) — token guard. Trim an assembled messages array so it no longer
+ * overflows the given provider's context window. Drops the lowest-priority
+ * context first, then the oldest middle turns, re-checking `checkOverflow`
+ * after each step. Never mutates the input; always preserves the final user
+ * message. A no-op when the payload already fits.
+ */
+export function trimMessagesForProvider(
+  provider: ProviderName,
+  messages: ChatMessage[],
+): ChatMessage[] {
+  if (checkOverflow(provider, messages) === 0) return messages
+
+  const regions = splitRegions(messages)
+  let { leadingSystem, middle } = regions
+  const { finalUser } = regions
+  let current = joinRegions(leadingSystem, middle, finalUser)
+
+  while (checkOverflow(provider, current) > 0) {
+    const step = trimOneStep(leadingSystem, middle)
+    if (!step.trimmed) break // only scaffold + user message left; can't trim further
+    leadingSystem = step.leadingSystem
+    middle = step.middle
+    current = joinRegions(leadingSystem, middle, finalUser)
+  }
+
+  return current
+}
+
+/**
+ * F9(2) — serialized-byte guard. Trim an assembled messages array so its
+ * JSON-serialized byte length is at or below `capBytes`. Same trim order and
+ * invariants as `trimMessagesForProvider`: lowest-priority context first, then
+ * oldest middle turns, final user message always preserved, input never
+ * mutated. A no-op when already within the cap.
+ */
+export function trimMessagesToByteCeiling(
+  messages: ChatMessage[],
+  capBytes: number,
+): ChatMessage[] {
+  const serializedBytes = (m: ChatMessage[]): number =>
+    Buffer.byteLength(JSON.stringify(m))
+
+  if (serializedBytes(messages) <= capBytes) return messages
+
+  const regions = splitRegions(messages)
+  let { leadingSystem, middle } = regions
+  const { finalUser } = regions
+  let current = joinRegions(leadingSystem, middle, finalUser)
+
+  while (serializedBytes(current) > capBytes) {
+    const step = trimOneStep(leadingSystem, middle)
+    if (!step.trimmed) break // only scaffold + user message left; can't trim further
+    leadingSystem = step.leadingSystem
+    middle = step.middle
+    current = joinRegions(leadingSystem, middle, finalUser)
+  }
+
+  return current
+}
