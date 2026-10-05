@@ -1,5 +1,6 @@
 import { config } from './config.js'
 import type { ChatMessageInput } from './prompt.js'
+import type { AdapterCompletion } from './openaiCompatible.js'
 import { stripThinkingTags, createThinkingTagFilter } from './thinkingTagStripper.js'
 
 /**
@@ -14,6 +15,7 @@ import { stripThinkingTags, createThinkingTagFilter } from './thinkingTagStrippe
 
 interface GroqChoice {
   message?: { role: string; content: string }
+  finish_reason?: string | null
 }
 
 interface GroqResponse {
@@ -170,7 +172,7 @@ export interface GroqCallOptions {
 export async function chatWithGroq(
   messages: ChatMessageInput[],
   options: GroqCallOptions = {},
-): Promise<string> {
+): Promise<AdapterCompletion> {
   if (!config.groqApiKey) {
     throw new Error('GROQ_API_KEY not set')
   }
@@ -219,7 +221,8 @@ export async function chatWithGroq(
   const data = (await res.json()) as GroqResponse
   if (data.error) throw new Error(data.error.message)
   const raw = data.choices?.[0]?.message?.content?.trim() ?? ''
-  return stripThinkingTags(raw)
+  const finishReason = data.choices?.[0]?.finish_reason ?? null
+  return { text: stripThinkingTags(raw), finishReason }
 }
 
 /**
@@ -230,7 +233,7 @@ export async function chatWithGroqStream(
   onChunk: (chunk: string) => void,
   signal?: AbortSignal,
   options: GroqCallOptions = {},
-): Promise<string> {
+): Promise<AdapterCompletion> {
   if (!config.groqApiKey) {
     throw new Error('GROQ_API_KEY not set')
   }
@@ -284,6 +287,8 @@ export async function chatWithGroqStream(
   // A network chunk can split an SSE line mid-JSON, so buffer across reads and
   // only parse up to the last newline; flush any remainder at EOF.
   let buffer = ''
+  // Terminal stop reason (F11d): the final delta event carries finish_reason.
+  let finishReason: string | null = null
   const cleanOnChunk = createThinkingTagFilter(onChunk)
 
   const consumeLine = (line: string): void => {
@@ -291,8 +296,12 @@ export async function chatWithGroqStream(
     const jsonStr = line.slice(6).trim()
     if (jsonStr === '[DONE]' || !jsonStr) return
     try {
-      const parsed = JSON.parse(jsonStr) as { choices?: Array<{ delta?: { content?: string } }> }
-      const token = parsed.choices?.[0]?.delta?.content ?? ''
+      const parsed = JSON.parse(jsonStr) as {
+        choices?: Array<{ delta?: { content?: string }; finish_reason?: string | null }>
+      }
+      const choice = parsed.choices?.[0]
+      if (choice?.finish_reason) finishReason = choice.finish_reason
+      const token = choice?.delta?.content ?? ''
       if (token) {
         accumulated += token
         cleanOnChunk(token)
@@ -319,5 +328,5 @@ export async function chatWithGroqStream(
     for (const line of buffer.split('\n')) consumeLine(line)
   }
 
-  return stripThinkingTags(accumulated)
+  return { text: stripThinkingTags(accumulated), finishReason }
 }

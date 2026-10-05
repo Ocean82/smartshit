@@ -30,14 +30,29 @@ function extractJsonObject(text: string): string | null {
   return null
 }
 
+/**
+ * Outcome of structured-output parsing.
+ *
+ * `'parsed'`   — a JSON object was extracted AND `JSON.parse` succeeded, even
+ *                when `actions` is `[]` (a well-formed clarification such as
+ *                `{"message":"which column?","actions":[]}`).
+ * `'unparsed'` — extraction found no JSON object, or `JSON.parse` threw.
+ *
+ * The retry predicate keys on this (F11c): only `'unparsed'` is a real parse
+ * failure worth a correction retry. A valid empty-actions clarification is
+ * intentional output, not a failure, so it must NOT trigger the retry.
+ */
+export type ParseStatus = 'parsed' | 'unparsed'
+
 export function parseAgentResponse(raw: string): {
   message: string
   actions: Array<{ tool: string; params: Record<string, unknown>; description: string }>
+  parseStatus: ParseStatus
 } {
   const jsonText = extractJsonObject(raw)
   if (!jsonText) {
     // JSON extraction failed — return the cleaned text (thinking tags stripped)
-    return { message: stripThinkingTags(raw), actions: [] }
+    return { message: stripThinkingTags(raw), actions: [], parseStatus: 'unparsed' }
   }
 
   try {
@@ -61,9 +76,10 @@ export function parseAgentResponse(raw: string): {
       // inside a handler, after the preview implied it was sound.
       .filter((a) => validateToolParams(a.tool, a.params).valid)
 
-    return { message, actions }
+    // Parse succeeded even if actions is empty — a valid clarification.
+    return { message, actions, parseStatus: 'parsed' }
   } catch {
-    return { message: stripThinkingTags(raw), actions: [] }
+    return { message: stripThinkingTags(raw), actions: [], parseStatus: 'unparsed' }
   }
 }
 

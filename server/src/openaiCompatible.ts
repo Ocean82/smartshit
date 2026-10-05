@@ -3,12 +3,26 @@ import { stripThinkingTags, createThinkingTagFilter } from './thinkingTagStrippe
 
 interface OpenAICompatibleChoice {
   message?: { role: string; content: string }
+  finish_reason?: string | null
 }
 
 interface OpenAICompatibleResponse {
   choices?: OpenAICompatibleChoice[]
   error?: { message?: string }
   usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number }
+}
+
+/**
+ * Adapter completion: accumulated text plus the terminal stop reason (F11d).
+ *
+ * `finishReason` is the raw provider string (`'stop'`, `'length'`, `'eos'`,
+ * `'end_turn'`, …) from the final response/stream event, or `null` when the
+ * provider never reported one. The provider loop treats `'length'`/missing as a
+ * truncated/incomplete completion and fails over rather than parsing garbage.
+ */
+export interface AdapterCompletion {
+  text: string
+  finishReason: string | null
 }
 
 interface OpenAICompatibleParams {
@@ -48,7 +62,7 @@ export async function chatWithOpenAiCompatible(
   params: OpenAICompatibleParams,
   messages: ChatMessageInput[],
   options: OpenAICompatibleCallOptions = {},
-): Promise<string> {
+): Promise<AdapterCompletion> {
   const { jsonMode = false, maxTokens = 768, suppressReasoning = false } = options
 
   const body: Record<string, unknown> = {
@@ -93,7 +107,8 @@ export async function chatWithOpenAiCompatible(
   const data = (await res.json()) as OpenAICompatibleResponse
   if (data.error?.message) throw new Error(data.error.message)
   const raw = data.choices?.[0]?.message?.content?.trim() ?? ''
-  return stripThinkingTags(raw)
+  const finishReason = data.choices?.[0]?.finish_reason ?? null
+  return { text: stripThinkingTags(raw), finishReason }
 }
 
 export async function chatWithOpenAiCompatibleStream(
@@ -102,7 +117,7 @@ export async function chatWithOpenAiCompatibleStream(
   onChunk: (chunk: string) => void,
   signal?: AbortSignal,
   options: OpenAICompatibleCallOptions = {},
-): Promise<string> {
+): Promise<AdapterCompletion> {
   const { jsonMode = false, maxTokens = 768, suppressReasoning = false } = options
 
   const body: Record<string, unknown> = {
@@ -155,6 +170,8 @@ export async function chatWithOpenAiCompatibleStream(
   // thinking-tag filter, which swallows empty strings) so the timeout disarms
   // without leaking reasoning text to the user.
   let pingedForReasoning = false
+  // Terminal stop reason (F11d): the final delta event carries finish_reason.
+  let finishReason: string | null = null
   // A network chunk can split an SSE line mid-JSON, so buffer across reads and
   // only parse up to the last newline; flush any remainder at EOF.
   let buffer = ''
@@ -165,9 +182,11 @@ export async function chatWithOpenAiCompatibleStream(
     if (!jsonStr || jsonStr === '[DONE]') return
     try {
       const parsed = JSON.parse(jsonStr) as {
-        choices?: Array<{ delta?: { content?: string; reasoning?: string } }>
+        choices?: Array<{ delta?: { content?: string; reasoning?: string }; finish_reason?: string | null }>
       }
-      const delta = parsed.choices?.[0]?.delta
+      const choice = parsed.choices?.[0]
+      if (choice?.finish_reason) finishReason = choice.finish_reason
+      const delta = choice?.delta
       const token = delta?.content ?? ''
       if (token) {
         accumulated += token
@@ -202,5 +221,5 @@ export async function chatWithOpenAiCompatibleStream(
     for (const line of buffer.split('\n')) consumeLine(line)
   }
 
-  return stripThinkingTags(accumulated)
+  return { text: stripThinkingTags(accumulated), finishReason }
 }

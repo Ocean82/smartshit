@@ -36,7 +36,7 @@ describe('chatWithOllamaStream chunk buffering', () => {
     for (let cut = 1; cut < body.length; cut++) {
       vi.spyOn(globalThis, 'fetch').mockResolvedValue(ndjsonStreamResponse(body, cut))
       const result = await chatWithOllamaStream(messages, () => {})
-      expect(result, `split at ${cut}`).toBe('Hello world')
+      expect(result.text, `split at ${cut}`).toBe('Hello world')
       vi.restoreAllMocks()
     }
   })
@@ -45,6 +45,50 @@ describe('chatWithOllamaStream chunk buffering', () => {
     const body = `${JSON.stringify({ message: { content: 'Done' }, done: true })}`
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(ndjsonStreamResponse(body, body.length))
     const result = await chatWithOllamaStream(messages, () => {})
-    expect(result).toBe('Done')
+    expect(result.text).toBe('Done')
+  })
+})
+
+/**
+ * Terminal done_reason capture (F11d).
+ *
+ * Ollama reports the stop reason on the final record (`done === true`) as
+ * `done_reason`; the adapter must surface it so the provider loop can fail over
+ * on a truncated completion rather than parsing a cut-off response.
+ */
+describe('chatWithOllamaStream done_reason capture (F11d)', () => {
+  function ndjsonStream(body: string): Response {
+    const enc = new TextEncoder()
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(enc.encode(body))
+        controller.close()
+      },
+    })
+    return new Response(stream, { status: 200, headers: { 'Content-Type': 'application/x-ndjson' } })
+  }
+
+  it('reports finishReason "length" when the final record is truncated', async () => {
+    const body =
+      `${JSON.stringify({ message: { content: 'partial' } })}\n` +
+      `${JSON.stringify({ message: { content: '' }, done: true, done_reason: 'length' })}\n`
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(ndjsonStream(body))
+    const result = await chatWithOllamaStream(messages, () => {})
+    expect(result.finishReason).toBe('length')
+  })
+
+  it('reports finishReason "stop" for a clean completion', async () => {
+    const body =
+      `${JSON.stringify({ message: { content: 'done' }, done: true, done_reason: 'stop' })}\n`
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(ndjsonStream(body))
+    const result = await chatWithOllamaStream(messages, () => {})
+    expect(result.finishReason).toBe('stop')
+  })
+
+  it('falls back to "stop" when done is true but done_reason is absent', async () => {
+    const body = `${JSON.stringify({ message: { content: 'done' }, done: true })}\n`
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(ndjsonStream(body))
+    const result = await chatWithOllamaStream(messages, () => {})
+    expect(result.finishReason).toBe('stop')
   })
 })

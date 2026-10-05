@@ -13,7 +13,7 @@
 import { config } from './config.js'
 import { chatWithOllama, chatWithOllamaStream } from './ollama.js'
 import { groqAvailable, chatWithGroqStream, recordGroqFallback } from './groq.js'
-import { chatWithOpenAiCompatible, chatWithOpenAiCompatibleStream, openAiCompatibleAvailable } from './openaiCompatible.js'
+import { chatWithOpenAiCompatible, chatWithOpenAiCompatibleStream, openAiCompatibleAvailable, type AdapterCompletion } from './openaiCompatible.js'
 
 export type ProviderName = 'openrouter' | 'huggingface' | 'groq' | 'ollama'
 
@@ -191,6 +191,33 @@ export interface ProviderMeta {
 export interface ProviderResponse {
   text: string
   meta: ProviderMeta
+  /**
+   * Terminal stop reason from the adapter (F11d): raw provider string
+   * (`'stop'`, `'length'`, `'eos'`, …) or `null` if none was reported. The
+   * server loop treats a non-terminal reason as a truncated completion.
+   */
+  finishReason: string | null
+}
+
+/**
+ * Known-terminal stop reasons across providers. A completion that ends on one
+ * of these is a complete answer. `'length'` (output-cap truncation) and a
+ * missing/`null` reason are NOT terminal — the model was cut off mid-answer, so
+ * parsing its text would parse garbage. (F11d)
+ */
+const TERMINAL_FINISH_REASONS = new Set(['stop', 'end_turn', 'eos', 'eos_token', 'complete', 'done'])
+
+/**
+ * Whether a completion's terminal stop reason indicates a complete answer.
+ *
+ * Returns `false` for `'length'` (truncated at the output cap) and for a
+ * missing/`null` reason (provider never confirmed a clean stop). The server
+ * provider loop uses this to fail over BEFORE parsing, instead of accepting a
+ * cut-off completion as if it were whole.
+ */
+export function isTerminalFinish(reason: string | null): boolean {
+  if (!reason) return false
+  return TERMINAL_FINISH_REASONS.has(reason.toLowerCase())
 }
 
 /** Resolve the model name for a given provider. */
@@ -233,7 +260,7 @@ export async function callProviderStream(
   let firstChunkReceived = false
   let timeoutTimer: ReturnType<typeof setTimeout> | null = null
 
-  const streamPromise = new Promise<string>((resolve, reject) => {
+  const streamPromise = new Promise<AdapterCompletion>((resolve, reject) => {
     // Set up first-byte timeout
     timeoutTimer = setTimeout(() => {
       if (!firstChunkReceived) {
@@ -264,7 +291,7 @@ export async function callProviderStream(
       onChunk(chunk)
     }
 
-    let innerPromise: Promise<string>
+    let innerPromise: Promise<AdapterCompletion>
     if (provider === 'openrouter') {
       innerPromise = chatWithOpenAiCompatibleStream(
         {
@@ -313,10 +340,11 @@ export async function callProviderStream(
       })
   })
 
-  const text = await streamPromise
+  const completion = await streamPromise
 
   return {
-    text,
+    text: completion.text,
+    finishReason: completion.finishReason,
     meta: {
       provider,
       model: getModelName(provider),
@@ -331,10 +359,10 @@ export async function callProvider(
   options: ProviderCallOptions = {},
 ): Promise<ProviderResponse> {
   const start = performance.now()
-  let text: string
+  let completion: AdapterCompletion
 
   if (provider === 'openrouter') {
-    text = await chatWithOpenAiCompatible(
+    completion = await chatWithOpenAiCompatible(
       {
         apiKey: config.openRouterApiKey,
         model: config.openRouterModel,
@@ -344,7 +372,7 @@ export async function callProvider(
       { jsonMode: options.jsonMode, maxTokens: options.maxTokens, suppressReasoning: true },
     )
   } else if (provider === 'huggingface') {
-    text = await chatWithOpenAiCompatible(
+    completion = await chatWithOpenAiCompatible(
       {
         apiKey: config.huggingFaceApiKey,
         model: config.huggingFaceModel,
@@ -355,17 +383,18 @@ export async function callProvider(
     )
   } else if (provider === 'groq') {
     const { chatWithGroq } = await import('./groq.js')
-    text = await chatWithGroq(messages, {
+    completion = await chatWithGroq(messages, {
       jsonMode: options.jsonMode,
       maxTokens: options.maxTokens,
     })
   } else {
     // Primary Ollama model — use JSON format when structured output is needed.
-    text = await chatWithOllama(messages, { jsonMode: options.jsonMode })
+    completion = await chatWithOllama(messages, { jsonMode: options.jsonMode })
   }
 
   return {
-    text,
+    text: completion.text,
+    finishReason: completion.finishReason,
     meta: {
       provider,
       model: getModelName(provider),

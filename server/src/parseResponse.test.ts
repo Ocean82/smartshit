@@ -87,3 +87,41 @@ describe('parseAgentResponse — parameter contract validation (F11)', () => {
     expect(actions).toHaveLength(1)
   })
 })
+
+describe('parseAgentResponse — parseStatus discriminator (F11c)', () => {
+  it('marks a well-formed empty-actions clarification as parsed', () => {
+    // An intentional clarification question is valid output, NOT a parse
+    // failure — it must not trigger the repair retry.
+    const result = parseAgentResponse(JSON.stringify({ message: 'Which column?', actions: [] }))
+    expect(result.parseStatus).toBe('parsed')
+    expect(result.actions).toEqual([])
+    expect(result.message).toBe('Which column?')
+  })
+
+  it('marks a well-formed response with actions as parsed', () => {
+    const result = parseAgentResponse(
+      JSON.stringify({ message: 'Done', actions: [{ tool: 'clear_sheet' }] }),
+    )
+    expect(result.parseStatus).toBe('parsed')
+    expect(result.actions).toHaveLength(1)
+  })
+
+  it('marks a prose blob (no JSON object) as unparsed', () => {
+    const result = parseAgentResponse('I can help you build a budget. What categories do you track?')
+    expect(result.parseStatus).toBe('unparsed')
+    expect(result.actions).toEqual([])
+  })
+
+  it('marks a response with no closing brace as unparsed (extraction fails)', () => {
+    const result = parseAgentResponse('{"message":"half a resp')
+    expect(result.parseStatus).toBe('unparsed')
+    expect(result.actions).toEqual([])
+  })
+
+  it('marks a malformed JSON object as unparsed (JSON.parse throws)', () => {
+    // Extraction finds a `{...}` slice, but it is not valid JSON.
+    const result = parseAgentResponse('{"message": "x", actions: [}')
+    expect(result.parseStatus).toBe('unparsed')
+    expect(result.actions).toEqual([])
+  })
+})

@@ -82,7 +82,7 @@ describe('openaiCompatible streaming — reasoning models', () => {
     // first-byte timeout during the reasoning phase); content follows.
     expect(chunks[0]).toBe('')
     expect(chunks.filter((c) => c === '').length).toBe(1) // pinged exactly once
-    expect(result).toBe('Hello world')
+    expect(result.text).toBe('Hello world')
     expect(chunks.join('')).toBe('Hello world')
   })
 
@@ -93,7 +93,7 @@ describe('openaiCompatible streaming — reasoning models', () => {
     const chunks: string[] = []
     const result = await chatWithOpenAiCompatibleStream(params, messages, (c) => chunks.push(c))
     expect(chunks.some((c) => c === '')).toBe(false)
-    expect(result).toBe('Hi there')
+    expect(result.text).toBe('Hi there')
   })
 
   // Regression for F6: a provider SSE line split mid-JSON across two network
@@ -118,9 +118,56 @@ describe('openaiCompatible streaming — reasoning models', () => {
         new Response(stream, { status: 200, headers: { 'Content-Type': 'text/event-stream' } }),
       )
       const result = await chatWithOpenAiCompatibleStream(params, messages, () => {})
-      expect(result, `split at ${cut}`).toBe('Hello world')
+      expect(result.text, `split at ${cut}`).toBe('Hello world')
       vi.restoreAllMocks()
     }
+  })
+})
+
+/**
+ * Terminal finish-reason capture (F11d).
+ *
+ * The adapter must surface the provider's terminal stop reason so the provider
+ * loop can treat a `length` (truncated) or missing-terminal completion as a
+ * failure BEFORE parsing, instead of parsing a cut-off response as if whole.
+ */
+describe('openaiCompatible finish_reason capture (F11d)', () => {
+  /** SSE body whose final content event carries a finish_reason. */
+  function sseWithFinish(reason: string): Response {
+    const body =
+      `data: ${JSON.stringify({ choices: [{ delta: { content: 'partial' }, finish_reason: null }] })}\n` +
+      `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: reason }] })}\n` +
+      'data: [DONE]\n'
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(body))
+        controller.close()
+      },
+    })
+    return new Response(stream, { status: 200, headers: { 'Content-Type': 'text/event-stream' } })
+  }
+
+  it('reports finishReason "length" when the stream is truncated', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(sseWithFinish('length'))
+    const result = await chatWithOpenAiCompatibleStream(params, messages, () => {})
+    expect(result.finishReason).toBe('length')
+  })
+
+  it('reports finishReason "stop" for a clean completion', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(sseWithFinish('stop'))
+    const result = await chatWithOpenAiCompatibleStream(params, messages, () => {})
+    expect(result.finishReason).toBe('stop')
+  })
+
+  it('reports finishReason from the non-streaming response', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'cut off' }, finish_reason: 'length' }] }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    )
+    const result = await chatWithOpenAiCompatible(params, messages)
+    expect(result).toEqual({ text: 'cut off', finishReason: 'length' })
   })
 })
 

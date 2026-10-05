@@ -18,6 +18,13 @@ import {
 } from './prompt.js'
 import { FEW_SHOT_EXAMPLES } from './prompts/index.js'
 import { parseAgentResponse } from './parseResponse.js'
+import {
+  MAX_TOKENS_PER_CALL,
+  shouldRetryStructuredOutput,
+  buildByokOptions,
+  isJsonModeRejection,
+  repairStructuredOutput as repairStructuredOutputShared,
+} from './structuredRetry.js'
 import { resolveIntent, isWeakResponse } from './intent.js'
 import { classifyMode, isLlmOnlyMode } from './mode.js'
 import { parseUserIntent as parseIntentWithKeyword } from './intentParser.js'
@@ -31,6 +38,7 @@ import {
   callProviderStream,
   getModelName,
   isUsableCompletion,
+  isTerminalFinish,
   isCircuitOpen,
   recordSuccess,
   recordFailure,
@@ -62,8 +70,10 @@ import { chatRateLimiter, checkoutRateLimiter, globalRateLimiter, sharedAccessRa
  * clients 768 — so failing over to OpenRouter silently cut the budget by 63%.
  * On a reasoning model that is the difference between a real answer and an empty
  * completion. One number for all providers keeps the failover path honest.
+ *
+ * Defined once in structuredRetry.ts (so BYOK/repair helpers share it without
+ * importing this HTTP-server module) and re-exported here for existing readers.
  */
-const MAX_TOKENS_PER_CALL = 2048
 
 // ─── Validate critical configuration + start background services ───────────
 startBackgroundServices()
@@ -256,16 +266,6 @@ function shouldStream(stream: boolean, onChunk?: (chunk: string) => void, signal
   return stream && Boolean(onChunk) && Boolean(signal)
 }
 
-/** Whether the LLM response merits a structured-output retry (act mode only, not streaming). */
-function shouldRetryStructuredOutput(
-  stream: boolean,
-  parsedActions: unknown[],
-  fullText: string,
-  usedProvider: ProviderName | null,
-): boolean {
-  return !stream && parsedActions.length === 0 && fullText.trim().length > 0 && usedProvider !== null
-}
-
 /** Whether all AI providers have been exhausted without success. */
 function allProvidersFailed(byokSucceeded: boolean, usedProvider: ProviderName | null): boolean {
   return !byokSucceeded && usedProvider === null
@@ -292,6 +292,7 @@ async function callByokProvider(
   byok: NonNullable<ChatRequestBody['byok']>,
   messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
   stream: boolean,
+  llmOnly: boolean,
   onChunk?: (chunk: string) => void,
   signal?: AbortSignal,
 ): Promise<ByokCallResult> {
@@ -303,11 +304,40 @@ async function callByokProvider(
   const { chatWithOpenAiCompatibleStream, chatWithOpenAiCompatible } = await import('./openaiCompatible.js')
   const byokParams = { apiKey: byok.apiKey, model: byok.model, baseUrl: byok.baseUrl }
 
+  // Match the server-funded path: forward jsonMode (act mode) + 2048 tokens.
+  // leave suppressReasoning off — the BYOK provider is unknown and an
+  // unrecognised field can fail the request outright.
+  const byokOpts = buildByokOptions(llmOnly)
+
+  // Run the adapter, retrying ONCE without jsonMode if the endpoint rejects
+  // response_format. Any other failure propagates (the caller falls through to
+  // server providers when not byokOnly). Terminal-reason gating is intentionally
+  // NOT applied here: BYOK endpoints may never emit a usable finish reason, and
+  // hard-failing on that would break JSON-mode-incapable keys. (F11a/F11d)
+  const run = async (opts: { jsonMode: boolean; maxTokens: number }): Promise<string> => {
+    if (shouldStream(stream, onChunk, signal)) {
+      const completion = await chatWithOpenAiCompatibleStream(byokParams, messages, onChunk!, signal!, opts)
+      return completion.text
+    }
+    const completion = await chatWithOpenAiCompatible(byokParams, messages, opts)
+    return completion.text
+  }
+
   let text: string
-  if (shouldStream(stream, onChunk, signal)) {
-    text = await chatWithOpenAiCompatibleStream(byokParams, messages, onChunk!, signal!)
-  } else {
-    text = await chatWithOpenAiCompatible(byokParams, messages)
+  try {
+    text = await run(byokOpts)
+  } catch (err) {
+    if (byokOpts.jsonMode && isJsonModeRejection(err)) {
+      // Endpoint doesn't support JSON mode — retry once without it, keeping
+      // the token budget. A streaming retry would double-emit tokens to the
+      // client, so the retry is always non-streaming (its text is still parsed
+      // for actions downstream; the first attempt streamed nothing usable).
+      console.warn('[llm] BYOK endpoint rejected response_format; retrying without jsonMode')
+      const completion = await chatWithOpenAiCompatible(byokParams, messages, { ...byokOpts, jsonMode: false })
+      text = completion.text
+    } else {
+      throw err
+    }
   }
 
   let byokHost = 'custom'
@@ -349,18 +379,32 @@ async function callServerProviders(
 
     try {
       let text: string
+      let finishReason: string | null
       if (shouldStream(stream, onChunk, signal)) {
         const response = await callProviderStream(provider, messages, onChunk!, signal!, providerOpts)
         text = response.text
+        finishReason = response.finishReason
       } else {
         const response = await callProvider(provider, messages, providerOpts)
         text = response.text
+        finishReason = response.finishReason
       }
 
       // An empty completion is a provider failure, not an answer. Skipping it
       // lets the failover chain continue instead of blaming the user's wording.
       if (!isUsableCompletion(text)) {
         const msg = 'empty completion (no content returned)'
+        providerErrors.push(`${provider}: ${msg}`)
+        console.warn(`[llm] provider ${provider} returned ${msg}`)
+        recordFailure(provider)
+        continue
+      }
+
+      // A truncated (finish_reason=length) or unconfirmed-terminal completion
+      // was cut off mid-answer — parsing it would parse garbage. Treat it as a
+      // provider failure and fail over BEFORE parsing. (F11d)
+      if (!isTerminalFinish(finishReason)) {
+        const msg = `truncated/incomplete (finish_reason=${finishReason ?? 'none'})`
         providerErrors.push(`${provider}: ${msg}`)
         console.warn(`[llm] provider ${provider} returned ${msg}`)
         recordFailure(provider)
@@ -478,7 +522,7 @@ async function runLlmChat(params: {
   // ─── Phase 1: Try BYOK if configured ───────────────────────────────────────
   if (hasByokConfig(body.byok)) {
     try {
-      const byokResult = await callByokProvider(body.byok!, messages, stream, onChunk, signal)
+      const byokResult = await callByokProvider(body.byok!, messages, stream, llmOnly, onChunk, signal)
       fullText = byokResult.text
       providerMeta = byokResult.meta
       byokSucceeded = true
@@ -549,29 +593,24 @@ async function runLlmChat(params: {
   // ─── Phase 5: Act mode — parse structured output ───────────────────────────
   let parsed = parseAgentResponse(fullText)
 
-  // Structured output retry: if response doesn't parse to actions, try once more
-  // with a correction hint (non-streaming only, server providers only).
-  if (shouldRetryStructuredOutput(stream, parsed.actions, fullText, usedProvider)) {
-    const retryHint: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
-      ...messages,
-      { role: 'assistant', content: fullText },
-      { role: 'user', content: 'Your response was not valid JSON. Please respond with ONLY a JSON object containing "message" (string) and "actions" (array of {tool, params, description}). No markdown, no explanation, just the JSON object.' },
-    ]
-    try {
-      const retryResponse = await callProvider(usedProvider!, retryHint, { jsonMode: true, maxTokens: 2048 })
-      const retryParsed = parseAgentResponse(retryResponse.text)
-      if (retryParsed.actions.length > 0) {
-        parsed = retryParsed
-      }
-    } catch {
-      // Retry failed — continue with original parsed result
-    }
+  // Structured-output repair: if the response failed to parse (not merely an
+  // intentional empty-actions clarification), re-request once with a correction
+  // hint. Runs on BOTH stream and non-stream act-mode paths (F11b/F11c). On the
+  // streaming path the tokens were already streamed to the client during the
+  // first call; this repair is an internal non-stream re-request whose result
+  // replaces only the final structured message/actions spliced into the
+  // terminal `complete` SSE event — it never re-emits a token stream and is not
+  // separately metered (metering stays the single post-turn call in the route).
+  if (shouldRetryStructuredOutput(parsed.parseStatus, fullText, usedProvider)) {
+    const repaired = await repairStructuredOutputShared(messages, fullText, usedProvider!, callProvider)
+    if (repaired) parsed = repaired
   }
 
   if (isWeakResponse(parsed.message, parsed.actions)) {
     parsed = {
       message: intent.message || fullText || 'Try a specific request like "build a monthly budget".',
       actions: intent.actions,
+      parseStatus: parsed.parseStatus,
     }
   }
 

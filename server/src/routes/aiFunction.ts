@@ -339,10 +339,11 @@ aiFunctionRouter.post('/', aiFunctionRateLimiter, validateBody(aiFunctionBodySch
       // names that resolve to private addresses; IP literals were blocked by Zod).
       await assertPublicByokHost(body.byok.baseUrl)
       const { chatWithOpenAiCompatible } = await import('../openaiCompatible.js')
-      rawResult = await chatWithOpenAiCompatible(
+      const byokCompletion = await chatWithOpenAiCompatible(
         { apiKey: body.byok.apiKey, model: body.byok.model ?? 'gpt-4o-mini', baseUrl: body.byok.baseUrl },
         messages,
       )
+      rawResult = byokCompletion.text
     } catch (err) {
       lastError = err instanceof Error ? err.message : String(err)
       if (access.byokOnly) {
