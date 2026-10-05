@@ -102,7 +102,7 @@ export function ChatPanel({ isMobileOpen, onCloseMobile, embedded }: ChatPanelPr
   const showChat = useShowChat()
   const togglePinMessage = useTogglePinMessage()
 
-  const { canAsk, remaining, dailyLimit, recordUsage, isPro } = useUsage()
+  const { canAsk, remaining, dailyLimit, isPro } = useUsage()
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const resizeStartRef = useRef<{ x: number; width: number } | null>(null)
@@ -212,7 +212,11 @@ export function ChatPanel({ isMobileOpen, onCloseMobile, embedded }: ChatPanelPr
 
   const handleSend = () => {
     if (!canAsk) return
-    recordUsage()
+    // F16(a): no optimistic pre-send increment. The client cannot know at send
+    // time whether the turn is billable (server LLM) vs local/deterministic or
+    // failed, so bumping here over-counts non-metered turns. The displayed count
+    // is driven by the server's authoritative usage.used — reconciled via
+    // reportServerUsage on billable turns and the /api/usage session seed.
     sendMessage()
   }
 

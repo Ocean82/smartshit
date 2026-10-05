@@ -7,6 +7,13 @@
  *
  * The unit tier runs in the `node` environment (no jsdom), so localStorage is
  * stubbed as an in-memory map — the same pattern as persistence.test.ts.
+ *
+ * F16(a): ChatPanel.handleSend no longer calls recordUsage() before a send, so
+ * reconciliation (syncServerUsage, driven by the server's authoritative
+ * usage.used) is now the only writer on the send path. A local/deterministic or
+ * failed turn returns no `usage` field and therefore no increment; a metered
+ * turn reconciles the client to usage.used. These syncServerUsage tests prove
+ * the count is server-driven — see server/src/usage.test.ts for the gate side.
  */
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest'
 import { syncServerUsage } from './useUsage'

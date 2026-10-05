@@ -37,7 +37,7 @@ import {
 } from './providers.js'
 import { allocateBudget, type ProviderName as BudgetProvider } from './tokenBudget.js'
 
-import { checkUsage, recordUsage, getUsageStats } from './usage.js'
+import { checkUsage, getUsageStats, reserveUsage, releaseUsage } from './usage.js'
 import { decideAiAccess, shouldRecordServerUsage } from './aiAccess.js'
 import { dbHealthCheck, closePool } from './db.js'
 import { s3HealthCheck } from './s3.js'
@@ -218,8 +218,14 @@ function sendSseComplete(
 type LlmChatResult = ChatResponseBody & { usedServerProvider: boolean }
 
 /**
- * Record a billable turn and return the authoritative post-request usage to
- * echo back to the client, so it reconciles its optimistic local counter.
+ * Reconcile the reservation made at the gate (reserveUsage) with the turn's
+ * actual outcome, and return the authoritative post-request usage to echo back
+ * to the client so it reconciles its local counter (F16a/F16c).
+ *
+ * The gate already incremented the counter by one. To keep exactly one net
+ * increment per billable turn:
+ *  - billable (server LLM, free): the reserve's +1 stands; just read and echo.
+ *  - non-billable (local/deterministic/BYOK-only/Pro): release the reservation.
  * Returns undefined when the turn wasn't metered (not server LLM, or Pro/BYOK).
  */
 async function meterAndReportUsage(
@@ -228,9 +234,11 @@ async function meterAndReportUsage(
   isPro: boolean,
 ): Promise<ChatResponseBody['usage']> {
   if (result.source !== 'llm' || !shouldRecordServerUsage({ usedServerProvider: result.usedServerProvider, isPro })) {
+    // The gate reserved a slot it didn't spend on app-funded inference — undo it.
+    // Pro never reserved (reserveUsage returns unlimited), so skip the release.
+    if (!isPro) await releaseUsage(userId)
     return undefined
   }
-  await recordUsage(userId)
   const after = await checkUsage(userId, isPro)
   if (after.isPro || after.limit === null || after.remaining === null) return undefined
   return { used: after.used, remaining: after.remaining, limit: after.limit }
@@ -763,7 +771,9 @@ app.post('/api/chat/stream', requireAuth, chatRateLimiter, validateBody(chatStre
   const hasByokCredentials = Boolean(body.byok?.apiKey && body.byok?.baseUrl)
   const userId = getRequestUserId(req) ?? undefined
   const isPro = await resolveIsPro(userId ?? null)
-  const usage = await checkUsage(userId, isPro)
+  // Reserve a slot atomically before inference (F16c). A denied reserve consumes
+  // nothing; a successful reserve is released below on non-billable/failed turns.
+  const usage = await reserveUsage(userId, isPro)
   const access = decideAiAccess({
     isPro,
     usageAllowed: usage.allowed,
@@ -831,6 +841,10 @@ app.post('/api/chat/stream', requireAuth, chatRateLimiter, validateBody(chatStre
     clearTimeout(llmTimeout)
     clearTimeout(reqTimeout)
 
+    // The reserve at the gate billed nothing on a failed turn — undo it.
+    // Pro never reserved, so only release for free users.
+    if (!isPro) await releaseUsage(userId)
+
     if (!res.writableEnded) {
       const message = err instanceof Error ? err.message : 'Unknown error'
       sendSseComplete(res, {
@@ -858,7 +872,9 @@ app.post('/api/chat', requireAuth, chatRateLimiter, validateBody(chatBodySchema)
   const hasByokCredentials = Boolean(body.byok?.apiKey && body.byok?.baseUrl)
   const userId = getRequestUserId(req) ?? undefined
   const isPro = await resolveIsPro(userId ?? null)
-  const usage = await checkUsage(userId, isPro)
+  // Reserve a slot atomically before inference (F16c); released below on
+  // non-billable/failed turns so there is one net increment per billable turn.
+  const usage = await reserveUsage(userId, isPro)
   const access = decideAiAccess({
     isPro,
     usageAllowed: usage.allowed,
@@ -896,6 +912,8 @@ app.post('/api/chat', requireAuth, chatRateLimiter, validateBody(chatBodySchema)
 
   // Low-confidence intent — clarify only when no template already resolved it
   if (shouldClarifyLowConfidence(userIntent, mode, intent.actions.length)) {
+    // Non-LLM early return: the gate reserved a slot it won't spend — release it.
+    if (!isPro) await releaseUsage(userId)
     res.json({
       message: buildClarificationMessage(userIntent),
       actions: [],
@@ -906,11 +924,13 @@ app.post('/api/chat', requireAuth, chatRateLimiter, validateBody(chatBodySchema)
   }
 
   if (mode === 'help' && !body.forceLlm) {
+    if (!isPro) await releaseUsage(userId)
     res.json({ message: intent.message, actions: [], source: 'template', suggestions })
     return
   }
 
   if (!llmOnly && (intent.actions.length > 0 || intent.message.length > 0)) {
+    if (!isPro) await releaseUsage(userId)
     res.json({
       message: intent.message,
       actions: intent.actions,
@@ -934,6 +954,9 @@ app.post('/api/chat', requireAuth, chatRateLimiter, validateBody(chatBodySchema)
     const { usedServerProvider: _used, ...payload } = result
     res.json({ ...payload, suggestions, usage })
   } catch (err) {
+    // The reserve at the gate billed nothing on a failed turn — undo it.
+    if (!isPro) await releaseUsage(userId)
+
     const message = err instanceof Error ? err.message : 'Unknown error'
     res.json({
       message: `${intent.message || 'Something went wrong.'}\n\n(${message})`,
