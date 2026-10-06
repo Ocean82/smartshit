@@ -172,6 +172,81 @@ describe('chatService — server refusals survive to the user', () => {
   })
 })
 
+describe('chatService — older history is summarized, not dropped', () => {
+  beforeEach(() => {
+    workbook = createEmptyWorkbook('Chat Service Test')
+    engine = new SpreadsheetEngine()
+    engine.loadWorkbook(workbook)
+    selection = null
+    messages.length = 0
+    serverStream.mockReset()
+    serverStream.mockResolvedValue(null)
+  })
+
+  function seedConversation(turns: number, firstUserContent: string): void {
+    // Alternating user/assistant turns, then the two current-turn placeholders
+    // (the user input echo + the streaming assistant placeholder) the store
+    // appends before processChatMessage runs.
+    for (let i = 0; i < turns; i++) {
+      const role: 'user' | 'assistant' = i % 2 === 0 ? 'user' : 'assistant'
+      messages.push({
+        id: `seed-${i}`,
+        role,
+        content: i === 0 ? firstUserContent : `${role} turn ${i} content`,
+        timestamp: Date.now(),
+      })
+    }
+    // Current-turn placeholders (excluded by `.slice(0, -2)`)
+    messages.push({ id: 'current-user', role: 'user', content: CURRENT_INPUT, timestamp: Date.now() })
+    messages.push({ id: 'stream-1', role: 'assistant', content: '', timestamp: Date.now() })
+  }
+
+  const CURRENT_INPUT = 'generate a lunar calendar from this dataset'
+
+  it('condenses older turns into a summary line instead of dropping them', async () => {
+    // 14 seeded turns + 2 placeholders → 12 real history messages, which exceeds
+    // the summarization threshold (8), so older turns must be summarized.
+    seedConversation(14, 'EARLY_TOPIC_MARKER budget question')
+
+    await processChatMessage(CURRENT_INPUT, 'stream-1', makeDeps())
+
+    expect(serverStream).toHaveBeenCalledTimes(1)
+    const passedHistory = (serverStream.mock.calls[0][0] as { history: { role: string; content: string }[] }).history
+
+    // (a) older messages are represented via a summary, not silently dropped
+    const summaryMsg = passedHistory.find((m) => m.content.includes('[Conversation context'))
+    expect(summaryMsg).toBeDefined()
+    expect(summaryMsg?.content).toContain('EARLY_TOPIC_MARKER')
+
+    // (b) output is still {role, content}-shaped
+    for (const m of passedHistory) {
+      expect(Object.keys(m).sort()).toEqual(['content', 'role'])
+      expect(['user', 'assistant']).toContain(m.role)
+    }
+
+    // (c) current-turn placeholders are excluded (`.slice(0, -2)` preserved)
+    expect(passedHistory.some((m) => m.content === CURRENT_INPUT)).toBe(false)
+    expect(passedHistory.some((m) => (m as { id?: string }).id === 'stream-1')).toBe(false)
+  })
+
+  it('leaves a short conversation verbatim with no summary line', async () => {
+    // 4 seeded turns + 2 placeholders → 4 real history messages, at/under the
+    // summarization threshold, so no summary is injected.
+    seedConversation(4, 'EARLY_TOPIC_MARKER budget question')
+
+    await processChatMessage(CURRENT_INPUT, 'stream-1', makeDeps())
+
+    expect(serverStream).toHaveBeenCalledTimes(1)
+    const passedHistory = (serverStream.mock.calls[0][0] as { history: { role: string; content: string }[] }).history
+
+    expect(passedHistory.some((m) => m.content.includes('[Conversation context'))).toBe(false)
+    // Earlier messages preserved verbatim
+    expect(passedHistory[0].content).toBe('EARLY_TOPIC_MARKER budget question')
+    // Current-turn placeholders still excluded
+    expect(passedHistory.some((m) => m.content === CURRENT_INPUT)).toBe(false)
+  })
+})
+
 describe('chatService — model-supplied metadata is stripped', () => {
   beforeEach(() => {
     workbook = createEmptyWorkbook('Chat Service Test')

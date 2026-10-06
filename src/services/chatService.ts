@@ -21,6 +21,7 @@ import type { ChatMessage, ProviderMeta, SheetData, Selection, WorkbookData, Act
 import type { ExecutionContext } from '@/agent/executor'
 import { toolResultToChatMessage } from '@/ai/responseBuilder'
 import { buildSpreadsheetContext } from '@/ai/buildContext'
+import { summarizeOlderMessages } from '@/ai/conversationSummary'
 import { classifyMode, isLlmOnlyMode } from '@/ai/mode'
 import type { SheetInsights } from '@/ai/sheetInsights'
 import type { AttachedFilePreview } from '@/ai/types'
@@ -171,11 +172,17 @@ export async function processChatMessage(
     // ─── Build pipeline context ──────────────────────────────────────────
     const sheet = getActiveSheet()
     const messages = getMessages()
-    const history = messages
+    // Drop the current turn's two placeholders (`.slice(0, -2)`), then condense
+    // older turns beyond the recent window into one summary line instead of
+    // silently discarding them (the old `.slice(-12)` dropped everything older).
+    const recent = messages
       .filter((m) => m.role === 'user' || m.role === 'assistant')
       .slice(0, -2)
-      .slice(-12)
       .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }))
+    const { summary, recentMessages } = summarizeOlderMessages(recent)
+    const history = summary
+      ? [{ role: 'user' as const, content: summary }, ...recentMessages]
+      : recentMessages
 
     const priorInsights = messages
       .filter((m) => m.role === 'assistant' && m.insightsSnapshot)
