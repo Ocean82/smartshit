@@ -17,7 +17,7 @@
  * without spinning up the full Zustand store.
  */
 
-import type { ChatMessage, ProviderMeta, SheetData, Selection, WorkbookData, ActionScope } from '@/types'
+import type { ChatMessage, ProviderMeta, SheetData, Selection, WorkbookData, ActionScope, AgentAction, InsightsSnapshot, InsightsScope } from '@/types'
 import type { ExecutionContext } from '@/agent/executor'
 import { toolResultToChatMessage } from '@/ai/responseBuilder'
 import { buildSpreadsheetContext } from '@/ai/buildContext'
@@ -109,6 +109,63 @@ function getScopeSource(deps: ChatServiceDeps) {
 }
 
 /**
+ * Map an action's lifecycle status to the factual word carried into history.
+ * Rendered verbatim so a pending/preview turn never reads as if it were
+ * applied — the model must see what actually happened, not what was proposed.
+ */
+function outcomeWord(status: AgentAction['status']): string {
+  switch (status) {
+    case 'applied':
+      return 'applied'
+    case 'rejected':
+      return 'rejected'
+    case 'failed':
+      return 'failed'
+    case 'stale':
+      return 'stale'
+    case 'applying':
+      return 'applying'
+    case 'previewing':
+    case 'preview':
+      return 'preview'
+    case 'pending':
+    default:
+      return 'pending'
+  }
+}
+
+/**
+ * F15(b): append a compact, structured outcome line to a past assistant turn
+ * that had actions, e.g. `[applied clear_sheet (a1b2); rejected set_formula (c3d4)]`.
+ * Tool name + outcome + short id only — no params, no prose — so the model
+ * gains execution memory at minimal input-token cost. Turns with no actions are
+ * returned unchanged.
+ */
+function appendActionOutcomes(message: ChatMessage): string {
+  if (message.role !== 'assistant' || !message.actions?.length) return message.content
+  const parts = message.actions.map(
+    (a) => `${outcomeWord(a.status)} ${a.tool} (${a.id.slice(0, 4)})`,
+  )
+  const note = `[${parts.join('; ')}]`
+  return message.content ? `${message.content}\n${note}` : note
+}
+
+/**
+ * True when prior insights were computed against the current scope. A snapshot
+ * restored from older persisted history may predate the scope key; an absent
+ * scope is treated as a mismatch (dropped), the same safe default as a stale
+ * action.
+ */
+function insightsScopeMatches(snapshotScope: InsightsScope | undefined, current: ActionScope): boolean {
+  if (!snapshotScope) return false
+  return (
+    snapshotScope.workbookId === current.workbookId &&
+    snapshotScope.sheetId === current.sheetId &&
+    snapshotScope.revision === current.revision
+  )
+}
+
+/**
  * Build the stage chain.
  *
  * `isNonCommand` drops the three stages that mutate immediately (goal router,
@@ -175,23 +232,40 @@ export async function processChatMessage(
     // Drop the current turn's two placeholders (`.slice(0, -2)`), then condense
     // older turns beyond the recent window into one summary line instead of
     // silently discarding them (the old `.slice(-12)` dropped everything older).
+    //
+    // F15(b): a past assistant turn that produced actions carries a compact,
+    // factual outcome line (`[applied clear_sheet (a1b2); rejected …]`) appended
+    // to its content, so the model can see what it previously did and whether it
+    // succeeded. Kept short and param-free to minimise input-token cost.
     const recent = messages
       .filter((m) => m.role === 'user' || m.role === 'assistant')
       .slice(0, -2)
-      .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }))
+      .map((m) => ({
+        role: m.role as 'user' | 'assistant',
+        content: appendActionOutcomes(m),
+      }))
     const { summary, recentMessages } = summarizeOlderMessages(recent)
     const history = summary
       ? [{ role: 'user' as const, content: summary }, ...recentMessages]
       : recentMessages
 
-    const priorInsights = messages
-      .filter((m) => m.role === 'assistant' && m.insightsSnapshot)
-      .at(-1)?.insightsSnapshot as SheetInsights | undefined
-
     // Scope captured once, before any stage runs. Every proposal this turn
     // produces is bound to it, so it can be rejected if the workbook, sheet,
     // selection or revision moves before the user clicks Apply.
     const scope: ActionScope = captureActionScope(getScopeSource(deps))
+
+    // F15(d): prior-turn insights are only reused as follow-up context when the
+    // snapshot was computed against the current workbook/sheet/revision. A
+    // snapshot from a different sheet or a stale revision is silently dropped
+    // (treated as no prior insights) — mirroring how a stale action is rejected
+    // rather than applied somewhere else.
+    const lastSnapshot = messages
+      .filter((m) => m.role === 'assistant' && m.insightsSnapshot)
+      .at(-1)?.insightsSnapshot
+    const priorInsights =
+      lastSnapshot && insightsScopeMatches(lastSnapshot.scope, scope)
+        ? (lastSnapshot.insights as unknown as SheetInsights)
+        : undefined
 
     const pipelineContext: PipelineContext = {
       message: input,
@@ -225,7 +299,10 @@ export async function processChatMessage(
       input,
       scope,
       processLocalFallback,
-      insightsSnapshot: buildSpreadsheetContext(getWorkbook(), sheet, getSelection(), getComputedValue).insights as unknown as Record<string, unknown>,
+      insightsSnapshot: {
+        insights: buildSpreadsheetContext(getWorkbook(), sheet, getSelection(), getComputedValue).insights as unknown as Record<string, unknown>,
+        scope: { workbookId: scope.workbookId, sheetId: scope.sheetId, revision: scope.revision },
+      },
     })
 
     finalizeMessage(streamingMsgId, finalMsg)
@@ -252,7 +329,7 @@ interface ConversionContext {
   /** Scope every emitted action is bound to. */
   scope: ActionScope
   processLocalFallback: (input: string) => ChatMessage
-  insightsSnapshot?: Record<string, unknown>
+  insightsSnapshot?: InsightsSnapshot
 }
 
 /**

@@ -247,6 +247,204 @@ describe('chatService — older history is summarized, not dropped', () => {
   })
 })
 
+describe('chatService — F15(b) past-action outcomes carried in history', () => {
+  beforeEach(() => {
+    workbook = createEmptyWorkbook('Chat Service Test')
+    engine = new SpreadsheetEngine()
+    engine.loadWorkbook(workbook)
+    selection = null
+    messages.length = 0
+    serverStream.mockReset()
+    serverStream.mockResolvedValue(null)
+  })
+
+  const CURRENT_INPUT = 'generate a lunar calendar from this dataset'
+
+  function historyPassed(): { role: string; content: string }[] {
+    return (serverStream.mock.calls[0][0] as { history: { role: string; content: string }[] }).history
+  }
+
+  it('appends a compact outcome line for applied and rejected actions, no params leaked', async () => {
+    messages.push({ id: 'u0', role: 'user', content: 'clean then formula', timestamp: Date.now() })
+    messages.push({
+      id: 'a0',
+      role: 'assistant',
+      content: 'Done.',
+      timestamp: Date.now(),
+      actions: [
+        {
+          id: 'a1b2c3d4-aaaa',
+          tool: 'clear_sheet',
+          params: { range: 'A1:Z99', secretValue: 'must-not-leak' },
+          description: 'Clear the sheet',
+          status: 'applied',
+        },
+        {
+          id: 'c3d4e5f6-bbbb',
+          tool: 'set_formula',
+          params: { cell: 'B1', formula: '=SUM(A:A)' },
+          description: 'Set formula',
+          status: 'rejected',
+        },
+      ],
+    })
+    // Current-turn placeholders dropped by `.slice(0, -2)`
+    messages.push({ id: 'current-user', role: 'user', content: CURRENT_INPUT, timestamp: Date.now() })
+    messages.push({ id: 'stream-1', role: 'assistant', content: '', timestamp: Date.now() })
+
+    await processChatMessage(CURRENT_INPUT, 'stream-1', makeDeps())
+
+    expect(serverStream).toHaveBeenCalledTimes(1)
+    const assistantTurn = historyPassed().find((m) => m.role === 'assistant')
+    expect(assistantTurn?.content).toContain('[applied clear_sheet (a1b2); rejected set_formula (c3d4)]')
+    // The original prose is preserved
+    expect(assistantTurn?.content).toContain('Done.')
+    // No action params leaked into history
+    expect(assistantTurn?.content).not.toContain('must-not-leak')
+    expect(assistantTurn?.content).not.toContain('SUM')
+  })
+
+  it('renders a pending turn as pending, never as applied', async () => {
+    messages.push({ id: 'u0', role: 'user', content: 'propose a chart', timestamp: Date.now() })
+    messages.push({
+      id: 'a0',
+      role: 'assistant',
+      content: 'Here is a proposal.',
+      timestamp: Date.now(),
+      actions: [
+        {
+          id: '9999aaaa-bbbb',
+          tool: 'create_chart',
+          params: { type: 'bar' },
+          description: 'Chart',
+          status: 'pending',
+        },
+      ],
+    })
+    messages.push({ id: 'current-user', role: 'user', content: CURRENT_INPUT, timestamp: Date.now() })
+    messages.push({ id: 'stream-1', role: 'assistant', content: '', timestamp: Date.now() })
+
+    await processChatMessage(CURRENT_INPUT, 'stream-1', makeDeps())
+
+    const assistantTurn = historyPassed().find((m) => m.role === 'assistant')
+    expect(assistantTurn?.content).toContain('[pending create_chart (9999)]')
+    expect(assistantTurn?.content).not.toContain('applied')
+  })
+
+  it('leaves a no-action assistant turn unchanged', async () => {
+    messages.push({ id: 'u0', role: 'user', content: 'what is this sheet', timestamp: Date.now() })
+    messages.push({ id: 'a0', role: 'assistant', content: 'It is a budget.', timestamp: Date.now() })
+    messages.push({ id: 'current-user', role: 'user', content: CURRENT_INPUT, timestamp: Date.now() })
+    messages.push({ id: 'stream-1', role: 'assistant', content: '', timestamp: Date.now() })
+
+    await processChatMessage(CURRENT_INPUT, 'stream-1', makeDeps())
+
+    const assistantTurn = historyPassed().find((m) => m.content.includes('budget'))
+    expect(assistantTurn?.content).toBe('It is a budget.')
+    expect(assistantTurn?.content).not.toContain('[')
+  })
+})
+
+describe('chatService — F15(d) insights scope-bound to workbook/sheet/revision', () => {
+  beforeEach(() => {
+    workbook = createEmptyWorkbook('Chat Service Test')
+    engine = new SpreadsheetEngine()
+    engine.loadWorkbook(workbook)
+    selection = null
+    messages.length = 0
+    serverStream.mockReset()
+    serverStream.mockResolvedValue(null)
+  })
+
+  const CURRENT_INPUT = 'generate a lunar calendar from this dataset'
+
+  function priorInsightsArg(): unknown {
+    // llmGateway builds a "Prior turn insights still apply" line into
+    // context.deterministicSummary only when priorInsights is present.
+    return (serverStream.mock.calls[0][0] as { context: { deterministicSummary?: string } }).context.deterministicSummary
+  }
+
+  it('reuses a snapshot whose scope matches the current sheet/revision', async () => {
+    messages.push({ id: 'u0', role: 'user', content: 'analyze', timestamp: Date.now() })
+    messages.push({
+      id: 'a0',
+      role: 'assistant',
+      content: 'Analysis.',
+      timestamp: Date.now(),
+      insightsSnapshot: {
+        insights: { totalIncome: 100 },
+        scope: { workbookId: workbook.id, sheetId: workbook.activeSheetId, revision: 0 },
+      },
+    })
+    messages.push({ id: 'current-user', role: 'user', content: CURRENT_INPUT, timestamp: Date.now() })
+    messages.push({ id: 'stream-1', role: 'assistant', content: '', timestamp: Date.now() })
+
+    await processChatMessage(CURRENT_INPUT, 'stream-1', makeDeps())
+
+    expect(serverStream).toHaveBeenCalledTimes(1)
+    expect(priorInsightsArg()).toContain('Prior turn insights still apply')
+  })
+
+  it('silently drops a snapshot from a different sheet (no priorInsights line)', async () => {
+    messages.push({ id: 'u0', role: 'user', content: 'analyze', timestamp: Date.now() })
+    messages.push({
+      id: 'a0',
+      role: 'assistant',
+      content: 'Analysis.',
+      timestamp: Date.now(),
+      insightsSnapshot: {
+        insights: { totalIncome: 100 },
+        scope: { workbookId: workbook.id, sheetId: 'some-other-sheet', revision: 0 },
+      },
+    })
+    messages.push({ id: 'current-user', role: 'user', content: CURRENT_INPUT, timestamp: Date.now() })
+    messages.push({ id: 'stream-1', role: 'assistant', content: '', timestamp: Date.now() })
+
+    await processChatMessage(CURRENT_INPUT, 'stream-1', makeDeps())
+
+    expect(serverStream).toHaveBeenCalledTimes(1)
+    expect(priorInsightsArg() ?? '').not.toContain('Prior turn insights still apply')
+  })
+
+  it('silently drops a legacy snapshot that predates the scope key', async () => {
+    messages.push({ id: 'u0', role: 'user', content: 'analyze', timestamp: Date.now() })
+    messages.push({
+      id: 'a0',
+      role: 'assistant',
+      content: 'Analysis.',
+      timestamp: Date.now(),
+      // Legacy persisted shape: raw insights with no `scope` wrapper.
+      insightsSnapshot: { totalIncome: 100 } as unknown as import('@/types').InsightsSnapshot,
+    })
+    messages.push({ id: 'current-user', role: 'user', content: CURRENT_INPUT, timestamp: Date.now() })
+    messages.push({ id: 'stream-1', role: 'assistant', content: '', timestamp: Date.now() })
+
+    await processChatMessage(CURRENT_INPUT, 'stream-1', makeDeps())
+
+    expect(priorInsightsArg() ?? '').not.toContain('Prior turn insights still apply')
+  })
+
+  it('silently drops a snapshot from a stale revision', async () => {
+    messages.push({ id: 'u0', role: 'user', content: 'analyze', timestamp: Date.now() })
+    messages.push({
+      id: 'a0',
+      role: 'assistant',
+      content: 'Analysis.',
+      timestamp: Date.now(),
+      insightsSnapshot: {
+        insights: { totalIncome: 100 },
+        scope: { workbookId: workbook.id, sheetId: workbook.activeSheetId, revision: 7 },
+      },
+    })
+    messages.push({ id: 'current-user', role: 'user', content: CURRENT_INPUT, timestamp: Date.now() })
+    messages.push({ id: 'stream-1', role: 'assistant', content: '', timestamp: Date.now() })
+
+    await processChatMessage(CURRENT_INPUT, 'stream-1', makeDeps())
+
+    expect(priorInsightsArg() ?? '').not.toContain('Prior turn insights still apply')
+  })
+})
+
 describe('chatService — model-supplied metadata is stripped', () => {
   beforeEach(() => {
     workbook = createEmptyWorkbook('Chat Service Test')

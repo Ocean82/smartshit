@@ -1,5 +1,5 @@
 import { v4 as uuid } from 'uuid'
-import type { ChatMessage } from '@/types'
+import type { ChatMessage, InsightsSnapshot } from '@/types'
 import type { SheetInsights } from '@/ai/sheetInsights'
 import type { SheetProfile, ToolResult } from '@/ai/types'
 import { AI_ANALYSIS_CONFIG } from '@/ai/config'
@@ -146,7 +146,7 @@ export function toolResultToChatMessage(
   meta?: {
     id?: string
     toolUsed?: string
-    insightsSnapshot?: Record<string, unknown>
+    insightsSnapshot?: InsightsSnapshot
     /**
      * When provided, attach cell-level previews for supported mutate tools.
      * `scope` binds every emitted action to the workbook/sheet/selection/

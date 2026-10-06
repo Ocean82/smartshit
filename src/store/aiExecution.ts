@@ -86,7 +86,14 @@ export function processAICommand(
         content: toolResultToMessage(result),
         timestamp: Date.now(),
         suggestions: result.suggestions,
-        insightsSnapshot: insights as unknown as Record<string, unknown>,
+        insightsSnapshot: {
+          insights: insights as unknown as Record<string, unknown>,
+          scope: {
+            workbookId: state.workbook.id,
+            sheetId: state.activeSheetId,
+            revision: state.workbookRevision,
+          },
+        },
       };
     }
 

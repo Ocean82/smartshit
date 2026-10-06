@@ -20,13 +20,35 @@ export interface ChatMessage {
   actions?: AgentAction[];
   status?: 'pending' | 'applied' | 'rejected' | 'preview';
   toolUsed?: string;
-  insightsSnapshot?: Record<string, unknown>;
+  insightsSnapshot?: InsightsSnapshot;
   reasoning?: string;
   suggestions?: string[];
   /** Whether this message is pinned/bookmarked by the user */
   pinned?: boolean;
   /** Server-reported provider identity (dev / expandable details). */
   providerMeta?: ProviderMeta;
+}
+
+/**
+ * Workbook/sheet/revision the insights were computed against. A subset of
+ * {@link ActionScope} — insights only need to be invalidated when the data
+ * they describe changes, so selection/epoch/signature are not carried.
+ */
+export interface InsightsScope {
+  workbookId: string;
+  sheetId: string;
+  revision: number;
+}
+
+/**
+ * Deterministic insights plus the scope they were computed against. Prior-turn
+ * insights are only reused as follow-up context when this scope still matches
+ * the current workbook/sheet/revision; a mismatch is treated as no prior
+ * insights (mirrors how a stale {@link AgentAction} is dropped, not applied).
+ */
+export interface InsightsSnapshot {
+  insights: Record<string, unknown>;
+  scope: InsightsScope;
 }
 
 export interface AgentAction {

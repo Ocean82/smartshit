@@ -415,6 +415,7 @@ Rules:
 - actions: array of tool calls (empty array if no sheet changes needed)
 - For conditional formatting (color cells by value), use format_cells with a condition param
 - Read/analysis questions (totals, top N, duplicates, summaries) are answered in the message prose using the provided context — never emit actions for them
+- A prior assistant turn may end with a bracketed note like [applied clear_sheet (a1b2); rejected set_formula (c3d4)]: these are factual records of what earlier actions did (applied/rejected/pending/failed) and their short ids — use them for continuity, do not echo them back
 - No markdown fences, no extra text outside JSON. Start with { end with }
 ${contextBlock}`
 }
