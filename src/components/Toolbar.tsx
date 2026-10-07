@@ -1,10 +1,8 @@
 import { useShallow } from 'zustand/react/shallow';
 import { useStore } from '@/store/useStore';
 import { refToCell } from '@/engine/spreadsheet';
-import { importWorkbookFromFileWithMeta, exportWorkbookToXlsx, exportSheetToCsv } from '@/io/xlsx';
-import { recordTelemetry } from '@/ai/telemetry';
-import { isBankCSV, parseBankCSV } from '@/lib/bankImport';
-import { workbookHasContent } from '@/lib/workbookGuard';
+import { exportWorkbookToXlsx, exportSheetToCsv } from '@/io/xlsx';
+import { useWorkbookFileImport } from '@/hooks/useWorkbookFileImport';
 import {
   Bold, Italic, Underline, Strikethrough, WrapText,
   AlignLeft, AlignCenter, AlignRight,
@@ -15,8 +13,7 @@ import {
 } from 'lucide-react';
 import { BG_COLORS, FULL_COLORS } from '@/data/colors';
 import { useRef, useState, useCallback } from 'react';
-import type { ChangeEvent, ReactNode } from 'react';
-import { v4 as uuid } from 'uuid';
+import type { ReactNode } from 'react';
 import { AnchoredPanel } from '@/components/AnchoredPanel';
 import './Toolbar.css';
 
@@ -38,9 +35,7 @@ export function Toolbar() {
     sortByColumn,
     setShowFilterDialog,
     setShowConditionalFormatDialog,
-    pushHistory,
     getActiveSheet,
-    showConfirm,
     applyAutoAggregate,
   } = useStore(useShallow((s) => ({
     selection: s.selection,
@@ -57,29 +52,11 @@ export function Toolbar() {
     sortByColumn: s.sortByColumn,
     setShowFilterDialog: s.setShowFilterDialog,
     setShowConditionalFormatDialog: s.setShowConditionalFormatDialog,
-    pushHistory: s.pushHistory,
     getActiveSheet: s.getActiveSheet,
-    showConfirm: s.showConfirm,
     applyAutoAggregate: s.applyAutoAggregate,
   })));
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const requestImport = useCallback(() => {
-    const proceed = () => fileInputRef.current?.click()
-    if (workbookHasContent(useStore.getState().workbook)) {
-      showConfirm({
-        title: 'Import file',
-        message:
-          'Importing a file will replace the current workbook and clear undo history. This cannot be undone.',
-        confirmLabel: 'Import file',
-        variant: 'warning',
-        onConfirm: proceed,
-      })
-    } else {
-      proceed()
-    }
-  }, [showConfirm])
+  const { requestImport, fileInput } = useWorkbookFileImport({ verb: 'Import', onDone: nudgeAuditorOnce });
 
   const cellColorRef = useRef<HTMLButtonElement>(null);
   const fontColorRef = useRef<HTMLButtonElement>(null);
@@ -106,139 +83,6 @@ export function Toolbar() {
     exportWorkbookToXlsx(workbook);
     setShowExportMenu(false);
   }, []);
-
-  const handleImportFile = async (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    // Also route CSV through SheetJS so multi-sheet-capable paths stay consistent
-    if (file.name.match(/\.(xlsx?|csv)$/i)) {
-      pushHistory('Import file');
-      const { workbook, meta } = await importWorkbookFromFileWithMeta(file);
-      useStore.getState().importWorkbook(workbook, { fileName: file.name, warnings: meta.warnings });
-      if (meta.warnings.length) {
-        recordTelemetry('importTruncationEvents', `Toolbar import: ${file.name}`);
-        // Warnings are also appended to the import chat message via importOrchestration.
-      }
-      // Post-import nudge: suggest the auditor on first import
-      const hasSeenAuditorNudge = localStorage.getItem('smartsht-auditor-nudge-seen');
-      if (!hasSeenAuditorNudge) {
-        localStorage.setItem('smartsht-auditor-nudge-seen', '1');
-        useStore.getState().showToast({
-          type: 'info',
-          message: 'Imported! Open the Auditor panel (right side) to check for formula errors.',
-          duration: 6000,
-        });
-      }
-      if (fileInputRef.current) fileInputRef.current.value = '';
-      return;
-    }
-
-    handleImportCSV(e);
-  };
-
-  const handleImportCSV = (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const text = event.target?.result as string;
-      if (!text) return;
-
-      // Try bank CSV detection first
-      if (isBankCSV(text)) {
-        const result = parseBankCSV(text);
-        if (result && result.transactions.length > 0) {
-          pushHistory('Import Bank CSV');
-          const cells: Record<string, { value: string | number | boolean | null }> = {};
-          cells[refToCell(0, 0)] = { value: '📊 Bank Statement Import' };
-          cells[refToCell(1, 0)] = { value: `Source: ${result.bankName}` };
-          cells[refToCell(1, 2)] = { value: `${result.dateRange.start} to ${result.dateRange.end}` };
-
-          cells[refToCell(3, 0)] = { value: 'Date' };
-          cells[refToCell(3, 1)] = { value: 'Description' };
-          cells[refToCell(3, 2)] = { value: 'Category' };
-          cells[refToCell(3, 3)] = { value: 'Amount' };
-          cells[refToCell(3, 4)] = { value: 'Type' };
-
-          result.transactions.forEach((t, i) => {
-            const row = 4 + i;
-            cells[refToCell(row, 0)] = { value: t.date };
-            cells[refToCell(row, 1)] = { value: t.description };
-            cells[refToCell(row, 2)] = { value: t.category };
-            cells[refToCell(row, 3)] = { value: t.type === 'debit' ? -t.amount : t.amount };
-            cells[refToCell(row, 4)] = { value: t.type === 'credit' ? 'Income' : 'Expense' };
-          });
-
-          const summaryRow = 4 + result.transactions.length + 2;
-          cells[refToCell(summaryRow, 0)] = { value: '📈 Summary' };
-          cells[refToCell(summaryRow + 1, 0)] = { value: 'Total Income' };
-          cells[refToCell(summaryRow + 1, 1)] = { value: result.totalIncome };
-          cells[refToCell(summaryRow + 2, 0)] = { value: 'Total Expenses' };
-          cells[refToCell(summaryRow + 2, 1)] = { value: -result.totalExpenses };
-          cells[refToCell(summaryRow + 3, 0)] = { value: 'Net' };
-          cells[refToCell(summaryRow + 3, 1)] = { value: result.totalIncome - result.totalExpenses };
-
-          const catRow = summaryRow + 5;
-          cells[refToCell(catRow, 0)] = { value: '📋 Spending by Category' };
-          cells[refToCell(catRow + 1, 0)] = { value: 'Category' };
-          cells[refToCell(catRow + 1, 1)] = { value: 'Total' };
-          cells[refToCell(catRow + 1, 2)] = { value: 'Transactions' };
-          result.categoryBreakdown.forEach((cat, i) => {
-            cells[refToCell(catRow + 2 + i, 0)] = { value: cat.category };
-            cells[refToCell(catRow + 2 + i, 1)] = { value: -cat.total };
-            cells[refToCell(catRow + 2 + i, 2)] = { value: cat.count };
-          });
-
-          useStore.getState().bulkSetCells(cells);
-
-          useStore.getState().setCellFormat(refToCell(0, 0), { bold: true, fontSize: 16, fontColor: '#1E40AF' });
-          useStore.getState().setCellFormat(refToCell(3, 0), { bold: true, bgColor: '#1E40AF', fontColor: '#FFFFFF' });
-          useStore.getState().setCellFormat(refToCell(3, 1), { bold: true, bgColor: '#1E40AF', fontColor: '#FFFFFF' });
-          useStore.getState().setCellFormat(refToCell(3, 2), { bold: true, bgColor: '#1E40AF', fontColor: '#FFFFFF' });
-          useStore.getState().setCellFormat(refToCell(3, 3), { bold: true, bgColor: '#1E40AF', fontColor: '#FFFFFF' });
-          useStore.getState().setCellFormat(refToCell(3, 4), { bold: true, bgColor: '#1E40AF', fontColor: '#FFFFFF' });
-
-          const topCats = result.categoryBreakdown.slice(0, 5).map((c) => `• **${c.category}**: $${c.total.toLocaleString()} (${c.count} transactions)`).join('\n');
-          useStore.getState().addMessage({
-            id: uuid(),
-            role: 'assistant',
-            content: `Imported **${file.name}** from **${result.bankName}** — ${result.transactions.length} transactions auto-categorized.\n\n**Income:** $${result.totalIncome.toLocaleString()}\n**Expenses:** $${result.totalExpenses.toLocaleString()}\n**Net:** $${(result.totalIncome - result.totalExpenses).toLocaleString()}\n\n**Top spending categories:**\n${topCats}\n\nTry: **"Where am I overspending?"** or **"How can I save more?"**`,
-            timestamp: Date.now(),
-          });
-
-          if (fileInputRef.current) fileInputRef.current.value = '';
-          return;
-        }
-      }
-
-      // Fallback: generic CSV import
-      pushHistory('Import CSV');
-      const rows = text.split('\n').filter(Boolean);
-      const cells: Record<string, { value: string | number | boolean | null }> = {};
-      rows.forEach((row, r) => {
-        const values = row.split(',').map(v => v.replace(/^"|"$/g, '').trim());
-        values.forEach((val, c) => {
-          const cellId = refToCell(r, c);
-          const num = Number(val);
-          if (val !== '' && !isNaN(num)) {
-            cells[cellId] = { value: num };
-          } else {
-            cells[cellId] = { value: val || null };
-          }
-        });
-      });
-      useStore.getState().bulkSetCells(cells);
-      useStore.getState().addMessage({
-        id: uuid(),
-        role: 'assistant',
-        content: `Imported **${file.name}** — ${rows.length} rows on the current sheet.\n\nAsk me to explain it, find overspending, or suggest savings.`,
-        timestamp: Date.now(),
-      });
-    };
-    reader.readAsText(file);
-    if (fileInputRef.current) fileInputRef.current.value = '';
-  };
 
   const colorOptions = BG_COLORS;
   const fontColorOptions = FULL_COLORS;
@@ -685,15 +529,7 @@ export function Toolbar() {
           </AnchoredPanel>
         </div>
 
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".csv,.xlsx,.xls"
-          className="hidden"
-          aria-label="Import spreadsheet file"
-          title="Import spreadsheet file"
-          onChange={handleImportFile}
-        />
+        {fileInput}
       </div>
     </div>
   );
@@ -728,6 +564,17 @@ function ToolButton({
 
 function Divider() {
   return <div className="toolbar-divider" />;
+}
+
+/** After the first successful import, point the user at the auditor. */
+function nudgeAuditorOnce(imported: boolean) {
+  if (!imported || localStorage.getItem('smartsht-auditor-nudge-seen')) return;
+  localStorage.setItem('smartsht-auditor-nudge-seen', '1');
+  useStore.getState().showToast({
+    type: 'info',
+    message: 'Imported! Open the Auditor panel (right side) to check for formula errors.',
+    duration: 6000,
+  });
 }
 
 // Keep Plus icon export for sheet tabs

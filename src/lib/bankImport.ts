@@ -9,6 +9,10 @@
  * budget breakdown in seconds.
  */
 
+import { v4 as uuid } from 'uuid'
+import type { CellFormat, SheetData } from '@/types'
+import { refToCell } from './cellRef'
+
 export interface Transaction {
   date: string
   description: string
@@ -53,19 +57,6 @@ const BANK_FORMATS: BankFormat[] = [
     },
   },
   {
-    name: 'Wells Fargo',
-    detect: (h) => h.includes('Date') && h.includes('Amount') && h.includes('Description') && !h.includes('Transaction Date'),
-    parse: (row, headers) => {
-      const dateIdx = headers.indexOf('Date')
-      const descIdx = headers.indexOf('Description')
-      const amountIdx = headers.indexOf('Amount')
-      if (dateIdx < 0 || descIdx < 0 || amountIdx < 0) return null
-      const amount = parseFloat(row[amountIdx]?.replace(/[$,]/g, '') ?? '')
-      if (isNaN(amount)) return null
-      return { date: row[dateIdx] ?? '', description: row[descIdx] ?? '', amount }
-    },
-  },
-  {
     name: 'Capital One',
     detect: (h) => h.includes('Transaction Date') && h.includes('Posted Date') && h.includes('Card No.') && h.includes('Debit') && h.includes('Credit'),
     parse: (row, headers) => {
@@ -83,6 +74,20 @@ const BANK_FORMATS: BankFormat[] = [
   {
     name: 'Bank of America',
     detect: (h) => h.includes('Date') && h.includes('Description') && h.includes('Amount') && h.includes('Running Bal.'),
+    parse: (row, headers) => {
+      const dateIdx = headers.indexOf('Date')
+      const descIdx = headers.indexOf('Description')
+      const amountIdx = headers.indexOf('Amount')
+      if (dateIdx < 0 || descIdx < 0 || amountIdx < 0) return null
+      const amount = parseFloat(row[amountIdx]?.replace(/[$,]/g, '') ?? '')
+      if (isNaN(amount)) return null
+      return { date: row[dateIdx] ?? '', description: row[descIdx] ?? '', amount }
+    },
+  },
+  {
+    // After Bank of America, whose headers are a superset of these.
+    name: 'Wells Fargo',
+    detect: (h) => h.includes('Date') && h.includes('Amount') && h.includes('Description') && !h.includes('Transaction Date'),
     parse: (row, headers) => {
       const dateIdx = headers.indexOf('Date')
       const descIdx = headers.indexOf('Description')
@@ -114,7 +119,7 @@ const BANK_FORMATS: BankFormat[] = [
     detect: (h) => {
       const hasDate = h.some((c) => /date/i.test(c))
       const hasDesc = h.some((c) => /desc|memo|payee|merchant|narrative/i.test(c))
-      const hasAmount = h.some((c) => /amount|debit|credit|sum|value/i.test(c))
+      const hasAmount = h.some((c) => /^amount$|debit|credit/i.test(c))
       return hasDate && hasDesc && hasAmount
     },
     parse: (row, headers) => {
@@ -318,13 +323,66 @@ export function parseBankCSV(csvText: string): BankImportResult | null {
   }
 }
 
-/**
- * Detect if a CSV file looks like a bank statement (vs generic data).
- * Uses header heuristics — if it has date + description + amount-like columns,
- * it's likely a bank export.
- */
-export function isBankCSV(csvText: string): boolean {
-  const firstLine = csvText.split(/\r?\n/)[0] ?? ''
-  const headers = parseCSVLine(firstLine)
-  return BANK_FORMATS.some((f) => f.detect(headers))
+const HEADER_FORMAT: CellFormat = { bold: true, bgColor: '#1E40AF', fontColor: '#FFFFFF' }
+
+/** A categorized summary sheet for a parsed bank statement, added beside the raw import. */
+export function buildBankSummarySheet(result: BankImportResult): SheetData {
+  const cells: SheetData['cells'] = {}
+  const put = (row: number, col: number, value: string | number, format?: CellFormat) => {
+    cells[refToCell(row, col)] = format ? { value, format } : { value }
+  }
+
+  put(0, 0, 'Bank Statement Import', { bold: true, fontSize: 16, fontColor: '#1E40AF' })
+  put(1, 0, `Source: ${result.bankName}`)
+  put(1, 2, `${result.dateRange.start} to ${result.dateRange.end}`)
+
+  const headers = ['Date', 'Description', 'Category', 'Amount', 'Type']
+  headers.forEach((h, c) => put(3, c, h, HEADER_FORMAT))
+  result.transactions.forEach((t, i) => {
+    const row = 4 + i
+    put(row, 0, t.date)
+    put(row, 1, t.description)
+    put(row, 2, t.category)
+    put(row, 3, t.type === 'debit' ? -t.amount : t.amount)
+    put(row, 4, t.type === 'credit' ? 'Income' : 'Expense')
+  })
+
+  const summaryRow = 4 + result.transactions.length + 2
+  put(summaryRow, 0, 'Summary', { bold: true })
+  put(summaryRow + 1, 0, 'Total Income')
+  put(summaryRow + 1, 1, result.totalIncome)
+  put(summaryRow + 2, 0, 'Total Expenses')
+  put(summaryRow + 2, 1, -result.totalExpenses)
+  put(summaryRow + 3, 0, 'Net')
+  put(summaryRow + 3, 1, Math.round((result.totalIncome - result.totalExpenses) * 100) / 100)
+
+  const catRow = summaryRow + 5
+  put(catRow, 0, 'Spending by Category', { bold: true })
+  ;['Category', 'Total', 'Transactions'].forEach((h, c) => put(catRow + 1, c, h, HEADER_FORMAT))
+  result.categoryBreakdown.forEach((cat, i) => {
+    put(catRow + 2 + i, 0, cat.category)
+    put(catRow + 2 + i, 1, -cat.total)
+    put(catRow + 2 + i, 2, cat.count)
+  })
+
+  return { id: uuid(), name: 'Bank Summary', cells, columnWidths: {}, rowHeights: {}, charts: [] }
+}
+
+/** Chat summary for a bank import. */
+export function describeBankImport(fileName: string, result: BankImportResult): string {
+  const money = (n: number) => `$${n.toLocaleString()}`
+  const topCats = result.categoryBreakdown
+    .slice(0, 5)
+    .map((c) => `- **${c.category}**: ${money(c.total)} (${c.count} transactions)`)
+    .join('\n')
+  return [
+    `**${fileName}** looks like a **${result.bankName}** statement. I added a **Bank Summary** sheet with ${result.transactions.length} transactions auto-categorized.`,
+    '',
+    `**Income:** ${money(result.totalIncome)}`,
+    `**Expenses:** ${money(result.totalExpenses)}`,
+    `**Net:** ${money(Math.round((result.totalIncome - result.totalExpenses) * 100) / 100)}`,
+    ...(topCats ? ['', '**Top spending categories:**', topCats] : []),
+    '',
+    'Try: **"Where am I overspending?"** or **"How can I save more?"**',
+  ].join('\n')
 }

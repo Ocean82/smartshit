@@ -120,10 +120,11 @@ M 1–2 days, L more.
 - [x] **Audit-entry import button needs the desktop toolbar** — S (2026-10-07)
   - New `useWorkbookFileImport` hook owns its file input; used by the audit panel, MenuBar,
     and MobileMenu (which now also pass import warnings). The document event is gone.
-  - Still open: signed-in browser check of the button and `/app?audit=1`.
-  - Toolbar keeps its own handler: its bank-CSV/plain-text fallback only runs for files
-    that aren't .csv/.xlsx/.xls, so bank detection is effectively unreachable. Decide
-    whether to route `.csv` through it or remove it.
+  - Browser-checked by the user on desktop and mobile (2026-10-07).
+  - Toolbar now uses the hook too. A `.csv` that matches a bank format keeps its raw sheet
+    and gets an added "Bank Summary" sheet plus a chat summary (bank detection was
+    previously unreachable). Bank of America is now detected before Wells Fargo; the
+    generic format only matches columns its parser can read.
 
 ## 4. Chat path (from the 2026-09-30 review)
 
