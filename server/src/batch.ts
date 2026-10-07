@@ -12,6 +12,7 @@
  */
 
 import { callProviderWithFailover } from './providers.js'
+import { runDeterministicFunction } from './deterministicFunctions.js'
 import type { ChatMessageInput } from './prompt.js'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -98,8 +99,15 @@ export async function processBatch(inputs: BatchInput[]): Promise<BatchResponse>
   const results: BatchResult[] = []
   const uncachedInputs: Array<{ input: BatchInput; key: string }> = []
 
-  // Step 1: Check cache for each input
+  // Step 1: Answer deterministic functions locally, then check cache
   for (const input of inputs) {
+    const deterministic = runDeterministicFunction(input.function, input.args)
+    if (deterministic) {
+      results.push(deterministic.ok
+        ? { id: input.id, result: deterministic.result, cached: false }
+        : { id: input.id, result: null, cached: false, error: deterministic.error })
+      continue
+    }
     const cached = getCached(input.function, input.args)
     if (cached !== undefined) {
       results.push({ id: input.id, result: cached, cached: true })
@@ -318,6 +326,7 @@ export function estimateBatchCost(inputs: BatchInput[]): { uniqueInputs: number;
   const seen = new Set<string>()
 
   for (const input of inputs) {
+    if (runDeterministicFunction(input.function, input.args)) continue
     const key = cacheKey(input.function, input.args)
     if (getCached(input.function, input.args) !== undefined) {
       cachedCount++

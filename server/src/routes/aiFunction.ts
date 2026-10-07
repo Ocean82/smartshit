@@ -19,8 +19,7 @@ import { aiFunctionRateLimiter } from '../middleware/rateLimit.js'
 import { validateBody } from '../middleware/validate.js'
 import { aiFunctionBodySchema } from '../schemas/aiFunction.js'
 import { assertPublicByokHost } from '../schemas/byok.js'
-import { forecast } from '../forecast.js'
-import { score } from '../scoring.js'
+import { runDeterministicFunction } from '../deterministicFunctions.js'
 import { validateLabel, parseAllowlist, parseSentiment } from '../labelValidation.js'
 import { processBatch, estimateBatchCost, type BatchInput } from '../batch.js'
 
@@ -226,35 +225,14 @@ aiFunctionRouter.post('/', aiFunctionRateLimiter, validateBody(aiFunctionBodySch
 
   // ─── Deterministic functions (AI.PREDICT, AI.SCORE) ─────────────────────
   // These use local math — no LLM, no API costs, no rate limits.
-  if (funcName === 'AI.PREDICT') {
-    const values = body.args.values
-    if (!Array.isArray(values) || values.length === 0) {
-      res.status(400).json({ error: 'AI.PREDICT requires a non-empty "values" array of numbers', result: null })
+  const deterministic = runDeterministicFunction(funcName, body.args)
+  if (deterministic) {
+    if (!deterministic.ok) {
+      res.status(400).json({ error: deterministic.error, result: null })
       return
     }
-    const numericValues = (values as unknown[]).map(Number).filter((v) => !isNaN(v))
-    if (numericValues.length === 0) {
-      res.status(400).json({ error: 'AI.PREDICT requires numeric values', result: null })
-      return
-    }
-    const periods = typeof body.args.periods === 'number' ? body.args.periods : 1
-    const method = typeof body.args.method === 'string' ? body.args.method as 'linear' | 'moving_average' | 'seasonal_naive' : undefined
-    const result = forecast(numericValues, { periods, method })
-    res.json({ result: result.value, method: result.method, confidence: result.confidence, deterministic: true })
-    return
-  }
-
-  if (funcName === 'AI.SCORE') {
-    const input = body.args.input ?? body.args.value ?? body.args.text ?? ''
-    const criteria = typeof body.args.criteria === 'string' ? body.args.criteria : 'quality'
-    const distribution = Array.isArray(body.args.distribution)
-      ? (body.args.distribution as unknown[]).map(Number).filter((v) => !isNaN(v))
-      : undefined
-    const mean = typeof body.args.mean === 'number' ? body.args.mean : undefined
-    const stddev = typeof body.args.stddev === 'number' ? body.args.stddev : undefined
-    const value = typeof input === 'number' ? input : String(input)
-    const result = score(value, { criteria, distribution, mean, stddev })
-    res.json({ result: result.score, method: result.method, deterministic: true })
+    const { result, method, confidence } = deterministic
+    res.json({ result, method, confidence, deterministic: true })
     return
   }
 

@@ -39,9 +39,11 @@ M 1–2 days, L more.
 - [x] **Multi-step instant edits only undo the first step** — done 2026-10-07 (steps run synchronously)
   - `historySlice.ts:103` finalizes the entry in a microtask, which runs at the first
     `await executeToolAsync` in `goalRouter.ts:79` and `agentParser.ts:192`.
-- [ ] **Fill-down batches send `AI.PREDICT` / `AI.SCORE` to the LLM** — S
+- [x] **Fill-down batches send `AI.PREDICT` / `AI.SCORE` to the LLM** — S (done 2026-10-07)
   - Single-cell route is deterministic (`server/src/routes/aiFunction.ts:229`); batches
     (`aiFunctionDefinitions.ts:467,486` → `server/src/batch.ts:253`) are not, and drop `values`.
+  - Shared `server/src/deterministicFunctions.ts` now answers both in the single route and in
+    `processBatch` / `estimateBatchCost` (no LLM call, no usage charge).
 - [x] **Leftover `charCodeAt(0) - 65` column parsing** — S (done 2026-10-06)
   - `src/lib/formulaExplainer.ts:17,31`, `src/lib/previewBuilders.ts:53`,
     `src/hooks/useSpreadsheet.ts:68`; columns AA+ get the wrong header.
