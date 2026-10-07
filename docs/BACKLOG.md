@@ -94,10 +94,10 @@ M 1–2 days, L more.
 
 ## 3. Auditor and inspector quality
 
-- [ ] **One audit result that stays current** — M
-  - `lastAuditResult` is set only at import (`importOrchestration.ts:113`), for one sheet,
-    without custom rules. Panel runs and post-fix re-runs stay in local state, so the panel
-    rail badge and import card go stale. Prerequisite for the tab badge and banner below.
+- [x] **One audit result that stays current** — M (2026-10-07)
+  - `runActiveSheetAudit()` store action (custom rules included) is used by panel runs and
+    post-fix re-runs; import also applies custom rules. `AuditResult.sheetId` lets the panel
+    and rail badge ignore another sheet's result. Edits don't re-audit automatically.
 - [x] **Auditor reference extraction is naive** — S–M (2026-10-07)
   - Shared parser `src/lib/formulaRefs.ts` (`$`, sheets, whole rows/columns, skips strings and
     function names). Circular/orphaned rules find formula cells inside ranges via a sorted

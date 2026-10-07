@@ -23,6 +23,8 @@ import {
 } from './slices'
 import type { AppState } from './storeTypes'
 import { applyWorkbookImportEffects } from './importOrchestration'
+import { runAudit } from '@/auditor'
+import { loadCustomRules } from '@/auditor/customRules'
 
 export type { AppState } from './storeTypes'
 
@@ -108,6 +110,12 @@ export const useStore = create<AppState>()(
       ...uiActions,
 
       lastAuditResult: null,
+      runActiveSheetAudit: () => {
+        const state = useStore.getState()
+        const result = runAudit(state.getActiveSheet(), state.getComputedValue, loadCustomRules())
+        useStore.setState((st) => { st.lastAuditResult = result })
+        return result
+      },
 
       undoStack: [],
       redoStack: [],

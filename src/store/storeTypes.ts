@@ -64,7 +64,10 @@ export interface AppState extends UIState, UIActions, FileActions, ChatActions {
   editValue: string
 
   // Panel system extras
+  /** Latest audit (import, panel run, or post-fix re-run); check `sheetId` before showing it. */
   lastAuditResult: import('@/auditor/types').AuditResult | null
+  /** Audit the active sheet with custom rules and store the result. */
+  runActiveSheetAudit: () => import('@/auditor/types').AuditResult
 
   // History
   undoStack: HistoryEntry[]

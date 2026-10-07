@@ -6,6 +6,7 @@
 import type { WorkbookData, ChatMessage, Toast } from '@/types'
 import { cellToRef } from '@/engine/spreadsheet'
 import { runAudit } from '@/auditor'
+import { loadCustomRules } from '@/auditor/customRules'
 import { v4 as uuid } from 'uuid'
 
 export interface ImportEffectAccess {
@@ -109,7 +110,7 @@ export function applyWorkbookImportEffects(
       try {
         const activeSheet = get().getActiveSheet()
         if (Object.keys(activeSheet.cells).length > 4) {
-          const auditResult = runAudit(activeSheet, get().getComputedValue)
+          const auditResult = runAudit(activeSheet, get().getComputedValue, loadCustomRules())
           set((s) => { s.lastAuditResult = auditResult })
 
           // Open the auditor for serious findings, and for the free audit entry (?audit=1).

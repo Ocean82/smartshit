@@ -28,7 +28,8 @@ const PANEL_COLORS: Record<PanelId, { bg: string; text: string; ring: string }> 
 export function PanelRail() {
   const activePanel = useStore((s) => s.activePanel)
   const setActivePanel = useStore((s) => s.setActivePanel)
-  const auditFindings = useStore((s) => s.lastAuditResult?.findings?.length ?? 0)
+  const auditFindings = useStore((s) =>
+    s.lastAuditResult?.sheetId === s.activeSheetId ? s.lastAuditResult.findings.length : 0)
   const [showLabels, setShowLabels] = useState(() => {
     try {
       return !localStorage.getItem('smartsht-rail-labels-dismissed')

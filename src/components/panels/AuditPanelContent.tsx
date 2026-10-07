@@ -6,9 +6,8 @@
 import { useState, useCallback, useEffect } from 'react'
 import { useStore } from '@/store/useStore'
 import { useShallow } from 'zustand/react/shallow'
-import { runAudit, getFixAbortReason } from '@/auditor'
-import { loadCustomRules } from '@/auditor/customRules'
-import type { AuditResult, AuditFinding, Severity } from '@/auditor/types'
+import { getFixAbortReason } from '@/auditor'
+import type { AuditFinding, Severity } from '@/auditor/types'
 import { AuditFindingCard } from '@/components/AuditFindingCard'
 import { CustomRulesSection } from './CustomRulesSection'
 import { UpgradeGate } from '@/components/UpgradeGate'
@@ -21,16 +20,16 @@ const SEVERITY_FILTERS = ['all', 'critical', 'high', 'medium', 'low', 'info'] as
 type FilterValue = (typeof SEVERITY_FILTERS)[number]
 
 export function AuditPanelContent() {
-  const { workbook, activeSheetId, getComputedValue, lastAuditResult } = useStore(
+  const { workbook, activeSheetId, lastAuditResult, runActiveSheetAudit } = useStore(
     useShallow((s) => ({
       workbook: s.workbook,
       activeSheetId: s.activeSheetId,
-      getComputedValue: s.getComputedValue,
       lastAuditResult: s.lastAuditResult,
+      runActiveSheetAudit: s.runActiveSheetAudit,
     })),
   )
   const { isPro } = useUsage()
-  const [result, setResult] = useState<AuditResult | null>(null)
+  const result = lastAuditResult?.sheetId === activeSheetId ? lastAuditResult : null
   const [loading, setLoading] = useState(false)
   const [filter, setFilter] = useState<FilterValue>('all')
   const [ruleVersion, setRuleVersion] = useState(0)
@@ -40,20 +39,12 @@ export function AuditPanelContent() {
 
   const activeSheet = workbook.sheets.find((s) => s.id === activeSheetId)
 
-  useEffect(() => {
-    if (lastAuditResult) setResult(lastAuditResult)
-  }, [lastAuditResult])
-
   const handleRunAudit = useCallback(() => {
-    const state = useStore.getState()
-    const sheet = state.workbook.sheets.find((s) => s.id === state.activeSheetId)
-    if (!sheet) return
     setFixMessage(null)
     setLoading(true)
     requestAnimationFrame(() => {
       try {
-        const auditResult = runAudit(sheet, getComputedValue, loadCustomRules())
-        setResult(auditResult)
+        runActiveSheetAudit()
       } catch (err) {
         console.error('Audit failed:', err)
       } finally {
@@ -63,7 +54,7 @@ export function AuditPanelContent() {
     // ruleVersion is read here solely as a version-bump trigger so the callback is
     // recreated (and the auto-run effect re-fires) when custom rules change
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [getComputedValue, ruleVersion])
+  }, [runActiveSheetAudit, ruleVersion])
 
   // Auto-run on first open, on sheet switch, and whenever custom rules change
   useEffect(() => {

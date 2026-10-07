@@ -172,6 +172,7 @@ export function runAudit(
   return {
     timestamp: Date.now(),
     durationMs,
+    sheetId: sheet.id,
     sheetName: sheet.name,
     totalCells: allCells.length,
     formulaCells: formulaCells.length,

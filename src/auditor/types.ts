@@ -37,6 +37,7 @@ export interface AuditFinding {
 export interface AuditResult {
   timestamp: number
   durationMs: number
+  sheetId: string
   sheetName: string
   totalCells: number
   formulaCells: number
