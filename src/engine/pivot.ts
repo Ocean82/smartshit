@@ -65,21 +65,35 @@ export function computePivotTable(
     const row: (string | number)[] = [...rowParts];
     for (const colKey of colKeys) {
       for (let vfIdx = 0; vfIdx < config.values.length; vfIdx++) {
-        const vf = config.values[vfIdx];
-        const vfKey = `${rowKey}||${colKey}||${vfIdx}`;
-        const values = valueAggMap.get(vfKey) || [];
-        switch (vf.aggregation) {
-          case 'sum': row.push(values.reduce((a, b) => a + b, 0)); break;
-          case 'average': row.push(values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0); break;
-          case 'count': row.push(values.length); break;
-          case 'min': row.push(values.length ? Math.min(...values) : 0); break;
-          case 'max': row.push(values.length ? Math.max(...values) : 0); break;
-          case 'distinctCount': row.push(new Set(values).size); break;
-        }
+        const values = valueAggMap.get(`${rowKey}||${colKey}||${vfIdx}`) || [];
+        row.push(aggregate(config.values[vfIdx].aggregation, values));
       }
     }
     resultRows.push(row);
   }
 
-  return { headers, rows: resultRows, grandTotals: [] };
+  const grandTotals: (string | number)[] = [];
+  if (config.rows.length > 0 && config.values.length > 0 && resultRows.length > 0) {
+    grandTotals.push('Grand Total', ...config.rows.slice(1).map(() => ''));
+    for (const colKey of colKeys) {
+      for (let vfIdx = 0; vfIdx < config.values.length; vfIdx++) {
+        // Aggregate the raw values so average/min/distinctCount stay correct.
+        const all = Array.from(rowKeyMap.keys()).flatMap(rk => valueAggMap.get(`${rk}||${colKey}||${vfIdx}`) || []);
+        grandTotals.push(aggregate(config.values[vfIdx].aggregation, all));
+      }
+    }
+  }
+
+  return { headers, rows: resultRows, grandTotals };
+}
+
+function aggregate(aggregation: PivotField['aggregation'], values: number[]): number {
+  switch (aggregation) {
+    case 'sum': return values.reduce((a, b) => a + b, 0);
+    case 'average': return values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0;
+    case 'count': return values.length;
+    case 'min': return values.length ? values.reduce((a, b) => Math.min(a, b)) : 0;
+    case 'max': return values.length ? values.reduce((a, b) => Math.max(a, b)) : 0;
+    case 'distinctCount': return new Set(values).size;
+  }
 }

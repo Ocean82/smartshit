@@ -9,6 +9,7 @@ import { useStore } from '@/store/useStore';
 import { useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { captureActionScope } from '@/lib/actionScope';
+import { letterToCol } from '@/lib/cellRef';
 
 // ─── Core State ────────────────────────────────────────────────────────────────
 
@@ -65,7 +66,7 @@ export function useComputedValueById(cellId: string): string {
   const { row, col } = useMemo(() => {
     const match = cellId.match(/^([A-Z]+)(\d+)$/i);
     if (!match) return { row: 0, col: 0 };
-    return { row: parseInt(match[2], 10) - 1, col: match[1].toUpperCase().charCodeAt(0) - 65 };
+    return { row: parseInt(match[2], 10) - 1, col: letterToCol(match[1]) };
   }, [cellId]);
   return useComputedValue(row, col);
 }

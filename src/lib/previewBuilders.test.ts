@@ -43,6 +43,19 @@ describe('previewBuilders', () => {
     expect(changes.some((c) => c.cell === 'B3' && c.newValue === 22)).toBe(true)
   })
 
+  it('previewModifyColumn resolves a header name like the executor does', () => {
+    const sheet = sheetWithColB()
+    sheet.cells.A1 = { value: 'Item' }
+    const changes = previewModifyColumn(
+      sheet,
+      'Amount',
+      'multiply',
+      2,
+      (r, c) => String(sheet.cells[`${'AB'[c]}${r + 1}`]?.value ?? ''),
+    )
+    expect(changes.map((c) => c.cell).sort()).toEqual(['B2', 'B3'])
+  })
+
   it('buildActionPreview wires modify_column', () => {
     const sheet = sheetWithColB()
     const preview = buildActionPreview(

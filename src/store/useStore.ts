@@ -44,6 +44,16 @@ export const useStore = create<AppState>()(
       }, 0)
     })
 
+    engine.setSheetLoadErrorHandler((sheetName) => {
+      // Deferred: loads can run during store creation or inside set().
+      setTimeout(() => {
+        useStore.getState().showToast({
+          type: 'warning',
+          message: `Sheet "${sheetName}" couldn't be fully loaded. Formulas that use it may show wrong results.`,
+        })
+      }, 0)
+    })
+
     /** Switch the live workbook to another file. Saves the current one first. */
     const swapToFile = (id: string) => {
       const s = useStore.getState()

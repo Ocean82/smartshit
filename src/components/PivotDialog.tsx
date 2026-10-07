@@ -99,6 +99,9 @@ export function PivotDialog({ isOpen, onClose }: Props) {
         store.setCellValue(refToCell(ri + 1, ci), val);
       });
     });
+    result.grandTotals.forEach((val, ci) => {
+      store.setCellValue(refToCell(result.rows.length + 1, ci), val);
+    });
     store.setRangeFormat({ bold: true, bgColor: '#e0e7ff', fontColor: '#3730a3' });
     store.setSelection({ startRow: 0, startCol: 0, endRow: 0, endCol: result.headers.length - 1 });
 

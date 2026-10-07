@@ -462,5 +462,19 @@ describe('deleteSheet engine sync (B2 / B3)', () => {
     await vi.waitFor(() => expect(updates).toEqual([['s1', 'A1']]))
     engine.destroy()
   })
+
+  it('reports sheet load failures to the handler', () => {
+    const engine = new SpreadsheetEngine()
+    const failed: string[] = []
+    engine.setSheetLoadErrorHandler((name) => failed.push(name))
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    engine.loadSheet(sheet('s1', 'Good', { A1: { value: 1 } }))
+    const wb = (engine as unknown as { wb: { addSheet: (name: string) => void } }).wb
+    vi.spyOn(wb, 'addSheet').mockImplementationOnce(() => { throw new Error('boom') })
+    engine.loadSheet(sheet('s2', 'Bad', {}))
+    spy.mockRestore()
+    expect(failed).toEqual(['Bad'])
+    engine.destroy()
+  })
 })
 

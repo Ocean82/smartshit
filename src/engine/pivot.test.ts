@@ -69,6 +69,13 @@ describe('computePivotTable — aggregation modes', () => {
     hasHeader: false,
   });
 
+  it('grand totals aggregate raw values, not group results', () => {
+    const sum = computePivotTable(cells, baseConfig, 0, 2, 0, 1);
+    expect(sum.grandTotals).toEqual(['Grand Total', 35]);
+    const avg = computePivotTable(cells, { ...baseConfig, values: [{ sourceColumn: 'B', aggregation: 'average' }] }, 0, 2, 0, 1);
+    expect(avg.grandTotals).toEqual(['Grand Total', 35 / 3]); // not (15 + 5) / 2
+  });
+
   it('sum — adds numeric values per group', () => {
     const result = computePivotTable(cells, baseConfig, 0, 2, 0, 1);
     const rowA = result.rows.find((r) => r[0] === 'A');

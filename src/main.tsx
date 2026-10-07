@@ -67,8 +67,12 @@ async function persistLocalSnapshot() {
  * being discarded, whereas localStorage.setItem is synchronous and reliable
  * here. The debounced path keeps IDB (the durable primary) up to date.
  */
-function persistOnTeardown() {
-  savePersistedState(currentSnapshot())
+function persistOnTeardown(hasPendingSave: boolean) {
+  const snapshot = currentSnapshot()
+  savePersistedState(snapshot)
+  // localStorage fails on quota for large workbooks; start the IDB write too.
+  // A hidden page usually lets it finish; on a hard close it's best effort.
+  if (hasPendingSave) void savePersistedStateAsync(snapshot)
   if (isCloudConfigured()) {
     const s = useStore.getState()
     const cloudId = s.files.find((f) => f.id === s.activeFileId)?.cloudWorkbookId
@@ -80,7 +84,10 @@ let saveTimer: ReturnType<typeof setTimeout> | null = null
 
 useStore.subscribe(() => {
   if (saveTimer) clearTimeout(saveTimer)
-  saveTimer = setTimeout(() => void persistLocalSnapshot(), 400)
+  saveTimer = setTimeout(() => {
+    saveTimer = null
+    void persistLocalSnapshot()
+  }, 400)
 })
 
 // Reconcile the sync localStorage seed with the durable IndexedDB primary: if
@@ -94,11 +101,12 @@ void hydrateFromIdbIfNewer()
 // hidden covers mobile tab-switch/app-background where the page can be killed
 // without ever firing pagehide. Both funnel through the synchronous save.
 function handleTeardown() {
+  const hasPendingSave = saveTimer !== null
   if (saveTimer) {
     clearTimeout(saveTimer)
     saveTimer = null
   }
-  persistOnTeardown()
+  persistOnTeardown(hasPendingSave)
 }
 
 window.addEventListener('pagehide', handleTeardown)

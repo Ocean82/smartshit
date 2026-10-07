@@ -5,6 +5,7 @@ import { resolveDeleteRow } from '@/lib/deleteRowPreview'
 import { getColumnDataRows } from '@/lib/sheetRows'
 import { buildRecipePlan, isStyleRecipe, planToPreviewChanges } from '@/lib/styleRecipes'
 import { detectFormulaRangeGapRisk } from '@/lib/formulaGapRisk'
+import { resolveColumnIndex } from '@/agent/toolHandlers/types'
 
 /**
  * Build CellChange[] previews for proposed mutations (Phase 1 grid overlay).
@@ -48,10 +49,8 @@ export function previewModifyColumn(
   getComputedValue: (row: number, col: number) => string,
 ): CellChange[] {
   if (!Number.isFinite(factor)) return []
-  const colIdx = /^[A-Z]+$/i.test(column)
-    ? letterToCol(column.toUpperCase())
-    : column.charCodeAt(0) - 65
-  if (colIdx < 0) return []
+  const colIdx = resolveColumnIndex(column, sheet, getComputedValue)
+  if (colIdx == null || colIdx < 0) return []
 
   const changes: CellChange[] = []
   const lastRow = findLastDataRow(sheet)

@@ -53,6 +53,7 @@ export class SpreadsheetEngine {
   private _disposeAIFunctions: (() => void) | null = null;
   private _disposeOnnxFunction: (() => void) | null = null;
   private _onnxInitOptions: OnnxInitOptions | undefined;
+  private _onSheetLoadError?: (sheetName: string, error: Error) => void;
   private namedRanges: NamedRange[] = [];
   /** sheet id → display name for named-range expansion */
   private sheetNamesById: Map<string, string> = new Map();
@@ -68,6 +69,10 @@ export class SpreadsheetEngine {
 
   get aiRegistry(): AIFunctionRegistry {
     return this._aiRegistry;
+  }
+
+  setSheetLoadErrorHandler(cb: (sheetName: string, error: Error) => void): void {
+    this._onSheetLoadError = cb;
   }
 
   loadWorkbook(workbook: WorkbookData): void {
@@ -139,6 +144,7 @@ export class SpreadsheetEngine {
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
       console.error(`[engine] Failed to load sheet "${sheet.name}":`, error);
+      this._onSheetLoadError?.(sheet.name, error);
       return { success: false, error };
     }
   }

@@ -3,6 +3,8 @@
  * Pattern-based, no LLM needed. Covers the most common Excel/Sheets functions.
  */
 
+import { letterToCol } from '@/lib/cellRef'
+
 interface ExplanationResult {
   explanation: string
   confidence: 'high' | 'medium' | 'low'
@@ -14,7 +16,7 @@ function describeRange(range: string, headers?: string[]): string {
 
   const [, startCol, startRow, endCol, endRow] = match
   if (startCol === endCol) {
-    const colIdx = startCol.charCodeAt(0) - 65
+    const colIdx = letterToCol(startCol)
     const headerName = headers?.[colIdx]
     const colLabel = headerName ? `"${headerName}"` : `column ${startCol}`
     return `${colLabel} from row ${startRow} to ${endRow}`
@@ -28,7 +30,7 @@ function describeRange(range: string, headers?: string[]): string {
 function describeCell(cell: string, headers?: string[]): string {
   const match = cell.match(/^([A-Z]+)(\d+)$/)
   if (!match) return cell
-  const colIdx = match[1].charCodeAt(0) - 65
+  const colIdx = letterToCol(match[1])
   const headerName = headers?.[colIdx]
   if (headerName) return `${cell} ("${headerName}" row ${match[2]})`
   return cell

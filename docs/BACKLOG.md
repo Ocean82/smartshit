@@ -42,17 +42,25 @@ M 1–2 days, L more.
 - [ ] **Fill-down batches send `AI.PREDICT` / `AI.SCORE` to the LLM** — S
   - Single-cell route is deterministic (`server/src/routes/aiFunction.ts:229`); batches
     (`aiFunctionDefinitions.ts:467,486` → `server/src/batch.ts:253`) are not, and drop `values`.
-- [ ] **Leftover `charCodeAt(0) - 65` column parsing** — S
+- [x] **Leftover `charCodeAt(0) - 65` column parsing** — S (done 2026-10-06)
   - `src/lib/formulaExplainer.ts:17,31`, `src/lib/previewBuilders.ts:53`,
     `src/hooks/useSpreadsheet.ts:68`; columns AA+ get the wrong header.
+  - Now use `letterToCol`; the modify-column preview uses `resolveColumnIndex` (same as the
+    executor, header names first). Unused `GridCanvas.tsx` deleted.
     `src/components/GridCanvas.tsx` looks unused — delete if confirmed.
-- [ ] **Pivot grand totals always empty** — S
+- [x] **Pivot grand totals always empty** — S (done 2026-10-06)
   - `src/engine/pivot.ts:84` returns `grandTotals: []`.
-- [ ] **Closing the tab drops the pending IndexedDB save** — S
+  - Now computed from raw values (correct for average/min/distinctCount) and written as a
+    "Grand Total" row by `PivotDialog`.
+- [x] **Closing the tab drops the pending IndexedDB save** — S (done 2026-10-06)
   - `main.tsx:96` teardown clears the save timer and only writes localStorage, which
     fails on quota for large workbooks.
-- [ ] **Sheet load failures are invisible** — S
+  - Teardown now also starts the IDB write when a save was pending (best effort on a hard
+    close; reliable on tab-hide). Not unit-tested (module-level side effects in `main.tsx`).
+- [x] **Sheet load failures are invisible** — S (done 2026-10-06)
   - `loadWorkbook` (`spreadsheet.ts:78`) and `workbookSlice.ts:370` ignore `loadSheet`'s result.
+  - Engine now calls a load-error handler (`setSheetLoadErrorHandler`), wired once in
+    `useStore.ts` to a warning toast, so every `loadWorkbook` caller is covered.
 - [ ] **Renaming a sheet doesn't update references** — M
   - `workbookSlice.ts:391` renames only; no formula rewrite, name validation, or undo entry.
 
