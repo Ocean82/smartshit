@@ -3,7 +3,6 @@
  *
  * Consolidated formula parsing logic extracted from:
  * - FormulaAutocomplete (extractActiveToken)
- * - InspectorPanelContent (precedent/dependent extraction)
  * - FormulaBar (name box parsing)
  * - ChartRenderer (series range parsing)
  * - aiFunctionDefinitions (AI function argument splitting)
@@ -86,51 +85,6 @@ export function extractActiveToken(formula: string): string | null {
   if (!match) return null;
   const token = match[1].toUpperCase();
   return token.length > 0 ? token : null;
-}
-
-/**
- * Parse all cell references from a formula (both individual and ranges).
- * Returns unique cell refs expanded from ranges.
- */
-export function parseCellReferences(formula: string): string[] {
-  const refs = new Set<string>();
-
-  // First, find and expand range references (A1:B10)
-  const rangeRe = /([A-Z]{1,3}\d{1,7}):([A-Z]{1,3}\d{1,7})/gi;
-  let match: RegExpExecArray | null;
-
-  while ((match = rangeRe.exec(formula)) !== null) {
-    const expanded = expandRange(`${match[1]}:${match[2]}`);
-    expanded.forEach(ref => refs.add(ref));
-  }
-
-  // Then find individual cell references not already covered by ranges
-  // Temporarily replace ranges so we don't double-match
-  const cleanedFormula = formula.replace(/[A-Z]{1,3}\d{1,7}:[A-Z]{1,3}\d{1,7}/gi, '');
-  const cellRe = /([A-Z]{1,3}\d{1,7})/gi;
-
-  while ((match = cellRe.exec(cleanedFormula)) !== null) {
-    refs.add(match[1].toUpperCase());
-  }
-
-  return Array.from(refs);
-}
-
-/**
- * Parse all range references from a formula.
- * Returns array of { start, end } CellRefs.
- */
-export function parseRangeReferences(formula: string): RangeRef[] {
-  const ranges: RangeRef[] = [];
-  const rangeRe = /([A-Z]{1,3}\d{1,7}):([A-Z]{1,3}\d{1,7})/gi;
-  let match: RegExpExecArray | null;
-
-  while ((match = rangeRe.exec(formula)) !== null) {
-    const parsed = parseRangeReference(`${match[1]}:${match[2]}`);
-    if (parsed) ranges.push(parsed);
-  }
-
-  return ranges;
 }
 
 /**

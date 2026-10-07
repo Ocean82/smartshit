@@ -85,6 +85,19 @@ export function runAudit(
     if (ref.col > maxCol) maxCol = ref.col
   }
 
+  // Index once: rules call getColumn/getRow per cell, and a full scan per call
+  // made the audit quadratic on large sheets. Callers must not mutate these.
+  const byCol = new Map<number, CellInfo[]>()
+  const byRow = new Map<number, CellInfo[]>()
+  for (const info of allCells) {
+    const col = byCol.get(info.col)
+    if (col) col.push(info)
+    else byCol.set(info.col, [info])
+    const row = byRow.get(info.row)
+    if (row) row.push(info)
+    else byRow.set(info.row, [info])
+  }
+
   // Build the audit context
   const ctx: AuditContext = {
     sheetName: sheet.name,
@@ -99,11 +112,11 @@ export function runAudit(
     },
 
     getColumn(col: number): CellInfo[] {
-      return allCells.filter((c) => c.col === col)
+      return byCol.get(col) ?? []
     },
 
     getRow(row: number): CellInfo[] {
-      return allCells.filter((c) => c.row === row)
+      return byRow.get(row) ?? []
     },
   }
 

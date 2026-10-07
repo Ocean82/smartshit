@@ -6,8 +6,6 @@ export {
   parseRangeReference,
   expandRange,
   extractActiveToken,
-  parseCellReferences,
-  parseRangeReferences,
   parseNameBoxInput,
   splitAIArguments,
   resolveAIArgument,

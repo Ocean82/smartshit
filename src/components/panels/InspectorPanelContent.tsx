@@ -11,9 +11,12 @@
 import { useMemo } from 'react'
 import { useStore } from '@/store/useStore'
 import { useShallow } from 'zustand/react/shallow'
-import { cellToRef, refToCell, colToLetter, letterToCol } from '@/engine/spreadsheet'
+import { cellToRef, refToCell, colToLetter } from '@/engine/spreadsheet'
 import { explainFormula, describeCellValue } from '@/lib/formulaExplainer'
+import { collectSheetFormulaRefs, findDependents, listPrecedents } from '@/lib/formulaRefs'
 import { ArrowDownRight, ArrowUpLeft, Hash, Type, Search } from 'lucide-react'
+
+const MAX_LISTED_CELLS = 20
 
 export function InspectorPanelContent() {
   const { selection, sheet, getComputedValue, setSelection, setChatInput, sendMessage, setActivePanel } = useStore(
@@ -52,59 +55,14 @@ export function InspectorPanelContent() {
     return { cellId, row, col, cellData, computed, formula, headers }
   }, [selection, sheet.cells, getComputedValue])
 
-  // Get precedents and dependents
+  const sheetFormulaRefs = useMemo(() => collectSheetFormulaRefs(sheet.cells), [sheet.cells])
+
   const dependencies = useMemo(() => {
-    if (!cellInfo?.formula) return { precedents: [], dependents: [] }
-
-    const formula = cellInfo.formula.startsWith('=')
-      ? cellInfo.formula.slice(1)
-      : cellInfo.formula
-
-    // Regex supports multi-letter columns (A–ZZZ) and up to 7-digit row numbers
-    const rangeRe = /([A-Z]{1,3})(\d{1,7}):([A-Z]{1,3})(\d{1,7})/gi
-    const cellRe = /([A-Z]{1,3})(\d{1,7})/gi
-
-    const rangeRefs = new Set<string>()
-    let match: RegExpExecArray | null
-
-    // Expand range references first
-    while ((match = rangeRe.exec(formula)) !== null) {
-      const startCol = letterToCol(match[1])
-      const startRow = parseInt(match[2], 10) - 1
-      const endCol = letterToCol(match[3])
-      const endRow = parseInt(match[4], 10) - 1
-      for (let r = startRow; r <= endRow; r++) {
-        for (let c = startCol; c <= endCol; c++) {
-          rangeRefs.add(refToCell(r, c))
-        }
-      }
-    }
-
-    // Collect individual cell refs, skipping those already covered by ranges
-    const individualRefs: string[] = []
-    // Strip range tokens so the cell regex doesn't double-match them
-    const cleanFormula = formula.replace(/[A-Z]{1,3}\d{1,7}:[A-Z]{1,3}\d{1,7}/gi, '')
-    while ((match = cellRe.exec(cleanFormula)) !== null) {
-      const col = letterToCol(match[1])
-      const row = parseInt(match[2], 10) - 1
-      individualRefs.push(refToCell(row, col))
-    }
-
-    const precedents = [...new Set([...rangeRefs, ...individualRefs])].slice(0, 20)
-
-    // Find dependents — cells whose formulas reference our cell
-    const ourCellId = cellInfo.cellId
-    const ourRef = `${colToLetter(cellInfo.col)}${cellInfo.row + 1}`
-    const dependents: string[] = []
-    for (const [id, cell] of Object.entries(sheet.cells)) {
-      if (id === ourCellId || !cell.formula) continue
-      if (cell.formula.includes(ourCellId) || cell.formula.includes(ourRef)) {
-        dependents.push(id)
-      }
-    }
-
-    return { precedents, dependents: dependents.slice(0, 20) }
-  }, [cellInfo, sheet.cells])
+    if (!cellInfo) return { precedents: [], dependents: [] }
+    const precedents = cellInfo.formula ? listPrecedents(cellInfo.formula, sheet.name, MAX_LISTED_CELLS) : []
+    const dependents = findDependents(sheetFormulaRefs, sheet.name, cellInfo.row, cellInfo.col)
+    return { precedents, dependents: dependents.slice(0, MAX_LISTED_CELLS) }
+  }, [cellInfo, sheet.name, sheetFormulaRefs])
 
   const handleNavigate = (cellId: string) => {
     const ref = cellToRef(cellId)

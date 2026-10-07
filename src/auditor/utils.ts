@@ -4,6 +4,7 @@
 
 import { colToLetter, letterToCol, cellToRef, refToCell } from '@/engine/spreadsheet'
 import type { CellInfo } from './types'
+import { extractFormulaRefs, refIsOnSheet } from '@/lib/formulaRefs'
 
 export { colToLetter, letterToCol, cellToRef, refToCell }
 
@@ -12,14 +13,16 @@ export function findingId(): string {
   return Math.random().toString(36).slice(2, 10)
 }
 
+const ERROR_VALUE_RE = /^(#(?:REF|VALUE|DIV\/0|NAME\?|NULL|N\/A|NUM|CIRC|SPILL|CALC)!?)$/i
+
 /** Check if a computed value represents a formula error. */
 export function isErrorValue(value: string): boolean {
-  return /^#(REF|VALUE|DIV\/0|NAME\?|NULL|N\/A|NUM)!?$/i.test(value)
+  return ERROR_VALUE_RE.test(value)
 }
 
 /** Extract the error type (e.g., "#REF!") from a computed value. */
 export function getErrorType(value: string): string | undefined {
-  const match = value.match(/^(#(?:REF|VALUE|DIV\/0|NAME\?|NULL|N\/A|NUM)!?)$/i)
+  const match = value.match(ERROR_VALUE_RE)
   return match ? match[1].toUpperCase() : undefined
 }
 
@@ -37,26 +40,80 @@ export function classifyCellType(
   return 'string'
 }
 
-/** Extract all cell references (e.g., "A1", "BC23") from a formula string. */
-export function extractCellRefs(formula: string): string[] {
-  const refs: string[] = []
-  const pattern = /\b([A-Z]{1,3}\d{1,5})\b/g
-  let match
-  while ((match = pattern.exec(formula)) !== null) {
-    refs.push(match[1])
+/** Formula-cell rows per column, sorted ascending. */
+export type FormulaCellIndex = Map<number, number[]>
+
+export function buildFormulaCellIndex(formulaCells: CellInfo[]): FormulaCellIndex {
+  const index: FormulaCellIndex = new Map()
+  for (const cell of formulaCells) {
+    const rows = index.get(cell.col)
+    if (rows) rows.push(cell.row)
+    else index.set(cell.col, [cell.row])
   }
-  return refs
+  for (const rows of index.values()) rows.sort((a, b) => a - b)
+  return index
 }
 
-/** Extract range references (e.g., "A1:A10") from a formula string. */
-export function extractRangeRefs(formula: string): Array<{ range: string; start: string; end: string }> {
-  const ranges: Array<{ range: string; start: string; end: string }> = []
-  const pattern = /\b([A-Z]{1,3}\d{1,5}):([A-Z]{1,3}\d{1,5})\b/g
-  let match
-  while ((match = pattern.exec(formula)) !== null) {
-    ranges.push({ range: match[0], start: match[1], end: match[2] })
+/**
+ * Caps total dependency edges a rule materializes. Running totals over another
+ * formula column (SUM($C$2:C2) filled down) grow quadratically.
+ */
+export const MAX_REFERENCE_EDGES = 200_000
+
+/**
+ * Formula cells on this sheet that `formula` references, including cells inside
+ * ranges and `$`/sheet-qualified refs. Uses the index instead of expanding
+ * ranges, so ranges over plain data cost nothing. Stops after `maxCells`.
+ */
+export function referencedFormulaCells(
+  formula: string,
+  sheetName: string,
+  index: FormulaCellIndex,
+  maxCells = Infinity,
+): string[] {
+  const out = new Set<string>()
+  for (const ref of extractFormulaRefs(formula)) {
+    if (out.size >= maxCells) break
+    if (!refIsOnSheet(ref, sheetName)) continue
+    const width = ref.endCol - ref.startCol + 1
+    const cols = width <= index.size
+      ? Array.from({ length: width }, (_, i) => ref.startCol + i)
+      : [...index.keys()].filter((c) => c >= ref.startCol && c <= ref.endCol)
+    for (const col of cols) {
+      const rows = index.get(col)
+      if (!rows) continue
+      for (let i = lowerBound(rows, ref.startRow); i < rows.length && rows[i] <= ref.endRow; i++) {
+        if (out.size >= maxCells) break
+        out.add(refToCell(rows[i], col))
+      }
+    }
   }
-  return ranges
+  return [...out]
+}
+
+function lowerBound(sorted: number[], target: number): number {
+  let lo = 0
+  let hi = sorted.length
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1
+    if (sorted[mid] < target) lo = mid + 1
+    else hi = mid
+  }
+  return lo
+}
+
+/**
+ * Unqualified, relative range references (e.g., "A1:A10") from a formula.
+ * Absolute and other-sheet ranges are skipped: range-gap fixes rewrite the
+ * range text and checks look at the current sheet.
+ */
+export function extractRangeRefs(formula: string): Array<{ range: string; start: string; end: string }> {
+  return extractFormulaRefs(formula)
+    .filter((ref) => ref.sheet === null && /^[A-Z]+\d+:[A-Z]+\d+$/i.test(ref.text))
+    .map((ref) => {
+      const [start, end] = ref.text.toUpperCase().split(':')
+      return { range: ref.text, start, end }
+    })
 }
 
 /**
@@ -99,8 +156,8 @@ export function isSummaryCell(cellInfo: CellInfo, allCellsInCol: CellInfo[]): bo
   if (!cellInfo.formula) return false
 
   // If it's the last formula in its column, it's likely a summary
-  const formulaCellsInCol = allCellsInCol.filter((c) => c.formula && c.row <= cellInfo.row)
-  if (cellInfo.row === Math.max(...formulaCellsInCol.map((c) => c.row))) return true
+  const isLastFormulaInCol = !allCellsInCol.some((c) => c.formula && c.row > cellInfo.row)
+  if (isLastFormulaInCol) return true
 
   // If the formula references a range within the same column (SUM, AVERAGE, etc.)
   const aggregatePattern = /\b(SUM|AVERAGE|COUNT|COUNTA|MIN|MAX|SUBTOTAL)\b/i

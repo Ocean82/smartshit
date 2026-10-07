@@ -81,13 +81,16 @@ M 1–2 days, L more.
     key lands in the cache key (`server/src/batch.ts:57`). Usage is checked once, then up to
     100 calls are recorded (`routes/aiFunction.ts:466,479`). No `validateBody`; raw provider
     errors are returned.
-- [ ] **`/api/ai-function` check-then-record race** — S
+- [x] **`/api/ai-function` check-then-record race** — S (done 2026-10-07)
   - Checks at `aiFunction.ts:303`, records at `:388`; copy chat's atomic `reserveUsage`.
-- [ ] **Sandbox `getRange` has no area cap** — S
+  - Now reserves before inference and releases on BYOK success, provider failure, or 503.
+- [x] **Sandbox `getRange` has no area cap** — S (done 2026-10-07)
   - `src/sandbox/api.ts:87`; a model-written full-sheet range freezes the tab.
-- [ ] **Postgres cell sync isn't transactional** — S
+  - Ranges over `MAX_RANGE_CELLS` (100k) are trimmed to the used extent; still too big → error.
+- [x] **Postgres cell sync isn't transactional** — S (done 2026-10-07)
   - `server/src/cellStore.ts:54` deletes then inserts in chunks on a shared pool; concurrent
     saves can interleave. S3 JSON remains the source of truth.
+  - Now one transaction (`withTransaction` in `db.ts`) plus `pg_advisory_xact_lock` per workbook.
 
 ## 3. Auditor and inspector quality
 
@@ -95,16 +98,21 @@ M 1–2 days, L more.
   - `lastAuditResult` is set only at import (`importOrchestration.ts:113`), for one sheet,
     without custom rules. Panel runs and post-fix re-runs stay in local state, so the panel
     rail badge and import card go stale. Prerequisite for the tab badge and banner below.
-- [ ] **Auditor reference extraction is naive** — S–M
-  - `src/auditor/utils.ts:41` misses `$A$1`, range interiors, and other sheets, and matches
-    `LOG10`. `isErrorValue` (`:17`) doesn't know `#CIRC!`, `#SPILL!`, `#CALC!`.
-- [ ] **Auditor is quadratic on large sheets** — S
-  - `getColumn`/`getRow` scan every cell per call (`auditor/index.ts:101`) and run on the
-    main thread after import. Build row/column indexes once.
-- [ ] **Inspector dependents are wrong** — M
-  - `InspectorPanelContent.tsx:57` skips non-formula cells; `:101` matches `A1` inside
-    `A10`; ranges are missed. `src/lib/formulaParse.tsx` says it is shared with the inspector
-    but isn't imported.
+- [x] **Auditor reference extraction is naive** — S–M (2026-10-07)
+  - Shared parser `src/lib/formulaRefs.ts` (`$`, sheets, whole rows/columns, skips strings and
+    function names). Circular/orphaned rules find formula cells inside ranges via a sorted
+    index, capped by `MAX_REFERENCE_EDGES`; cycle DFS is iterative. Error values include
+    `#CIRC!`, `#SPILL!`, `#CALC!`. `extractRangeRefs` now ignores other-sheet ranges.
+- [x] **Auditor is quadratic on large sheets** — S (2026-10-07)
+  - Row/column indexes built once; orphaned-formulas runs its cheap skips first
+    (20k-row chain: 3.5s to ~0.1s).
+- [ ] **Orphaned-formulas rule never fires** — S (found 2026-10-07)
+  - Its skips (last formula in column = summary; 2+ formulas in column = series) cover every
+    case, so it can't produce findings. Needs a product decision on what "orphaned" means.
+- [x] **Inspector dependents are wrong** — M (2026-10-07)
+  - Uses `formulaRefs` (`findDependents`, `listPrecedents`); works for value cells, exact
+    refs, and ranges, ignores other sheets, and no longer expands huge ranges. Dead
+    `parseCellReferences`/`parseRangeReferences` removed.
 - [ ] **Audit-entry import button needs the desktop toolbar** — S
   - The auditor's "Import a spreadsheet" button dispatches `smartsht:request-import`, which
     only `Toolbar` listens for. With the toolbar hidden it does nothing. Owning the file input
@@ -119,8 +127,8 @@ M 1–2 days, L more.
     timeout now aborts the upstream fetch. The client's 120s timeout therefore stops the provider too.
 - [x] **Stop button in chat** — done 2026-10-07. Send turns into Stop while a reply runs;
   `stopAiResponse` / `clearChat` abort the turn's fetch, the server sees the disconnect and stops the provider.
-- [ ] Non-streaming `withTimeout` (`providers.ts:116`) still rejects without aborting; `/api/chat` has no
-  client caller, so low priority.
+- [x] Non-streaming `withTimeout` (`providers.ts:116`) still rejects without aborting — done 2026-10-07.
+  Failover passes a per-attempt signal to the adapters and aborts it on timeout.
 - [x] **Stream errors escape the client's try/catch** — done 2026-10-06 (`return await` in `agentClient.ts`).
 - [x] **Small prompt/protocol fixes** — done 2026-10-06 (all six below)
   - Unused `reasoning` field still requested (`server/src/prompt.ts:380`).

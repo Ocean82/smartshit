@@ -5,7 +5,13 @@
  */
 
 import type { AuditRule, AuditFinding, AuditContext } from '../types'
-import { findingId, extractCellRefs, cellToRef } from '../utils'
+import {
+  findingId,
+  cellToRef,
+  buildFormulaCellIndex,
+  referencedFormulaCells,
+  MAX_REFERENCE_EDGES,
+} from '../utils'
 
 export const circularRefsRule: AuditRule = {
   id: 'circular-refs',
@@ -16,15 +22,17 @@ export const circularRefsRule: AuditRule = {
   run(ctx: AuditContext): AuditFinding[] {
     const findings: AuditFinding[] = []
 
-    // Build adjacency list: cell → cells it references
+    // Build adjacency list: formula cell → formula cells it references
+    // (only formula cells can close a cycle).
+    const index = buildFormulaCellIndex(ctx.formulaCells)
     const deps = new Map<string, string[]>()
-    const formulaMap = new Map<string, string>()
+    let budget = MAX_REFERENCE_EDGES
 
     for (const cell of ctx.formulaCells) {
       if (!cell.formula) continue
-      const refs = extractCellRefs(cell.formula)
+      const refs = budget > 0 ? referencedFormulaCells(cell.formula, ctx.sheetName, index, budget) : []
+      budget -= refs.length
       deps.set(cell.cellId, refs)
-      formulaMap.set(cell.cellId, cell.formula)
     }
 
     // DFS cycle detection
@@ -35,38 +43,47 @@ export const circularRefsRule: AuditRule = {
     const color = new Map<string, number>()
     const reportedCycles = new Set<string>()
 
-    function dfs(node: string, path: string[]): string[] | null {
-      color.set(node, GRAY)
-      path.push(node)
+    // Iterative so long fill-down chains can't overflow the call stack.
+    function findCycle(start: string): string[] | null {
+      const path = [start]
+      const nextNeighbor = [0]
+      color.set(start, GRAY)
 
-      const neighbors = deps.get(node) ?? []
-      for (const neighbor of neighbors) {
+      while (path.length > 0) {
+        const top = path.length - 1
+        const node = path[top]
+        const neighbors = deps.get(node) ?? []
+
+        if (nextNeighbor[top] >= neighbors.length) {
+          color.set(node, BLACK)
+          path.pop()
+          nextNeighbor.pop()
+          continue
+        }
+
+        const neighbor = neighbors[nextNeighbor[top]++]
         const neighborColor = color.get(neighbor) ?? WHITE
 
         if (neighborColor === GRAY) {
-          // Found a cycle — extract just the cycle portion
-          const cycleStart = path.indexOf(neighbor)
-          if (cycleStart >= 0) {
-            return path.slice(cycleStart)
-          }
-          return [neighbor, node]
+          const cycle = path.slice(path.indexOf(neighbor))
+          for (const n of path) color.set(n, BLACK)
+          return cycle
         }
 
         if (neighborColor === WHITE && deps.has(neighbor)) {
-          const cycle = dfs(neighbor, path)
-          if (cycle) return cycle
+          color.set(neighbor, GRAY)
+          path.push(neighbor)
+          nextNeighbor.push(0)
         }
       }
 
-      path.pop()
-      color.set(node, BLACK)
       return null
     }
 
     for (const node of deps.keys()) {
       if ((color.get(node) ?? WHITE) !== WHITE) continue
 
-      const cycle = dfs(node, [])
+      const cycle = findCycle(node)
       if (cycle && cycle.length > 0) {
         // Deduplicate: sort the cycle members and use as a key
         const cycleKey = [...cycle].sort().join(',')

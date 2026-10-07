@@ -9,7 +9,13 @@
  */
 
 import type { AuditRule, AuditFinding, AuditContext } from '../types'
-import { findingId, extractCellRefs, isSummaryCell } from '../utils'
+import {
+  findingId,
+  isSummaryCell,
+  buildFormulaCellIndex,
+  referencedFormulaCells,
+  MAX_REFERENCE_EDGES,
+} from '../utils'
 
 export const orphanedFormulasRule: AuditRule = {
   id: 'orphaned-formulas',
@@ -20,31 +26,26 @@ export const orphanedFormulasRule: AuditRule = {
   run(ctx: AuditContext): AuditFinding[] {
     const findings: AuditFinding[] = []
 
-    // Build the set of all cells that are referenced by at least one formula
-    const referenced = new Set<string>()
+    let referenced: Set<string> | null = null
+    const formulasPerCol = new Map<number, number>()
     for (const cell of ctx.formulaCells) {
-      if (!cell.formula) continue
-      const refs = extractCellRefs(cell.formula)
-      for (const ref of refs) {
-        referenced.add(ref)
-      }
+      formulasPerCol.set(cell.col, (formulasPerCol.get(cell.col) ?? 0) + 1)
     }
 
-    // Find formula cells that no one references
+    // Cheapest skips first: the column scan in isSummaryCell is O(column) per cell.
     for (const cell of ctx.formulaCells) {
-      if (referenced.has(cell.cellId)) continue
-
-      // Skip summary/total cells — they're expected to be unreferenced output
-      const colCells = ctx.getColumn(cell.col)
-      if (isSummaryCell(cell, colCells)) continue
+      // Skip if it's surrounded by other formulas in the same column (part of a calculation series)
+      if ((formulasPerCol.get(cell.col) ?? 0) >= 2) continue
 
       // Skip if the cell is in a row with other data (it's likely a user-facing output)
-      const rowCells = ctx.getRow(cell.row)
-      if (rowCells.length >= 2) continue
+      if (ctx.getRow(cell.row).length >= 2) continue
 
-      // Skip if it's surrounded by other formulas in the same column (part of a calculation series)
-      const colFormulas = colCells.filter((c) => c.type === 'formula')
-      if (colFormulas.length >= 2) continue
+      // Skip summary/total cells — they're expected to be unreferenced output
+      if (isSummaryCell(cell, ctx.getColumn(cell.col))) continue
+
+      referenced ??= buildReferencedSet(ctx)
+      if (!referenced) return []
+      if (referenced.has(cell.cellId)) continue
 
       findings.push({
         id: findingId(),
@@ -60,4 +61,19 @@ export const orphanedFormulasRule: AuditRule = {
 
     return findings
   },
+}
+
+/** Formula cells referenced by at least one formula, or null if the edge budget ran out. */
+function buildReferencedSet(ctx: AuditContext): Set<string> | null {
+  const index = buildFormulaCellIndex(ctx.formulaCells)
+  const referenced = new Set<string>()
+  let budget = MAX_REFERENCE_EDGES
+  for (const cell of ctx.formulaCells) {
+    if (!cell.formula) continue
+    const refs = referencedFormulaCells(cell.formula, ctx.sheetName, index, budget + 1)
+    if (refs.length > budget) return null
+    budget -= refs.length
+    for (const ref of refs) referenced.add(ref)
+  }
+  return referenced
 }
