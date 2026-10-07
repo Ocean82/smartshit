@@ -33,10 +33,10 @@ M 1–2 days, L more.
     `loadWorkbook` calls `reset()` on boot, import, undo, and sheet ops, so `=AI.*` cells
     stay on "Loading…".
   - Fix: keep the callback on the engine and re-apply it in `reset()`; add a test.
-- [ ] **Pivot tables drop the first data row** — S **(verified)**
+- [x] **Pivot tables drop the first data row** — done 2026-10-07 (dialog passes the raw start row)
   - `PivotDialog.tsx:66` adds 1 to `startRow` for the header and also passes `hasHeader`;
     `pivot.ts:18` adds 1 again. `pivot.test.ts:125` encodes the double skip.
-- [ ] **Multi-step instant edits only undo the first step** — S **(verified)**
+- [x] **Multi-step instant edits only undo the first step** — done 2026-10-07 (steps run synchronously)
   - `historySlice.ts:103` finalizes the entry in a microtask, which runs at the first
     `await executeToolAsync` in `goalRouter.ts:79` and `agentParser.ts:192`.
 - [ ] **Fill-down batches send `AI.PREDICT` / `AI.SCORE` to the LLM** — S
