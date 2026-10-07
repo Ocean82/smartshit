@@ -1020,6 +1020,9 @@ describe('startReconciler', () => {
     config.stripeSecretKey = originalStripeSecretKey
     vi.useRealTimers()
     vi.restoreAllMocks()
+    // Vitest 4+ restoreAllMocks no longer resets vi.fn mocks; the failing-sweep
+    // tests rely on getClerkClient returning undefined.
+    vi.mocked(getClerkClient).mockReset()
   })
 
   it('warns and schedules nothing when STRIPE_SECRET_KEY is unset', () => {

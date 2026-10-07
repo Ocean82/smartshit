@@ -471,7 +471,7 @@ describe('OnnxWorkerBridge lazy construction', () => {
   it('constructs a Worker on first loadModel', async () => {
     vi.useFakeTimers();
     const mockWorker = new MockWorker();
-    const WorkerSpy = vi.fn(() => mockWorker);
+    const WorkerSpy = vi.fn(function () { return mockWorker });
     vi.stubGlobal('Worker', WorkerSpy);
 
     const lazy = new OnnxWorkerBridge();
