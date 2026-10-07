@@ -80,11 +80,13 @@ export class SpreadsheetEngine {
   }
 
   reset(): void {
+    const onCellUpdate = this._aiRegistry.updateCallback;
     this._aiRegistry.clearCache();
     this._aiRegistry.dispose();
     this._disposeAIFunctions?.();
     this._disposeOnnxFunction?.();
     this._aiRegistry = new AIFunctionRegistry();
+    if (onCellUpdate) this._aiRegistry.setUpdateCallback(onCellUpdate);
     this.wb = new Workbook();
     this.sheetMapping.clear();
     this.namedRanges = [];

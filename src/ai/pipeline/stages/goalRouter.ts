@@ -7,7 +7,7 @@
 
 import type { PipelineContext, PipelineStage, StageResult } from '../types'
 import type { ExecutionContext } from '@/agent/executor'
-import { executeToolAsync } from '@/agent'
+import { executeTool } from '@/agent'
 import { getToolDefinition } from '@shared/toolRegistry'
 import { buildSpreadsheetContext } from '@/ai/buildContext'
 import { executeGoal, listSuggestedGoals, matchGoal } from '@/ai/goals'
@@ -75,14 +75,13 @@ export function createGoalRouterStage(deps: GoalRouterDeps): PipelineStage {
       }
 
       const execCtx = deps.buildExecContext({ suppressHistory: true })
-      const results = []
-      for (const action of execution.actions) {
-        results.push(await executeToolAsync({
-          tool: action.tool,
-          params: action.params,
-          description: action.description,
-        }, execCtx))
-      }
+      // Synchronous on purpose: pushHistory finalizes its undo diff in a microtask,
+      // so an await between steps would leave later steps out of the undo entry.
+      const results = execution.actions.map((action) => executeTool({
+        tool: action.tool,
+        params: action.params,
+        description: action.description,
+      }, execCtx))
 
       const allSuccess = results.every((result) => result.success)
       const totalModified = results.reduce((sum, result) => sum + result.modified, 0)

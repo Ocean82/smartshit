@@ -20,7 +20,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('@/agent', () => ({
   parseMessage: vi.fn(),
-  executeToolAsync: vi.fn(),
+  executeTool: vi.fn(),
 }))
 
 vi.mock('@/lib/sheetSort', () => ({
@@ -164,7 +164,7 @@ vi.mock('@/ai/contextualSuggestions', () => ({
 
 // ─── Imports (after mocks) ──────────────────────────────────────────────────
 
-import { parseMessage, executeToolAsync } from '@/agent'
+import { parseMessage, executeTool } from '@/agent'
 import { resolveGalleryTemplate, executeTemplateTool } from '@/templates'
 import { chatWithAgentServerStream } from '@/ai/agentClient'
 import { parseUserIntent } from '@shared/intentParser'
@@ -225,7 +225,7 @@ describe('Smoke Test: Top commands routing verification', () => {
       calls: [{ tool: 'sort_sheet', params: { column: 'Amount', direction: 'desc' }, description: 'Sort by Amount descending' }],
       explanation: 'Sorting by Amount (highest first).',
     })
-    vi.mocked(executeToolAsync).mockResolvedValue({
+    vi.mocked(executeTool).mockReturnValue({
       success: true,
       message: 'Sorted by Amount descending',
       modified: 10,
@@ -252,7 +252,7 @@ describe('Smoke Test: Top commands routing verification', () => {
       }],
       explanation: 'Highlighting values over 500.',
     })
-    vi.mocked(executeToolAsync).mockResolvedValue({
+    vi.mocked(executeTool).mockReturnValue({
       success: true,
       message: 'Highlighted 8 cells over 500 in red',
       modified: 8,
@@ -369,7 +369,7 @@ describe('Smoke Test: Top commands routing verification', () => {
 
     // For delete_row, the stage invokes findDeleteRowMatches for preview
     vi.mocked(findDeleteRowMatches).mockReturnValue([3])
-    vi.mocked(executeToolAsync).mockResolvedValue({
+    vi.mocked(executeTool).mockReturnValue({
       success: true,
       message: 'Deleted row 3 (Netflix, $15.99, Entertainment)',
       modified: 1,

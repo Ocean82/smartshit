@@ -5,7 +5,7 @@
  * docs/agent-engine-code-review.md.
  */
 
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import {
   SpreadsheetEngine,
   colToLetter,
@@ -445,6 +445,21 @@ describe('deleteSheet engine sync (B2 / B3)', () => {
     // reset() is invoked inside loadWorkbook — at minimum this must not throw
     // and the engine must be in a consistent state afterwards.
     expect(() => engine.loadWorkbook(workbook([sheet('s2', 'New', {})]))).not.toThrow()
+    engine.destroy()
+  })
+
+  it('keeps the AI cell-update callback across loadWorkbook', async () => {
+    const engine = new SpreadsheetEngine()
+    const updates: Array<[string, string]> = []
+    engine.aiRegistry.setUpdateCallback((sheetId, cellId) => updates.push([sheetId, cellId]))
+
+    engine.loadWorkbook(workbook([sheet('s1', 'S', {})]))
+    engine.aiRegistry.registerAsyncFunction(
+      { name: 'AI.TESTECHO', description: '', abstract: '', category: 'AI', syntax: '', parameters: [], isAsync: true },
+      async () => 'done',
+    )
+    engine.aiRegistry.execute('AI.TESTECHO', 'A1', [], 's1')
+    await vi.waitFor(() => expect(updates).toEqual([['s1', 'A1']]))
     engine.destroy()
   })
 })

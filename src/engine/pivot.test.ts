@@ -122,9 +122,9 @@ describe('computePivotTable — aggregation modes', () => {
 
 describe('computePivotTable — header-row handling (B6 regression)', () => {
   /**
-   * Selection includes header row (row 0). PivotDialog pre-adjusts startRow
-   * for the engine call, but `computePivotTable` must *also* respect
-   * `config.hasHeader` via `dataStartRow`.
+   * Selection includes header row (row 0). PivotDialog passes the raw
+   * selection start; `computePivotTable` alone skips the header via
+   * `config.hasHeader` / `dataStartRow`.
    *
    * If the bug is present, the header strings "Category" / "Amount" are
    * included in the aggregation — "Amount" parses as NaN, silently under-

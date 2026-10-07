@@ -27,7 +27,7 @@ M 1–2 days, L more.
 
 ## 1. Correctness bugs (do first)
 
-- [ ] **AI formula results stop reaching cells after any workbook load** — S **(verified)**
+- [x] **AI formula results stop reaching cells after any workbook load** — done 2026-10-07 (`reset()` carries the callback over)
   - `SpreadsheetEngine.reset()` replaces `_aiRegistry` (`src/engine/spreadsheet.ts:87`);
     the update callback is set once on the original registry (`src/store/useStore.ts:36`).
     `loadWorkbook` calls `reset()` on boot, import, undo, and sheet ops, so `=AI.*` cells

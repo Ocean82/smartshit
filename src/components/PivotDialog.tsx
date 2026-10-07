@@ -62,8 +62,8 @@ export function PivotDialog({ isOpen, onClose }: Props) {
 
   if (!isOpen || !selection) return null;
 
-  const startRowBase = Math.min(selection.startRow, selection.endRow);
-  const startRow = hasHeader ? startRowBase + 1 : startRowBase;
+  // computePivotTable skips the header itself when config.hasHeader is set.
+  const startRow = Math.min(selection.startRow, selection.endRow);
   const endRow = Math.max(selection.startRow, selection.endRow);
   const startCol = Math.min(selection.startCol, selection.endCol);
   const endCol = Math.max(selection.startCol, selection.endCol);

@@ -14,7 +14,7 @@ import type { PipelineContext } from '../types'
 // Mock the agent module
 vi.mock('@/agent', () => ({
   parseMessage: vi.fn(),
-  executeToolAsync: vi.fn(),
+  executeTool: vi.fn(),
   getToolDefinition: vi.fn(),
 }))
 
@@ -41,7 +41,7 @@ vi.mock('@shared/toolRegistry', () => ({
   getToolDefinition: () => ({ category: 'mutate' }),
 }))
 
-import { parseMessage, executeToolAsync } from '@/agent'
+import { parseMessage, executeTool } from '@/agent'
 import { createAgentParserStage } from '../stages/agentParser'
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -78,8 +78,7 @@ describe('AgentParser stage', () => {
       explanation: 'Sorting by Amount descending',
     })
 
-    const mockExecute = vi.mocked(executeToolAsync)
-    mockExecute.mockResolvedValue({ success: true, message: 'Sorted', modified: 5 })
+    vi.mocked(executeTool).mockReturnValue({ success: true, message: 'Sorted', modified: 5 })
 
     const deps = makeDeps()
     const stage = createAgentParserStage(deps)
@@ -139,10 +138,10 @@ describe('AgentParser stage', () => {
       explanation: 'Setting cells',
     })
 
-    const mockExecute = vi.mocked(executeToolAsync)
+    const mockExecute = vi.mocked(executeTool)
     mockExecute
-      .mockResolvedValueOnce({ success: true, message: 'Set A1', modified: 1 })
-      .mockResolvedValueOnce({ success: true, message: 'Set A2', modified: 1 })
+      .mockReturnValueOnce({ success: true, message: 'Set A1', modified: 1 })
+      .mockReturnValueOnce({ success: true, message: 'Set A2', modified: 1 })
 
     const deps = makeDeps()
     const stage = createAgentParserStage(deps)
@@ -151,5 +150,32 @@ describe('AgentParser stage', () => {
     expect(result).not.toBeNull()
     expect(result!.success).toBe(true)
     expect(mockExecute).toHaveBeenCalledTimes(2)
+  })
+
+  it('runs every step before the undo entry is finalized (one undo reverts all)', async () => {
+    vi.mocked(parseMessage).mockReturnValue({
+      understood: true,
+      calls: [
+        { tool: 'set_cell', params: { cell: 'A1', value: '10' }, description: 'Set A1' },
+        { tool: 'set_cell', params: { cell: 'A2', value: '20' }, description: 'Set A2' },
+      ],
+      explanation: 'Setting cells',
+    })
+    // pushHistory finalizes its diff in a microtask; steps that run after it are lost to undo.
+    let historyFinalized = false
+    const finalizedAtStep: boolean[] = []
+    const run = () => {
+      finalizedAtStep.push(historyFinalized)
+      return { success: true, message: 'ok', modified: 1 }
+    }
+    vi.mocked(executeTool).mockImplementation(run)
+    const deps = {
+      buildExecContext: vi.fn().mockReturnValue({}),
+      pushHistory: vi.fn(() => queueMicrotask(() => { historyFinalized = true })),
+    }
+
+    await createAgentParserStage(deps).process(makeContext('set A1 to 10 and A2 to 20'))
+
+    expect(finalizedAtStep).toEqual([false, false])
   })
 })

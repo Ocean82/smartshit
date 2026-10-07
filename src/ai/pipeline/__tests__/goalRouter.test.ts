@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { PipelineContext } from '../types'
 
 vi.mock('@/agent', () => ({
-  executeToolAsync: vi.fn(),
+  executeTool: vi.fn(),
 }))
 
 vi.mock('@/ai/buildContext', () => ({
@@ -26,7 +26,7 @@ vi.mock('@shared/toolRegistry', () => ({
   getToolDefinition: () => ({ category: 'mutate' }),
 }))
 
-import { executeToolAsync } from '@/agent'
+import { executeTool } from '@/agent'
 import { createGoalRouterStage } from '../stages/goalRouter'
 
 function makeContext(message: string): PipelineContext {
@@ -45,7 +45,7 @@ describe('GoalRouter stage', () => {
   })
 
   it('claims sum column commands and dispatches apply_formula', async () => {
-    vi.mocked(executeToolAsync).mockResolvedValue({ success: true, message: 'Added SUM', modified: 1 })
+    vi.mocked(executeTool).mockReturnValue({ success: true, message: 'Added SUM', modified: 1 })
     const pushHistory = vi.fn()
     const stage = createGoalRouterStage({
       buildExecContext: vi.fn().mockReturnValue({}),
@@ -56,7 +56,7 @@ describe('GoalRouter stage', () => {
     expect(result?.success).toBe(true)
     expect(result?.message).toContain('Goal: Total')
     expect(result?.suggestions).toEqual(['Total', 'By Category'])
-    expect(executeToolAsync).toHaveBeenCalledWith(
+    expect(executeTool).toHaveBeenCalledWith(
       expect.objectContaining({ tool: 'apply_formula' }),
       expect.anything(),
     )

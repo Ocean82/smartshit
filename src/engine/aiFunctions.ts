@@ -100,6 +100,10 @@ export class AIFunctionRegistry {
     this._onCellUpdate = cb
   }
 
+  get updateCallback() {
+    return this._onCellUpdate
+  }
+
   /** Set cache TTL in milliseconds */
   setCacheTtl(ms: number) {
     this._cacheTtl = ms

@@ -14,7 +14,7 @@
 import type { PipelineContext, PipelineStage, StageResult } from '../types'
 import type { ExecutionContext } from '@/agent/executor'
 import type { SheetContext, ParsedToolCall } from '@/agent/parser'
-import { parseMessage, executeToolAsync } from '@/agent'
+import { parseMessage, executeTool } from '@/agent'
 import { getToolDefinition } from '@shared/toolRegistry'
 import { findHeaderRow, findLastDataRow } from '@/lib/sheetSort'
 import { cellToRef } from '@/engine/spreadsheet'
@@ -195,11 +195,9 @@ async function executeToolCalls(
 
   const execCtx = deps.buildExecContext({ suppressHistory: true })
 
-  // Execute sequentially to preserve mutation order
-  const results = []
-  for (const call of calls) {
-    results.push(await executeToolAsync(call, execCtx))
-  }
+  // Synchronous on purpose: pushHistory finalizes its undo diff in a microtask,
+  // so an await between steps would leave later steps out of the undo entry.
+  const results = calls.map((call) => executeTool(call, execCtx))
 
   const allSuccess = results.every((r) => r.success)
   const totalModified = results.reduce((sum, r) => sum + r.modified, 0)

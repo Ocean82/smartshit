@@ -20,7 +20,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 // AgentParser depends on @/agent
 vi.mock('@/agent', () => ({
   parseMessage: vi.fn(),
-  executeToolAsync: vi.fn(),
+  executeTool: vi.fn(),
 }))
 
 // AgentParser supporting modules
@@ -166,7 +166,7 @@ vi.mock('@/ai/contextualSuggestions', () => ({
 
 // ─── Imports (after mocks) ──────────────────────────────────────────────────
 
-import { parseMessage, executeToolAsync } from '@/agent'
+import { parseMessage, executeTool } from '@/agent'
 import { resolveGalleryTemplate, executeTemplateTool } from '@/templates'
 import { chatWithAgentServerStream } from '@/ai/agentClient'
 import { parseUserIntent } from '@shared/intentParser'
@@ -227,7 +227,7 @@ describe('Pipeline Integration: end-to-end routing', () => {
       calls: [{ tool: 'sort_column', params: { column: 'Amount', direction: 'asc' }, description: 'Sort by Amount' }],
       explanation: 'Sorting by Amount ascending',
     })
-    vi.mocked(executeToolAsync).mockResolvedValue({
+    vi.mocked(executeTool).mockReturnValue({
       success: true,
       message: 'Sorted by Amount ascending',
       modified: 10,
@@ -395,7 +395,7 @@ describe('Pipeline Integration: end-to-end routing', () => {
       calls: [{ tool: 'set_cell', params: { cell: 'A1', value: 'Budget' }, description: 'Set A1' }],
       explanation: 'Setting cell',
     })
-    vi.mocked(executeToolAsync).mockResolvedValue({
+    vi.mocked(executeTool).mockReturnValue({
       success: true,
       message: 'Set A1',
       modified: 1,
