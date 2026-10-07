@@ -6,7 +6,8 @@
 import React, { useState, useRef, useCallback } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '@/store/useStore'
-import { exportWorkbookToXlsx, exportSheetToCsv, importWorkbookFromFileWithMeta } from '@/io/xlsx'
+import { exportWorkbookToXlsx, exportSheetToCsv } from '@/io/xlsx'
+import { useWorkbookFileImport } from '@/hooks/useWorkbookFileImport'
 import { exportWorkbookToJson, importWorkbookFromJsonFile, normalizeImportedWorkbook } from '@/io/workbookJson'
 import { workbookHasContent } from '@/lib/workbookGuard'
 import { v4 as uuid } from 'uuid'
@@ -32,7 +33,7 @@ export function MenuBar() {
   const [renameOpen, setRenameOpen] = useState(false)
   const triggerRefs = useRef<Partial<Record<MenuId, HTMLButtonElement | null>>>({})
   const activeTriggerRef = useRef<HTMLButtonElement | null>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const { requestImport, fileInput } = useWorkbookFileImport()
   const jsonInputRef = useRef<HTMLInputElement>(null)
 
   const {
@@ -223,33 +224,8 @@ export function MenuBar() {
   }
 
   const handleOpen = () => {
-    const proceed = () => fileInputRef.current?.click()
-    if (workbookHasContent(useStore.getState().workbook)) {
-      showConfirm({
-        title: 'Open file',
-        message:
-          'Opening a file will replace the current workbook and clear undo history. This cannot be undone.',
-        confirmLabel: 'Open file',
-        variant: 'warning',
-        onConfirm: proceed,
-      })
-    } else {
-      proceed()
-    }
+    requestImport()
     setOpenMenu(null)
-  }
-
-  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    try {
-      pushHistory('Open file')
-      const { workbook: wb } = await importWorkbookFromFileWithMeta(file)
-      useStore.getState().importWorkbook(wb, { fileName: file.name })
-    } catch {
-      addMessage({ id: uuid(), role: 'assistant', content: `Could not open **${file.name}**. Make sure it's a valid .xlsx or .csv file.`, timestamp: Date.now() })
-    }
-    if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
   const handleSave = () => {
@@ -494,13 +470,7 @@ export function MenuBar() {
         ))}
       </AnchoredPanel>
 
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".csv,.xlsx,.xls"
-        className="hidden"
-        onChange={handleImportFile}
-      />
+      {fileInput}
       <input
         ref={jsonInputRef}
         type="file"

@@ -14,7 +14,7 @@ import {
   Filter, SortAsc,
 } from 'lucide-react';
 import { BG_COLORS, FULL_COLORS } from '@/data/colors';
-import { useRef, useState, useCallback, useEffect } from 'react';
+import { useRef, useState, useCallback } from 'react';
 import type { ChangeEvent, ReactNode } from 'react';
 import { v4 as uuid } from 'uuid';
 import { AnchoredPanel } from '@/components/AnchoredPanel';
@@ -80,12 +80,6 @@ export function Toolbar() {
       proceed()
     }
   }, [showConfirm])
-
-  useEffect(() => {
-    const open = () => requestImport()
-    document.addEventListener('smartsht:request-import', open)
-    return () => document.removeEventListener('smartsht:request-import', open)
-  }, [requestImport])
 
   const cellColorRef = useRef<HTMLButtonElement>(null);
   const fontColorRef = useRef<HTMLButtonElement>(null);

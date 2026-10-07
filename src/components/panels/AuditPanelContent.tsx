@@ -13,6 +13,7 @@ import { AuditFindingCard } from '@/components/AuditFindingCard'
 import { CustomRulesSection } from './CustomRulesSection'
 import { UpgradeGate } from '@/components/UpgradeGate'
 import { useUsage } from '@/auth'
+import { useWorkbookFileImport } from '@/hooks/useWorkbookFileImport'
 import { canAutoFix, recordAutoFixUse, autoFixRemaining } from '@/lib/featureGates'
 import { ShieldCheck, Loader2, RefreshCw, X } from 'lucide-react'
 
@@ -35,6 +36,7 @@ export function AuditPanelContent() {
   const [ruleVersion, setRuleVersion] = useState(0)
   const [fixMessage, setFixMessage] = useState<string | null>(null)
   const [showUpgradeGate, setShowUpgradeGate] = useState(false)
+  const { requestImport, fileInput } = useWorkbookFileImport({ verb: 'Import' })
 
   const activeSheet = workbook.sheets.find((s) => s.id === activeSheetId)
 
@@ -241,6 +243,8 @@ export function AuditPanelContent() {
         />
       )}
 
+      {fileInput}
+
       {/* Findings list */}
       <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2.5 scrollbar-thin">
         {!result && !loading && (
@@ -250,7 +254,7 @@ export function AuditPanelContent() {
               type="button"
               className="mt-3 px-3 py-1.5 rounded-lg text-xs font-medium text-white"
               style={{ background: 'var(--accent-600)' }}
-              onClick={() => document.dispatchEvent(new CustomEvent('smartsht:request-import'))}
+              onClick={requestImport}
             >
               Import a spreadsheet
             </button>

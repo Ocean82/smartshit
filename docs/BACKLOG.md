@@ -113,10 +113,13 @@ M 1–2 days, L more.
   - Uses `formulaRefs` (`findDependents`, `listPrecedents`); works for value cells, exact
     refs, and ranges, ignores other sheets, and no longer expands huge ranges. Dead
     `parseCellReferences`/`parseRangeReferences` removed.
-- [ ] **Audit-entry import button needs the desktop toolbar** — S
-  - The auditor's "Import a spreadsheet" button dispatches `smartsht:request-import`, which
-    only `Toolbar` listens for. With the toolbar hidden it does nothing. Owning the file input
-    in the panel or store fixes it. `/app?audit=1` also still needs a signed-in browser check.
+- [x] **Audit-entry import button needs the desktop toolbar** — S (2026-10-07)
+  - New `useWorkbookFileImport` hook owns its file input; used by the audit panel, MenuBar,
+    and MobileMenu (which now also pass import warnings). The document event is gone.
+  - Still open: signed-in browser check of the button and `/app?audit=1`.
+  - Toolbar keeps its own handler: its bank-CSV/plain-text fallback only runs for files
+    that aren't .csv/.xlsx/.xls, so bank detection is effectively unreachable. Decide
+    whether to route `.csv` through it or remove it.
 
 ## 4. Chat path (from the 2026-09-30 review)
 

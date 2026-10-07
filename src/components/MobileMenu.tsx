@@ -2,13 +2,12 @@
  * MobileMenu — Bottom sheet menu for mobile devices.
  * Replaces the desktop MenuBar dropdown pattern with touch-friendly actions.
  */
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useStore } from '@/store/useStore';
-import { exportWorkbookToXlsx, exportSheetToCsv, importWorkbookFromFileWithMeta } from '@/io/xlsx';
-import { workbookHasContent } from '@/lib/workbookGuard';
+import { exportWorkbookToXlsx, exportSheetToCsv } from '@/io/xlsx';
+import { useWorkbookFileImport } from '@/hooks/useWorkbookFileImport';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
-import { v4 as uuid } from 'uuid';
 import {
   Menu, X, FileText, FolderOpen, Download,
   Undo2, Redo2, Scissors, Copy, ClipboardPaste,
@@ -26,7 +25,6 @@ interface MobileMenuProps {
 
 export function MobileMenu({ onOpenTemplates, onOpenCloudPicker, onOpenShare, onOpenCommandPalette }: MobileMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const sheetRef = useFocusTrap<HTMLDivElement>(isOpen, () => setIsOpen(false));
   const {
     workbook,
@@ -38,7 +36,6 @@ export function MobileMenu({ onOpenTemplates, onOpenCloudPicker, onOpenShare, on
     cut,
     paste,
     selection,
-    pushHistory,
     toggleFileExplorer,
     getActiveSheet,
     setShowChartDialog,
@@ -51,7 +48,6 @@ export function MobileMenu({ onOpenTemplates, onOpenCloudPicker, onOpenShare, on
     setActivePanel,
     sortByColumn,
     initWorkbook,
-    addMessage,
     showVersionHistory,
     setShowVersionHistory,
     showConfirm,
@@ -65,7 +61,6 @@ export function MobileMenu({ onOpenTemplates, onOpenCloudPicker, onOpenShare, on
     cut: s.cut,
     paste: s.paste,
     selection: s.selection,
-    pushHistory: s.pushHistory,
     toggleFileExplorer: s.toggleFileExplorer,
     getActiveSheet: s.getActiveSheet,
     setShowChartDialog: s.setShowChartDialog,
@@ -78,7 +73,6 @@ export function MobileMenu({ onOpenTemplates, onOpenCloudPicker, onOpenShare, on
     setActivePanel: s.setActivePanel,
     sortByColumn: s.sortByColumn,
     initWorkbook: s.initWorkbook,
-    addMessage: s.addMessage,
     showVersionHistory: s.showVersionHistory,
     setShowVersionHistory: s.setShowVersionHistory,
     showConfirm: s.showConfirm,
@@ -87,19 +81,7 @@ export function MobileMenu({ onOpenTemplates, onOpenCloudPicker, onOpenShare, on
   const sheet = getActiveSheet();
   const col = selection ? Math.min(selection.startCol, selection.endCol) : 0;
 
-  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      pushHistory('Open file');
-      const { workbook: wb } = await importWorkbookFromFileWithMeta(file);
-      useStore.getState().importWorkbook(wb, { fileName: file.name });
-    } catch {
-      addMessage({ id: uuid(), role: 'assistant', content: `Could not open **${file.name}**.`, timestamp: Date.now() });
-    }
-    if (fileInputRef.current) fileInputRef.current.value = '';
-    setIsOpen(false);
-  };
+  const { requestImport, fileInput } = useWorkbookFileImport({ onDone: () => setIsOpen(false) });
 
   const handleNewWorkbook = () => {
     if (Object.keys(getActiveSheet().cells).length > 0) {
@@ -122,20 +104,7 @@ export function MobileMenu({ onOpenTemplates, onOpenCloudPicker, onOpenShare, on
   const actions = [
     { section: 'File' },
     { label: 'New Workbook', icon: <FileText size={18} />, action: handleNewWorkbook },
-    { label: 'Open File...', icon: <FolderOpen size={18} />, action: () => {
-      const proceed = () => fileInputRef.current?.click()
-      if (workbookHasContent(useStore.getState().workbook)) {
-        showConfirm({
-          title: 'Open file',
-          message: 'Opening a file will replace the current workbook and clear undo history. This cannot be undone.',
-          confirmLabel: 'Open file',
-          variant: 'warning',
-          onConfirm: proceed,
-        })
-      } else {
-        proceed()
-      }
-    } },
+    { label: 'Open File...', icon: <FolderOpen size={18} />, action: requestImport },
     { label: 'Templates', icon: <LayoutTemplate size={18} />, action: () => { setIsOpen(false); onOpenTemplates(); } },
     { label: 'Cloud workbooks', icon: <Cloud size={18} />, action: () => { setIsOpen(false); onOpenCloudPicker(); } },
     { label: 'Share', icon: <Share2 size={18} />, action: () => { setIsOpen(false); onOpenShare(); } },
@@ -239,13 +208,7 @@ export function MobileMenu({ onOpenTemplates, onOpenCloudPicker, onOpenShare, on
         </div>
       )}
 
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".csv,.xlsx,.xls"
-        className="hidden"
-        onChange={handleImportFile}
-      />
+      {fileInput}
     </>
   );
 }
