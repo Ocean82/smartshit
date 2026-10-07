@@ -14,7 +14,7 @@ import {
   Filter, SortAsc,
 } from 'lucide-react';
 import { BG_COLORS, FULL_COLORS } from '@/data/colors';
-import { useRef, useState, useCallback } from 'react';
+import { useRef, useState, useCallback, useEffect } from 'react';
 import type { ChangeEvent, ReactNode } from 'react';
 import { v4 as uuid } from 'uuid';
 import { AnchoredPanel } from '@/components/AnchoredPanel';
@@ -64,6 +64,29 @@ export function Toolbar() {
   })));
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const requestImport = useCallback(() => {
+    const proceed = () => fileInputRef.current?.click()
+    if (workbookHasContent(useStore.getState().workbook)) {
+      showConfirm({
+        title: 'Import file',
+        message:
+          'Importing a file will replace the current workbook and clear undo history. This cannot be undone.',
+        confirmLabel: 'Import file',
+        variant: 'warning',
+        onConfirm: proceed,
+      })
+    } else {
+      proceed()
+    }
+  }, [showConfirm])
+
+  useEffect(() => {
+    const open = () => requestImport()
+    document.addEventListener('smartsht:request-import', open)
+    return () => document.removeEventListener('smartsht:request-import', open)
+  }, [requestImport])
+
   const cellColorRef = useRef<HTMLButtonElement>(null);
   const fontColorRef = useRef<HTMLButtonElement>(null);
   const exportBtnRef = useRef<HTMLButtonElement>(null);
@@ -628,21 +651,7 @@ export function Toolbar() {
           <ToolButton
             icon={<Upload size={15} />}
             title="Import file"
-            onClick={() => {
-              const proceed = () => fileInputRef.current?.click()
-              if (workbookHasContent(useStore.getState().workbook)) {
-                showConfirm({
-                  title: 'Import file',
-                  message:
-                    'Importing a file will replace the current workbook and clear undo history. This cannot be undone.',
-                  confirmLabel: 'Import file',
-                  variant: 'warning',
-                  onConfirm: proceed,
-                })
-              } else {
-                proceed()
-              }
-            }}
+            onClick={requestImport}
           />
 
           <button

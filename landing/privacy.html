@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#1e40af" />
   <meta name="color-scheme" content="light" />
   <title>Privacy Policy — smartsht</title>
-  <meta name="description" content="Privacy Policy for smartsht. Your spreadsheet data stays in your browser. We collect minimal data." />
+  <meta name="description" content="Privacy Policy for smartsht. The workbook stays in your browser unless you enable cloud backup. AI questions send a cell summary." />
   <link rel="canonical" href="https://smartsht.com/privacy" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
@@ -23,10 +23,10 @@
         "@id": "https://smartsht.com/privacy#webpage",
         "url": "https://smartsht.com/privacy",
         "name": "Privacy Policy — smartsht",
-        "description": "Privacy Policy for smartsht. Your spreadsheet data stays in your browser. We collect minimal data.",
+        "description": "Privacy Policy for smartsht. The workbook stays in your browser unless you enable cloud backup. AI questions send a cell summary.",
         "isPartOf": { "@id": "https://smartsht.com/#website" },
         "about": { "@id": "https://smartsht.com/#organization" },
-        "dateModified": "2026-07-23",
+        "dateModified": "2026-10-06",
         "inLanguage": "en-US",
         "breadcrumb": { "@id": "https://smartsht.com/privacy#breadcrumb" }
       },
@@ -170,10 +170,10 @@
   <main class="container">
     <a href="/" class="back">← Back to smartsht.com</a>
     <h1>Privacy Policy</h1>
-    <p class="updated">Last updated: July 23, 2026</p>
+    <p class="updated">Last updated: October 6, 2026</p>
 
     <h2>Summary</h2>
-    <p>Your spreadsheet data stays in your browser. We collect minimal account info for authentication and billing. We don't sell your data.</p>
+    <p>The workbook stays in your browser unless you turn on cloud backup. The formula auditor runs locally. An AI question sends that question and a summary of relevant cells to our server, or to the provider on your own API key. We don't sell your data.</p>
 
     <h2>What We Collect</h2>
     <table>
@@ -184,7 +184,7 @@
         <tr><td>Email address</td><td>Account creation, billing receipts</td><td>Clerk (auth provider)</td></tr>
         <tr><td>Name (optional)</td><td>Account display</td><td>Clerk</td></tr>
         <tr><td>Payment info</td><td>Subscription billing</td><td>Stripe (payment processor)</td></tr>
-        <tr><td>AI chat messages</td><td>Generate responses</td><td>Processed in memory, not stored</td></tr>
+        <tr><td>AI chat messages and a cell summary</td><td>Generate a response</td><td>Processed in memory on our server, or sent to your BYOK provider. Not stored.</td></tr>
         <tr><td>Usage counts</td><td>Free tier enforcement</td><td>Server-side, anonymized</td></tr>
         <tr><td>Device/browser info</td><td>Security, compatibility</td><td>Server logs (30 day retention)</td></tr>
       </tbody>
@@ -192,15 +192,15 @@
 
     <h2>What We Don't Collect</h2>
     <ul>
-      <li>Your spreadsheet data (stays in browser localStorage)</li>
-      <li>Financial figures, budget amounts, or expense details</li>
+      <li>The workbook file itself, unless you turn on cloud backup</li>
+      <li>A stored copy of financial figures, budget amounts, or expense details</li>
       <li>Browsing history or third-party tracking cookies</li>
       <li>Data from other apps or services</li>
       <li>Location data</li>
     </ul>
 
     <h2>How AI Queries Work</h2>
-    <p>When you send a message to the AI assistant, your message and a summary of visible cells are sent to our server to generate a response. This data is processed in memory and discarded immediately after the response is delivered. We do not log, store, or train on your queries or spreadsheet content.</p>
+    <p>When you send a message to the AI assistant, your message and a summary of relevant cells are sent to our server to generate a response. This data is processed in memory and discarded after the response. We do not log, store, or train on your queries or spreadsheet content. If you bring your own API key, that same message and cell summary go to the provider you chose, and that provider bills the tokens. We do not meter those calls.</p>
 
     <h2>Cookies and Tracking</h2>
     <p>We use essential cookies only for authentication sessions (via Clerk). We do not use:</p>
@@ -216,6 +216,7 @@
       <li><strong>Clerk</strong> — Authentication. <a href="https://clerk.com/privacy" target="_blank" rel="noopener">Their privacy policy</a>.</li>
       <li><strong>Stripe</strong> — Payments. <a href="https://stripe.com/privacy" target="_blank" rel="noopener">Their privacy policy</a>.</li>
       <li><strong>Cloudflare</strong> — CDN and DDoS protection. <a href="https://www.cloudflare.com/privacypolicy/" target="_blank" rel="noopener">Their privacy policy</a>.</li>
+      <li><strong>AI providers</strong> — Groq, OpenRouter, Hugging Face, or the provider in your BYOK settings. They receive the message and cell summary for that request only.</li>
     </ul>
 
     <h2>Data Retention</h2>
@@ -223,7 +224,7 @@
       <li><strong>Account data:</strong> Retained while your account is active. Deleted within 30 days of account deletion request.</li>
       <li><strong>Payment records:</strong> Retained as required by law (typically 7 years for tax purposes).</li>
       <li><strong>Server logs:</strong> Automatically purged after 30 days.</li>
-      <li><strong>Spreadsheet data:</strong> Stored only in your browser. We never have access to it.</li>
+      <li><strong>Spreadsheet data:</strong> The workbook is stored in your browser. We do not keep a copy unless you turn on cloud backup. AI requests are processed in memory and discarded.</li>
     </ul>
 
     <h2>Your Rights</h2>

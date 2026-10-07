@@ -78,9 +78,9 @@ Gate before uniqueness spend (smoke-test after sync):
 
 | ID | Work |
 |----|------|
-| P2.1 | Auditor as brand / free viral audit funnel |
-| P2.2 | Honest privacy/BYOK narrative (no stub NLP claims) |
-| P2.3 | Kill or ship façades (NLP MiniLM / ONNX upload) |
+| P2.1 | Free audit entry | **DONE** — `/app?audit=1` opens the in-browser auditor and imports from that panel. Hosted sign-in still applies when Clerk is on. |
+| P2.2 | Honest privacy/BYOK copy | **DONE** — landing and privacy: workbook stays local, auditor stays local, AI sends a cell summary, BYOK goes to the user's provider. |
+| P2.3 | Kill or ship façades — moved to [`docs/BACKLOG.md`](../BACKLOG.md) (Decisions) |
 
 ---
 
@@ -127,6 +127,7 @@ Same executor spine. No new agent runtime.
 
 ## Related
 
+- Open work outside this plan: [`docs/BACKLOG.md`](../BACKLOG.md)  
 - Planning priorities: [`docs/planning/README.md`](../planning/README.md)  
 - Formatter sketch: [`docs/planning/11-tools-formatter.md`](../planning/11-tools-formatter.md)  
 - Engine gaps: [`docs/formualizer-gaps.md`](../formualizer-gaps.md)  

@@ -8,6 +8,7 @@ interface WelcomeOverlayProps {
 
 export function WelcomeOverlay({ onOpenTemplates }: WelcomeOverlayProps) {
   const [isVisible, setIsVisible] = useState(() => {
+    if (new URLSearchParams(window.location.search).get('audit') === '1') return false
     try {
       return !localStorage.getItem('smartsht-welcome-dismissed')
     } catch {

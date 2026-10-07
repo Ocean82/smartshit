@@ -112,12 +112,15 @@ export function applyWorkbookImportEffects(
           const auditResult = runAudit(activeSheet, get().getComputedValue)
           set((s) => { s.lastAuditResult = auditResult })
 
-          // Auto-open auditor panel when critical or high severity issues are found
+          // Open the auditor for serious findings, and for the free audit entry (?audit=1).
           const hasSeriousIssues = auditResult.findings.some(
             (f) => f.severity === 'critical' || f.severity === 'high'
           )
-          if (hasSeriousIssues) {
+          const fromAuditEntry = new URLSearchParams(location.search).get('audit') === '1'
+          if (hasSeriousIssues || fromAuditEntry) {
             get().setActivePanel('auditor')
+          }
+          if (hasSeriousIssues) {
             get().showToast({
               type: 'warning',
               message: `Auditor found ${auditResult.findings.length} issue${auditResult.findings.length === 1 ? '' : 's'} in this spreadsheet`,

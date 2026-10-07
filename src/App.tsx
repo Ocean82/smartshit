@@ -55,6 +55,7 @@ const VersionHistoryPanel = lazy(() => import('@/components/VersionHistoryPanel'
 const TelemetryDebugPanel = lazy(() => import('@/components/TelemetryDebugPanel').then(m => ({ default: m.TelemetryDebugPanel })))
 
 function App() {
+  const auditEntry = new URLSearchParams(window.location.search).get('audit') === '1'
   // NLP engine initialization removed as part of intent system unification.
   // The NLP worker was a stub (always returned 'unknown'). When NLP is re-enabled
   // in the future, it will be integrated as a pipeline stage.
@@ -101,6 +102,10 @@ const {
   const [showShareDialog, setShowShareDialog] = useState(false)
   const [showGoToCell, setShowGoToCell] = useState(false)
   const jsonRestoreInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (auditEntry) setActivePanel('auditor')
+  }, [auditEntry, setActivePanel])
 
   useEffect(() => {
     engine.loadWorkbook(workbook)

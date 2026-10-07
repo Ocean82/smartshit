@@ -123,4 +123,24 @@ describe('importOrchestration', () => {
     expect(seen).toEqual(['second'])
     vi.useRealTimers()
   })
+
+  it('opens the auditor from ?audit=1 even without serious findings', () => {
+    vi.useFakeTimers()
+    vi.stubGlobal('location', { search: '?audit=1' })
+    const wb = createEmptyWorkbook('Plain')
+    const cells: Record<string, { value: number }> = {}
+    for (let r = 0; r < 8; r++) cells[`A${r + 1}`] = { value: r }
+    wb.sheets[0].cells = cells
+    const access = makeAccess(wb)
+    applyWorkbookImportEffects(
+      (fn) => { fn(access) },
+      () => access,
+      wb,
+      { fileName: 'plain.xlsx' },
+    )
+    vi.advanceTimersByTime(500)
+    expect(access.setActivePanel).toHaveBeenCalledWith('auditor')
+    vi.unstubAllGlobals()
+    vi.useRealTimers()
+  })
 })

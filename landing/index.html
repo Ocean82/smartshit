@@ -10,9 +10,9 @@
   <meta name="application-name" content="smartsht" />
   <meta name="format-detection" content="telephone=no" />
   <title>AI Spreadsheet &amp; Excel Alternative | smartsht</title>
-  <meta name="description" content="Free AI spreadsheet for budgets, expenses, and invoices. Type in plain English. Import Excel. Catch formula errors. Private in your browser." />
+  <meta name="description" content="Free AI spreadsheet for budgets, expenses, and invoices. Import Excel and audit formulas in your browser. AI questions send a cell summary." />
   <meta property="og:title" content="AI Spreadsheet &amp; Excel Alternative | smartsht" />
-  <meta property="og:description" content="Free AI spreadsheet for budgets, expenses, and invoices. Type in plain English. Import Excel. Private in your browser." />
+  <meta property="og:description" content="Free AI spreadsheet for budgets, expenses, and invoices. Import Excel and audit formulas in your browser. AI questions send a cell summary." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://smartsht.com/" />
   <meta property="og:image" content="https://smartsht.com/og-image.png" />
@@ -170,7 +170,7 @@
           "priceCurrency": "USD",
           "availability": "https://schema.org/InStock",
           "seller": { "@id": "https://smartsht.com/#organization" },
-          "description": "Free forever: 3 AI questions per day, full spreadsheet, all templates, Excel import/export, auditor, BYOK. Pro is $7/month."
+          "description": "Free forever: 7 AI questions per day, full spreadsheet, all templates, Excel import/export, in-browser auditor, BYOK. Pro is $7/month."
         },
         "hasOfferCatalog": {
           "@type": "OfferCatalog",
@@ -186,7 +186,7 @@
               "priceCurrency": "USD",
               "availability": "https://schema.org/InStock",
               "seller": { "@id": "https://smartsht.com/#organization" },
-              "description": "3 AI questions per day, full spreadsheet, all templates, Excel import/export, auditor error detection, 3 auto-fixes, 1 cloud workbook, view-only share links, BYOK for unlimited AI on your own key"
+              "description": "7 AI questions per day, full spreadsheet, all templates, Excel import/export, in-browser auditor, 3 auto-fixes, 1 cloud workbook, view-only share links, BYOK billed by your provider"
             },
             {
               "@type": "Offer",
@@ -227,7 +227,7 @@
             "url": "https://smartsht.com/#faq-free",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Yes. The Free plan includes the full spreadsheet, templates, Excel/CSV import and export, the formula auditor, and 3 AI questions per day. You can also bring your own API key (BYOK) for unlimited AI on your own provider account at no subscription cost."
+              "text": "Yes. The Free plan includes the full spreadsheet, templates, Excel/CSV import and export, the in-browser formula auditor, and 7 AI questions per day. Bring your own API key to send questions to your provider instead of using the daily limit. That provider bills the tokens."
             }
           },
           {
@@ -247,7 +247,7 @@
             "url": "https://smartsht.com/#faq-privacy",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "By default your spreadsheet data stays in your browser. Nothing syncs to smartsht servers unless you explicitly enable cloud backup. Self-hosted and BYOK setups are supported for users who want full control."
+              "text": "The workbook stays in your browser unless you turn on cloud backup. The formula auditor runs locally. An AI question sends that question and a summary of relevant cells to our server, or to the provider on your own API key."
             }
           },
           {
@@ -297,7 +297,7 @@
             "url": "https://smartsht.com/#faq-sheets-alternative",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "It is a browser spreadsheet you can use instead of Google Sheets for personal and small-business files. Data stays in your browser by default instead of a Google account. Collaboration is view-only share links today, not live multiplayer editing."
+              "text": "It is a browser spreadsheet you can use instead of Google Sheets for personal and small-business files. The workbook stays in your browser unless you turn on cloud backup. Collaboration is view-only share links today, not live multiplayer editing."
             }
           },
           {
@@ -1132,6 +1132,7 @@
         smartsh!t
       </a>
       <div class="nav-links">
+        <a href="/app?audit=1">Audit</a>
         <a href="#features">Features</a>
         <a href="#pricing">Pricing</a>
         <a href="#reviews">Reviews</a>
@@ -1147,6 +1148,7 @@
   <!-- Mobile nav overlay -->
   <div id="mobile-nav" class="mobile-nav" onclick="this.classList.remove('open')">
     <div class="mobile-nav-content" onclick="event.stopPropagation()">
+      <a href="/app?audit=1" onclick="document.getElementById('mobile-nav').classList.remove('open')">Audit</a>
       <a href="#features" onclick="document.getElementById('mobile-nav').classList.remove('open')">Features</a>
       <a href="#pricing" onclick="document.getElementById('mobile-nav').classList.remove('open')">Pricing</a>
       <a href="#reviews" onclick="document.getElementById('mobile-nav').classList.remove('open')">Reviews</a>
@@ -1163,13 +1165,13 @@
       <div class="hero-tagline animate-fade-in">Free forever, no credit card needed</div>
       <h1 class="animate-fade-up delay-100">The AI spreadsheet that understands plain English.<br/><em class="animate-fade-in delay-200">No formulas required.</em></h1>
       <p class="hero-sub animate-fade-up delay-200">
-        Build budgets, track expenses, generate invoices, and catch formula errors in a real spreadsheet. Type what you need. Import Excel or CSV. A private Excel and Google Sheets alternative that stays in your browser.
+        Build budgets, track expenses, and invoices. Import Excel and the formula auditor runs in your browser. An AI question sends a summary of the cells it needs.
       </p>
       <div class="hero-actions animate-fade-up delay-300">
-        <a href="/app" class="btn btn-primary">
-          Launch App (It's Free)
+        <a href="/app?audit=1" class="btn btn-primary">
+          Audit an Excel file
         </a>
-        <a href="#features" class="btn btn-secondary">See how it works</a>
+        <a href="/app" class="btn btn-secondary">Launch App (It's Free)</a>
       </div>
 
       <!-- Product screenshot -->
@@ -1308,7 +1310,7 @@
         </div>
         <div class="feature-card animate-fade-up delay-300">
           <div class="feature-icon">🔍</div>
-          <div class="feature-title">10-Rule Auditor</div>
+          <div class="feature-title">Formula Auditor</div>
           <div class="feature-desc">Finds range gaps, inconsistent formulas, outliers, and hidden errors automatically.</div>
         </div>
         <div class="feature-card animate-fade-up">
@@ -1346,15 +1348,15 @@
       <div class="values-grid">
         <div class="value-item value-featured">
           <h3>The Auditor catches formula errors</h3>
-          <p>An AI-powered spreadsheet auditor checks for skipped cells in SUMs, inconsistent formula patterns, statistical outliers, and hardcoded constants. Finds mistakes before they compound — something Google Sheets and Excel don't do automatically.</p>
+          <p>A local formula check looks for skipped cells in SUMs, inconsistent formula patterns, statistical outliers, and hardcoded constants. It runs in your browser, with no account. Auto-fix is limited on the free plan.</p>
         </div>
         <div class="value-item value-featured">
           <h3>Preview before anything changes</h3>
           <p>Every AI suggestion shows an interactive diff preview first. Approve or reject with one click. Your data is never modified without explicit consent — building trust that no other AI spreadsheet tool offers.</p>
         </div>
         <div class="value-item">
-          <h3>Your data stays on your machine</h3>
-          <p>Unlike cloud-only tools, your spreadsheet data lives in your browser by default. A privacy-first spreadsheet where nothing syncs to our servers unless you explicitly enable cloud backup. Self-hosted friendly.</p>
+          <h3>The workbook stays in your browser</h3>
+          <p>The file is not uploaded unless you turn on cloud backup. The auditor stays local. An AI question sends that question and a cell summary to our server, or to your own provider if you bring a key.</p>
         </div>
         <div class="value-item">
           <h3>Plain English, real results</h3>
@@ -1374,7 +1376,7 @@
         </div>
         <div class="value-item">
           <h3>Bring Your Own API Key</h3>
-          <p>Tech-savvy users can plug in their own OpenRouter, Groq, or OpenAI API key for unlimited AI usage at their own token cost. Full control, full privacy, zero subscription needed.</p>
+          <p>Use your own OpenRouter, Groq, or OpenAI key. We do not bill those calls. The prompt and cell summary go to the provider you chose, and that provider bills the tokens.</p>
         </div>
       </div>
     </div>
@@ -1400,7 +1402,7 @@
             <li class="limit">Auditor scans + 3 auto-fixes</li>
             <li class="limit">1 cloud workbook</li>
             <li class="limit">Read-only share links</li>
-            <li class="included">Data stays in your browser</li>
+            <li class="included">Workbook stays in your browser</li>
             <li class="included">Bring Your Own Key (unlimited AI)</li>
           </ul>
           <a href="/app" class="btn btn-secondary">Get Started Free</a>
@@ -1515,7 +1517,7 @@
         </div>
         <div class="faq-item" id="faq-privacy">
           <h3>Does my spreadsheet data stay private?</h3>
-          <p>By default your spreadsheet data stays in your browser. Nothing syncs to smartsht servers unless you explicitly enable cloud backup. Self-hosted and BYOK setups are supported for users who want full control.</p>
+          <p>The workbook stays in your browser unless you turn on cloud backup. The formula auditor runs locally. An AI question sends that question and a summary of relevant cells to our server, or to the provider on your own API key.</p>
         </div>
         <div class="faq-item" id="faq-excel">
           <h3>Can I import Excel files?</h3>
@@ -1535,7 +1537,7 @@
         </div>
         <div class="faq-item" id="faq-sheets-alternative">
           <h3>Is this a Google Sheets alternative?</h3>
-          <p>It is a browser spreadsheet you can use instead of Google Sheets for personal and small-business files. Data stays in your browser by default instead of a Google account. Collaboration is view-only share links today, not live multiplayer editing.</p>
+          <p>It is a browser spreadsheet you can use instead of Google Sheets for personal and small-business files. The workbook stays in your browser unless you turn on cloud backup. Collaboration is view-only share links today, not live multiplayer editing.</p>
         </div>
         <div class="faq-item" id="faq-ai-spreadsheet">
           <h3>What is an AI spreadsheet?</h3>

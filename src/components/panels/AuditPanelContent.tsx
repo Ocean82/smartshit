@@ -20,11 +20,12 @@ const SEVERITY_FILTERS = ['all', 'critical', 'high', 'medium', 'low', 'info'] as
 type FilterValue = (typeof SEVERITY_FILTERS)[number]
 
 export function AuditPanelContent() {
-  const { workbook, activeSheetId, getComputedValue } = useStore(
+  const { workbook, activeSheetId, getComputedValue, lastAuditResult } = useStore(
     useShallow((s) => ({
       workbook: s.workbook,
       activeSheetId: s.activeSheetId,
       getComputedValue: s.getComputedValue,
+      lastAuditResult: s.lastAuditResult,
     })),
   )
   const { isPro } = useUsage()
@@ -36,6 +37,10 @@ export function AuditPanelContent() {
   const [showUpgradeGate, setShowUpgradeGate] = useState(false)
 
   const activeSheet = workbook.sheets.find((s) => s.id === activeSheetId)
+
+  useEffect(() => {
+    if (lastAuditResult) setResult(lastAuditResult)
+  }, [lastAuditResult])
 
   const handleRunAudit = useCallback(() => {
     const state = useStore.getState()
@@ -240,7 +245,15 @@ export function AuditPanelContent() {
       <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2.5 scrollbar-thin">
         {!result && !loading && (
           <div className="text-center text-[11px] text-gray-400 mt-8 px-4 leading-relaxed">
-            Run "Scan Spreadsheet" to check your spreadsheet for formula errors, inconsistencies, and potential problems.
+            <p>Import a file, or scan the sheet that's open. The check runs in this browser.</p>
+            <button
+              type="button"
+              className="mt-3 px-3 py-1.5 rounded-lg text-xs font-medium text-white"
+              style={{ background: 'var(--accent-600)' }}
+              onClick={() => document.dispatchEvent(new CustomEvent('smartsht:request-import'))}
+            >
+              Import a spreadsheet
+            </button>
           </div>
         )}
 
