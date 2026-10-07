@@ -28,6 +28,7 @@ import { computeSortedCellUpdates, computeMultiSortedCellUpdates, type SortPatch
 import { conditionToRule, attachConditionalRuleToColumn } from '@/lib/conditionalFormat'
 import { getActionRecorder } from '@/lib/actionRecorder'
 import { validateCell } from '@/lib/validation'
+import { renameSheetInFormula, validateSheetName, type RenameSheetResult } from '@/lib/sheetRename'
 import { capUndoStack, newHistoryEntryId, type HistoryEntry } from '@/lib/historyDiff'
 import { mergeChartLayout } from '@/lib/chartLayout'
 import { toMergeRange, parseMergeRange, rangesOverlap, shiftMergesOnDelete, shiftMergesOnInsert, type MergeAxis } from '@/lib/merge'
@@ -213,7 +214,7 @@ export interface WorkbookSliceState {
   autoFitRows: (rows: number[]) => void
   insertRow: (afterRow: number) => void
   deleteRow: (row: number) => void
-  renameSheet: (sheetId: string, name: string) => void
+  renameSheet: (sheetId: string, name: string) => RenameSheetResult
   addSheet: (name?: string) => void
   duplicateSheet: (sheetId: string) => void
   moveSheet: (sheetId: string, toIndex: number) => void
@@ -231,7 +232,7 @@ export interface WorkbookActions {
   setActiveSheet: (sheetId: string) => void
   addSheet: (name?: string) => void
   deleteSheet: (sheetId: string) => void
-  renameSheet: (sheetId: string, name: string) => void
+  renameSheet: (sheetId: string, name: string) => RenameSheetResult
   duplicateSheet: (sheetId: string) => void
   moveSheet: (sheetId: string, toIndex: number) => void
   setSheetTabColor: (sheetId: string, color: string | null) => void
@@ -388,13 +389,30 @@ export function createWorkbookActions(
         get().engine.loadWorkbook(get().workbook);
       },
 
-      renameSheet: (sheetId, name) => {
+      renameSheet: (sheetId, rawName) => {
+        const name = rawName.trim();
+        const sheets = get().workbook.sheets;
+        const target = sheets.find((sh) => sh.id === sheetId);
+        if (!target) return { ok: false, error: 'Sheet not found.' };
+        const error = validateSheetName(name, sheets, sheetId);
+        if (error) return { ok: false, error };
+        if (target.name === name) return { ok: true };
+
+        const oldName = target.name;
+        get().pushHistory('Rename sheet');
         set((s) => {
-          const sheet = s.workbook.sheets.find((sh) => sh.id === sheetId);
-          if (sheet) sheet.name = name;
+          for (const sheet of s.workbook.sheets) {
+            if (sheet.id === sheetId) sheet.name = name;
+            for (const cell of Object.values(sheet.cells)) {
+              if (!cell.formula) continue;
+              const next = renameSheetInFormula(cell.formula, oldName, name);
+              if (next !== cell.formula) cell.formula = next;
+            }
+          }
           s.workbook.updatedAt = Date.now();
         });
         get().engine.loadWorkbook(get().workbook);
+        return { ok: true };
       },
 
       duplicateSheet: (sheetId) => {

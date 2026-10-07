@@ -21,7 +21,8 @@ export const handleRenameSheet: ToolHandler = (params, ctx, sheet) => {
   if (!name) {
     return { success: false, message: 'rename_sheet requires a "name"', modified: 0 }
   }
-  ctx.renameSheet(sheet.id, name)
+  const result = ctx.renameSheet(sheet.id, name)
+  if (!result.ok) return { success: false, message: result.error, modified: 0 }
   return { success: true, message: `Sheet renamed to "${name}"`, modified: 0 }
 }
 

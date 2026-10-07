@@ -89,7 +89,7 @@ export interface ChatStoreAccess extends ChatState {
   deleteRow: (row: number) => void
   insertRow: (afterRow: number) => void
   addSheet: (name?: string) => void
-  renameSheet: (sheetId: string, name: string) => void
+  renameSheet: (sheetId: string, name: string) => import('@/lib/sheetRename').RenameSheetResult
   addChart: (chart: import('@/types').ChartConfig) => void
   additionalSelections: Selection[]
 }

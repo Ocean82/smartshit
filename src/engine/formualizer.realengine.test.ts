@@ -13,6 +13,7 @@
  */
 import { describe, it, expect, beforeAll } from 'vitest'
 import { Workbook, initializeWasm } from '@ocean8219/formualizer'
+import { renameSheetInFormula } from '@/lib/sheetRename'
 
 beforeAll(async () => {
   await initializeWasm()
@@ -83,6 +84,18 @@ describe('real formualizer WASM — cross-sheet references', () => {
     wb.evaluateAll()
     expect(Number(wb.evaluateCell('S2', 1, 1))).toBe(42)
     expect(Number(wb.evaluateCell('S2', 1, 2))).toBe(42)
+  })
+
+  it('evaluates formulas rewritten by a sheet rename (spaces and apostrophes)', () => {
+    for (const newName of ['Q1 Data', "Bob's", 'Plain']) {
+      const wb = new Workbook()
+      wb.addSheet(newName)
+      wb.addSheet('Other')
+      wb.setValue(newName, 1, 1, 21)
+      wb.setFormula('Other', 1, 1, renameSheetInFormula('=Old!A1*2', 'Old', newName))
+      wb.evaluateAll()
+      expect(Number(wb.evaluateCell('Other', 1, 1))).toBe(42)
+    }
   })
 })
 

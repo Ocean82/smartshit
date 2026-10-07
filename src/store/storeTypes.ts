@@ -101,7 +101,7 @@ export interface AppState extends UIState, UIActions, FileActions, ChatActions {
   setActiveSheet: (sheetId: string) => void
   addSheet: (name?: string) => void
   deleteSheet: (sheetId: string) => void
-  renameSheet: (sheetId: string, name: string) => void
+  renameSheet: (sheetId: string, name: string) => import('@/lib/sheetRename').RenameSheetResult
   duplicateSheet: (sheetId: string) => void
   moveSheet: (sheetId: string, toIndex: number) => void
   setSheetTabColor: (sheetId: string, color: string | null) => void

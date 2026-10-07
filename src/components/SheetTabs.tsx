@@ -61,7 +61,10 @@ export function SheetTabs() {
   }
 
   const handleFinishRename = () => {
-    if (renamingId && renameValue.trim()) renameSheet(renamingId, renameValue.trim())
+    if (renamingId && renameValue.trim()) {
+      const result = renameSheet(renamingId, renameValue.trim())
+      if (!result.ok) useStore.getState().showToast({ type: 'warning', message: result.error })
+    }
     setRenamingId(null)
   }
 

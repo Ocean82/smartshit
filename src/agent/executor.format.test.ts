@@ -45,7 +45,7 @@ function makeContext(sheet: SheetData) {
     deleteRow: () => {},
     insertRow: () => {},
     addSheet: () => {},
-    renameSheet: () => {},
+    renameSheet: () => ({ ok: true }),
     pushHistory: () => {},
     getSelection: () => [],
     executeTemplate: (tool, params) => {

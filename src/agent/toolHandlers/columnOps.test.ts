@@ -26,7 +26,7 @@ function makeCtx(sheet: ReturnType<typeof createEmptySheet>): ExecutionContext {
     deleteRow: () => {},
     insertRow: () => {},
     addSheet: () => {},
-    renameSheet: () => {},
+    renameSheet: () => ({ ok: true }),
     pushHistory: vi.fn(),
   }
 }

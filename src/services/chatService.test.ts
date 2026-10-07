@@ -58,7 +58,7 @@ function makeExecContext(): ExecutionContext {
     deleteRow: () => {},
     insertRow: () => {},
     addSheet: () => {},
-    renameSheet: () => {},
+    renameSheet: () => ({ ok: true }),
     pushHistory: () => {},
   }
   return ctx

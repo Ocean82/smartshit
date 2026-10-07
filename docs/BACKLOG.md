@@ -63,8 +63,12 @@ M 1–2 days, L more.
   - `loadWorkbook` (`spreadsheet.ts:78`) and `workbookSlice.ts:370` ignore `loadSheet`'s result.
   - Engine now calls a load-error handler (`setSheetLoadErrorHandler`), wired once in
     `useStore.ts` to a warning toast, so every `loadWorkbook` caller is covered.
-- [ ] **Renaming a sheet doesn't update references** — M
+- [x] **Renaming a sheet doesn't update references** — M (done 2026-10-07)
   - `workbookSlice.ts:391` renames only; no formula rewrite, name validation, or undo entry.
+  - `renameSheet` now validates (Excel rules, unique), pushes an undo entry, and rewrites
+    `Old!A1` / `'Old'!A1` in every sheet's cell formulas (`src/lib/sheetRename.ts`). Returns
+    `{ ok, error }`; sheet tabs toast and the `rename_sheet` tool report errors.
+    Not handled: 3D refs (`Sheet1:Sheet3!A1`) and sheet names inside `INDIRECT` strings.
 
 ## 2. Security and billing
 

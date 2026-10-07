@@ -8,6 +8,7 @@
 import type { ParsedToolCall } from './parser'
 import type { SheetData, FilterConfig, CellFormat, ChartConfig } from '@/types'
 import type { SortPatch } from '@/lib/sheetSort'
+import type { RenameSheetResult } from '@/lib/sheetRename'
 import { resolveToolName, TEMPLATE_TOOL_NAMES } from '@shared/toolRegistry'
 import { runScript } from '@/sandbox'
 import { recordTelemetry } from '@/ai/telemetry'
@@ -33,7 +34,7 @@ export interface ExecutionContext {
   deleteRow: (row: number) => void
   insertRow: (afterRow: number) => void
   addSheet: (name?: string) => void
-  renameSheet: (sheetId: string, name: string) => void
+  renameSheet: (sheetId: string, name: string) => RenameSheetResult
   pushHistory: (desc: string) => void
   /** Currently selected cell ids, if any (used by format_cells defaults). */
   getSelection?: () => string[]

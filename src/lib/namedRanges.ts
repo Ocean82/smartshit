@@ -40,7 +40,7 @@ export function normalizeRangeText(raw: string): string | null {
   return `${a}:$${m[6].toUpperCase()}$${parseInt(m[8], 10)}`
 }
 
-function quoteSheetName(name: string): string {
+export function quoteSheetName(name: string): string {
   if (/^[A-Za-z_][A-Za-z0-9._]*$/.test(name)) return name
   return `'${name.replace(/'/g, "''")}'`
 }
