@@ -341,6 +341,21 @@ describe('Sandbox Runner', () => {
         expect(parsed).toEqual([[1, 2], [3, 4]])
       }
     })
+
+    it('trims a whole-column range to the used rows instead of freezing', async () => {
+      const ctx = buildTestContext({ A1: { value: 1 }, A2: { value: 2 }, A3: { value: 3 } })
+      const started = Date.now()
+      const result = await runScript('log(JSON.stringify(getRange("A1", "A1048576")))', ctx)
+      expect(Date.now() - started).toBeLessThan(2000)
+      expect(result.success).toBe(true)
+      if (result.success) expect(JSON.parse(result.logs[0])).toEqual([[1], [2], [3]])
+    })
+
+    it('keeps the exact shape for small ranges', async () => {
+      const ctx = buildTestContext({ A1: { value: 1 } })
+      const result = await runScript('log(JSON.stringify(getRange("A1", "A3")))', ctx)
+      if (result.success) expect(JSON.parse(result.logs[0])).toEqual([[1], [null], [null]])
+    })
   })
 
   describe('findCells', () => {

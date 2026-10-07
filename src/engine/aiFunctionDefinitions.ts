@@ -70,13 +70,13 @@ async function flushBatchQueue(): Promise<void> {
     const inputs = pending.map((item) => ({
       id: item.id,
       function: item.functionName,
-      args: { ...item.args, ...(byok ? { byok } : {}) },
+      args: item.args,
     }))
 
     const res = await fetch(`${API_BASE}/api/ai-function/batch`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ inputs }),
+      body: JSON.stringify({ inputs, ...(byok ? { byok } : {}) }),
       signal: AbortSignal.timeout(60_000), // Longer timeout for batches
     })
 

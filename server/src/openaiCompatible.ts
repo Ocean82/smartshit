@@ -36,6 +36,8 @@ export interface OpenAICompatibleCallOptions {
   jsonMode?: boolean
   /** Override max_tokens (default: 768, raised for tool/act calls). */
   maxTokens?: number
+  /** Cancels a non-streaming request (combined with the built-in 30s timeout). */
+  signal?: AbortSignal
   /**
    * Ask the provider to skip its reasoning phase — OpenRouter honours
    * `reasoning: { exclude: true }`, which keeps fallback output as clean as
@@ -48,6 +50,12 @@ export interface OpenAICompatibleCallOptions {
    * prevent. BYOK callers must also leave it off: the provider is unknown there.
    */
   suppressReasoning?: boolean
+}
+
+/** Fetch signal that fires on the caller's abort or after `timeoutMs`. */
+export function withRequestTimeout(signal: AbortSignal | undefined, timeoutMs: number): AbortSignal {
+  const timeout = AbortSignal.timeout(timeoutMs)
+  return signal ? AbortSignal.any([signal, timeout]) : timeout
 }
 
 function buildUrl(baseUrl: string): string {
@@ -88,7 +96,7 @@ export async function chatWithOpenAiCompatible(
       'Authorization': `Bearer ${params.apiKey}`,
     },
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(30_000),
+    signal: withRequestTimeout(options.signal, 30_000),
     // SSRF guard: never follow redirects. A validated public baseUrl could
     // otherwise 3xx the request to an internal address (e.g. the cloud
     // metadata endpoint). opaqueredirect surfaces here as a non-ok response.

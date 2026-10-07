@@ -178,6 +178,8 @@ export interface ProviderCallOptions {
   jsonMode?: boolean
   /** Override max_tokens. Default: 1280 for Groq, 768 for others. Use 2048+ for act/tool calls. */
   maxTokens?: number
+  /** Cancels the upstream request (non-streaming calls). */
+  signal?: AbortSignal
 }
 
 /** Metadata about which provider/model handled the request. */
@@ -373,7 +375,7 @@ export async function callProvider(
         baseUrl: config.openRouterBaseUrl,
       },
       messages,
-      { jsonMode: options.jsonMode, maxTokens: options.maxTokens, suppressReasoning: true },
+      { jsonMode: options.jsonMode, maxTokens: options.maxTokens, suppressReasoning: true, signal: options.signal },
     )
   } else if (provider === 'huggingface') {
     completion = await chatWithOpenAiCompatible(
@@ -383,17 +385,18 @@ export async function callProvider(
         baseUrl: config.huggingFaceBaseUrl,
       },
       messages,
-      { jsonMode: options.jsonMode, maxTokens: options.maxTokens },
+      { jsonMode: options.jsonMode, maxTokens: options.maxTokens, signal: options.signal },
     )
   } else if (provider === 'groq') {
     const { chatWithGroq } = await import('./groq.js')
     completion = await chatWithGroq(messages, {
       jsonMode: options.jsonMode,
       maxTokens: options.maxTokens,
+      signal: options.signal,
     })
   } else {
     // Primary Ollama model — use JSON format when structured output is needed.
-    completion = await chatWithOllama(messages, { jsonMode: options.jsonMode })
+    completion = await chatWithOllama(messages, { jsonMode: options.jsonMode, signal: options.signal })
   }
 
   return {
@@ -433,14 +436,20 @@ export async function callProviderWithFailover(
       continue
     }
 
+    // Timing out must cancel the upstream fetch too, or failover runs two providers at once.
+    const attemptAbort = new AbortController()
     try {
       const response = await withTimeout(
-        callProvider(provider, messages, options),
+        callProvider(provider, messages, {
+          ...options,
+          signal: options.signal ? AbortSignal.any([options.signal, attemptAbort.signal]) : attemptAbort.signal,
+        }),
         provider,
       )
       recordSuccess(provider)
       return response
     } catch (err) {
+      attemptAbort.abort()
       lastError = err instanceof Error ? err : new Error(String(err))
       recordFailure(provider)
       console.warn(`[providers] ${provider} failed, trying next:`, lastError.message)

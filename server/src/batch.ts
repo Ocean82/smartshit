@@ -12,7 +12,9 @@
  */
 
 import { callProviderWithFailover } from './providers.js'
+import { chatWithOpenAiCompatible } from './openaiCompatible.js'
 import { runDeterministicFunction } from './deterministicFunctions.js'
+import type { ByokCredentials } from './schemas/byok.js'
 import type { ChatMessageInput } from './prompt.js'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -41,8 +43,13 @@ export interface BatchResponse {
   model?: string
   /** Total unique inputs processed (before dedup) */
   uniqueInputs: number
-  /** Number of LLM calls made */
+  /** Number of successful LLM calls (failed calls are not billable) */
   llmCalls: number
+}
+
+export interface BatchOptions {
+  /** User's own provider. When set, app-funded providers are never used. */
+  byok?: ByokCredentials
 }
 
 // ─── Cache ───────────────────────────────────────────────────────────────────
@@ -95,7 +102,7 @@ const MAX_BATCH_SIZE = 10
  * Process a batch of AI function requests efficiently.
  * Deduplicates, batches, and caches results.
  */
-export async function processBatch(inputs: BatchInput[]): Promise<BatchResponse> {
+export async function processBatch(inputs: BatchInput[], options: BatchOptions = {}): Promise<BatchResponse> {
   const results: BatchResult[] = []
   const uncachedInputs: Array<{ input: BatchInput; key: string }> = []
 
@@ -145,10 +152,10 @@ export async function processBatch(inputs: BatchInput[]): Promise<BatchResponse>
   for (const [, groupEntries] of byFunction) {
     for (let i = 0; i < groupEntries.length; i += MAX_BATCH_SIZE) {
       const batch = groupEntries.slice(i, i + MAX_BATCH_SIZE)
-      llmCalls++
 
       try {
-        const batchResults = await executeBatch(batch.map((b) => b.input))
+        const batchResults = await executeBatch(batch.map((b) => b.input), options.byok)
+        llmCalls++
         lastProvider = batchResults.provider
         lastModel = batchResults.model
 
@@ -166,11 +173,12 @@ export async function processBatch(inputs: BatchInput[]): Promise<BatchResponse>
           }
         }
       } catch (err) {
-        // On batch failure, mark all items in this batch as errored
-        const errorMsg = err instanceof Error ? err.message : String(err)
+        // On batch failure, mark all items in this batch as errored. Provider
+        // details stay in the server log, not the response.
+        console.warn('[batch] chunk failed:', err instanceof Error ? err.message : String(err))
         for (const { ids } of batch) {
           for (const id of ids) {
-            results.push({ id, result: null, cached: false, error: errorMsg })
+            results.push({ id, result: null, cached: false, error: 'AI provider failed for this item' })
           }
         }
       }
@@ -194,7 +202,7 @@ interface BatchExecResult {
   model?: string
 }
 
-async function executeBatch(inputs: BatchInput[]): Promise<BatchExecResult> {
+async function executeBatch(inputs: BatchInput[], byok?: ByokCredentials): Promise<BatchExecResult> {
   if (inputs.length === 0) return { results: [] }
 
   // All inputs should be the same function for optimal batching
@@ -208,10 +216,19 @@ async function executeBatch(inputs: BatchInput[]): Promise<BatchExecResult> {
     { role: 'user', content: userContent },
   ]
 
-  const response = await callProviderWithFailover(messages, {
-    jsonMode: true,
-    maxTokens: 2048,
-  })
+  const callOptions = { jsonMode: true, maxTokens: 2048 }
+
+  if (byok) {
+    const model = byok.model ?? 'gpt-4o-mini'
+    const completion = await chatWithOpenAiCompatible(
+      { apiKey: byok.apiKey, baseUrl: byok.baseUrl, model },
+      messages,
+      callOptions,
+    )
+    return { results: parseBatchResponse(completion.text, inputs.length), provider: 'byok', model }
+  }
+
+  const response = await callProviderWithFailover(messages, callOptions)
 
   // Parse the JSON array response
   const parsed = parseBatchResponse(response.text, inputs.length)
@@ -323,20 +340,27 @@ export function clearBatchCache(): void {
  */
 export function estimateBatchCost(inputs: BatchInput[]): { uniqueInputs: number; estimatedCalls: number; cachedCount: number } {
   let cachedCount = 0
-  const seen = new Set<string>()
+  // processBatch chunks per function, so count unique inputs per function.
+  const uniqueByFunction = new Map<string, Set<string>>()
 
   for (const input of inputs) {
     if (runDeterministicFunction(input.function, input.args)) continue
-    const key = cacheKey(input.function, input.args)
     if (getCached(input.function, input.args) !== undefined) {
       cachedCount++
-    } else {
-      seen.add(key)
+      continue
     }
+    const func = input.function.toUpperCase()
+    const keys = uniqueByFunction.get(func) ?? new Set<string>()
+    keys.add(cacheKey(input.function, input.args))
+    uniqueByFunction.set(func, keys)
   }
 
-  const uniqueInputs = seen.size
-  const estimatedCalls = Math.ceil(uniqueInputs / MAX_BATCH_SIZE)
+  let uniqueInputs = 0
+  let estimatedCalls = 0
+  for (const keys of uniqueByFunction.values()) {
+    uniqueInputs += keys.size
+    estimatedCalls += Math.ceil(keys.size / MAX_BATCH_SIZE)
+  }
 
   return { uniqueInputs, estimatedCalls, cachedCount }
 }

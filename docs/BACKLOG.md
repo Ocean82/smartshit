@@ -72,7 +72,11 @@ M 1–2 days, L more.
 
 ## 2. Security and billing
 
-- [ ] **AI batch endpoint ignores BYOK and overruns the free quota** — M
+- [x] **AI batch endpoint ignores BYOK and overruns the free quota** — M (done 2026-10-07)
+  - Now: Zod `aiFunctionBatchSchema`; top-level `byok` (legacy `args.byok` accepted, always
+    stripped) runs the whole batch on the user's key, unmetered; app-funded batches reserve one
+    slot per estimated call (estimate now per function group), release unspent slots, 429 if not
+    enough left. Provider errors are logged, not returned.
   - The client puts the BYOK key in each item's `args`; the server never uses it, and the
     key lands in the cache key (`server/src/batch.ts:57`). Usage is checked once, then up to
     100 calls are recorded (`routes/aiFunction.ts:466,479`). No `validateBody`; raw provider

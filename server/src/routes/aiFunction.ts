@@ -13,12 +13,12 @@ import { Router } from 'express'
 import { providerOrder, providerIsConfigured, callProvider } from '../providers.js'
 import { requireAuth, getRequestUserId } from '../auth/clerk.js'
 import { resolveIsPro } from '../plan.js'
-import { checkUsage, recordUsage } from '../usage.js'
+import { reserveUsage, releaseUsage, recordUsage } from '../usage.js'
 import { decideAiAccess, shouldRecordServerUsage } from '../aiAccess.js'
 import { aiFunctionRateLimiter } from '../middleware/rateLimit.js'
 import { validateBody } from '../middleware/validate.js'
-import { aiFunctionBodySchema } from '../schemas/aiFunction.js'
-import { assertPublicByokHost } from '../schemas/byok.js'
+import { aiFunctionBodySchema, aiFunctionBatchSchema, type AIFunctionBatchBody } from '../schemas/aiFunction.js'
+import { assertPublicByokHost, byokSchema, type ByokCredentials } from '../schemas/byok.js'
 import { runDeterministicFunction } from '../deterministicFunctions.js'
 import { validateLabel, parseAllowlist, parseSentiment } from '../labelValidation.js'
 import { processBatch, estimateBatchCost, type BatchInput } from '../batch.js'
@@ -278,7 +278,13 @@ aiFunctionRouter.post('/', aiFunctionRateLimiter, validateBody(aiFunctionBodySch
   const hasByokCredentials = Boolean(body.byok?.apiKey && body.byok?.baseUrl)
   const userId = getRequestUserId(req) ?? undefined
   const isPro = await resolveIsPro(userId)
-  const usage = await checkUsage(userId, isPro)
+  // Reserve atomically before inference so parallel calls can't overrun the
+  // quota; released below whenever app-funded inference didn't happen.
+  const usage = await reserveUsage(userId, isPro)
+  const holdsReservation = !isPro && usage.allowed
+  const releaseReservation = async () => {
+    if (holdsReservation) await releaseUsage(userId)
+  }
   const access = decideAiAccess({
     isPro,
     usageAllowed: usage.allowed,
@@ -299,6 +305,7 @@ aiFunctionRouter.post('/', aiFunctionRateLimiter, validateBody(aiFunctionBodySch
   const availableProviders = providerOrder().filter(providerIsConfigured)
 
   if (availableProviders.length === 0 && !hasByokCredentials) {
+    await releaseReservation()
     res.status(503).json({
       error: 'No AI providers available',
       result: null,
@@ -353,6 +360,7 @@ aiFunctionRouter.post('/', aiFunctionRateLimiter, validateBody(aiFunctionBodySch
   }
 
   if (rawResult === null) {
+    await releaseReservation()
     console.error(`[ai-function] All providers failed for ${funcName}:`, lastError)
     res.status(502).json({
       // Don't echo provider internals back to the client
@@ -362,10 +370,8 @@ aiFunctionRouter.post('/', aiFunctionRateLimiter, validateBody(aiFunctionBodySch
     return
   }
 
-  // Meter only app-funded inference for free users
-  if (shouldRecordServerUsage({ usedServerProvider, isPro })) {
-    await recordUsage(userId)
-  }
+  // Meter only app-funded inference: a BYOK success gives the slot back.
+  if (!shouldRecordServerUsage({ usedServerProvider, isPro })) await releaseReservation()
 
   const result = parseResult(effectiveFuncName, rawResult)
   const response: AIFunctionResponse = { result }
@@ -402,69 +408,76 @@ aiFunctionRouter.post('/', aiFunctionRateLimiter, validateBody(aiFunctionBodySch
 // Processes multiple AI function inputs in optimized batches.
 // Deduplicates identical inputs, caches results, and coalesces LLM calls.
 
-aiFunctionRouter.post('/batch', aiFunctionRateLimiter, async (req, res) => {
-  const body = req.body as { inputs?: unknown[] }
+aiFunctionRouter.post('/batch', aiFunctionRateLimiter, validateBody(aiFunctionBatchSchema), async (req, res) => {
+  const body = req.body as AIFunctionBatchBody
+  // Older clients put BYOK inside every item's args; never let it reach the
+  // cache key or the prompt.
+  const byok = body.byok ?? legacyByokFromArgs(body.inputs)
+  const inputs: BatchInput[] = body.inputs.map((item) => ({
+    id: item.id,
+    function: item.function,
+    args: stripByok(item.args),
+  }))
 
-  if (!Array.isArray(body.inputs) || body.inputs.length === 0) {
-    res.status(400).json({ error: 'Request body must contain a non-empty "inputs" array' })
+  // User's own key: their provider pays, so no metering and no app fallback.
+  if (byok) {
+    try {
+      await assertPublicByokHost(byok.baseUrl)
+    } catch {
+      res.status(400).json({ error: 'BYOK baseUrl must be a public HTTPS endpoint' })
+      return
+    }
+    res.json(await processBatch(inputs, { byok }))
     return
   }
 
-  if (body.inputs.length > 100) {
-    res.status(400).json({ error: 'Maximum 100 inputs per batch request' })
-    return
-  }
-
-  // Validate each input
-  const inputs: BatchInput[] = []
-  for (let i = 0; i < body.inputs.length; i++) {
-    const item = body.inputs[i] as Record<string, unknown> | null
-    if (!item || typeof item !== 'object') {
-      res.status(400).json({ error: `inputs[${i}] must be an object` })
-      return
-    }
-    if (!item.id || typeof item.id !== 'string') {
-      res.status(400).json({ error: `inputs[${i}].id is required and must be a string` })
-      return
-    }
-    if (!item.function || typeof item.function !== 'string') {
-      res.status(400).json({ error: `inputs[${i}].function is required and must be a string` })
-      return
-    }
-    inputs.push({
-      id: item.id,
-      function: String(item.function),
-      args: (item.args && typeof item.args === 'object' ? item.args : {}) as Record<string, unknown>,
-    })
-  }
-
-  // Usage gate
+  // App-funded: reserve one slot per expected LLM call up front, give back
+  // whatever wasn't actually spent.
   const userId = getRequestUserId(req) ?? undefined
   const isPro = await resolveIsPro(userId)
-  const usage = await checkUsage(userId, isPro)
-  if (!usage.allowed) {
+  const needed = isPro ? 0 : estimateBatchCost(inputs).estimatedCalls
+  let reserved = 0
+  while (reserved < needed) {
+    const slot = await reserveUsage(userId, isPro)
+    if (!slot.allowed) break
+    reserved++
+  }
+  const release = async (count: number) => {
+    for (let i = 0; i < count; i++) await releaseUsage(userId)
+  }
+  if (reserved < needed) {
+    await release(reserved)
     res.status(429).json({
-      error: `You've used all ${usage.limit} free AI requests for today. Upgrade to Pro for unlimited access.`,
+      error: `Not enough free AI requests left today for this batch (${needed} needed). Upgrade to Pro for unlimited access.`,
     })
     return
   }
 
   try {
     const response = await processBatch(inputs)
-
-    // Count each LLM call for usage tracking (cached results are free).
-    // This ensures free-tier users are billed per actual inference, not per batch request.
-    for (let i = 0; i < response.llmCalls; i++) {
-      await recordUsage(userId)
+    await release(Math.max(0, reserved - response.llmCalls))
+    // A cache entry can expire between the estimate and the run; meter the extra calls.
+    if (!isPro) {
+      for (let i = reserved; i < response.llmCalls; i++) await recordUsage(userId)
     }
-
     res.json(response)
   } catch (err) {
+    await release(reserved)
     const message = err instanceof Error ? err.message : 'Unknown error'
     console.error('[ai-function/batch] Error:', message)
     res.status(502).json({ error: 'Batch processing failed. Please try again.' })
   }
 })
+
+function stripByok(args: Record<string, unknown>): Record<string, unknown> {
+  const { byok: _byok, ...rest } = args
+  return rest
+}
+
+function legacyByokFromArgs(inputs: AIFunctionBatchBody['inputs']): ByokCredentials | undefined {
+  const parsed = byokSchema.safeParse(inputs[0]?.args.byok)
+  return parsed.success ? parsed.data : undefined
+}
 
 // ─── Cost Estimate Endpoint ──────────────────────────────────────────────────
 // POST /api/ai-function/estimate
@@ -483,7 +496,7 @@ aiFunctionRouter.post('/estimate', async (req, res) => {
     .map((item) => ({
       id: String(item.id ?? ''),
       function: String(item.function ?? ''),
-      args: (item.args && typeof item.args === 'object' ? item.args : {}) as Record<string, unknown>,
+      args: stripByok((item.args && typeof item.args === 'object' ? item.args : {}) as Record<string, unknown>),
     }))
 
   const estimate = estimateBatchCost(inputs)

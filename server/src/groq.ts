@@ -1,6 +1,6 @@
 import { config } from './config.js'
 import type { ChatMessageInput } from './prompt.js'
-import type { AdapterCompletion } from './openaiCompatible.js'
+import { withRequestTimeout, type AdapterCompletion } from './openaiCompatible.js'
 import { stripThinkingTags, createThinkingTagFilter } from './thinkingTagStripper.js'
 
 /**
@@ -167,6 +167,8 @@ export interface GroqCallOptions {
   jsonMode?: boolean
   /** Override max_tokens (default: 2048) */
   maxTokens?: number
+  /** Cancels the request (combined with the built-in 30s timeout). */
+  signal?: AbortSignal
 }
 
 export async function chatWithGroq(
@@ -199,7 +201,7 @@ export async function chatWithGroq(
       'Authorization': `Bearer ${config.groqApiKey}`,
     },
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(30_000),
+    signal: withRequestTimeout(options.signal, 30_000),
   })
 
   // Track rate limit headers on every response

@@ -67,6 +67,27 @@ export async function query<T extends pg.QueryResultRow = Record<string, unknown
   return pool.query<T>(text, params)
 }
 
+export type QueryFn = <T extends pg.QueryResultRow = Record<string, unknown>>(
+  text: string,
+  params?: unknown[],
+) => Promise<pg.QueryResult<T>>
+
+/** Run `fn` on one pooled client inside BEGIN/COMMIT; ROLLBACK on throw. */
+export async function withTransaction<R>(fn: (q: QueryFn) => Promise<R>): Promise<R> {
+  const client = await getPool().connect()
+  try {
+    await client.query('BEGIN')
+    const result = await fn((text, params) => client.query(text, params))
+    await client.query('COMMIT')
+    return result
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => undefined)
+    throw err
+  } finally {
+    client.release()
+  }
+}
+
 /**
  * Gracefully close the pool (for clean shutdown).
  */

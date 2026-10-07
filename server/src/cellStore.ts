@@ -3,7 +3,7 @@
  * Provides SQL query tools for the AI agent to access real spreadsheet data.
  */
 import { createHash } from 'node:crypto'
-import { query } from './db.js'
+import { query, withTransaction, type QueryFn } from './db.js'
 
 export interface CellRow {
   row_index: number
@@ -42,6 +42,21 @@ export async function syncWorkbookCells(
 ): Promise<{ cellCount: number; skipped?: boolean }> {
   const versionHash = hashWorkbookSheets(sheets)
 
+  // One transaction so readers never see a half-written workbook; the
+  // per-workbook advisory lock serializes concurrent saves (without it, a second
+  // save's DELETE can't see the first save's fresh inserts and stale cells survive).
+  return withTransaction(async (query) => {
+    await query('SELECT pg_advisory_xact_lock(hashtext($1))', [workbookId])
+    return replaceWorkbookCells(query, workbookId, sheets, versionHash)
+  })
+}
+
+async function replaceWorkbookCells(
+  query: QueryFn,
+  workbookId: string,
+  sheets: SyncSheet[],
+  versionHash: string,
+): Promise<{ cellCount: number; skipped?: boolean }> {
   const prior = await query<{ version_hash: string | null; cell_count: number | null }>(
     `SELECT version_hash, cell_count FROM smartsht.cell_sync WHERE workbook_id = $1`,
     [workbookId],

@@ -8,7 +8,7 @@
 import { refToCell, cellToRef, letterToCol, colToLetter } from '@/engine/spreadsheet'
 import type { SheetData } from '@/types'
 import type { MutationCollector } from './types'
-import { MAX_MUTATIONS, MAX_LOG_LINES } from './limits'
+import { MAX_MUTATIONS, MAX_LOG_LINES, MAX_RANGE_CELLS } from './limits'
 
 export interface HostAPIContext {
   sheet: SheetData
@@ -88,9 +88,23 @@ export function buildHostAPI(ctx: HostAPIContext) {
     const start = cellToRef(startRef.trim().toUpperCase())
     const end = cellToRef(endRef.trim().toUpperCase())
     const minRow = Math.min(start.row, end.row)
-    const maxR = Math.max(start.row, end.row)
+    let maxR = Math.max(start.row, end.row)
     const minCol = Math.min(start.col, end.col)
-    const maxC = Math.max(start.col, end.col)
+    let maxC = Math.max(start.col, end.col)
+
+    // Host code runs outside the VM timeout, so a whole-column range would
+    // freeze the tab. Oversized ranges are trimmed to the used extent.
+    if ((maxR - minRow + 1) * (maxC - minCol + 1) > MAX_RANGE_CELLS) {
+      const used = usedExtent()
+      maxR = Math.min(maxR, used.row)
+      maxC = Math.min(maxC, used.col)
+      const area = Math.max(0, maxR - minRow + 1) * Math.max(0, maxC - minCol + 1)
+      if (area > MAX_RANGE_CELLS) {
+        throw new Error(
+          `Range ${startRef}:${endRef} covers ${area} filled cells (max ${MAX_RANGE_CELLS}). Read it in smaller blocks.`,
+        )
+      }
+    }
 
     const result: (string | number | null)[][] = []
     for (let r = minRow; r <= maxR; r++) {
@@ -107,6 +121,18 @@ export function buildHostAPI(ctx: HostAPIContext) {
       result.push(row)
     }
     return result
+  }
+
+  /** Last used row/col, including writes made earlier in this run. */
+  function usedExtent(): { row: number; col: number } {
+    let row = maxRow
+    let col = maxCol
+    for (const cellId of Object.keys(mutations.cellUpdates)) {
+      const ref = cellToRef(cellId)
+      if (ref.row > row) row = ref.row
+      if (ref.col > col) col = ref.col
+    }
+    return { row, col }
   }
 
   function getHeaders(): string[] {

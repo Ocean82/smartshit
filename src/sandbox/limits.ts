@@ -13,6 +13,9 @@ export const MEMORY_LIMIT_BYTES = 16 * 1024 * 1024
 /** Maximum number of cell mutations a single script can produce. */
 export const MAX_MUTATIONS = 50_000
 
+/** Maximum cells a single getRange call may read. */
+export const MAX_RANGE_CELLS = 100_000
+
 /** Maximum number of log lines a script can emit. */
 export const MAX_LOG_LINES = 200
 

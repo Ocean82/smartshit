@@ -49,6 +49,13 @@ describe('batch processing', () => {
     })
   })
 
+  it('estimates one call per function group, matching how processBatch chunks', () => {
+    const inputs: BatchInput[] = ['AI.CATEGORIZE', 'AI.SENTIMENT', 'AI.SUMMARIZE'].map((fn, i) => ({
+      id: `c${i}`, function: fn, args: { input: 'x' },
+    }))
+    expect(estimateBatchCost(inputs).estimatedCalls).toBe(3)
+  })
+
   describe('deterministic functions', () => {
     const inputs: BatchInput[] = [
       { id: 'p1', function: 'AI.PREDICT', args: { values: [1, 2, 3, 4], periods: 1 } },

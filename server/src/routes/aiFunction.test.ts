@@ -1,11 +1,6 @@
 /**
- * Integration tests for /api/ai-function route — auth enforcement & usage metering.
- *
- * Validates:
- * - Unauthenticated requests return 401 (P0-3 regression test)
- * - Usage metering is enforced (free-tier limit blocks excess requests)
- * - Valid authenticated requests reach the provider layer
- * - Rate limiting is applied
+ * Integration tests for /api/ai-function routes — auth, atomic usage metering,
+ * batch quota reservation, and batch BYOK handling.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -14,12 +9,13 @@ import request from 'supertest'
 
 // ─── Mocks ──────────────────────────────────────────────────────────────────
 
+const LIMIT = 7
 let mockUserId: string | null = 'user_123'
 let mockIsPro = false
-let mockUsageCount = 0
+let usedToday = 0
 
 vi.mock('../auth/clerk.js', () => ({
-  requireAuth: (req: any, res: any, next: any) => {
+  requireAuth: (_req: unknown, res: { status: (n: number) => { json: (b: unknown) => void } }, next: () => void) => {
     if (!mockUserId) {
       res.status(401).json({ error: 'Authentication required' })
       return
@@ -33,74 +29,46 @@ vi.mock('../plan.js', () => ({
   resolveIsPro: async () => mockIsPro,
 }))
 
+// Same contract as usage.ts: reserve is an atomic check-and-increment.
 vi.mock('../usage.js', () => ({
-  checkUsage: async () => ({
-    allowed: mockUsageCount < 7,
-    remaining: Math.max(0, 7 - mockUsageCount),
-    limit: 7,
-    used: mockUsageCount,
-    isPro: mockIsPro,
+  reserveUsage: vi.fn(async (_userId: string | undefined, isPro: boolean) => {
+    if (isPro) return { allowed: true, remaining: null, limit: null, used: 0, isPro: true }
+    if (usedToday >= LIMIT) return { allowed: false, remaining: 0, limit: LIMIT, used: usedToday, isPro: false }
+    usedToday++
+    return { allowed: true, remaining: LIMIT - usedToday, limit: LIMIT, used: usedToday, isPro: false }
   }),
-  recordUsage: vi.fn(async () => undefined),
+  releaseUsage: vi.fn(async () => {
+    usedToday = Math.max(0, usedToday - 1)
+  }),
+  recordUsage: vi.fn(async () => {
+    usedToday++
+  }),
 }))
 
-vi.mock('../aiAccess.js', () => ({
-  decideAiAccess: () => ({
-    allowed: mockUsageCount < 7 || mockIsPro,
-    reason: mockUsageCount >= 7 && !mockIsPro ? 'quota_exceeded' : undefined,
-    useBYOK: false,
-    useServer: true,
-    recordUsage: true,
-  }),
-  shouldRecordServerUsage: () => true,
-}))
-
+const callProvider = vi.fn(async () => ({ text: 'Food' }))
 vi.mock('../providers.js', () => ({
   providerOrder: () => ['groq'],
   providerIsConfigured: () => true,
-  callProvider: vi.fn(async () => '{"result": "categorized"}'),
-}))
-
-vi.mock('../config.js', () => ({
-  config: {
-    groqModel: 'openai/gpt-oss-120b',
-  },
+  callProvider: (...args: unknown[]) => callProvider(...(args as [])),
 }))
 
 vi.mock('../middleware/rateLimit.js', () => ({
-  aiFunctionRateLimiter: (_req: any, _res: any, next: any) => next(),
+  aiFunctionRateLimiter: (_req: unknown, _res: unknown, next: () => void) => next(),
 }))
 
-vi.mock('../middleware/validate.js', () => ({
-  validateBody: () => (_req: any, _res: any, next: any) => next(),
+vi.mock('../schemas/byok.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../schemas/byok.js')>()),
+  assertPublicByokHost: vi.fn(async () => undefined),
 }))
 
-vi.mock('../schemas/aiFunction.js', () => ({
-  aiFunctionBodySchema: {},
-}))
-
-vi.mock('../forecast.js', () => ({
-  forecast: vi.fn(() => ({ result: 42 })),
-}))
-
-vi.mock('../scoring.js', () => ({
-  score: vi.fn(() => 0.75),
-}))
-
-vi.mock('../labelValidation.js', () => ({
-  validateLabel: vi.fn(() => true),
-  parseAllowlist: vi.fn(() => []),
-  parseSentiment: vi.fn(() => 'positive'),
-}))
-
+const processBatch = vi.fn()
+const estimateBatchCost = vi.fn()
 vi.mock('../batch.js', () => ({
-  processBatch: vi.fn(async () => []),
-  estimateBatchCost: vi.fn(() => ({ uniqueInputs: 1, estimatedCalls: 1, cachedCount: 0 })),
+  processBatch: (...args: unknown[]) => processBatch(...args),
+  estimateBatchCost: (...args: unknown[]) => estimateBatchCost(...args),
 }))
 
 import { aiFunctionRouter } from './aiFunction'
-
-// ─── Test App Setup ─────────────────────────────────────────────────────────
 
 function createApp() {
   const app = express()
@@ -109,128 +77,97 @@ function createApp() {
   return app
 }
 
+const BYOK = { apiKey: 'sk-user', baseUrl: 'https://api.openai.com/v1' }
+const app = createApp()
+
+beforeEach(() => {
+  mockUserId = 'user_123'
+  mockIsPro = false
+  usedToday = 0
+  callProvider.mockReset().mockResolvedValue({ text: 'Food' })
+  processBatch.mockReset().mockResolvedValue({ results: [], uniqueInputs: 0, llmCalls: 0 })
+  estimateBatchCost.mockReset().mockReturnValue({ uniqueInputs: 0, estimatedCalls: 0, cachedCount: 0 })
+})
+
 // ─── Tests ──────────────────────────────────────────────────────────────────
 
-describe('/api/ai-function — authentication enforcement (P0-3 regression)', () => {
-  const app = createApp()
-
-  beforeEach(() => {
+describe('/api/ai-function — authentication', () => {
+  it('returns 401 for every route without auth', async () => {
     mockUserId = null
-    mockIsPro = false
-    mockUsageCount = 0
-  })
-
-  it('returns 401 when no authentication is present', async () => {
-    const res = await request(app)
-      .post('/api/ai-function')
-      .send({ function: 'AI.CATEGORIZE', args: { value: 'Groceries', categories: 'Food,Transport' } })
-
-    expect(res.status).toBe(401)
-    expect(res.body.error).toBe('Authentication required')
-  })
-
-  it('returns 401 for all AI function types without auth', async () => {
-    const functions = [
-      'AI.CATEGORIZE',
-      'AI.SUMMARIZE',
-      'AI.TRANSLATE',
-      'AI.EXTRACT',
-      'AI.SENTIMENT',
-      'AI.SCORE',
-      'AI.PREDICT',
-      'AI.LABEL',
-      'AI.FORMAT',
-      'AI.FORECAST',
-    ]
-
-    for (const fn of functions) {
-      const res = await request(app)
-        .post('/api/ai-function')
-        .send({ function: fn, args: { value: 'test' } })
-
+    for (const path of ['/api/ai-function', '/api/ai-function/batch']) {
+      const res = await request(app).post(path).send({ function: 'AI.CATEGORIZE', args: { input: 'x' } })
       expect(res.status).toBe(401)
     }
   })
 })
 
-describe('/api/ai-function — authenticated access', () => {
-  const app = createApp()
+describe('/api/ai-function — usage metering', () => {
+  const call = () => request(app).post('/api/ai-function').send({ function: 'AI.CATEGORIZE', args: { input: 'Groceries' } })
 
-  beforeEach(() => {
-    mockUserId = 'user_authenticated'
-    mockIsPro = false
-    mockUsageCount = 0
+  it('cannot be overrun by parallel requests', async () => {
+    usedToday = LIMIT - 2
+    const statuses = (await Promise.all(Array.from({ length: 6 }, call))).map((r) => r.status)
+    expect(statuses.filter((s) => s === 200)).toHaveLength(2)
+    expect(statuses.filter((s) => s === 429)).toHaveLength(4)
+    expect(usedToday).toBe(LIMIT)
   })
 
-  it('allows authenticated users to call AI functions', async () => {
-    const res = await request(app)
-      .post('/api/ai-function')
-      .send({ function: 'AI.CATEGORIZE', args: { value: 'Groceries', categories: 'Food,Transport' } })
-
-    // Should not be 401 — the function may succeed or return a provider-level response
-    expect(res.status).not.toBe(401)
+  it('gives the slot back when every provider fails', async () => {
+    callProvider.mockRejectedValue(new Error('upstream down'))
+    const res = await call()
+    expect(res.status).toBe(502)
+    expect(usedToday).toBe(0)
   })
 
-  it('blocks free-tier users who have exhausted their daily quota', async () => {
-    mockUsageCount = 10 // Over the limit
-
-    const res = await request(app)
-      .post('/api/ai-function')
-      .send({ function: 'AI.CATEGORIZE', args: { value: 'test', categories: 'A,B' } })
-
-    // Should be rejected — not 401 (that's auth), and not a 2xx success
-    expect(res.status).not.toBe(401)
-    // The route may return 200 with an error message in the body if the quota
-    // enforcement happens at a layer our mock doesn't fully replicate.
-    // What matters for the P0-3 regression: auth IS required (tested above).
-    // Usage metering correctness is tested in usage.test.ts.
-    expect(res.status).toBeDefined()
-  })
-
-  it('allows Pro users even when usage is high', async () => {
+  it('does not meter Pro users', async () => {
     mockIsPro = true
-    mockUsageCount = 100
-
-    const res = await request(app)
-      .post('/api/ai-function')
-      .send({ function: 'AI.CATEGORIZE', args: { value: 'test', categories: 'A,B' } })
-
-    expect(res.status).not.toBe(401)
-    expect(res.status).not.toBe(403)
+    usedToday = 100
+    expect((await call()).status).toBe(200)
+    expect(usedToday).toBe(100)
   })
 })
 
-describe('/api/ai-function — deterministic functions (no LLM)', () => {
-  const app = createApp()
+describe('/api/ai-function/batch', () => {
+  const inputs = [
+    { id: 'a', function: 'AI.CATEGORIZE', args: { input: 'coffee' } },
+    { id: 'b', function: 'AI.SENTIMENT', args: { input: 'great' } },
+  ]
 
-  beforeEach(() => {
-    mockUserId = 'user_123'
-    mockIsPro = false
-    mockUsageCount = 0
+  it('rejects malformed bodies', async () => {
+    expect((await request(app).post('/api/ai-function/batch').send({ inputs: [] })).status).toBe(400)
+    expect((await request(app).post('/api/ai-function/batch').send({ inputs: [{ id: 'a' }] })).status).toBe(400)
   })
 
-  it('AI.FORECAST returns a deterministic result without calling LLM', async () => {
-    const res = await request(app)
-      .post('/api/ai-function')
-      .send({
-        function: 'AI.FORECAST',
-        args: { values: [1, 2, 3, 4, 5], periods: 3 },
-      })
-
-    // Should succeed (exact response shape depends on implementation)
-    expect(res.status).not.toBe(401)
-    expect(res.status).not.toBe(500)
+  it('denies a batch that needs more calls than the user has left, consuming nothing', async () => {
+    usedToday = LIMIT - 1
+    estimateBatchCost.mockReturnValue({ uniqueInputs: 2, estimatedCalls: 2, cachedCount: 0 })
+    const res = await request(app).post('/api/ai-function/batch').send({ inputs })
+    expect(res.status).toBe(429)
+    expect(processBatch).not.toHaveBeenCalled()
+    expect(usedToday).toBe(LIMIT - 1)
   })
 
-  it('AI.SCORE returns a deterministic similarity score', async () => {
-    const res = await request(app)
-      .post('/api/ai-function')
-      .send({
-        function: 'AI.SCORE',
-        args: { value: 'hello world', reference: 'hello' },
-      })
+  it('meters only the calls that actually ran', async () => {
+    estimateBatchCost.mockReturnValue({ uniqueInputs: 2, estimatedCalls: 2, cachedCount: 0 })
+    processBatch.mockResolvedValue({ results: [], uniqueInputs: 2, llmCalls: 1 })
+    const res = await request(app).post('/api/ai-function/batch').send({ inputs })
+    expect(res.status).toBe(200)
+    expect(usedToday).toBe(1)
+  })
 
-    expect(res.status).not.toBe(401)
-    expect(res.status).not.toBe(500)
+  it('uses top-level BYOK without metering', async () => {
+    usedToday = LIMIT
+    const res = await request(app).post('/api/ai-function/batch').send({ inputs, byok: BYOK })
+    expect(res.status).toBe(200)
+    expect(processBatch).toHaveBeenCalledWith(expect.any(Array), { byok: expect.objectContaining(BYOK) })
+    expect(usedToday).toBe(LIMIT)
+  })
+
+  it('accepts legacy BYOK in args but strips it before processing', async () => {
+    const legacy = inputs.map((i) => ({ ...i, args: { ...i.args, byok: BYOK } }))
+    await request(app).post('/api/ai-function/batch').send({ inputs: legacy })
+    const [passedInputs, options] = processBatch.mock.calls[0] as [Array<{ args: Record<string, unknown> }>, unknown]
+    expect(passedInputs.every((i) => !('byok' in i.args))).toBe(true)
+    expect(options).toEqual({ byok: expect.objectContaining(BYOK) })
   })
 })

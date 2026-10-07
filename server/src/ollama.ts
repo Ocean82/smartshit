@@ -2,6 +2,7 @@ import { config } from './config.js'
 import type { ChatMessageInput } from './prompt.js'
 import type { AdapterCompletion } from './openaiCompatible.js'
 import { stripThinkingTags, createThinkingTagFilter } from './thinkingTagStripper.js'
+import { withRequestTimeout } from './openaiCompatible.js'
 
 interface OllamaChatResponse {
   message?: { role: string; content: string }
@@ -33,7 +34,7 @@ export async function modelIsRegistered(name = config.modelName): Promise<boolea
 /** Non-streaming chat — used as fallback */
 export async function chatWithOllama(
   messages: ChatMessageInput[],
-  options: { jsonMode?: boolean } = {},
+  options: { jsonMode?: boolean; signal?: AbortSignal } = {},
 ): Promise<AdapterCompletion> {
   const body: Record<string, unknown> = {
     model: config.modelName,
@@ -55,7 +56,7 @@ export async function chatWithOllama(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(120_000),
+    signal: withRequestTimeout(options.signal, 120_000),
   })
 
   if (!res.ok) {
