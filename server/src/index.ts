@@ -468,7 +468,7 @@ async function runLlmChat(params: {
   signal?: AbortSignal
 }): Promise<LlmChatResult> {
   const { body, userMessage, mode, intent, userIntent, stream, byokOnly = false, onChunk, signal } = params
-  const llmOnly = isLlmOnlyMode(mode) || Boolean(body.forceLlm)
+  const llmOnly = isLlmOnlyMode(mode)
 
   const history = (body.history ?? []).filter((m) => m.role === 'user' || m.role === 'assistant')
 
@@ -789,7 +789,7 @@ app.post('/api/chat/stream', requireAuth, chatRateLimiter, validateBody(chatStre
   const llmOnly = isLlmOnlyMode(mode) || body.forceLlm
 
   // Low-confidence intent — clarify only when no template already resolved it
-  if (shouldClarifyLowConfidence(userIntent, mode, intent.actions.length)) {
+  if (!body.forceLlm && shouldClarifyLowConfidence(userIntent, mode, intent.actions.length)) {
     res.setHeader('Content-Type', 'text/event-stream')
     res.setHeader('Cache-Control', 'no-cache')
     res.setHeader('Connection', 'keep-alive')
@@ -852,13 +852,16 @@ app.post('/api/chat/stream', requireAuth, chatRateLimiter, validateBody(chatStre
 
   res.flushHeaders()
 
-  // Abort on client disconnect or hard timeout (120s)
+  // Abort on client disconnect or hard timeout (120s). `req` 'close' fires once the
+  // body is consumed (before this handler), so watch the response socket instead.
   const reqAbort = new AbortController()
   const reqTimeout = setTimeout(() => reqAbort.abort(), 120_000)
-  req.on('close', () => {
+  const onClientGone = () => {
     clearTimeout(reqTimeout)
-    reqAbort.abort()
-  })
+    if (!res.writableEnded) reqAbort.abort()
+  }
+  res.on('close', onClientGone)
+  if (res.destroyed) onClientGone()
 
   // LLM has its own 90s cap, but must ALSO stop when the client disconnects or
   // the 120s hard timeout fires — otherwise a closed tab keeps the provider
@@ -971,7 +974,7 @@ app.post('/api/chat', requireAuth, chatRateLimiter, validateBody(chatBodySchema)
   const llmOnly = isLlmOnlyMode(mode) || body.forceLlm
 
   // Low-confidence intent — clarify only when no template already resolved it
-  if (shouldClarifyLowConfidence(userIntent, mode, intent.actions.length)) {
+  if (!body.forceLlm && shouldClarifyLowConfidence(userIntent, mode, intent.actions.length)) {
     // Non-LLM early return: the gate reserved a slot it won't spend — release it.
     if (!isPro) await releaseUsage(userId)
     res.json({

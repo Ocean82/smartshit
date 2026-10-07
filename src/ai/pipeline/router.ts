@@ -4,7 +4,9 @@
  * Executes stages in fixed priority order. The first stage to return a
  * non-null StageResult wins — subsequent stages are not executed.
  *
- * Stage errors are caught and logged; the pipeline continues to the next stage.
+ * Stage errors are caught and logged; the pipeline continues to the next stage,
+ * unless the failing stage already changed the workbook — then it stops so a
+ * later stage can't act on a half-edited sheet.
  * If no stage claims the input, a fallback result is returned.
  */
 
@@ -25,9 +27,13 @@ export interface PipelineRouterInstance {
  * Creates a pipeline router that processes stages in order.
  *
  * @param stages - Ordered array of pipeline stages (priority = array order)
+ * @param getWorkbook - Live workbook getter; a changed reference after a throw means a partial edit
  * @returns A router instance with process() and diagnostics
  */
-export function createPipelineRouter(stages: PipelineStage[]): PipelineRouterInstance {
+export function createPipelineRouter(
+  stages: PipelineStage[],
+  getWorkbook?: () => unknown,
+): PipelineRouterInstance {
   let lastTimings: StageTiming[] = []
 
   return {
@@ -37,13 +43,22 @@ export function createPipelineRouter(stages: PipelineStage[]): PipelineRouterIns
       for (const stage of stages) {
         const start = performance.now()
         let result: StageResult | null = null
+        const workbookBefore = getWorkbook?.()
 
         try {
           result = await stage.process(context)
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err)
           console.error(`[pipeline] Stage "${stage.name}" threw:`, message)
-          // Stage failed — skip to next, don't crash the pipeline
+          if (getWorkbook && getWorkbook() !== workbookBefore) {
+            result = {
+              success: false,
+              message: '⚠️ Something went wrong partway through that change, so I stopped. Some cells may already be updated — use Undo to revert.',
+              stageName: stage.name,
+              metadata: { error: message, partialEdit: true },
+            }
+          }
+          // Otherwise nothing changed — skip to next, don't crash the pipeline
         }
 
         const durationMs = Math.round((performance.now() - start) * 100) / 100

@@ -757,7 +757,7 @@ function isDeterministicContentSubstantial(
 ): boolean {
   const deterministicLen = deterministicText.trim().length
   const llmLen = llmText.trim().length
-  return deterministicLen > 100 && llmLen > 0 && llmLen < deterministicLen * 0.8 && source !== 'llm'
+  return deterministicLen > 100 && llmLen > 0 && llmLen < deterministicLen * 0.8 && source !== 'llm' && source !== 'clarification'
 }
 
 /** Determine whether LLM text should be used or skipped due to overlap with deterministic content. */

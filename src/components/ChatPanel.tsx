@@ -4,7 +4,7 @@ import type { ServerHealth } from '@/ai/agentClient'
 import { useServerHealth } from '@/ai/useServerHealth'
 import {
   Send, Check, XCircle, Sparkles, Bot, User, Loader2, Paperclip, X, ThumbsUp, ThumbsDown, Copy, Download,
-  PanelLeftClose, SquarePen, Pin, PinOff, ChevronDown, ChevronUp,
+  PanelLeftClose, SquarePen, Pin, PinOff, ChevronDown, ChevronUp, Square,
 } from 'lucide-react'
 import type { AgentAction, ChatMessage as ChatMessageType } from '@/types'
 import { getFeedbackForMessage, recordChatFeedback, type ChatFeedbackRating } from '@/ai/chatFeedback'
@@ -20,6 +20,7 @@ import {
   useChatInput,
   useSetChatInput,
   useSendMessage,
+  useStopAiResponse,
   useClearChat,
   useIsAiProcessing,
   useApplyAction,
@@ -86,6 +87,7 @@ export function ChatPanel({ isMobileOpen, onCloseMobile, embedded }: ChatPanelPr
   const chatInput = useChatInput()
   const setChatInput = useSetChatInput()
   const sendMessage = useSendMessage()
+  const stopAiResponse = useStopAiResponse()
   const clearChat = useClearChat()
   const isAiProcessing = useIsAiProcessing()
   const applyAction = useApplyAction()
@@ -310,6 +312,7 @@ export function ChatPanel({ isMobileOpen, onCloseMobile, embedded }: ChatPanelPr
         chatInput={chatInput}
         setChatInput={setChatInput}
         onSend={handleSend}
+        onStop={stopAiResponse}
         onKeyDown={handleKeyDown}
         isProcessing={isAiProcessing}
         canAsk={canAsk}
@@ -718,6 +721,7 @@ interface ChatInputAreaProps {
   chatInput: string
   setChatInput: (v: string) => void
   onSend: () => void
+  onStop: () => void
   onKeyDown: (e: React.KeyboardEvent) => void
   isProcessing: boolean
   canAsk: boolean
@@ -734,7 +738,7 @@ interface ChatInputAreaProps {
 }
 
 function ChatInputArea({
-  chatInput, setChatInput, onSend, onKeyDown, isProcessing, canAsk,
+  chatInput, setChatInput, onSend, onStop, onKeyDown, isProcessing, canAsk,
   isPro, remaining, dailyLimit, fileInputRef, inputRef,
   attachedFilePreview, onAttachFile, onImportFile, onClearFile, health,
 }: ChatInputAreaProps) {
@@ -785,17 +789,29 @@ function ChatInputArea({
           placeholder='e.g. "Explain this spreadsheet" or "Build a monthly budget"'
           aria-label="Message the AI assistant"
         />
-        <button
-          type="button"
-          className="p-2.5 rounded-xl text-white disabled:opacity-40 transition-colors shadow-sm shrink-0"
-          style={{ background: 'var(--accent-600)' }}
-          onClick={onSend}
-          disabled={!chatInput.trim() || isProcessing || !canAsk}
-          title="Send message"
-          aria-label="Send message"
-        >
-          <Send size={16} />
-        </button>
+        {isProcessing ? (
+          <button
+            type="button"
+            className="p-2.5 rounded-xl border border-gray-300 bg-white text-slate-700 hover:bg-slate-100 transition-colors shadow-sm shrink-0"
+            onClick={onStop}
+            title="Stop response"
+            aria-label="Stop response"
+          >
+            <Square size={16} fill="currentColor" />
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="p-2.5 rounded-xl text-white disabled:opacity-40 transition-colors shadow-sm shrink-0"
+            style={{ background: 'var(--accent-600)' }}
+            onClick={onSend}
+            disabled={!chatInput.trim() || !canAsk}
+            title="Send message"
+            aria-label="Send message"
+          >
+            <Send size={16} />
+          </button>
+        )}
       </div>
       <p className="text-[10px] text-slate-400 mt-2 text-center">
         {healthFooterMessage(health)}

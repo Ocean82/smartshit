@@ -30,7 +30,7 @@ export interface UsageSnapshot {
 export interface ServerChatResponse {
   message: string
   actions: ServerAgentAction[]
-  source: 'llm' | 'fallback' | 'template'
+  source: 'llm' | 'fallback' | 'template' | 'clarification'
   reasoning?: string
   suggestions?: string[]
   meta?: ProviderMeta
@@ -172,6 +172,18 @@ export async function chatWithAgentServer(
   }
 }
 
+/** Caller's signal plus the chat timeout. Manual combine: AbortSignal.any needs Safari 17.4+. */
+function withChatTimeout(signal?: AbortSignal): AbortSignal {
+  const timeout = AbortSignal.timeout(CHAT_TIMEOUT_MS)
+  if (!signal) return timeout
+  const combined = new AbortController()
+  const abort = () => combined.abort()
+  if (signal.aborted) abort()
+  signal.addEventListener('abort', abort, { once: true })
+  timeout.addEventListener('abort', abort, { once: true })
+  return combined.signal
+}
+
 /**
  * Streaming chat via SSE.
  * Calls `onToken` with each text chunk as it arrives.
@@ -181,18 +193,14 @@ export async function chatWithAgentServerStream(
   request: AgentStreamChatRequest,
 ): Promise<ServerChatResponse | AgentServerError | null> {
   try {
-    const res = await postAgentChat(
-      '/api/chat/stream',
-      request,
-      request.signal ?? AbortSignal.timeout(CHAT_TIMEOUT_MS),
-    )
+    const res = await postAgentChat('/api/chat/stream', request, withChatTimeout(request.signal))
     // Non-200 before the SSE stream opens (e.g. 401 expired token, 429 rate
     // limit from middleware) has a JSON body with an actionable message. Surface
     // it rather than dropping to null and rendering a misleading local fallback.
     if (!res.ok) return await toAgentServerError(res)
     const reader = res.body?.getReader()
     if (!reader) return null
-    return readAgentSseStream(reader, request.onToken)
+    return await readAgentSseStream(reader, request.onToken)
   } catch {
     return null
   }

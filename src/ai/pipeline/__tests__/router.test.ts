@@ -68,6 +68,33 @@ describe('PipelineRouter', () => {
     expect(stage2.process).not.toHaveBeenCalled()
   })
 
+  it('stops instead of continuing when a throwing stage already changed the workbook', async () => {
+    let workbook = { rev: 1 }
+    const partial: PipelineStage = {
+      name: 'partial',
+      process: vi.fn(async () => {
+        workbook = { rev: 2 }
+        throw new Error('mid-edit')
+      }),
+    }
+    const next = makeStage('next', makeResult('next'))
+
+    const result = await createPipelineRouter([partial, next], () => workbook).process(makeContext())
+
+    expect(next.process).not.toHaveBeenCalled()
+    expect(result).toMatchObject({ success: false, stageName: 'partial', metadata: { partialEdit: true } })
+  })
+
+  it('continues past a throwing stage that changed nothing', async () => {
+    const workbook = { rev: 1 }
+    const next = makeStage('next', makeResult('next'))
+
+    const result = await createPipelineRouter([makeThrowingStage('bad', 'boom'), next], () => workbook)
+      .process(makeContext())
+
+    expect(result.stageName).toBe('next')
+  })
+
   it('passes to the next stage when one returns null', async () => {
     const stage1 = makeStage('stage-1', null)
     const stage2 = makeStage('stage-2', makeResult('stage-2'))

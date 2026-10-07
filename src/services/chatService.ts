@@ -82,6 +82,8 @@ export interface ChatServiceDeps {
   skipCapabilityRouter?: boolean
   /** User clarified to this capability — Tier 2 short-circuits (no re-clarify). */
   resolvedCapabilityId?: string
+  /** Aborts the server call when the user presses Stop */
+  signal?: AbortSignal
 }
 
 // ─── Service ─────────────────────────────────────────────────────────────────
@@ -278,6 +280,7 @@ export async function processChatMessage(
       priorInsights: priorInsights ?? null,
       history,
       onToken: (token) => appendToken(streamingMsgId, token),
+      signal: deps.signal,
       skipCapabilityRouter,
       resolvedCapabilityId,
       clarificationSource: resolvedCapabilityId ? 'clarification_chip' : undefined,
@@ -288,7 +291,7 @@ export async function processChatMessage(
     // never allowed to reach a stage that mutates immediately. Those stages are
     // simply not in the chain, so the request falls through to the
     // proposal-only and explanatory stages.
-    const router = createPipelineRouter(buildStages(deps, classifyRequestSafety(input).isNonCommand))
+    const router = createPipelineRouter(buildStages(deps, classifyRequestSafety(input).isNonCommand), getWorkbook)
 
     const result = await router.process(pipelineContext)
 
@@ -413,12 +416,13 @@ function stageResultToChatMessage(
     })
   }
 
-  // Agent parser / macro / Tier-2 capability router with actions → Apply UI
+  // Agent parser / macro / Tier-2 capability router / template overwrite with actions → Apply UI
   if (
     (
       result.stageName === 'agent-parser'
       || result.stageName === 'macro-planner'
       || result.stageName === 'semantic-capability-router'
+      || result.stageName === 'template-resolver'
     )
     && result.actions?.length
   ) {

@@ -3,7 +3,9 @@
  *
  * Wraps the existing promptRouter.ts resolveGalleryTemplate() function.
  * When a user says "Create a monthly budget" or "Build a sales tracker",
- * this stage matches it against the template database and executes instantly.
+ * this stage matches it against the template database. On an empty sheet it
+ * executes instantly; on a sheet with data it returns the template as a
+ * pending action so the user approves the overwrite first.
  *
  * Claims when: template match found
  * Passes when: no match
@@ -26,7 +28,19 @@ export function createTemplateResolverStage(deps: TemplateResolverDeps): Pipelin
       const match = resolveGalleryTemplate(context.message)
       if (!match) return null
 
-      // Execute the template tool
+      const sheetHasData = Object.values(context.sheet.cells).some(
+        (cell) => cell?.value != null || cell?.formula,
+      )
+      if (sheetHasData) {
+        return {
+          success: true,
+          message: `This sheet already has data. Building the ${match.label} template will write over existing cells. Review it below before applying.`,
+          actions: [{ tool: match.tool, params: {}, description: `Build ${match.label} template` }],
+          stageName: 'template-resolver',
+          metadata: { toolUsed: match.tool, templateName: match.name, needsApproval: true },
+        }
+      }
+
       deps.pushHistory(`Template: ${match.label}`)
       const execCtx = deps.buildExecContext({ suppressHistory: true })
       const result = executeTemplateTool(match.tool, {}, execCtx)

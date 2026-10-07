@@ -36,6 +36,8 @@ export interface PipelineContext {
   history?: Array<{ role: 'user' | 'assistant'; content: string }>
   /** Streaming token callback */
   onToken?: (token: string) => void
+  /** Aborted when the user presses Stop or clears the chat */
+  signal?: AbortSignal
   /**
    * When true, SemanticCapabilityRouter must pass (LLM escape after ambiguous clarify).
    * Set when the user picks "Something else…".

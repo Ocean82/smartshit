@@ -105,6 +105,28 @@ describe('TemplateResolver stage', () => {
     expect(deps.buildExecContext).toHaveBeenCalledWith({ suppressHistory: true })
   })
 
+  it('returns a pending action instead of overwriting a sheet that has data', async () => {
+    vi.mocked(resolveGalleryTemplate).mockReturnValue({
+      name: 'monthly-budget',
+      label: 'Monthly Budget',
+      prompt: 'Create a monthly budget',
+      tool: 'template_monthly_budget',
+    })
+    const mockExecute = vi.mocked(executeTemplateTool)
+    mockExecute.mockClear()
+
+    const deps = makeDeps()
+    const ctx = makeContext()
+    ctx.sheet = { cells: { A1: { value: 'Rent' } } } as unknown as PipelineContext['sheet']
+    const result = await createTemplateResolverStage(deps).process(ctx)
+
+    expect(mockExecute).not.toHaveBeenCalled()
+    expect(deps.pushHistory).not.toHaveBeenCalled()
+    expect(result!.actions).toEqual([
+      expect.objectContaining({ tool: 'template_monthly_budget', params: {} }),
+    ])
+  })
+
   it('includes metadata with template name and tool used', async () => {
     const mockResolve = vi.mocked(resolveGalleryTemplate)
     mockResolve.mockReturnValue({

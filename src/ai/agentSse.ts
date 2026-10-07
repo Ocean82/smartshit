@@ -21,7 +21,7 @@ type SseEventEffect =
 const SSE_DATA_PREFIX = 'data: '
 
 /** Allowed values for ServerChatResponse.source */
-const VALID_SOURCES: ReadonlySet<ServerChatResponse['source']> = new Set(['llm', 'fallback', 'template'])
+const VALID_SOURCES: ReadonlySet<ServerChatResponse['source']> = new Set(['llm', 'fallback', 'template', 'clarification'])
 
 /** Parse a raw SSE `data:` JSON string once. Returns null on malformed JSON. */
 export function parseSseEventPayload(jsonStr: string): SseEventPayload | null {

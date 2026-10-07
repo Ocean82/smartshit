@@ -29,7 +29,7 @@ import {
 } from '../aiExecution'
 
 export const DEFAULT_WELCOME_CONTENT =
-  `Welcome to **smartsh!t** — your budgeting copilot.\n\nStart by importing a spreadsheet, then ask:\n- *"Explain this spreadsheet I just loaded"*\n- *"Where am I overspending?"*\n- *"What should I cut first to save more?"*\n\nI only apply changes after you review and approve them.`
+  `Welcome to **smartsh!t** — your budgeting copilot.\n\nStart by importing a spreadsheet, then ask:\n- *"Explain this spreadsheet I just loaded"*\n- *"Where am I overspending?"*\n- *"What should I cut first to save more?"*\n\nI only apply major changes after you review and approve them.`
 
 export function createWelcomeMessage(): ChatMessage {
   return {
@@ -61,6 +61,9 @@ const inFlightActions = new Set<string>()
  * `clearChat` so abandoned work cannot write into a newer turn.
  */
 let activeTurnId = 0
+
+/** Cancels the in-flight turn's server call (Stop button / clear chat). */
+let activeTurnAbort: AbortController | null = null
 
 /** Dependencies chat actions need from the composed store. */
 export interface ChatStoreAccess extends ChatState {
@@ -95,6 +98,7 @@ export interface ChatActions {
   setChatInput: (val: string) => void
   addMessage: (msg: ChatMessage) => void
   sendMessage: () => Promise<void>
+  stopAiResponse: () => void
   clearChat: () => void
   togglePinMessage: (messageId: string) => void
   getPinnedMessages: () => ChatMessage[]
@@ -119,6 +123,7 @@ export function createChatActions(
       // Abandon any in-flight turn: its late tokens must not reappear and its
       // completion must not clear the processing flag of a newer turn.
       activeTurnId += 1
+      activeTurnAbort?.abort()
       inFlightActions.clear()
       set((s) => {
         s.messages = [createWelcomeMessage()]
@@ -126,6 +131,8 @@ export function createChatActions(
         s.isAiProcessing = false
       })
     },
+
+    stopAiResponse: () => activeTurnAbort?.abort(),
 
     togglePinMessage: (messageId) => set((s) => {
       const msg = s.messages.find((m) => m.id === messageId)
@@ -204,6 +211,8 @@ export function createChatActions(
       // the processing flag for a newer turn.
       const turnId = ++activeTurnId
       const isCurrentTurn = () => turnId === activeTurnId
+      const turnAbort = new AbortController()
+      activeTurnAbort = turnAbort
 
       return import('@/services/chatService').then(({ processChatMessage }) =>
         processChatMessage(input, streamingMsgId, {
@@ -248,8 +257,11 @@ export function createChatActions(
           processLocalFallback: (fallbackInput) => processAICommand(fallbackInput, get as never),
           skipCapabilityRouter,
           resolvedCapabilityId,
+          signal: turnAbort.signal,
         })
-      )
+      ).finally(() => {
+        if (activeTurnAbort === turnAbort) activeTurnAbort = null
+      })
     },
 
     runTemplateTool: (tool) => {

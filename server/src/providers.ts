@@ -259,11 +259,15 @@ export async function callProviderStream(
   const timeoutMs = PROVIDER_TIMEOUT_MS[provider]
   let firstChunkReceived = false
   let timeoutTimer: ReturnType<typeof setTimeout> | null = null
+  // Timing out must cancel the upstream fetch too, or failover runs two providers at once.
+  const timeoutAbort = new AbortController()
+  const providerSignal = AbortSignal.any([signal, timeoutAbort.signal])
 
   const streamPromise = new Promise<AdapterCompletion>((resolve, reject) => {
     // Set up first-byte timeout
     timeoutTimer = setTimeout(() => {
       if (!firstChunkReceived) {
+        timeoutAbort.abort()
         reject(new Error(`Provider ${provider} stream timed out: no data received within ${timeoutMs}ms`))
       }
     }, timeoutMs)
@@ -301,7 +305,7 @@ export async function callProviderStream(
         },
         messages,
         wrappedOnChunk,
-        signal,
+        providerSignal,
         { jsonMode: options.jsonMode, maxTokens: options.maxTokens, suppressReasoning: true },
       )
     } else if (provider === 'huggingface') {
@@ -313,16 +317,16 @@ export async function callProviderStream(
         },
         messages,
         wrappedOnChunk,
-        signal,
+        providerSignal,
         { jsonMode: options.jsonMode, maxTokens: options.maxTokens },
       )
     } else if (provider === 'groq') {
-      innerPromise = chatWithGroqStream(messages, wrappedOnChunk, signal, {
+      innerPromise = chatWithGroqStream(messages, wrappedOnChunk, providerSignal, {
         jsonMode: options.jsonMode,
         maxTokens: options.maxTokens,
       })
     } else {
-      innerPromise = chatWithOllamaStream(messages, wrappedOnChunk, signal, {
+      innerPromise = chatWithOllamaStream(messages, wrappedOnChunk, providerSignal, {
         jsonMode: options.jsonMode,
       })
     }

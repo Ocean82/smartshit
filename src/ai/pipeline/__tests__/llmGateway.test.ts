@@ -270,6 +270,19 @@ describe('LLMGateway stage', () => {
     expect(result!.stageName).toBe('llm-gateway')
   })
 
+  it('reports Stopped instead of a fallback when the user cancelled', async () => {
+    vi.mocked(chatWithAgentServerStream).mockResolvedValue(null)
+    vi.mocked(isLlmOnlyMode).mockReturnValue(false)
+    const abort = new AbortController()
+    abort.abort()
+
+    const result = await createLLMGatewayStage().process(makeContext({ mode: 'act', signal: abort.signal }))
+
+    expect(vi.mocked(chatWithAgentServerStream).mock.lastCall?.[0].signal).toBe(abort.signal)
+    expect(result).toMatchObject({ success: true, metadata: { source: 'user-cancelled' } })
+    expect(result!.message).toContain('Stopped')
+  })
+
   it('runs audit for explain/advise modes', async () => {
     vi.mocked(isLlmOnlyMode).mockReturnValue(true)
     vi.mocked(chatWithAgentServerStream).mockResolvedValue({

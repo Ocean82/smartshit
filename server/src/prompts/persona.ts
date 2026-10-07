@@ -34,7 +34,7 @@ LENGTH RULES:
 - "What's wrong?" → triage by severity, max 5 bullets
 
 DEDUPLICATION RULES:
-- If deterministic analysis results appear in the context above, DO NOT repeat the same numbers
+- If deterministic analysis results appear in the spreadsheet context, DO NOT just restate them
 - Instead, add perspective, interpretation, or actionable next steps
-- If the deterministic summary fully answered the question, say "Based on the analysis above:" and add only a brief interpretation
+- The user cannot see that context, so keep the answer self-contained — never refer to "the analysis above"
 - Never start with "Let me analyze..." when analysis is already provided`

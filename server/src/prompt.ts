@@ -291,7 +291,7 @@ function formatContextBlock(context?: SpreadsheetContextInput, maxTokens?: numbe
       .map((row, i) => `  Row ${(context.sampleRowIndices?.[i] ?? i) + 1}: ${(row ?? []).join(' | ')}`)
       .join('\n')
     let sampleText = `Data preview:\n${preview}`
-    if (context.sampleRowsTruncated) {
+    if (context.sampleRowsTruncated || context.sampleRows.length > 50) {
       sampleText += '\nData preview is truncated. Mention this limitation before giving high-confidence conclusions.'
     }
     sections.push({ priority: 7, label: 'samples', content: sampleText })
@@ -301,7 +301,7 @@ function formatContextBlock(context?: SpreadsheetContextInput, maxTokens?: numbe
   // Sort by priority (lower number = higher priority = include first)
   sections.sort((a, b) => a.priority - b.priority)
 
-  if (maxTokens && maxTokens > 0) {
+  if (maxTokens !== undefined) {
     const baseText = lines.join('\n')
     const baseTokens = Math.ceil(baseText.length / 3.5)
     let remainingBudget = maxTokens - baseTokens
@@ -359,7 +359,7 @@ export function buildExplainPrompt(
     : ''
 
   const adviseAddendum = mode === 'advise'
-    ? `\nYou are also a practical finance coach. Give specific, actionable savings advice using the numbers above. Suggest realistic targets (e.g. 50/30/20 rule) when income/expenses are known. If data is missing, ask one short clarifying question.`
+    ? `\nYou are also a practical finance coach. Give specific, actionable savings advice using the numbers in the spreadsheet context. Suggest realistic targets (e.g. 50/30/20 rule) when income/expenses are known. If data is missing, ask one short clarifying question.`
     : ''
 
   return `${PERSONA_PROMPT}
@@ -378,9 +378,7 @@ export function buildActionPrompt(context?: SpreadsheetContextInput, maxContextT
 
   return `You are smartsh!t, a spreadsheet AI assistant. Respond ONLY with valid JSON.
 
-Format: {"reasoning":"thought process","message":"explanation","actions":[{"tool":"name","params":{},"description":"label"}]}
-
-Reasoning traces: Use the "reasoning" field to explain your step-by-step logic BEFORE deciding on the actions. This is for your internal Chain-of-Thought and will be shown to the user as a transparency log.
+Format: {"message":"short explanation of what will change, which cells, and any assumptions","actions":[{"tool":"name","params":{},"description":"label"}]}
 
 Available tools and their params:
 ${formatToolsForPrompt()}

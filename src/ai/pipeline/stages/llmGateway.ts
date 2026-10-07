@@ -87,7 +87,17 @@ export function createLLMGatewayStage(): PipelineStage {
         },
         history: context.history ?? [],
         onToken,
+        signal: context.signal,
       })
+
+      if (context.signal?.aborted) {
+        return {
+          success: true,
+          message: 'Stopped. No changes were made.',
+          stageName: 'llm-gateway',
+          metadata: { toolUsed: 'cancelled', source: 'user-cancelled' },
+        }
+      }
 
       // Server explicitly refused (auth / rate limit / quota). Surface its
       // worded message as a real assistant reply — falling back to local

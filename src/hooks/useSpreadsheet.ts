@@ -339,6 +339,10 @@ export function useSendMessage() {
   return useStore((s) => s.sendMessage);
 }
 
+export function useStopAiResponse() {
+  return useStore((s) => s.stopAiResponse);
+}
+
 /** Set chat input */
 export function useSetChatInput() {
   return useStore((s) => s.setChatInput);
