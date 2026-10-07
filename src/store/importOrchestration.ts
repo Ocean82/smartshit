@@ -15,6 +15,8 @@ export interface ImportEffectAccess {
   messages: ChatMessage[]
   activePanel: 'chat' | 'insights' | 'auditor' | 'inspector' | null
   lastAuditResult: import('@/auditor/types').AuditResult | null
+  lastAuditRevision: number | null
+  workbookRevision: number
   getActiveSheet: () => WorkbookData['sheets'][number]
   getComputedValue: (row: number, col: number) => string
   showToast: (toast: Omit<Toast, 'id'>) => void
@@ -111,7 +113,10 @@ export function applyWorkbookImportEffects(
         const activeSheet = get().getActiveSheet()
         if (Object.keys(activeSheet.cells).length > 4) {
           const auditResult = runAudit(activeSheet, get().getComputedValue, loadCustomRules())
-          set((s) => { s.lastAuditResult = auditResult })
+          set((s) => {
+            s.lastAuditResult = auditResult
+            s.lastAuditRevision = s.workbookRevision
+          })
 
           // Open the auditor for serious findings, and for the free audit entry (?audit=1).
           const hasSeriousIssues = auditResult.findings.some(

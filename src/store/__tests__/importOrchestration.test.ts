@@ -16,6 +16,8 @@ function makeAccess(
     messages: [],
     activePanel: null,
     lastAuditResult: null,
+    lastAuditRevision: null,
+    workbookRevision: 0,
     getActiveSheet: () => wb.sheets[0],
     getComputedValue: () => '',
     showToast: vi.fn(),

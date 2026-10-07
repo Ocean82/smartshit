@@ -12,7 +12,6 @@ import { hardcodedConstantsRule } from './hardcodedConstants'
 import { hiddenDependenciesRule } from './hiddenDependencies'
 import { magnitudeOutliersRule } from './magnitudeOutliers'
 import { volatileFunctionsRule } from './volatileFunctions'
-import { orphanedFormulasRule } from './orphanedFormulas'
 import { duplicateFormulasRule } from './duplicateFormulas'
 import { onnxFormulaConsistencyRule } from './onnxFormulaConsistency'
 import { hardcodedWeightsRule } from './hardcodedWeights'
@@ -31,7 +30,6 @@ export const ALL_RULES: AuditRule[] = [
   hiddenDependenciesRule,
   // Low
   magnitudeOutliersRule,
-  orphanedFormulasRule,
   // Info
   volatileFunctionsRule,
   duplicateFormulasRule,

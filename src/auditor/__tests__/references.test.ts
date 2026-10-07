@@ -67,6 +67,22 @@ describe('auditor reference extraction', () => {
     expect(referencedFormulaCells('SUM(A1:XFD1048576)', 'S', index, 2)).toHaveLength(2)
   })
 
+  it('flags a column pattern break but not the total row below it', () => {
+    const cells: SheetData['cells'] = {}
+    for (let r = 2; r <= 7; r++) {
+      cells[`A${r}`] = { value: r }
+      cells[`C${r}`] = { value: r * 10 }
+      cells[`B${r}`] = { value: null, formula: `=C${r}-A${r}` }
+    }
+    cells.B4 = { value: null, formula: '=C4*A4' }
+    cells.B8 = { value: null, formula: '=SUM(B2:B7)' }
+    const flagged = runAudit(sheetOf(cells), () => '').findings
+      .filter((f) => f.ruleId === 'inconsistent-formulas')
+      .map((f) => f.cells[0].cellId)
+    expect(flagged).toContain('B4')
+    expect(flagged).not.toContain('B8')
+  })
+
   it('recognizes newer engine error values', () => {
     expect(getErrorType('#CIRC!')).toBe('#CIRC!')
     expect(getErrorType('#spill!')).toBe('#SPILL!')

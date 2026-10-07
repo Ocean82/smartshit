@@ -106,9 +106,13 @@ M 1–2 days, L more.
 - [x] **Auditor is quadratic on large sheets** — S (2026-10-07)
   - Row/column indexes built once; orphaned-formulas runs its cheap skips first
     (20k-row chain: 3.5s to ~0.1s).
-- [ ] **Orphaned-formulas rule never fires** — S (found 2026-10-07)
-  - Its skips (last formula in column = summary; 2+ formulas in column = series) cover every
-    case, so it can't produce findings. Needs a product decision on what "orphaned" means.
+- [x] **Orphaned-formulas rule never fires** — S (removed 2026-10-07)
+  - Its skips covered every case, and unreferenced formulas are usually the user's outputs.
+  - Side effect of the `isSummaryCell` fix: inconsistent-formulas now checks columns (it
+    previously skipped every column deviation); covered by `references.test.ts`.
+- [x] **Stale audit notice** — S (2026-10-07)
+  - `lastAuditRevision` vs `workbookRevision`; panel shows "Sheet changed since last scan"
+    with Re-scan. No automatic re-runs.
 - [x] **Inspector dependents are wrong** — M (2026-10-07)
   - Uses `formulaRefs` (`findDependents`, `listPrecedents`); works for value cells, exact
     refs, and ranges, ignores other sheets, and no longer expands huge ranges. Dead

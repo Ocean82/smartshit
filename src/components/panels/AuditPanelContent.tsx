@@ -20,12 +20,13 @@ const SEVERITY_FILTERS = ['all', 'critical', 'high', 'medium', 'low', 'info'] as
 type FilterValue = (typeof SEVERITY_FILTERS)[number]
 
 export function AuditPanelContent() {
-  const { workbook, activeSheetId, lastAuditResult, runActiveSheetAudit } = useStore(
+  const { workbook, activeSheetId, lastAuditResult, runActiveSheetAudit, isStale } = useStore(
     useShallow((s) => ({
       workbook: s.workbook,
       activeSheetId: s.activeSheetId,
       lastAuditResult: s.lastAuditResult,
       runActiveSheetAudit: s.runActiveSheetAudit,
+      isStale: s.lastAuditRevision !== s.workbookRevision,
     })),
   )
   const { isPro } = useUsage()
@@ -177,6 +178,7 @@ export function AuditPanelContent() {
                   className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all active:scale-90 shadow-sm border border-slate-100"
                   onClick={handleRunAudit}
                   title="Re-run audit"
+                  aria-label="Re-run audit"
                 >
                   <RefreshCw size={14} />
                 </button>
@@ -188,6 +190,20 @@ export function AuditPanelContent() {
                 style={{ width: `${result.score}%` }}
               />
             </div>
+            {isStale && (
+              <div role="status" className="flex items-center justify-between gap-2 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5">
+                <p className="text-[10px] text-amber-800 font-medium leading-tight">
+                  Sheet changed since last scan
+                </p>
+                <button
+                  type="button"
+                  className="text-[10px] font-semibold text-amber-900 underline hover:no-underline"
+                  onClick={handleRunAudit}
+                >
+                  Re-scan
+                </button>
+              </div>
+            )}
             <div className="flex items-center gap-2 bg-slate-50 rounded-lg px-2 py-1.5 border border-slate-100">
               <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
               <p className="text-[10px] text-slate-600 font-medium leading-tight">

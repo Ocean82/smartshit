@@ -33,4 +33,14 @@ describe('runActiveSheetAudit', () => {
     expect(result.sheetId).toBe(state.activeSheetId)
     expect(result.findings.some((f) => f.ruleId === 'custom:big')).toBe(true)
   })
+
+  it('records the workbook revision so later edits mark the result stale', () => {
+    useStore.getState().runActiveSheetAudit()
+    const isStale = () => useStore.getState().lastAuditRevision !== useStore.getState().workbookRevision
+    expect(isStale()).toBe(false)
+    useStore.getState().setCellValue('B3', 42)
+    expect(isStale()).toBe(true)
+    useStore.getState().runActiveSheetAudit()
+    expect(isStale()).toBe(false)
+  })
 })
