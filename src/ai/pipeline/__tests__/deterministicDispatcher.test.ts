@@ -83,9 +83,13 @@ vi.mock('@shared/intentParser', () => ({
   isQueryIntent: vi.fn(() => false),
 }))
 
-vi.mock('@shared/mode', () => ({
-  isBudgetExplainQuery: vi.fn(() => false),
-}))
+vi.mock('@shared/mode', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@shared/mode')>()
+  return {
+    isLlmOnlyMode: actual.isLlmOnlyMode,
+    isBudgetExplainQuery: vi.fn(() => false),
+  }
+})
 
 import { createDeterministicDispatcherStage } from '../stages/deterministicDispatcher'
 import { isOutlierFollowUp } from '@/ai/outliers'
@@ -287,7 +291,7 @@ describe('DeterministicDispatcher stage', () => {
     expect(result!.metadata?.toolUsed).toBe('budget')
   })
 
-  it('claims for advise mode with monthly income (REQ-6.2)', async () => {
+  it('passes advice to the LLM with the savings recommendation as local analysis', async () => {
     const stage = createDeterministicDispatcherStage(makeTarget(), 'TestBook')
     const ctx = makeContext({
       message: 'how can I save money',
@@ -297,9 +301,62 @@ describe('DeterministicDispatcher stage', () => {
 
     const result = await stage.process(ctx)
 
-    expect(result).not.toBeNull()
-    expect(result!.metadata?.toolUsed).toBe('budget')
+    expect(result).toBeNull()
     expect(savingsRecommendation).toHaveBeenCalledWith(6000, expect.anything())
+    expect(ctx.localAnalysis).toEqual({ message: 'Savings recommendation', suggestions: ['Save more'], toolUsed: 'budget' })
+  })
+
+  it('does not let the query engine answer advice questions', async () => {
+    vi.mocked(isQueryIntent).mockReturnValue(true)
+    vi.mocked(runQueryFromIntent).mockClear()
+
+    const stage = createDeterministicDispatcherStage(makeTarget(), 'TestBook')
+    const ctx = makeContext({
+      message: 'where am I overspending?',
+      intent: { intentType: 'filter', confidence: 0.6, routingSource: 'regex', parameters: {} } as unknown as PipelineContext['intent'],
+      mode: 'advise',
+    })
+
+    const result = await stage.process(ctx)
+
+    expect(result).toBeNull()
+    expect(runQueryFromIntent).not.toHaveBeenCalled()
+    expect(ctx.localAnalysis?.toolUsed).toBe('budget')
+  })
+
+  it('passes an open-ended budget question in chat mode to the LLM', async () => {
+    const stage = createDeterministicDispatcherStage(makeTarget(), 'TestBook')
+    const ctx = makeContext({
+      message: 'is this budget realistic?',
+      intent: { intentType: 'budget', confidence: 0.8, routingSource: 'regex', parameters: {} } as unknown as PipelineContext['intent'],
+      mode: 'chat',
+    })
+
+    const result = await stage.process(ctx)
+
+    expect(result).toBeNull()
+    expect(ctx.localAnalysis?.message).toBeTruthy()
+  })
+
+  it('still answers a structured budget-sheet query deterministically in explain mode', async () => {
+    vi.mocked(isQueryIntent).mockReturnValue(true)
+    vi.mocked(runQueryFromIntent).mockReturnValue({ success: true, message: 'Top 5 expenses' } as ReturnType<typeof runQueryFromIntent>)
+    vi.mocked(isBudgetExplainQuery).mockReturnValue(true)
+    vi.mocked(buildSheetProfile).mockReturnValue({
+      name: 'Budget', rowCount: 20, colCount: 5, detectedPurpose: 'budget', columns: [],
+    } as unknown as ReturnType<typeof buildSheetProfile>)
+
+    const stage = createDeterministicDispatcherStage(makeTarget(), 'TestBook')
+    const ctx = makeContext({
+      message: 'what are my top 5 expenses',
+      intent: { intentType: 'filter', confidence: 0.8, routingSource: 'regex', parameters: { n: 5 } } as unknown as PipelineContext['intent'],
+      mode: 'explain',
+    })
+
+    const result = await stage.process(ctx)
+
+    expect(result?.metadata?.toolUsed).toBe('query')
+    expect(ctx.localAnalysis).toBeUndefined()
   })
 
   it('claims for outlier follow-up (REQ-6.2)', async () => {
@@ -333,7 +390,7 @@ describe('DeterministicDispatcher stage', () => {
     expect(result!.message).toContain('What I can see about your data')
   })
 
-  it('claims for budget explain on budget sheet (REQ-6.2)', async () => {
+  it('passes budget explain on a budget sheet to the LLM with local analysis', async () => {
     vi.mocked(isBudgetExplainQuery).mockReturnValue(true)
     vi.mocked(buildSheetProfile).mockReturnValue({
       name: 'Budget',
@@ -352,8 +409,8 @@ describe('DeterministicDispatcher stage', () => {
 
     const result = await stage.process(ctx)
 
-    expect(result).not.toBeNull()
-    expect(result!.metadata?.toolUsed).toBe('budget')
+    expect(result).toBeNull()
+    expect(ctx.localAnalysis).toMatchObject({ message: 'Budget analysis result', toolUsed: 'budget' })
   })
 
   // ─── REQ-6.1: Result shape matches StageResult contract ──────────────────

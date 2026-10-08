@@ -172,6 +172,19 @@ describe('parseMessage — existing behavior stays intact', () => {
     const result = parseMessage('what should I do about my budget?')
     expect(result.understood).toBe(false)
   })
+
+  it('defers a lookup that also asks for judgment to the LLM', () => {
+    expect(parseMessage("what's my biggest expense and should I worry about it?").understood).toBe(false)
+    expect(parseMessage('is the highest value in B too much?').understood).toBe(false)
+  })
+
+  it('still answers a plain lookup on the fast path', () => {
+    expect(parseMessage("what's my biggest expense in column B").calls[0]?.tool).toBe('find_max')
+  })
+
+  it('does not defer when a judgment word is just a cell value', () => {
+    expect(parseMessage('what is the highest value in column B for Normal priority').calls[0]?.tool).toBe('find_max')
+  })
 })
 
 /**

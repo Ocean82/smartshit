@@ -445,6 +445,144 @@ describe('chatService — F15(d) insights scope-bound to workbook/sheet/revision
   })
 })
 
+/**
+ * Open-ended question baseline.
+ *
+ * Runs the real classifiers, parser and dispatcher against a small budget sheet
+ * and checks that open-ended questions (judgment, interpretation, advice) reach
+ * the model with the data they are about, and never change the sheet. This
+ * measures routing and context, not answer quality — the server is mocked.
+ */
+describe('chatService — open-ended questions reach the model with relevant data', () => {
+  const LLM_ANSWER = 'LLM_ANSWER_MARKER'
+
+  interface SentRequest {
+    message: string
+    context: { deterministicSummary?: string; focusData?: string }
+  }
+
+  function seedBudgetSheet(): void {
+    const rows: Array<Array<string | number>> = [
+      ['Category', 'Budget', 'Actual', 'Notes'],
+      ['Rent', 1200, 1200, 'fixed'],
+      ['Groceries', 400, 450, 'weekly shop'],
+      ['Entertainment', 200, 250, 'concerts'],
+      ['Utilities', 150, 140, 'electric + water'],
+      ['Transport', 100, 130, 'fuel'],
+      ['Total'],
+    ]
+    const ctx = makeExecContext()
+    rows.forEach((row, r) => row.forEach((value, c) => {
+      ctx.setCellValue(`${String.fromCharCode(65 + c)}${r + 1}`, value)
+    }))
+    ctx.setCellValue('B7', null, '=SUM(B2:B6)')
+    ctx.setCellValue('C7', null, '=SUM(C2:C6)')
+  }
+
+  function sentRequest(): SentRequest {
+    return serverStream.mock.calls[0][0] as SentRequest
+  }
+
+  beforeEach(() => {
+    workbook = createEmptyWorkbook('Chat Service Test')
+    engine = new SpreadsheetEngine()
+    engine.loadWorkbook(workbook)
+    selection = null
+    messages.length = 0
+    serverStream.mockReset()
+    serverStream.mockResolvedValue({ message: LLM_ANSWER, actions: [], source: 'llm' })
+    seedBudgetSheet()
+  })
+
+  const OPEN_ENDED_QUESTIONS = [
+    'Where am I overspending?',
+    "What's my biggest expense and should I worry about it?",
+    'I make $5000 a month, how much should I save?',
+    'Explain my expenses',
+    'Is the Actual column running above budget?',
+    'Why is C7 higher than B7?',
+    'What does the formula in B7 do?',
+    'Walk me through what this sheet is for',
+    'What stands out to you in this data?',
+    'Is this budget realistic for a single person?',
+    'What would you change about how this sheet is organized?',
+    'Which categories should I keep an eye on next month?',
+    'Can you explain the Notes column?',
+    'Tell me about my spending habits',
+    'Are there any mistakes in this spreadsheet?',
+    'How could I make this more useful for tracking monthly trends?',
+    'Give me your honest opinion of this budget',
+    'What should I focus on first to improve my finances?',
+    'Summarize this sheet in plain English',
+    'Is my entertainment spending reasonable compared to everything else?',
+  ]
+
+  it.each(OPEN_ENDED_QUESTIONS)('"%s" reaches the model and leaves the sheet unchanged', async (question) => {
+    const before = JSON.stringify(activeSheet().cells)
+
+    const reply = await send(question)
+
+    expect(serverStream).toHaveBeenCalledTimes(1)
+    expect(reply?.content).toContain(LLM_ANSWER)
+    expect(JSON.stringify(activeSheet().cells)).toBe(before)
+  })
+
+  it('passes the local budget analysis to the model for advice questions', async () => {
+    await send('Where am I overspending?')
+
+    expect(sentRequest().context.deterministicSummary).toMatch(/budget analysis/i)
+  })
+
+  it('attaches the values of a column named in the question', async () => {
+    await send('Is the Actual column running above budget?')
+
+    const focus = sentRequest().context.focusData ?? ''
+    expect(focus).toContain('Actual')
+    expect(focus).toContain('450')
+    expect(focus).toContain('Groceries')
+  })
+
+  it('attaches the formula of a cell named in the question', async () => {
+    await send('Why is C7 higher than B7?')
+
+    const focus = sentRequest().context.focusData ?? ''
+    expect(focus).toContain('=SUM(C2:C6)')
+    expect(focus).toContain('=SUM(B2:B6)')
+  })
+
+  it('keeps the full insights write-up on follow-up turns', async () => {
+    messages.push({ id: 'u0', role: 'user', content: 'explain this sheet', timestamp: Date.now() })
+    messages.push({
+      id: 'a0',
+      role: 'assistant',
+      content: 'It is a budget.',
+      timestamp: Date.now(),
+      insightsSnapshot: {
+        insights: { totalIncome: 100 },
+        scope: { workbookId: workbook.id, sheetId: workbook.activeSheetId, revision: 0 },
+      },
+    })
+    messages.push({ id: 'current-user', role: 'user', content: 'Explain the totals again', timestamp: Date.now() })
+    messages.push({ id: 'stream-1', role: 'assistant', content: '', timestamp: Date.now() })
+
+    await processChatMessage('Explain the totals again', 'stream-1', makeDeps())
+
+    const summary = sentRequest().context.deterministicSummary ?? ''
+    expect(summary).toContain('Prior turn insights still apply')
+    expect(summary).toContain('Deterministic sheet findings')
+  })
+
+  it('falls back to the local budget analysis when the model is unreachable', async () => {
+    serverStream.mockResolvedValue(null)
+
+    const reply = await send('Where am I overspending?')
+
+    expect(reply?.content).toMatch(/spending|budget/i)
+    expect(reply?.content).toContain('local analysis only')
+    expect(reply?.content).not.toMatch(/^I couldn't reach the AI service/)
+  })
+})
+
 describe('chatService — model-supplied metadata is stripped', () => {
   beforeEach(() => {
     workbook = createEmptyWorkbook('Chat Service Test')

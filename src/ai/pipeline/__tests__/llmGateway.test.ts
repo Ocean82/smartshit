@@ -7,7 +7,7 @@
  * - Always claims (never returns null) — REQ-7.2
  * - Sends message to server-side LLM — REQ-7.1
  * - Passes conversation history and sheet context — REQ-7.4
- * - On LLM failure + non-explain/advise mode → local fallback — REQ-7.3
+ * - On LLM failure + non-explain/advise mode → stage fails so chatService falls back locally — REQ-7.3
  * - On LLM failure + explain/advise mode → error message
  */
 
@@ -200,21 +200,14 @@ describe('LLMGateway stage', () => {
     expect(result!.metadata?.source).toBe('llm')
   })
 
-  // REQ-7.3: LLM failure + non-explain/advise → local fallback
-  it('returns local fallback when LLM fails and mode is not explain/advise', async () => {
+  // REQ-7.3: act-mode failure fails the stage so chatService runs processLocalFallback
+  it('fails the stage when LLM fails and mode is not explain/advise', async () => {
     vi.mocked(chatWithAgentServerStream).mockResolvedValue(null)
     vi.mocked(isLlmOnlyMode).mockReturnValue(false)
-    vi.mocked(formatInsights).mockReturnValue('### Sheet insights\nTotal: $5000')
 
     const stage = createLLMGatewayStage()
-    const ctx = makeContext({ mode: 'act' })
-    // isLlmOnlyMode returns false for 'act' mode, but the stage checks
-    // insights generation on a different path — let's set it up so insights exist
-    // Since isLlmOnlyMode(act) = false, insightsBlock will be '' by default
-    // We need to test the case where insightsBlock is available
-    const result = await stage.process(ctx)
+    const result = await stage.process(makeContext({ mode: 'act' }))
 
-    // With no insights available and LLM failed, it should return the error fallback
     expect(result!.success).toBe(false)
     expect(result!.metadata?.source).toBe('ai-server-unavailable')
   })
@@ -360,6 +353,73 @@ describe('LLMGateway stage', () => {
         onToken: expect.any(Function),
       }),
     )
+  })
+
+  describe('local analysis from the deterministic dispatcher', () => {
+    const localAnalysis = { message: 'Groceries is $50 over budget', suggestions: ['Show groceries'], toolUsed: 'budget' }
+
+    it('sends it to the model as context', async () => {
+      vi.mocked(chatWithAgentServerStream).mockResolvedValue({ message: 'LLM', actions: [], source: 'llm' })
+
+      await createLLMGatewayStage().process(makeContext({ mode: 'advise', localAnalysis }))
+
+      const sent = vi.mocked(chatWithAgentServerStream).mock.lastCall![0]
+      expect(sent.context.deterministicSummary).toContain('Groceries is $50 over budget')
+    })
+
+    it('shows it when the server is unreachable', async () => {
+      vi.mocked(chatWithAgentServerStream).mockResolvedValue(null)
+
+      const result = await createLLMGatewayStage().process(makeContext({ mode: 'advise', localAnalysis }))
+
+      expect(result).toMatchObject({ success: true, metadata: { source: 'local-fallback', toolUsed: 'budget' } })
+      expect(result!.message).toContain('Groceries is $50 over budget')
+      expect(result!.message).toContain('couldn\'t reach the AI service')
+      expect(result!.suggestions).toEqual(['Show groceries'])
+    })
+
+    it('shows it with the server notice when the server answers with a fallback (quota / providers down)', async () => {
+      vi.mocked(chatWithAgentServerStream).mockResolvedValue({
+        message: "You've used all 7 free AI questions for today.",
+        actions: [],
+        source: 'fallback',
+      })
+
+      const result = await createLLMGatewayStage().process(makeContext({ mode: 'advise', localAnalysis }))
+
+      expect(result!.message).toContain('Groceries is $50 over budget')
+      expect(result!.message).toContain('free AI questions')
+    })
+
+    it('keeps the refusal call-to-action alongside it when the server refuses', async () => {
+      vi.mocked(chatWithAgentServerStream).mockResolvedValue({
+        kind: 'server-error',
+        status: 'quota',
+        message: 'Upgrade to keep going.',
+        httpStatus: 402,
+      } as any)
+
+      const result = await createLLMGatewayStage().process(makeContext({ mode: 'advise', localAnalysis }))
+
+      expect(result!.message).toContain('Groceries is $50 over budget')
+      expect(result!.message).toContain('Upgrade to keep going.')
+      expect(result!.suggestions).toEqual(['Upgrade to Pro', 'Add your own API key'])
+    })
+  })
+
+  it('keeps the full insights write-up on follow-up turns', async () => {
+    vi.mocked(isLlmOnlyMode).mockReturnValue(true)
+    vi.mocked(formatInsights).mockReturnValue('### Sheet insights\nTotal: $5000')
+    vi.mocked(chatWithAgentServerStream).mockResolvedValue({ message: 'LLM', actions: [], source: 'llm' })
+
+    await createLLMGatewayStage().process(makeContext({
+      mode: 'explain',
+      priorInsights: { headers: [] } as unknown as PipelineContext['priorInsights'],
+    }))
+
+    const summary = vi.mocked(chatWithAgentServerStream).mock.lastCall![0].context.deterministicSummary
+    expect(summary).toContain('Prior turn insights still apply')
+    expect(summary).toContain('Total: $5000')
   })
 
   it('uses a no-op token callback when context.onToken is undefined', async () => {

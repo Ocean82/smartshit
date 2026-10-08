@@ -9,7 +9,7 @@
  * - "Sort by Amount descending" → instant (AgentParser)
  * - "Highlight cells over 500 red" → instant (AgentParser)
  * - "Create a monthly budget" → instant (TemplateResolver)
- * - "Analyze my expenses" → deterministic (DeterministicDispatcher, no LLM)
+ * - "Analyze my expenses" (advise) → LLM stream with the local budget analysis as context
  * - "What does this data mean?" → LLM stream (LLMGateway)
  * - "Delete row Netflix" → preview/confirm flow (AgentParser)
  */
@@ -299,7 +299,7 @@ describe('Smoke Test: Top commands routing verification', () => {
     expect(chatWithAgentServerStream).not.toHaveBeenCalled()
   })
 
-  it('"Analyze my expenses" → deterministic (no LLM)', async () => {
+  it('"Analyze my expenses" (advise) → LLM with local budget analysis as context', async () => {
     // AgentParser doesn't understand
     vi.mocked(parseMessage).mockReturnValue({
       understood: false,
@@ -309,7 +309,7 @@ describe('Smoke Test: Top commands routing verification', () => {
     // TemplateResolver doesn't match
     vi.mocked(resolveGalleryTemplate).mockReturnValue(null)
 
-    // IntentClassifier → budget / advise so DeterministicDispatcher claims
+    // IntentClassifier → budget / advise: the dispatcher hands its analysis to the LLM
     vi.mocked(parseUserIntent).mockReturnValue({
       intentType: 'budget',
       targetColumns: [],
@@ -324,11 +324,11 @@ describe('Smoke Test: Top commands routing verification', () => {
     const { router } = buildPipeline()
     const result = await router.process(makeContext('Analyze my expenses'))
 
-    expect(result.stageName).toBe('deterministic-dispatcher')
+    expect(result.stageName).toBe('llm-gateway')
     expect(result.success).toBe(true)
-    expect(result.message).toContain('expenses')
-    // Deterministic path — no LLM streaming
-    expect(chatWithAgentServerStream).not.toHaveBeenCalled()
+    expect(chatWithAgentServerStream).toHaveBeenCalledTimes(1)
+    const sent = vi.mocked(chatWithAgentServerStream).mock.calls[0][0]
+    expect(sent.context.deterministicSummary).toContain('expenses')
   })
 
   it('"What does this data mean?" → LLM stream (LLMGateway)', async () => {

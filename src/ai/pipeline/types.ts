@@ -56,6 +56,19 @@ export interface PipelineContext {
   intent?: UserIntent
   /** Message mode: explain/advise/act/help/chat (set by IntentClassifier stage) */
   mode?: AgentMode
+
+  // ─── Enriched by DeterministicDispatcher stage ──────────────────────────
+  /**
+   * Local analysis computed for an open-ended question. The LLM gateway sends
+   * it to the model as context and shows it on its own if the model is unavailable.
+   */
+  localAnalysis?: LocalAnalysis
+}
+
+export interface LocalAnalysis {
+  message: string
+  suggestions?: string[]
+  toolUsed: string
 }
 
 // ─── Stage Result ───────────────────────────────────────────────────────────

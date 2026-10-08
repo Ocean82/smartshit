@@ -7,16 +7,18 @@
  * Responsibilities:
  * 1. Build the deterministic summary (insights, audit) for LLM context
  * 2. Send user message + context to server via chatWithAgentServerStream()
- * 3. On LLM failure for non-explain/advise mode: use local fallback (insights)
+ * 3. On LLM failure: show DeterministicDispatcher's local analysis when present;
+ *    otherwise fail so chatService runs its local fallback for act/help modes
  * 4. Always returns a StageResult (never null)
  *
  * REQ-7.1: Send message to server-side LLM
  * REQ-7.2: Always claims (terminal stage)
- * REQ-7.3: On LLM failure + non-explain/advise → local fallback
+ * REQ-7.3: On LLM failure + non-explain/advise → local fallback (via chatService)
  * REQ-7.4: Pass conversation history, sheet context, deterministic summary
  */
 
-import type { PipelineContext, PipelineStage, StageResult } from '../types'
+import type { LocalAnalysis, PipelineContext, PipelineStage, StageResult } from '../types'
+import { buildFocusData } from '@/ai/focusData'
 import { resolveAnalysisTarget } from '@/ai/analysisTarget'
 import { chatWithAgentServerStream, isAgentServerError } from '@/ai/agentClient'
 import { reportServerUsage } from '@/auth/useUsage'
@@ -59,11 +61,24 @@ export function createLLMGatewayStage(): PipelineStage {
         getSheetComputedValue: target.getSheetComputedValue,
       })
 
-      // Build deterministic summary for LLM context enrichment
-      const isFollowUp = Boolean(context.priorInsights)
-      const insightsBlock = isLlmOnlyMode(mode) && !isFollowUp
+      // Build deterministic summary for LLM context enrichment. Follow-ups keep
+      // the full write-up: the model has no memory of the prior turn's context.
+      const insightsBlock = isLlmOnlyMode(mode)
         ? formatInsights(sheetContext.insights)
         : ''
+
+      // Exact values for cells/columns the question names (non-fatal)
+      let focusData = ''
+      try {
+        focusData = buildFocusData({
+          message: context.message,
+          intent: context.intent,
+          sheet: target.sheet,
+          getComputedValue: target.getComputedValue,
+        })
+      } catch {
+        // Focus data is an enrichment — continue without it
+      }
 
       // Run auditor for explain/advise modes (non-fatal)
       let auditBlock = ''
@@ -76,7 +91,8 @@ export function createLLMGatewayStage(): PipelineStage {
         }
       }
 
-      const deterministicSummary = buildSummary(insightsBlock, auditBlock, context.priorInsights)
+      const localAnalysis = context.localAnalysis
+      const deterministicSummary = buildSummary(insightsBlock, auditBlock, context.priorInsights, localAnalysis)
 
       // REQ-7.1, REQ-7.4: Send message + history + context to server LLM
       const serverResult = await chatWithAgentServerStream({
@@ -84,6 +100,7 @@ export function createLLMGatewayStage(): PipelineStage {
         context: {
           ...sheetContext,
           deterministicSummary,
+          ...(focusData ? { focusData } : {}),
         },
         history: context.history ?? [],
         onToken,
@@ -100,10 +117,13 @@ export function createLLMGatewayStage(): PipelineStage {
       }
 
       // Server explicitly refused (auth / rate limit / quota). Surface its
-      // worded message as a real assistant reply — falling back to local
-      // insights here would hide the "sign in / slow down / upgrade" CTA and
-      // pretend the request succeeded.
+      // worded message as a real assistant reply so the "sign in / slow down /
+      // upgrade" CTA is never hidden. A local analysis, when present, is shown
+      // with that message appended as a notice.
       if (isAgentServerError(serverResult)) {
+        if (localAnalysis) {
+          return localAnalysisResult(localAnalysis, serverResult.message, suggestionsForServerError(serverResult.status))
+        }
         return {
           success: false,
           message: serverResult.message,
@@ -116,6 +136,12 @@ export function createLLMGatewayStage(): PipelineStage {
             httpStatus: serverResult.httpStatus,
           },
         }
+      }
+
+      // The server answers with source 'fallback' when every provider failed or
+      // the free-tier quota is used up; the local analysis is still worth showing.
+      if (serverResult?.source === 'fallback' && localAnalysis) {
+        return localAnalysisResult(localAnalysis, serverResult.message, localAnalysis.suggestions)
       }
 
       if (serverResult) {
@@ -158,22 +184,15 @@ export function createLLMGatewayStage(): PipelineStage {
         }
       }
 
-      // REQ-7.3: LLM failed — use local fallback for non-explain/advise modes
-      if (!isLlmOnlyMode(mode) && insightsBlock) {
-        // For act/help modes, return insights as a useful local fallback
-        return {
-          success: true,
-          message: insightsBlock,
-          stageName: 'llm-gateway',
-          suggestions: ['Try your question again', 'Explain this spreadsheet I just loaded'],
-          metadata: {
-            toolUsed: 'insights',
-            source: 'local-fallback',
-          },
-        }
+      if (localAnalysis) {
+        return localAnalysisResult(
+          localAnalysis,
+          'I couldn\'t reach the AI service, so this is the local analysis only. Try again in a moment for a fuller answer.',
+          localAnalysis.suggestions,
+        )
       }
 
-      // Final fallback — server unreachable, no useful local content
+      // REQ-7.3: act/help failures return success:false so chatService runs processLocalFallback
       return {
         success: false,
         message: 'I couldn\'t reach the AI service just now. Please try again in a moment.',
@@ -196,11 +215,15 @@ function buildSummary(
   insightsBlock: string,
   auditBlock: string,
   priorInsights?: import('@/ai/sheetInsights').SheetInsights | null,
+  localAnalysis?: LocalAnalysis,
 ): string {
   const parts: string[] = []
 
   if (priorInsights) {
     parts.push('Prior turn insights still apply for follow-up questions.')
+  }
+  if (localAnalysis) {
+    parts.push(`Local budget analysis computed from this sheet (build on it with judgment; do not just repeat it):\n${localAnalysis.message}`)
   }
   if (insightsBlock) {
     parts.push(`Deterministic sheet findings:\n${insightsBlock}`)
@@ -210,6 +233,20 @@ function buildSummary(
   }
 
   return mergeToolResultContent(parts.filter(Boolean))
+}
+
+/** Show the local analysis on its own when the model can't answer, with the reason underneath. */
+function localAnalysisResult(analysis: LocalAnalysis, notice: string, suggestions?: string[]): StageResult {
+  return {
+    success: true,
+    message: `${analysis.message}\n\n> ${notice}`,
+    stageName: 'llm-gateway',
+    suggestions,
+    metadata: {
+      toolUsed: analysis.toolUsed,
+      source: 'local-fallback',
+    },
+  }
 }
 
 /** Follow-up chips tailored to why the server refused the request. */

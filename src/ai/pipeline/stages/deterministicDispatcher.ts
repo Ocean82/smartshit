@@ -6,8 +6,10 @@
  * without requiring an LLM call.
  *
  * Claims when: an intent maps to a built-in skill (clean, report, compare,
- *   budget, query, outlier follow-up, data awareness)
- * Passes when: no deterministic skill handles the intent (returns null)
+ *   budget in act mode, query, outlier follow-up, data awareness)
+ * Passes when: no deterministic skill handles the intent, or the question is
+ *   advice / an open-ended budget question — then the budget analysis is set on
+ *   `context.localAnalysis` for the LLM gateway (returns null)
  *
  * Validates: REQ-6.1, REQ-6.2, REQ-6.3, REQ-6.4
  */
@@ -25,7 +27,7 @@ import { queryComparison } from '@/ai/comparison'
 import { explainOutliers } from '@/ai/responseBuilder'
 import { isOutlierFollowUp } from '@/ai/outliers'
 import { isQueryIntent } from '@shared/intentParser'
-import { isBudgetExplainQuery } from '@shared/mode'
+import { isBudgetExplainQuery, isLlmOnlyMode } from '@shared/mode'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -206,28 +208,38 @@ export function createDeterministicDispatcherStage(
         }, intent?.routingSource)
       }
 
+      const isBudgetQuestion = mode === 'advise' || intent.intentType === 'budget'
+      const isBudgetExplain = mode === 'explain' && profile.detectedPurpose === 'budget' && isBudgetExplainQuery(message)
+      const runBudgetSkill = (): ToolResult => {
+        const monthlyIncome = typeof intent.parameters.monthlyIncome === 'number'
+          ? intent.parameters.monthlyIncome
+          : insights.totalIncome
+        if (isBudgetQuestion && monthlyIncome && monthlyIncome > 0) {
+          return { ...savingsRecommendation(monthlyIncome, insights), toolUsed: 'budget' }
+        }
+        return { ...budgetAnalysisToToolResult(analyzeBudget(profile, insights)), toolUsed: 'budget' }
+      }
+
+      // ─── Advice / open-ended budget questions ───────────────────────────────
+      // These need judgment, so the local analysis becomes model context rather
+      // than the whole answer. Advice skips the query engine: keyword hits like
+      // "where" or "biggest" would otherwise turn "where am I overspending?"
+      // into a top-N listing.
+      if (mode === 'advise' || ((isBudgetQuestion || isBudgetExplain) && isLlmOnlyMode(mode) && !isQueryIntent(intent))) {
+        const result = runBudgetSkill()
+        context.localAnalysis = { message: result.message, suggestions: result.suggestions, toolUsed: 'budget' }
+        return null
+      }
+
       // ─── Query ──────────────────────────────────────────────────────────────
       if (isQueryIntent(intent)) {
         const queryResult = runQueryFromIntent(resolvedTarget.sheet, intent, resolvedTarget.getComputedValue, insights)
         return queryResult ? toStageResult({ ...queryResult, toolUsed: 'query' }, intent?.routingSource) : null
       }
 
-      // ─── Budget / Advise ────────────────────────────────────────────────────
-      if (mode === 'advise' || intent.intentType === 'budget') {
-        const monthlyIncome = typeof intent.parameters.monthlyIncome === 'number'
-          ? intent.parameters.monthlyIncome
-          : insights.totalIncome
-
-        if (monthlyIncome && monthlyIncome > 0) {
-          return toStageResult({ ...savingsRecommendation(monthlyIncome, insights), toolUsed: 'budget' }, intent?.routingSource)
-        }
-
-        return toStageResult({ ...budgetAnalysisToToolResult(analyzeBudget(profile, insights)), toolUsed: 'budget' }, intent?.routingSource)
-      }
-
-      // ─── Budget Explain (explain mode + budget sheet) ───────────────────────
-      if (mode === 'explain' && profile.detectedPurpose === 'budget' && isBudgetExplainQuery(message)) {
-        return toStageResult({ ...budgetAnalysisToToolResult(analyzeBudget(profile, insights)), toolUsed: 'budget' }, intent?.routingSource)
+      // ─── Budget (act mode) ──────────────────────────────────────────────────
+      if (isBudgetQuestion || isBudgetExplain) {
+        return toStageResult(runBudgetSkill(), intent?.routingSource)
       }
 
       // ─── No deterministic skill matched — pass to next stage ────────────────

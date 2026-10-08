@@ -18,6 +18,7 @@ import type { ColumnProfile } from '@/ai/types'
 import { parseAdvancedFormula } from './formulaPatterns'
 import { escapeRegex, letterToCol } from '@/lib'
 import { isNonCommandRequest } from '../../shared/requestSafety'
+import { getToolDefinition } from '../../shared/toolRegistry'
 
 export interface ParsedToolCall {
   tool: string
@@ -86,6 +87,14 @@ const DESTRUCTIVE_TOOLS = new Set([
  * clauses and parses each independently.
  */
 const COMPOUND_CONNECTOR_RE = /\b(?:and\s+then|,\s*then\b|;\s*|after\s+that|\band\s+also\b)/i
+
+/**
+ * A request for judgment on top of a lookup ("what's my biggest expense and
+ * should I worry about it?"). A read-only tool answers only the lookup half, so
+ * these defer to the LLM, which gets the same data as context.
+ */
+// Phrases only, never bare adjectives: cell values like "Normal" or "Concern" must not defer a lookup.
+const JUDGMENT_CLAUSE_RE = /\b(?:should\s+(?:i|we)|worr(?:y|ied)\s+about|am\s+i\s+concerned|why|too\s+(?:much|high|low|many)|is\s+(?:that|this|it)\s+(?:ok|okay|bad|good|normal|reasonable|realistic|a\s+problem)|what\s+does\s+(?:that|this|it)\s+mean|how\s+(?:bad|good|concerned))\b/i
 
 /**
  * Pronouns and vague references that should never be used as row match targets.
@@ -188,6 +197,7 @@ function describeColumnChoices(sheetContext?: SheetContext): string {
  *     commands (e.g. highlight/format) still execute, while destructive tools
  *     remain deferred to the LLM.
  *  4. Trailing-`?` messages that resolve to a destructive tool are vetoed.
+ *  5. Read-only lookups that also ask for judgment are deferred to the LLM.
  */
 export function parseMessage(message: string, sheetContext?: SheetContext): ParseResult {
   // ─── Non-command guard ────────────────────────────────────────────────────
@@ -225,6 +235,15 @@ export function parseMessage(message: string, sheetContext?: SheetContext): Pars
   }
 
   const result = parseMessageInternal(messageToParse, sheetContext)
+
+  // Covers clarification-only parses (no calls) too: "which column?" answers neither half.
+  if (
+    result.understood
+    && result.calls.every((call) => getToolDefinition(call.tool)?.category === 'read')
+    && JUDGMENT_CLAUSE_RE.test(message)
+  ) {
+    return { calls: [], understood: false }
+  }
 
   if (hasQuestionPrefix) {
     if (!result.understood || result.calls.length === 0) {

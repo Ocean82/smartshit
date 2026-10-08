@@ -274,7 +274,7 @@ describe('Pipeline Integration: end-to-end routing', () => {
     expect(chatWithAgentServerStream).not.toHaveBeenCalled()
   })
 
-  it('"analyze my expenses" → DeterministicDispatcher claims (deterministic path)', async () => {
+  it('"analyze my expenses" (advise) → LLMGateway answers with the local budget analysis as context', async () => {
     // AgentParser doesn't understand
     vi.mocked(parseMessage).mockReturnValue({
       understood: false,
@@ -298,10 +298,11 @@ describe('Pipeline Integration: end-to-end routing', () => {
     const { router } = buildPipeline()
     const result = await router.process(makeContext('analyze my expenses'))
 
-    expect(result.stageName).toBe('deterministic-dispatcher')
+    expect(result.stageName).toBe('llm-gateway')
     expect(result.success).toBe(true)
-    expect(result.message).toContain('expense analysis')
-    expect(chatWithAgentServerStream).not.toHaveBeenCalled()
+    expect(chatWithAgentServerStream).toHaveBeenCalledTimes(1)
+    const sent = vi.mocked(chatWithAgentServerStream).mock.calls[0][0]
+    expect(sent.context.deterministicSummary).toContain('expense analysis')
   })
 
   it('"Explain my data" → LLMGateway claims (LLM path)', async () => {

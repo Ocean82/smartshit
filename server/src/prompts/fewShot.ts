@@ -196,18 +196,28 @@ Each \`=Sheet2!A1\` forces a lookup. Consolidate where possible.
 
 I can see your formula cells — want me to flag the ones causing the most recalculation overhead?`,
   },
-
-  // ─── 9: Script execution — complex multi-cell operation ────────────────────
-  {
-    role: 'user',
-    content: 'fill all the blank cells in column B with the value from the row above',
-  },
-  {
-    role: 'assistant',
-    content: `I'll fill down the blanks in column B using the last non-empty value above each gap. This handles consecutive blanks too.
-
-\`\`\`json
-{"message":"Filling blank cells in column B with the value from the row above.","actions":[{"tool":"execute_script","params":{"code":"for (let row = 1; row < getRowCount(); row++) {\\n  const ref = cellRef(row, 1)\\n  if (getCell(ref) === null) {\\n    const above = getCell(cellRef(row - 1, 1))\\n    if (above !== null) setCell(ref, above)\\n  }\\n}","description":"Fill blank cells in column B with value from row above"},"description":"Fill blanks downward in column B"}]}
-\`\`\``,
-  },
 ]
+
+export const FEW_SHOT_TAG = '[Style example — hypothetical spreadsheet]'
+
+export const FEW_SHOT_OUTRO =
+  'Those were style examples about a hypothetical spreadsheet, not this user\'s workbook. Copy their tone and format only — ' +
+  'never reuse their numbers, categories, or cell references. The real conversation starts now; use only the spreadsheet context for facts.'
+
+/**
+ * Mark the examples as style references only; otherwise their figures and
+ * categories leak into answers about the user's real data. Each example user
+ * turn carries its own tag because token trimming drops the oldest turns first.
+ */
+export function buildFewShotMessages(
+  examples: FewShotExample[],
+): Array<{ role: 'system' | 'user' | 'assistant'; content: string }> {
+  if (examples.length === 0) return []
+  return [
+    ...examples.map((m) => ({
+      role: m.role,
+      content: m.role === 'user' ? `${FEW_SHOT_TAG} ${m.content}` : m.content,
+    })),
+    { role: 'system', content: FEW_SHOT_OUTRO },
+  ]
+}

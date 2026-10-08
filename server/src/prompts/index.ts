@@ -14,7 +14,7 @@
  */
 
 export { PERSONA_PROMPT } from './persona.js'
-export { FEW_SHOT_EXAMPLES, type FewShotExample } from './fewShot.js'
+export { FEW_SHOT_EXAMPLES, buildFewShotMessages, type FewShotExample } from './fewShot.js'
 export { CLARIFICATION_RULES } from './clarification.js'
 export { buildAuditContext, type AuditSummary, type AuditFindingSummary } from './auditContext.js'
 export { buildMinimalSpreadsheetContext, type SpreadsheetSnapshot } from './spreadsheetContext.js'

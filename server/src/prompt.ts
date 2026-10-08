@@ -83,6 +83,8 @@ export interface SpreadsheetContextInput {
   /** SpreadsheetLLM-style compressed encoding (inverted-index + structural anchors) */
   compressedEncoding?: string
   deterministicSummary?: string
+  /** Exact values/formulas for the cells and columns the user's question names */
+  focusData?: string
   userPreferences?: Record<string, string>
   /** @deprecated legacy flat cell map */
   cellSummary?: Record<string, string | number | boolean | null>
@@ -131,6 +133,7 @@ export interface ChatResponseBody {
  * When `maxTokens` is provided, uses progressive truncation to fit within
  * the token budget. Priority order (highest → lowest):
  * 1. Workbook metadata (name, sheets, dimensions) — always included
+ * 1.5 Focus data — exact values for the cells/columns the question names
  * 2. Compressed encoding (most token-efficient representation)
  * 3. Deterministic summary / pre-computed analysis
  * 4. Sheet profile + column info
@@ -181,6 +184,15 @@ function formatContextBlock(context?: SpreadsheetContextInput, maxTokens?: numbe
   }
 
   const sections: ContextSection[] = []
+
+  // Priority 1.5: Exact data for what the question names — outranks the lossy snapshot
+  if (context.focusData?.trim()) {
+    sections.push({
+      priority: 1.5,
+      label: 'focus',
+      content: `Exact data for what the question names (read live from the sheet — prefer these values over the compressed data and preview below):\n${context.focusData}`,
+    })
+  }
 
   // Priority 2: Compressed encoding
   if (context.compressedEncoding) {
@@ -311,8 +323,8 @@ function formatContextBlock(context?: SpreadsheetContextInput, maxTokens?: numbe
       if (sectionTokens <= remainingBudget) {
         lines.push(section.content)
         remainingBudget -= sectionTokens
-      } else if (remainingBudget > 100 && section.label === 'compressed') {
-        // For compressed encoding, truncate to fit rather than drop entirely
+      } else if (remainingBudget > 100 && (section.label === 'focus' || section.label === 'compressed')) {
+        // Truncate to fit rather than drop entirely
         const maxChars = Math.floor(remainingBudget * 3.5)
         const truncated = section.content.slice(0, maxChars)
         const lastNewline = truncated.lastIndexOf('\n')

@@ -16,7 +16,7 @@ import {
   type ChatRequestBody,
   type ChatResponseBody,
 } from './prompt.js'
-import { FEW_SHOT_EXAMPLES } from './prompts/index.js'
+import { FEW_SHOT_EXAMPLES, buildFewShotMessages } from './prompts/index.js'
 import { parseAgentResponse } from './parseResponse.js'
 import {
   MAX_TOKENS_PER_CALL,
@@ -526,7 +526,7 @@ async function runLlmChat(params: {
 
   const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
     { role: 'system', content: systemPrompt },
-    ...fewShot.map((m) => ({ role: m.role, content: m.content })),
+    ...buildFewShotMessages(fewShot),
     ...(conversationSummary
       ? [{ role: 'system' as const, content: conversationSummary }]
       : []),

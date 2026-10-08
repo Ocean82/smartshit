@@ -41,6 +41,8 @@ export interface SpreadsheetContextPayload {
   /** SpreadsheetLLM-style compressed encoding for token-efficient LLM consumption */
   compressedEncoding?: string
   deterministicSummary?: string
+  /** Exact values/formulas for the cells and columns the question names (see focusData.ts) */
+  focusData?: string
   userPreferences?: Record<string, string>
   /** @deprecated kept for backward compatibility */
   cellSummary?: Record<string, string | number | boolean | null>

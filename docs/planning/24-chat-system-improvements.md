@@ -7,6 +7,8 @@
 > - Phase 4 (vector embeddings): **Deferred** — token-overlap suggestion scoring shipped in `server/src/suggestions.ts` (embeddings optional later)
 > - Phase 5 (feedback loop): **Lite done** — thumbs up/down in chat + localStorage + telemetry counters
 > - Phase 6 (ELK / fine-tuning / Zod hardening): **Deferred**
+>
+> **Update (2026-10-08) — open-ended questions:** advice and open-ended budget questions now reach the LLM with the local budget analysis as context (`deterministicDispatcher.ts` → `context.localAnalysis`), falling back to that analysis when the model is unavailable or over quota. Questions that name cells or columns carry their exact values/formulas (`src/ai/focusData.ts` → `context.focusData`, priority 1.5 in `server/src/prompt.ts`). Follow-ups keep the full insights write-up, and few-shot examples are framed as hypothetical (`buildFewShotMessages`). Baseline: `chatService.test.ts` "open-ended questions" (20 questions; 12/20 reached the model before, 20/20 after). Not done: an in-answer read-tool loop.
 
 This document outlines a phased approach to enhance the chat system's reliability for open-ended questions by integrating advanced AI capabilities.
 

@@ -45,6 +45,7 @@ const contextSchema = z.object({
   insights: insightsSchema.optional(),
   sheetNames: z.array(z.string()).optional(),
   deterministicSummary: z.string().optional(),
+  focusData: z.string().max(20_000).optional(),
 }).passthrough()
 
 /** POST /api/chat/stream request body. */
