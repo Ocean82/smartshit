@@ -22,7 +22,16 @@ vi.mock('./openaiCompatible.js', async (importOriginal) => ({
   chatWithOpenAiCompatible: async () => fallbackCompletion,
 }))
 
-const { callProviderStream, callProviderWithFailover } = await import('./providers.js')
+const { callProviderStream, callProviderWithFailover, openRouterMaxTokens } = await import('./providers.js')
+const { config } = await import('./config.js')
+
+describe('openRouterMaxTokens', () => {
+  it('caps requests at the credit-safe ceiling and leaves smaller or default requests alone', () => {
+    expect(openRouterMaxTokens(100_000)).toBe(config.openRouterMaxTokens)
+    expect(openRouterMaxTokens(1)).toBe(1)
+    expect(openRouterMaxTokens(undefined)).toBeUndefined()
+  })
+})
 
 describe('callProviderWithFailover timeout', () => {
   it('aborts the timed-out provider before failing over', async () => {

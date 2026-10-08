@@ -173,6 +173,10 @@ export function providerIsConfigured(provider: ProviderName): boolean {
   return true
 }
 
+export function openRouterMaxTokens(requested?: number): number | undefined {
+  return requested === undefined ? undefined : Math.min(requested, config.openRouterMaxTokens)
+}
+
 export interface ProviderCallOptions {
   /** Enable JSON mode for structured output (action mode). */
   jsonMode?: boolean
@@ -308,7 +312,7 @@ export async function callProviderStream(
         messages,
         wrappedOnChunk,
         providerSignal,
-        { jsonMode: options.jsonMode, maxTokens: options.maxTokens, suppressReasoning: true },
+        { jsonMode: options.jsonMode, maxTokens: openRouterMaxTokens(options.maxTokens), suppressReasoning: true },
       )
     } else if (provider === 'huggingface') {
       innerPromise = chatWithOpenAiCompatibleStream(
@@ -375,7 +379,7 @@ export async function callProvider(
         baseUrl: config.openRouterBaseUrl,
       },
       messages,
-      { jsonMode: options.jsonMode, maxTokens: options.maxTokens, suppressReasoning: true, signal: options.signal },
+      { jsonMode: options.jsonMode, maxTokens: openRouterMaxTokens(options.maxTokens), suppressReasoning: true, signal: options.signal },
     )
   } else if (provider === 'huggingface') {
     completion = await chatWithOpenAiCompatible(

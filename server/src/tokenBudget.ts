@@ -28,7 +28,7 @@ const PROVIDER_CONTEXT_WINDOWS: Record<ProviderName, number> = {
 const PROVIDER_MAX_OUTPUT: Record<ProviderName, number> = {
   ollama: config.numPredict,
   groq: 2048,
-  openrouter: 2048,
+  openrouter: config.openRouterMaxTokens,
   huggingface: 2048,
 }
 
@@ -208,14 +208,14 @@ export type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: stri
 /**
  * Split an assembled messages array into the three regions the F9 guards trim
  * against, matching how `runLlmChat` assembles them:
- *   [ systemContext, ...middle (few-shot + summary + history), finalUser ]
+ *   [ systemPrompt, ...middle (few-shot + summary + history), finalUser ]
  *
- * - `systemContext` is the single leading system message carrying the
- *   spreadsheet context — the lowest-priority payload we shrink/drop first.
+ * - `systemPrompt` is the single leading system message: instructions first,
+ *   spreadsheet context last. It is trimmed last, from its tail.
  * - `middle` is everything between it and the final user message (few-shot
  *   examples, the optional summary system line, and history turns). We drop
  *   from the FRONT of this region (oldest first), which preserves the most
- *   recent turns before touching the final user message.
+ *   recent turns before touching the system prompt.
  * - `finalUser` is the current user message and is NEVER trimmed.
  *
  * On a degenerate array (no leading system message, or a single message) the
@@ -250,26 +250,34 @@ function joinRegions(
   return out
 }
 
+const MIN_SYSTEM_CHARS = 1_000
+const SYSTEM_TRUNCATED_MARKER = '\n[context truncated to fit the model window]'
+
 /**
  * Perform ONE trim step toward a smaller payload, in priority order:
- *   1. Drop the leading system context message (lowest-priority payload).
- *   2. Otherwise drop the oldest message in the middle region (oldest history
- *      / few-shot turn first).
+ *   1. Drop the oldest message in the middle region (few-shot examples first,
+ *      then the summary line, then the oldest history).
+ *   2. Halve the leading system prompt from its tail. It carries the persona,
+ *      rules and (in act mode) the JSON action contract, with the spreadsheet
+ *      context block last — so the tail cut sheds data before instructions.
+ *   3. Drop the system prompt only once it is too small to halve.
  * The final user message is never touched. Returns the new regions and whether
- * anything could be trimmed (false = nothing left but scaffold + user message).
+ * anything could be trimmed (false = nothing left but the user message).
  */
 function trimOneStep(
   leadingSystem: ChatMessage | null,
   middle: ChatMessage[],
 ): { leadingSystem: ChatMessage | null; middle: ChatMessage[]; trimmed: boolean } {
-  if (leadingSystem) {
-    // Drop the whole context message. (The system scaffolding is already
-    // context-capped up-front via maxContextTokens; here we remove the
-    // lowest-priority payload entirely rather than mangle it mid-string.)
-    return { leadingSystem: null, middle, trimmed: true }
-  }
   if (middle.length > 0) {
-    return { leadingSystem: null, middle: middle.slice(1), trimmed: true }
+    return { leadingSystem, middle: middle.slice(1), trimmed: true }
+  }
+  if (leadingSystem && leadingSystem.content.length > MIN_SYSTEM_CHARS) {
+    // ponytail: blind halving, can cut rules once the context is gone; rebuild the prompt per provider budget if failover answers degrade.
+    const content = leadingSystem.content.slice(0, Math.floor(leadingSystem.content.length / 2)) + SYSTEM_TRUNCATED_MARKER
+    return { leadingSystem: { ...leadingSystem, content }, middle, trimmed: true }
+  }
+  if (leadingSystem) {
+    return { leadingSystem: null, middle, trimmed: true }
   }
   return { leadingSystem: null, middle, trimmed: false }
 }

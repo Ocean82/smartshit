@@ -81,7 +81,7 @@ Copy `.env.example` to `.env` in `server/` and add one API key:
 GROQ_API_KEY=your-key-here
 ```
 
-> Groq is the primary cloud provider (fast inference via `qwen/qwen3.6-27b`).
+> Groq is the primary cloud provider (fast inference via `qwen/qwen3.8-27b`).
 > OpenRouter and HuggingFace are supported as failover. See `.env.example` for all options.
 
 ### 3. Run
@@ -168,7 +168,7 @@ instance (see "Running locally" above to run without them).
 | `NUM_CTX` | `8192` | Context window size |
 | `NUM_PREDICT` | `1024` | Max tokens per response |
 | `GROQ_API_KEY` | — | Primary cloud provider (fast inference) |
-| `GROQ_MODEL` | `qwen/qwen3.6-27b` | Groq model identifier |
+| `GROQ_MODEL` | `qwen/qwen3.8-27b` | Groq model identifier |
 | `OPENROUTER_API_KEY` | — | Failover cloud provider |
 | `HUGGINGFACE_API_KEY` | — | Failover cloud provider |
 | `LLM_PROVIDER_ORDER` | `groq,openrouter,ollama` | Failover order |

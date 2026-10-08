@@ -8,9 +8,17 @@ Items are added as local development work creates production requirements. Check
 
 ## Pending
 
+- [ ] **Deploy the OpenRouter `max_tokens` cap** — added 2026-10-08
+  - Live logs on 2026-10-08 show OpenRouter returning 402: the account (free tier, $0.18 used) "can only afford" ~1,056–1,717 tokens while the app requests `max_tokens: 2048`. A 5-token probe still succeeds, so key checks look green while real calls fail.
+  - Code fix (pending deploy): `OPENROUTER_MAX_TOKENS` (default 1024) caps server-funded OpenRouter calls in `server/src/providers.ts`; BYOK is unaffected. Lower it in `/opt/smartsht/.env` if the balance keeps shrinking; the cap only buys time while credits drain.
+  - Verify after deploy: no new `openrouter ... (402)` lines in `pm2 logs smartsht-api`.
+
+- [x] **Ollama's role on this box** — decided 2026-10-08: keep as last fallback
+  - Host is 2 CPU cores, 7.6 GB RAM, no GPU. `smartshit` (Qwen3 4B Q4) took 55.6 s for a 40-token reply; the logs show "Request aborted while streaming from ollama". Expect it to time out when both cloud providers fail.
+
 - [ ] **Confirm OpenRouter `reasoning.exclude` against the live API** — added 2026-09-28
   - Context: the plumbing shipped (see Completed below), but only against a mocked `fetch`. Nobody has watched a real OpenRouter response come back without a reasoning phase.
-  - Verify: one live streaming call through the OpenRouter fallback (temporarily point the primary provider at an invalid key to force failover, or call `chatWithOpenAiCompatibleStream` directly against the production key) with `qwen/qwen3.6-27b`. Confirm no `delta.reasoning` arrives, output matches Groq's clean shape, and `usage.completion_tokens` drops versus the same call without the flag.
+  - Verify: one live streaming call through the OpenRouter fallback (temporarily point the primary provider at an invalid key to force failover, or call `chatWithOpenAiCompatibleStream` directly against the production key) with `qwen/qwen3.8-27b`. Confirm no `delta.reasoning` arrives, output matches Groq's clean shape, and `usage.completion_tokens` drops versus the same call without the flag.
   - Priority: low. If OpenRouter silently ignores the field the only cost is the tokens we already pay today — nothing regresses. If it *rejects* the field, the fallback errors and the failover chain breaks, which is the real risk worth 5 minutes of testing.
 
 ---
@@ -74,6 +82,11 @@ Items are added as local development work creates production requirements. Check
 - [x] **Env/model diagnostics confirmed on the live box** — Confirmed 2026-09-05
   - Boot log shows `Env: NODE_ENV=production | cwd=/opt/smartsht/current/server` and `Env file: ✓ loaded …/dist/server/.env` — that path is a **symlink → `/opt/smartsht/.env`** (the reconciled shared file), so effective config is correct: `GROQ_MODEL=qwen/qwen3.6-27b`, Clerk/DB/S3 all ✓, ONNX model resolved. The env-loading fix (#24) works; `loadEnv()` picks the symlinked compiled-dir `.env`, which resolves to the same reconciled file as `server/.env`.
   - Verified `application/wasm` gzip is live: assets serve `content-encoding: gzip` + `content-type: application/wasm` + 30d cache.
+
+- [x] **Move Groq and OpenRouter to `qwen/qwen3.8-27b`** — Completed 2026-10-08
+  - Groq retired `qwen/qwen3.6-27b` (404 `model_not_found` on every call). Set `GROQ_MODEL` and `OPENROUTER_MODEL` to `qwen/qwen3.8-27b` in `/opt/smartsht/.env` and `/opt/smartsht/current/server/.env` (backups: `*.bak-model-20261008-*`), then `pm2 restart smartsht-api --update-env`.
+  - Verified: strict health 200; a 2,048-token Groq request with `reasoning_effort: 'none'` returns clean content in 0.22 s.
+  - GitHub `ENV` secret (environment `production`) re-synced from the edited `/opt/smartsht/.env` so the next deploy does not revert it. The pre-edit file's mtime matched the 2026-10-07 22:57:57 deploy sync, so only the two model lines changed.
 
 - [x] **Update `GROQ_MODEL` on production server** — Completed 2026-08-25
   - Changed to `qwen/qwen3.6-27b` (Groq's flagship replacement for deprecated llama-3.3-70b-versatile)

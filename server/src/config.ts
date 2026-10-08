@@ -19,7 +19,6 @@ const projectRoot = path.resolve(__dirname, '../..')
 const KNOWN_GROQ_MODELS = new Set([
   'openai/gpt-oss-120b',
   'openai/gpt-oss-20b',
-  'qwen/qwen3.6-27b',
   'qwen/qwen3.8-27b',
   'qwen/qwen3-32b',
   'qwen-qwq-32b',
@@ -52,7 +51,7 @@ const validatedProviderOrder = rawProviderOrder.filter((p): p is AllowedProvider
 // ─── Validate Groq model ────────────────────────────────────────────────────
 
 /** Must match GROQ_MODEL in server/.env.example, .env.example, and the README. */
-export const DEFAULT_GROQ_MODEL = 'qwen/qwen3.6-27b'
+export const DEFAULT_GROQ_MODEL = 'qwen/qwen3.8-27b'
 
 const groqModel = process.env.GROQ_MODEL ?? DEFAULT_GROQ_MODEL
 if (groqModel && !KNOWN_GROQ_MODELS.has(groqModel)) {
@@ -164,8 +163,10 @@ export const config = {
 
   // OpenRouter (optional primary)
   openRouterApiKey: process.env.OPENROUTER_API_KEY ?? '',
-  openRouterModel: process.env.OPENROUTER_MODEL ?? 'qwen/qwen3-32b',
+  openRouterModel: process.env.OPENROUTER_MODEL ?? 'qwen/qwen3.8-27b',
   openRouterBaseUrl: process.env.OPENROUTER_BASE_URL ?? 'https://openrouter.ai/api/v1',
+  // OpenRouter rejects (402) any request whose max_tokens exceeds what the remaining credit balance covers.
+  openRouterMaxTokens: Number(process.env.OPENROUTER_MAX_TOKENS) || 1024,
 
   // Hugging Face Inference Router (optional primary)
   huggingFaceApiKey: process.env.HUGGINGFACE_API_KEY ?? '',

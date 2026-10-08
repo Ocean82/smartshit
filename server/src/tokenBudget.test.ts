@@ -10,8 +10,9 @@
  * whose JSON bytes exceed the configured ceiling must be trimmed below it
  * before send, regardless of token count.
  *
- * Both guards drop lowest-priority context first, then oldest history, and
- * ALWAYS preserve the final user message. They are pure and must not mutate
+ * Both guards drop few-shot/history turns oldest-first, then cut the system
+ * prompt from its tail (context before rules), and ALWAYS preserve the final
+ * user message. They are pure and must not mutate
  * their input.
  */
 import { describe, expect, it } from 'vitest'
@@ -47,6 +48,21 @@ describe('trimMessagesForProvider (F9(1) — token window guard)', () => {
 
     expect(checkOverflow('ollama', trimmed)).toBe(0) // guard closed the overflow
     expect(trimmed[trimmed.length - 1]).toEqual(msgs[msgs.length - 1]) // final user msg preserved
+  })
+
+  it('keeps the system prompt instructions while dropping turns and trailing context', () => {
+    const msgs: ChatMessage[] = [
+      { role: 'system', content: 'RULES: answer from the sheet.\n' + 'x'.repeat(40_000) },
+      { role: 'user', content: '[Style example] q' },
+      { role: 'assistant', content: 'a' },
+      { role: 'user', content: 'What is the total?' },
+    ]
+    const trimmed = trimMessagesForProvider('ollama', msgs)
+
+    expect(checkOverflow('ollama', trimmed)).toBe(0)
+    expect(trimmed.map((m) => m.role)).toEqual(['system', 'user'])
+    expect(trimmed[0].content.startsWith('RULES: answer from the sheet.')).toBe(true)
+    expect(trimmed[0].content).toContain('[context truncated')
   })
 
   it('preserves the final user message even when nothing else can be trimmed', () => {
