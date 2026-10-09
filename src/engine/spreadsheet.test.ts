@@ -333,28 +333,32 @@ describe('executeAIFormula — regex and parser edge cases', () => {
   })
 
   /**
-   * O4 limitation — documented: nested parentheses in arguments are not parsed.
-   * We verify the function still executes rather than crashing (graceful degradation),
-   * and that the limitation is not silently turned into a wrong result that would
-   * mislead the user. This test intentionally documents the known boundary.
+   * O4: the regex fallback does not evaluate nested calls, but it must keep them
+   * whole. Commas inside a nested call's parentheses are not argument separators.
    */
-  it('O4 — does not crash on arguments with nested parentheses (graceful degradation)', async () => {
+  it('O4 — keeps a nested call as one argument instead of splitting on its inner commas', async () => {
     const engine = new SpreadsheetEngine()
+    let receivedArgs: unknown[] = []
     engine.aiRegistry.registerFunction(
       {
         name: 'AI.EXPLAIN',
         description: '',
         abstract: '',
         category: 'AI',
-        syntax: 'AI.EXPLAIN(value)',
+        syntax: 'AI.EXPLAIN(value, [mode])',
         parameters: [],
         isAsync: false,
       },
-      (arg) => `explained: ${String(arg)}`,
+      (...args) => {
+        receivedArgs = args
+        return 'done'
+      },
     )
-    // The mini-parser will pass `IF(A1>0,"pos","neg")` as a raw string argument;
-    // that is acceptable behaviour for the current implementation.
-    await expect(engine.executeAIFormula('A1', '=AI.EXPLAIN(IF(A1>0,"pos","neg"))', () => null, 'sheet1')).resolves.not.toThrow()
+    await engine.executeAIFormula('A1', '=AI.EXPLAIN(IF(A1>0,"pos","neg"), "short")', () => null, 'sheet1')
+    expect(receivedArgs).toEqual(['IF(A1>0,"pos","neg")', 'short'])
+
+    await engine.executeAIFormula('A1', '=AI.EXPLAIN(ROUND(SUM(1,2),0),"a,b")', () => null, 'sheet1')
+    expect(receivedArgs).toEqual(['ROUND(SUM(1,2),0)', 'a,b'])
     engine.destroy()
   })
 })

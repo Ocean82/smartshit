@@ -143,6 +143,68 @@ describe('clipboard', () => {
     expect(useStore.getState().getActiveSheet().cells['A1']?.value).toBe('src')
   })
 
+  describe('pasteFromClipboard when the OS clipboard holds our own copy', () => {
+    /** Round-trips through a fake OS clipboard; Windows returns CRLF line endings. */
+    function stubRoundTripClipboard() {
+      let written = ''
+      const write = vi.fn(async (items: FakeClipboardItem[]) => {
+        written = await items[0].getType('text/plain').then((b) => b.text())
+      })
+      const readText = vi.fn(async () => written.replace(/\n/g, '\r\n'))
+      vi.stubGlobal('navigator', { clipboard: { write, readText } })
+      vi.stubGlobal('ClipboardItem', FakeClipboardItem)
+      return { waitForWrite: () => vi.waitFor(() => expect(written).not.toBe('')) }
+    }
+
+    it('cut then keyboard paste moves the cells and clears the source', async () => {
+      const { waitForWrite } = stubRoundTripClipboard()
+      useStore.getState().setSelection({ startRow: 0, startCol: 0, endRow: 1, endCol: 1 })
+      useStore.getState().setCellValue('A2', 'row2')
+      useStore.getState().cut()
+      await waitForWrite()
+
+      useStore.getState().setSelection({ startRow: 4, startCol: 4, endRow: 4, endCol: 4 })
+      await useStore.getState().pasteFromClipboard()
+
+      const sheet = useStore.getState().getActiveSheet()
+      expect(sheet.cells['E5']?.value).toBe('src')
+      expect(sheet.cells['F5']?.value).toBe(2)
+      expect(sheet.cells['E6']?.value).toBe('row2')
+      expect(sheet.cells['A1']).toBeUndefined()
+      expect(sheet.cells['A2']).toBeUndefined()
+      expect(useStore.getState().clipboard).toBeNull()
+    })
+
+    it('copy then keyboard paste keeps cell formats', async () => {
+      const { waitForWrite } = stubRoundTripClipboard()
+      useStore.getState().setCellFormat('A1', { bold: true })
+      useStore.getState().copy()
+      await waitForWrite()
+
+      useStore.getState().setSelection({ startRow: 3, startCol: 0, endRow: 3, endCol: 0 })
+      await useStore.getState().pasteFromClipboard()
+
+      const sheet = useStore.getState().getActiveSheet()
+      expect(sheet.cells['A4']?.value).toBe('src')
+      expect(sheet.cells['A4']?.format?.bold).toBe(true)
+      expect(sheet.cells['A1']?.value).toBe('src')
+    })
+
+    it('external text copied after a cut is pasted as text and leaves the cut source alone', async () => {
+      const readText = vi.fn().mockResolvedValue('external')
+      vi.stubGlobal('navigator', { clipboard: { readText } })
+      useStore.getState().cut()
+
+      useStore.getState().setSelection({ startRow: 4, startCol: 4, endRow: 4, endCol: 4 })
+      await useStore.getState().pasteFromClipboard()
+
+      const sheet = useStore.getState().getActiveSheet()
+      expect(sheet.cells['E5']?.value).toBe('external')
+      expect(sheet.cells['A1']?.value).toBe('src')
+      expect(useStore.getState().clipboard).toBeNull()
+    })
+  })
+
   it('cut paste overlapping destination does not clear overwritten source cells', () => {
     const store = useStore.getState()
     store.setSelection({ startRow: 0, startCol: 0, endRow: 0, endCol: 1 })

@@ -62,6 +62,12 @@ function coerceValue(raw: string): string | number | boolean | null {
   return raw
 }
 
+/** Compare clipboard text ignoring CRLF vs LF and one trailing newline (OS-dependent). */
+function sameClipboardText(a: string, b: string): boolean {
+  const normalize = (s: string) => s.replace(/\r\n/g, '\n').replace(/\n$/, '')
+  return normalize(a) === normalize(b)
+}
+
 /** Best-effort write of a cell block to the OS clipboard. Never throws. */
 async function writeToOsClipboard(
   cells: Record<string, CellData>,
@@ -999,6 +1005,14 @@ export function createWorkbookActions(
           } catch {
             text = null;
           }
+        }
+
+        // Our own copy/cut round-trips through the OS clipboard as text; paste it in-app
+        // so formats, links, and the cut-move survive.
+        const { clipboard } = get();
+        if (text && clipboard && sameClipboardText(text, encodeCellBlock(clipboard.cells, clipboard.selection).text)) {
+          get().paste();
+          return;
         }
 
         if (text) {

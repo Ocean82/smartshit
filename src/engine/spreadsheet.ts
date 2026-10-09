@@ -518,6 +518,7 @@ export class SpreadsheetEngine {
     let current = '';
     let inString = false;
     let stringChar = '';
+    let depth = 0;
 
     for (let i = 0; i < argsStr.length; i++) {
       const ch = argsStr[i];
@@ -530,7 +531,13 @@ export class SpreadsheetEngine {
         inString = true;
         stringChar = ch;
         current += ch;
-      } else if (ch === ',') {
+      } else if (ch === '(') {
+        depth++;
+        current += ch;
+      } else if (ch === ')') {
+        depth = Math.max(0, depth - 1);
+        current += ch;
+      } else if (ch === ',' && depth === 0) {
         args.push(current);
         current = '';
       } else {

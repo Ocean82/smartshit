@@ -455,6 +455,8 @@ export async function callProviderWithFailover(
     } catch (err) {
       attemptAbort.abort()
       lastError = err instanceof Error ? err : new Error(String(err))
+      // A user cancel is not a provider fault: don't trip its breaker or try the next one.
+      if (options.signal?.aborted) throw lastError
       recordFailure(provider)
       console.warn(`[providers] ${provider} failed, trying next:`, lastError.message)
 
@@ -512,16 +514,13 @@ export async function callProviderStreamWithFailover(
       return response
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err))
+      // A user cancel is not a provider fault: don't trip its breaker or try the next one.
+      if (signal.aborted) throw lastError
       recordFailure(provider)
       console.warn(`[providers] ${provider} stream failed, trying next:`, lastError.message)
 
       if (provider === 'groq') {
         recordGroqFallback()
-      }
-
-      // If the signal was aborted, don't try more providers — user cancelled
-      if (signal.aborted) {
-        throw lastError
       }
     }
   }
