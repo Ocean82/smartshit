@@ -61,15 +61,15 @@ Gate before uniqueness spend (smoke-test after sync):
 5. Safe edits with preview / undo  
 6. No marketing claims for stub surfaces  
 
-### P1 — Competitive polish (including formatting sandbox) — **NEXT**
+### P1 — Competitive polish (including formatting sandbox) — **COMPLETE (2026-10-08)**
 
 | ID | Work | Outcome |
 |----|------|---------|
 | P1.1 | Extend `format_cells` | **DONE** — `CellFormat` surface (underline, strikethrough, fontFamily, textAlign, verticalAlign, textWrap, borders) wired through `buildFormatPatch`, `FormatCellsParams`, and the tool registry schema. |
 | P1.2 | Layout tools | **DONE** — `set_column_width`, `set_row_height`, `auto_fit` agent tools + ExecutionContext hooks delegating to the existing undoable store methods. |
 | P1.3 | Parser phrases | **DONE** — `parseLayoutPhrase` routes column width / row height / auto-fit through both the client parser and server `actTemplates`; false-positive corpus green. |
-| P1.4 | Style recipes | Bounded macros: `header`, `total_row`, `table_polish` (preview once) |
-| P1.5 | Free-tier alignment | Gate auto-fix depth, not first understanding |
+| P1.4 | Style recipes | **DONE** — `header`, `total_row`, `table_polish` in `src/lib/styleRecipes.ts`, routed by the parser and `actTemplates` with one preview. |
+| P1.5 | Free-tier alignment | **DONE** — the audit is free; only auto-fix is gated (`FREE_AUTOFIX_LIFETIME_LIMIT` in `src/lib/featureGates.ts`). |
 
 **In scope:** cell styles, borders, fonts, sizes, alignment, wrap, row/col sizing, preset recipes.  
 **Out of scope:** Excel group/outline hierarchy (unless UI supports it), unbounded “make it pretty”, open autonomy loops.

@@ -40,7 +40,7 @@ export const FEATURE_GATE_COPY: Record<GatedFeature, FeatureGateConfig> = {
   'ai-chat': {
     feature: 'ai-chat',
     headline: "You're getting great use out of the AI",
-    description: "You've asked 7 questions today — that's the free daily limit. Upgrade to Pro for unlimited AI chat so you never hit a wall mid-workflow.",
+    description: `You've asked ${FREE_DAILY_CHAT_LIMIT} questions today — that's the free daily limit. Upgrade to Pro for unlimited AI chat so you never hit a wall mid-workflow.`,
     ctaLabel: 'Upgrade to Pro — $7/month',
   },
   'auto-fix': {
@@ -52,7 +52,7 @@ export const FEATURE_GATE_COPY: Record<GatedFeature, FeatureGateConfig> = {
   'cloud-save': {
     feature: 'cloud-save',
     headline: 'Save more to the cloud',
-    description: 'Free accounts include 1 cloud workbook. Upgrade to Pro for unlimited cloud storage, automatic backups, and access from any device.',
+    description: `Free accounts include ${FREE_CLOUD_WORKBOOK_LIMIT} cloud workbook${FREE_CLOUD_WORKBOOK_LIMIT === 1 ? '' : 's'}. Upgrade to Pro for unlimited cloud storage, automatic backups, and access from any device.`,
     ctaLabel: 'Upgrade for unlimited cloud',
   },
   'version-history': {

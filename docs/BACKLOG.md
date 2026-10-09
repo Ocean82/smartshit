@@ -160,7 +160,7 @@ M 1–2 days, L more.
 - [ ] Selection-based suggestions and an "Explain cell" context-menu entry (S–M).
 - [ ] Import warning for formulas the engine is known to get wrong (S).
 - [ ] Engine golden tests for upstream issues #312, #283, #295, #319, #285 (S).
-- [ ] Use `FREE_DAILY_LIMIT` in the AI upgrade copy instead of "7" (`featureGates.ts:43`) (S).
+- [x] Use `FREE_DAILY_LIMIT` in the AI upgrade copy instead of "7" (`featureGates.ts:43`) (S) — done 2026-10-08, along with the cloud-workbook count and the auto-fix "used" count.
 
 ## Later / larger
 

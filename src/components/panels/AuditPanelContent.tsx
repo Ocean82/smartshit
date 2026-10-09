@@ -13,7 +13,7 @@ import { CustomRulesSection } from './CustomRulesSection'
 import { UpgradeGate } from '@/components/UpgradeGate'
 import { useUsage } from '@/auth'
 import { useWorkbookFileImport } from '@/hooks/useWorkbookFileImport'
-import { canAutoFix, recordAutoFixUse, autoFixRemaining } from '@/lib/featureGates'
+import { canAutoFix, recordAutoFixUse, autoFixRemaining, FREE_AUTOFIX_LIFETIME_LIMIT } from '@/lib/featureGates'
 import { ShieldCheck, Loader2, RefreshCw, X } from 'lucide-react'
 
 const SEVERITY_FILTERS = ['all', 'critical', 'high', 'medium', 'low', 'info'] as const
@@ -294,7 +294,7 @@ export function AuditPanelContent() {
         {showUpgradeGate && (
           <UpgradeGate
             feature="auto-fix"
-            contextDetail={`${autoFixRemaining(isPro)} of 3 free fixes used`}
+            contextDetail={`${FREE_AUTOFIX_LIFETIME_LIMIT - autoFixRemaining(isPro)} of ${FREE_AUTOFIX_LIFETIME_LIMIT} free fixes used`}
             onDismiss={() => setShowUpgradeGate(false)}
           />
         )}
