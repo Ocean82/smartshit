@@ -83,6 +83,16 @@ Items are added as local development work creates production requirements. Check
   - Boot log shows `Env: NODE_ENV=production | cwd=/opt/smartsht/current/server` and `Env file: ✓ loaded …/dist/server/.env` — that path is a **symlink → `/opt/smartsht/.env`** (the reconciled shared file), so effective config is correct: `GROQ_MODEL=qwen/qwen3.6-27b`, Clerk/DB/S3 all ✓, ONNX model resolved. The env-loading fix (#24) works; `loadEnv()` picks the symlinked compiled-dir `.env`, which resolves to the same reconciled file as `server/.env`.
   - Verified `application/wasm` gzip is live: assets serve `content-encoding: gzip` + `content-type: application/wasm` + 30d cache.
 
+- [x] **Tidy production `.env`: trim `GROQ_API_KEY`, pin `CORS_ORIGIN`** — Completed 2026-10-08
+  - Removed a trailing space from `GROQ_API_KEY`; set `CORS_ORIGIN=https://smartsht.com,https://www.smartsht.com` so production no longer allows the localhost dev origins. Backups: `*.bak-tidy-*`.
+  - Applied to `/opt/smartsht/.env` and `/opt/smartsht/current/server/.env`, restarted, and synced the GitHub `ENV` secret from the same file.
+  - Verified: strict health 200; CORS allows both smartsht.com origins and rejects `http://localhost:5173`; Groq accepts the trimmed key.
+
+- [x] **Remove `NODE_TLS_REJECT_UNAUTHORIZED=0` from the pm2 process** — Completed 2026-10-08
+  - The override lived only in pm2's saved process env (since the 2026-09-20 RDS migration), not in `.env` or the repo. It disabled certificate checks for outbound HTTPS (Stripe, Clerk, Groq).
+  - Verified first that RDS (`sslmode=require`, `rejectUnauthorized: true`), Stripe, Clerk, and Groq all pass full TLS verification without it.
+  - Recreated the process without it (`pm2 start dist/server/src/index.js --name smartsht-api --node-args="--enable-source-maps" --merge-logs --time`, `NODE_ENV=production`) and ran `pm2 save`. Strict health 200; public `/` and `/health` 200. Deploys keep using `pm2 restart smartsht-api --update-env`, which does not reintroduce it.
+
 - [x] **Move Groq and OpenRouter to `qwen/qwen3.8-27b`** — Completed 2026-10-08
   - Groq retired `qwen/qwen3.6-27b` (404 `model_not_found` on every call). Set `GROQ_MODEL` and `OPENROUTER_MODEL` to `qwen/qwen3.8-27b` in `/opt/smartsht/.env` and `/opt/smartsht/current/server/.env` (backups: `*.bak-model-20261008-*`), then `pm2 restart smartsht-api --update-env`.
   - Verified: strict health 200; a 2,048-token Groq request with `reasoning_effort: 'none'` returns clean content in 0.22 s.
