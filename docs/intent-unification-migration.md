@@ -1,5 +1,12 @@
 # Intent System Unification — Migration Notes
 
+> **Status (2026-10-09):** historical. The pipeline now has more stages than described here:
+> goal router, agent parser, template resolver, intent classifier, semantic capability router,
+> macro planner, deterministic dispatcher, and LLM gateway (`src/ai/pipeline/stages/`). There is
+> no `brainDispatcher`; the embedding classifier already runs as the intent-classifier stage, so
+> "How to Re-enable NLP" below is stale. Step 6 (delete the deprecated `processMessage()` in
+> `src/ai/brain.ts`) is still open — tracked in `docs/BACKLOG.md` section 8.
+
 ## Summary
 
 Replaced 6 competing intent/routing systems with a single ordered PipelineRouter.

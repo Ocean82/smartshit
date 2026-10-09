@@ -8,6 +8,10 @@ commit `04b3a62` (see `src/lib/persistence.ts`, `src/main.tsx`):
 - `loadPersistedState` quarantines a corrupt payload to
   `smartsht-state-v1.corrupt` before returning `null`.
 
+> **Status (2026-10-09):** item 2 is done — IndexedDB is the main store
+> (`src/lib/idbStorage.ts`, `src/lib/persistence.ts`) with a localStorage mirror for unload.
+> Item 1 (LRU eviction) is not started and is tracked in `docs/BACKLOG.md` section 7.
+
 The two items below were **deliberately deferred** — they are larger than the
 data-loss fix warranted, and one conflicts with the project's stability rules.
 They are optional improvements, not open bugs.

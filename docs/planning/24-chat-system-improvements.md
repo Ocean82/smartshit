@@ -1,7 +1,7 @@
 # Chat System Improvements: Phased Implementation Plan
 
 > **Status (2026-07-11):**
-> - Phase 1 (LLM intent parsing): **Done** (`server/src/llmIntentParser.ts`)
+> - Phase 1 (LLM intent parsing): **Superseded** — `server/src/llmIntentParser.ts` was deleted; `server/src/intentParser.ts` re-exports the keyword parser in `shared/`, and routing happens in the client pipeline (`src/ai/pipeline/stages/`). References to `llmIntentParser.ts` below are historical. (2026-10-09)
 > - Phase 2 (clarification on low confidence): **Done** (`intentConfidenceThreshold`)
 > - Phase 3 (conversation history context): **Partial** (`insightsSnapshot` / prior insights)
 > - Phase 4 (vector embeddings): **Deferred** — token-overlap suggestion scoring shipped in `server/src/suggestions.ts` (embeddings optional later)

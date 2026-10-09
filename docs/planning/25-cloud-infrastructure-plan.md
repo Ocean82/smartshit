@@ -1,6 +1,6 @@
 # Cloud Infrastructure Plan: RDS + S3 Integration
 
-> **Status**: Planning — ready for implementation
+> **Status**: Implemented (checked 2026-10-09) — `server/src/{db,s3}.ts`, workbook/version/share/template routes, `src/lib/cloudSync.ts`, `WorkbookPicker`, `VersionHistoryPanel`, `ShareDialog`, `SharedView`. Share links are view-only by design (`server/src/routes/shares.ts` rejects `edit`).
 > **Priority**: High — resolves the #1 user trust issue ("where does my data go?")
 > **AWS Resources**: RDS PostgreSQL (`burntbeats-db.cgnemc2qmel7.us-east-1.rds.amazonaws.com`), S3 (`burntbeatz2-storage`, us-east-1)
 

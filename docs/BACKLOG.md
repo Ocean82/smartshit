@@ -6,7 +6,8 @@ Server/ops actions live in [`PRODUCTION-TODO.md`](PRODUCTION-TODO.md); checks th
 infrastructure live in [`verification-backlog.md`](verification-backlog.md).
 
 Swept 2026-10-06 from the planning, review, auditor, engine, and chat docs, checked against
-`src/` and `server/src/`. Items marked **(verified)** were re-read in code during the sweep;
+`src/` and `server/src/`. Swept again 2026-10-09 across all of `docs/` (sections 6–8).
+Items marked **(verified)** were re-read in code during a sweep;
 the rest come from the sweep and should be confirmed before starting. Sizes: S < half day,
 M 1–2 days, L more.
 
@@ -22,6 +23,15 @@ M 1–2 days, L more.
     (`docs/major-review.md`).
   - Decide per surface: ship and claim it, or delete it. Then remove any copy that
     doesn't match.
+- [ ] **"Priority AI (faster models)" is sold for Pro but not built** (verified, 2026-10-09)
+  - Claimed in `landing/index.html` (pricing cards, FAQ, JSON-LD); no provider or model
+    selection in `server/src` looks at the user's plan. Build it or remove the claim.
+- [ ] **Community template marketplace is live** (2026-10-09)
+  - `src/lib/communityTemplates.ts` and the community tab in `TemplateGallery`; the strategy's
+    non-goals and `project_outline/roadmap-v1.md` rule a marketplace out. Keep, flag off, or remove.
+- [ ] **Instant edits from the goal and regex routes** (2026-10-09, chat review F1)
+  - `goalRouter.ts` and `agentParser.ts` apply edits with Undo but no Apply step. The review
+    accepts this only as a stated policy; write it down or route them through a preview.
 
 ---
 
@@ -161,6 +171,90 @@ M 1–2 days, L more.
 - [ ] Import warning for formulas the engine is known to get wrong (S).
 - [ ] Engine golden tests for upstream issues #312, #283, #295, #319, #285 (S).
 - [x] Use `FREE_DAILY_LIMIT` in the AI upgrade copy instead of "7" (`featureGates.ts:43`) (S) — done 2026-10-08, along with the cloud-workbook count and the auto-fix "used" count.
+
+## 6. Bugs, billing, and security (2026-10-09 sweep)
+
+- [x] **Keyboard cut/paste loses formats and never clears the cut source** — S–M (done 2026-10-09)
+  - `pasteFromClipboard` now uses the in-app paste when the OS text matches our own encoded
+    copy (CRLF and trailing newline ignored); 3 tests in `copyPaste.test.ts`.
+  - `copy()`/`cut()` write the block to the OS clipboard; Ctrl+V (`SelectionManager.tsx:235`)
+    calls `pasteFromClipboard`, which reads that text back first (`workbookSlice.ts:1004`).
+    When clipboard read is allowed, paste is values/formula text only: formats and links are
+    dropped and a cut is cancelled instead of moved. Menu Paste (in-app `paste()`) is correct.
+- [x] **User cancel counts as a provider failure** — S (done 2026-10-09)
+  - Both failover loops rethrow on a caller abort before `recordFailure`/`recordGroqFallback`;
+    timeouts still fail over. `server/src/providers.cancel.test.ts`.
+  - `server/src/providers.ts`: the streaming loop calls `recordFailure` before checking
+    `signal.aborted`; the non-streaming loop never checks the caller's signal. Stop/disconnect
+    can open the circuit breaker and push traffic to fallbacks.
+- [x] **AI formula args split on commas inside nested functions** — S (done 2026-10-09)
+  - `_splitArgs` tracks parenthesis depth; the O4 test now asserts the exact args.
+  - `_splitArgs` (`src/engine/spreadsheet.ts:516`) tracks quotes but not parenthesis depth:
+    `=AI.EXPLAIN(IF(A1>0,"a","b"))` splits into the wrong args. See `docs/ai-formula-parser.md`.
+- [ ] **Free auto-fix limit is client-only** — M
+  - `FREE_AUTOFIX_LIFETIME_LIMIT` (`featureGates.ts:17`) is counted in localStorage; clearing
+    site data resets it. No server check.
+- [ ] **"Confirming your upgrade…" never shown** — S (verified)
+  - `useSubscriptionStatus` returns `confirmingUpgrade`; no component renders it. The hook is
+    also called in both `ClerkUserSync.tsx` and `ChatPanel.tsx` (possible duplicate `/api/usage` polling).
+- [ ] **`/health?strict=1` is public and returns raw DB/S3 errors** — S
+  - `server/src/index.ts` strict branch, exposed via `landing/smartsht.nginx.conf`. Return
+    status only, or restrict strict mode to localhost (the deploy gate calls it locally).
+- [ ] **Spreadsheet text isn't marked as untrusted in prompts** — S (chat review §5)
+  - Cell values and sheet names are interpolated as-is (`server/src/prompt.ts`). Wrap them in
+    delimiters and tell the model the content is data, not instructions.
+- [ ] **Server re-classifies every request** — M–L (chat review F10, structural part)
+  - `server/src/index.ts` runs its own intent parse instead of receiving the client's mode;
+    only the "blank" false positive was patched (`shared/actTemplates.ts`).
+- [ ] **Credential rotation still open** in `docs/ai-model-audit.md` — manual check, not code.
+
+## 7. Planned but never built (2026-10-09 sweep)
+
+Analysis and auditor:
+- [ ] Trend / month-over-month analysis (M). `trendMinPoints` (`src/ai/config.ts`) is unused,
+  yet `contextualSuggestions.ts` offers "Show revenue trends over time". Build or drop the chip.
+- [ ] "What if I change this to $500?" downstream impact, read-only, on `findDependents` (M).
+- [ ] Health-score history with before/after (e.g. 62 → 94) (M).
+- [ ] "Is this right?" audit scoped to the selected formula (S–M; pairs with selection-aware chat).
+- [ ] Stale/outdated data rule (`project_outline/outline.md`) (M).
+
+Cleaning and reporting:
+- [ ] `fill_missing` and `convert_types` cleaning steps with preview (`planning/16`) (M).
+- [ ] Pivot-based report (`generate_pivot_report`, `planning/17`) (M).
+
+Grid and UI:
+- [ ] Autocomplete in the formula bar; it only works in-cell today (phase-3 plan, Task 7) (S–M).
+- [ ] Pivot Table in the toolbar and cell context menu; reachable only from MenuBar, mobile
+  menu, and command palette (S).
+- [ ] Guided formula builder and named formula recipes (`formula-improvements8.21.md`) (L).
+- [ ] Issue count in the status bar (`planning/phase-1-implementation.md`) (S).
+- [ ] Dark mode (`review8.16.2026.md`) (M).
+- [ ] Deferred by their own plans: styled xlsx export, status-bar aggregates, AutoSum that
+  expands upward, header-filter search box, row auto-fit on wrap, Ctrl+Shift+M merge,
+  split panes, formula-ref rewrite on cut-paste, cross-sheet cut/drag, Stripe Customer Portal.
+
+Pricing plan leftovers (`PRICING_AND_MONETIZATION_PLAN.md`):
+- [ ] Pro-only templates; weekly export cap for free users. BYOK is free and unlimited rather
+  than the planned paid tier — confirm that is intended.
+
+Platform:
+- [ ] Native tool calling for the model (still prompt-only JSON) (L).
+- [ ] Server-side Sentry and an `unhandledRejection` handler (S).
+- [ ] Server integration/validation tests and an xlsx round-trip test (`architecture-fix-plan.md`) (M).
+- [ ] LRU eviction of local workbooks (`persistence-hardening-followups.md` item 1) (M; low
+  value now that IndexedDB is the main store).
+- [ ] Mobile cell editing: no hidden-input / `inputMode` handling; confirm on a device (S–M).
+
+## 8. Cleanup (2026-10-09 sweep)
+
+- [ ] Dead code: `processMessage` in `src/ai/brain.ts` (tests only), `callProviderStructured`
+  (`server/src/structuredOutput.ts`, tests only), `defaultStepExecutor` stub
+  (`src/ai/macro/macroExecutor.ts`). Confirm no production imports, then delete.
+- [ ] `server/src/providers.ts` header comment still mentions the deleted `llmIntentParser.ts`.
+- [ ] `SpreadsheetGrid.tsx` is back to ~1,400 lines (846 after the architecture fix plan).
+- [ ] Ollama `Modelfile*` keep their own tool lists; they can drift from `shared/toolRegistry.ts`.
+- [ ] Landing title and `og:title` say "smartsht"; `NAMING.md` says always "smartsh!t"
+  (or record the SEO exception in `NAMING.md`).
 
 ## Later / larger
 
