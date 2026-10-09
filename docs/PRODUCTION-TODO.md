@@ -8,22 +8,26 @@ Items are added as local development work creates production requirements. Check
 
 ## Pending
 
-- [ ] **Deploy the OpenRouter `max_tokens` cap** — added 2026-10-08
-  - Live logs on 2026-10-08 show OpenRouter returning 402: the account (free tier, $0.18 used) "can only afford" ~1,056–1,717 tokens while the app requests `max_tokens: 2048`. A 5-token probe still succeeds, so key checks look green while real calls fail.
-  - Code fix (pending deploy): `OPENROUTER_MAX_TOKENS` (default 1024) caps server-funded OpenRouter calls in `server/src/providers.ts`; BYOK is unaffected. Lower it in `/opt/smartsht/.env` if the balance keeps shrinking; the cap only buys time while credits drain.
-  - Verify after deploy: no new `openrouter ... (402)` lines in `pm2 logs smartsht-api`.
+- [ ] **OpenRouter still pays for hidden reasoning** — added 2026-10-09 (optional)
+  - `reasoning: { exclude: true }` hides the reasoning but the model still reasons: a "reply PROBE_OK" call used 48 completion tokens with the flag vs 56 without (~40 of the 48 are reasoning). Those tokens also count against the 1024 cap.
+  - If credits or truncation become a problem, try OpenRouter's `reasoning: { effort: "none" }` / `enabled: false` for `qwen/qwen3.8-27b` (verify the model accepts it first; a rejected field breaks the fallback).
 
 - [x] **Ollama's role on this box** — decided 2026-10-08: keep as last fallback
   - Host is 2 CPU cores, 7.6 GB RAM, no GPU. `smartshit` (Qwen3 4B Q4) took 55.6 s for a 40-token reply; the logs show "Request aborted while streaming from ollama". Expect it to time out when both cloud providers fail.
 
-- [ ] **Confirm OpenRouter `reasoning.exclude` against the live API** — added 2026-09-28
-  - Context: the plumbing shipped (see Completed below), but only against a mocked `fetch`. Nobody has watched a real OpenRouter response come back without a reasoning phase.
-  - Verify: one live streaming call through the OpenRouter fallback (temporarily point the primary provider at an invalid key to force failover, or call `chatWithOpenAiCompatibleStream` directly against the production key) with `qwen/qwen3.8-27b`. Confirm no `delta.reasoning` arrives, output matches Groq's clean shape, and `usage.completion_tokens` drops versus the same call without the flag.
-  - Priority: low. If OpenRouter silently ignores the field the only cost is the tokens we already pay today — nothing regresses. If it *rejects* the field, the fallback errors and the failover chain breaks, which is the real risk worth 5 minutes of testing.
-
 ---
 
 ## Completed
+
+- [x] **Deploy the OpenRouter `max_tokens` cap** — Deployed 2026-10-08 (`2188019`), verified 2026-10-09
+  - Context: OpenRouter returned 402 ("can only afford 1056") while the app requested `max_tokens: 2048`.
+  - `OPENROUTER_MAX_TOKENS` is not set in `/opt/smartsht/.env`, so the code default (1024) applies; BYOK is unaffected.
+  - Verified: the error log has 30 such 402 lines, the last at 2026-10-08 15:17, none after the deploy (20:39 UTC). Groq has not failed over since, so a live streaming probe with the production key at `max_tokens: 1024` was run on the box: HTTP 200.
+  - Lower the cap in `/opt/smartsht/.env` (and the GitHub `ENV` secret) if the balance keeps shrinking.
+
+- [x] **Confirm OpenRouter `reasoning.exclude` against the live API** — Verified 2026-10-09
+  - Live streaming call to `qwen/qwen3.8-27b` with the production key: HTTP 200, the field is accepted (the failover chain is safe), no `reasoning` deltas (50 without the flag), content `PROBE_OK`.
+  - Token savings are small (48 vs 56 completion tokens): see the Pending item above.
 
 - [x] **Suppress reasoning on the OpenRouter fallback (Option 2)** — Fixed 2026-09-28
   - Goal: the OpenRouter/HF fallback should produce output as clean as Groq's `reasoning_effort: 'none'`, without paying for a reasoning phase we discard.
