@@ -23,9 +23,9 @@ M 1–2 days, L more.
     (`docs/major-review.md`).
   - Decide per surface: ship and claim it, or delete it. Then remove any copy that
     doesn't match.
-- [ ] **"Priority AI (faster models)" is sold for Pro but not built** (verified, 2026-10-09)
-  - Claimed in `landing/index.html` (pricing cards, FAQ, JSON-LD); no provider or model
-    selection in `server/src` looks at the user's plan. Build it or remove the claim.
+- [x] **"Priority AI (faster models)" was sold for Pro but not built** — resolved 2026-10-09
+  - Claim removed from `landing/index.html` (pricing cards, FAQ, JSON-LD) and `public/llms.txt`.
+    No provider selection looks at the plan; re-add the claim only if that is built.
 - [ ] **Community template marketplace is live** (2026-10-09)
   - `src/lib/communityTemplates.ts` and the community tab in `TemplateGallery`; the strategy's
     non-goals and `project_outline/roadmap-v1.md` rule a marketplace out. Keep, flag off, or remove.
@@ -191,9 +191,14 @@ M 1–2 days, L more.
   - `_splitArgs` tracks parenthesis depth; the O4 test now asserts the exact args.
   - `_splitArgs` (`src/engine/spreadsheet.ts:516`) tracks quotes but not parenthesis depth:
     `=AI.EXPLAIN(IF(A1>0,"a","b"))` splits into the wrong args. See `docs/ai-formula-parser.md`.
-- [ ] **Free auto-fix limit is client-only** — M
-  - `FREE_AUTOFIX_LIFETIME_LIMIT` (`featureGates.ts:17`) is counted in localStorage; clearing
-    site data resets it. No server check.
+- [x] **Free auto-fix limit is client-only** — M (done 2026-10-09)
+  - Signed-in users reserve each fix via `POST /api/autofix/reserve` (`server/src/autofixUsage.ts`,
+    table `smartsht.autofix_usage`, migration 006 applied in production). The limit lives in
+    `shared/config.ts`. A BYOK key no longer unlocks unlimited fixes. Signed-out use and server
+    outages fall back to the localStorage counter (`src/auth/useAutoFixGate.ts`).
+- [x] **AI health was "configured", not "working"** (done 2026-10-09)
+  - `.github/workflows/ai-probe.yml` runs `server/src/scripts/aiProbe.ts` on the box every 30
+    minutes (one real completion per cloud provider); a failure opens an `ai-probe` issue.
 - [ ] **"Confirming your upgrade…" never shown** — S (verified)
   - `useSubscriptionStatus` returns `confirmingUpgrade`; no component renders it. The hook is
     also called in both `ClerkUserSync.tsx` and `ChatPanel.tsx` (possible duplicate `/api/usage` polling).

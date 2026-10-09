@@ -1,0 +1,87 @@
+name: AI probe
+
+# Makes one tiny real completion per configured cloud provider ON the production
+# box (server/src/scripts/aiProbe.ts), using the live .env. /health only checks
+# that keys exist, so retired models (404) and empty credit balances (402) used
+# to go unnoticed. On failure an issue labeled `ai-probe` is opened (or
+# commented on); the next passing run closes it.
+#
+# Reuses the production Environment secret SSH_PRIVATE_KEY (see deploy.yml).
+# `deployment: false` reads the secrets without creating deployment records.
+# Note: GitHub pauses schedules after 60 days without repository activity.
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: ai-probe
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: production
+      deployment: false
+    env:
+      SSH_HOST: ${{ vars.SSH_HOST || 'ubuntu@52.0.207.242' }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Install SSH key
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printenv SSH_PRIVATE_KEY | sed 's/\r$//' > ~/.ssh/smartsht_probe
+          chmod 600 ~/.ssh/smartsht_probe
+          ssh-keyscan -H -T 30 "${SSH_HOST#*@}" >> ~/.ssh/known_hosts
+
+      - name: Run probe on server
+        id: probe
+        run: |
+          set +e
+          ssh -i ~/.ssh/smartsht_probe -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=30 "$SSH_HOST" \
+            'cd /opt/smartsht/current/server && node dist/server/src/scripts/aiProbe.js' > probe.txt 2>&1
+          code=$?
+          cat probe.txt
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+
+      - name: Open or update issue on failure
+        if: steps.probe.outputs.code != '0'
+        run: |
+          set -euo pipefail
+          gh label create ai-probe --repo "$GITHUB_REPOSITORY" --color B60205 \
+            --description 'Scheduled AI provider probe failures' --force
+          {
+            echo "AI probe failed (exit ${{ steps.probe.outputs.code }}) at $(date -u +%Y-%m-%dT%H:%MZ)."
+            echo
+            echo '```'
+            cat probe.txt
+            echo '```'
+            echo
+            echo "Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          } > body.md
+          issue=$(gh issue list --repo "$GITHUB_REPOSITORY" --label ai-probe --state open --json number --jq '.[0].number // empty')
+          if [ -n "$issue" ]; then
+            gh issue comment "$issue" --repo "$GITHUB_REPOSITORY" --body-file body.md
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --label ai-probe \
+              --title 'AI provider probe failing' --body-file body.md
+          fi
+          exit 1
+
+      - name: Close issue on recovery
+        if: steps.probe.outputs.code == '0'
+        run: |
+          set -euo pipefail
+          for issue in $(gh issue list --repo "$GITHUB_REPOSITORY" --label ai-probe --state open --json number --jq '.[].number' || true); do
+            gh issue close "$issue" --repo "$GITHUB_REPOSITORY" --comment "Probe passing again: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          done
