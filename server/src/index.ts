@@ -51,6 +51,7 @@ import {
 } from './tokenBudget.js'
 
 import { checkUsage, getUsageStats, reserveUsage, releaseUsage } from './usage.js'
+import { reserveAutoFix } from './autofixUsage.js'
 import { decideAiAccess, shouldRecordServerUsage } from './aiAccess.js'
 import { dbHealthCheck, closePool } from './db.js'
 import { s3HealthCheck } from './s3.js'
@@ -1037,6 +1038,18 @@ app.post('/api/usage', requireAuth, async (req, res) => {
   const status = await resolveSubscriptionStatus(userId)
   const stats = await getUsageStats(userId ?? undefined, status.isPro, status.revocationReason)
   res.json(stats)
+})
+
+// ─── Auditor auto-fix metering ───────────────────────────────────────────────
+
+app.post('/api/autofix/reserve', requireAuth, async (req, res) => {
+  const userId = getRequestUserId(req)
+  if (!userId) {
+    res.status(401).json({ error: 'Authentication required' })
+    return
+  }
+  const isPro = await resolveIsPro(userId)
+  res.json(await reserveAutoFix(userId, isPro))
 })
 
 // ─── Stripe Checkout ─────────────────────────────────────────────────────────

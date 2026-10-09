@@ -3,7 +3,7 @@
  * This is the inner content of the auditor (no outer wrapper, no visibility toggle).
  */
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { useStore } from '@/store/useStore'
 import { useShallow } from 'zustand/react/shallow'
 import { getFixAbortReason } from '@/auditor'
@@ -11,9 +11,9 @@ import type { AuditFinding, Severity } from '@/auditor/types'
 import { AuditFindingCard } from '@/components/AuditFindingCard'
 import { CustomRulesSection } from './CustomRulesSection'
 import { UpgradeGate } from '@/components/UpgradeGate'
-import { useUsage } from '@/auth'
+import { useAutoFixGate, useUsage } from '@/auth'
 import { useWorkbookFileImport } from '@/hooks/useWorkbookFileImport'
-import { canAutoFix, recordAutoFixUse, autoFixRemaining, FREE_AUTOFIX_LIFETIME_LIMIT } from '@/lib/featureGates'
+import { FREE_AUTOFIX_LIFETIME_LIMIT } from '@/lib/featureGates'
 import { ShieldCheck, Loader2, RefreshCw, X } from 'lucide-react'
 
 const SEVERITY_FILTERS = ['all', 'critical', 'high', 'medium', 'low', 'info'] as const
@@ -36,6 +36,8 @@ export function AuditPanelContent() {
   const [ruleVersion, setRuleVersion] = useState(0)
   const [fixMessage, setFixMessage] = useState<string | null>(null)
   const [showUpgradeGate, setShowUpgradeGate] = useState(false)
+  const reserveAutoFix = useAutoFixGate()
+  const fixInFlightRef = useRef(false)
   const { requestImport, fileInput } = useWorkbookFileImport({ verb: 'Import' })
 
   const activeSheet = workbook.sheets.find((s) => s.id === activeSheetId)
@@ -70,33 +72,40 @@ export function AuditPanelContent() {
     useStore.getState().setSelection({ startRow: row, startCol: col, endRow: row, endCol: col })
   }, [])
 
-  const handleFix = useCallback((finding: AuditFinding) => {
-    if (!finding.fixActions?.length) return
+  const applyFix = useCallback(async (finding: AuditFinding) => {
+    const fixActions = finding.fixActions
+    if (!fixActions?.length) return
 
-    // Gate: check if free user has remaining auto-fixes
-    if (!canAutoFix(isPro)) {
-      setShowUpgradeGate(true)
+    // Pre-flight: value writes must land in currently-empty cells. If any target
+    // is occupied (e.g. a stale card picked the same cell as a fresh fix), abort
+    // the whole batch so we never silently overwrite data. Checked again after the
+    // reservation because the sheet can change while it is in flight.
+    const preflight = (): string | null => {
+      const state = useStore.getState()
+      const sheet = state.workbook.sheets.find((s) => s.id === state.activeSheetId)
+      return sheet ? getFixAbortReason(sheet, fixActions) : 'The sheet is no longer open.'
+    }
+    const earlyAbort = preflight()
+    if (earlyAbort) {
+      setFixMessage(earlyAbort)
       return
     }
 
-    const state = useStore.getState()
-    const sheet = state.workbook.sheets.find((s) => s.id === state.activeSheetId)
-    if (!sheet) return
-    // Pre-flight: value writes must land in currently-empty cells. If any target
-    // is occupied (e.g. a stale card picked the same cell as a fresh fix), abort
-    // the whole batch so we never silently overwrite data.
-    const abortReason = getFixAbortReason(sheet, finding.fixActions)
+    const decision = await reserveAutoFix(isPro)
+    if (!decision.allowed) {
+      setShowUpgradeGate(true)
+      return
+    }
+    const abortReason = preflight()
     if (abortReason) {
       setFixMessage(abortReason)
       return
     }
     setFixMessage(null)
 
-    // Record usage for free-tier tracking
-    if (!isPro) recordAutoFixUse()
-
+    const state = useStore.getState()
     state.pushHistory('Audit auto-fix')
-    for (const action of finding.fixActions) {
+    for (const action of fixActions) {
       const { cellId, formula, value } = action
       if (formula) {
         const formulaStr = formula.startsWith('=') ? formula : `=${formula}`
@@ -106,7 +115,16 @@ export function AuditPanelContent() {
       }
     }
     setTimeout(() => handleRunAudit(), 200)
-  }, [handleRunAudit, isPro])
+  }, [handleRunAudit, isPro, reserveAutoFix])
+
+  const handleFix = useCallback((finding: AuditFinding) => {
+    // One reservation at a time, so a double-click can't spend two free fixes.
+    if (fixInFlightRef.current) return
+    fixInFlightRef.current = true
+    void applyFix(finding).finally(() => {
+      fixInFlightRef.current = false
+    })
+  }, [applyFix])
 
   const filteredFindings = result
     ? filter === 'all'
@@ -294,7 +312,7 @@ export function AuditPanelContent() {
         {showUpgradeGate && (
           <UpgradeGate
             feature="auto-fix"
-            contextDetail={`${FREE_AUTOFIX_LIFETIME_LIMIT - autoFixRemaining(isPro)} of ${FREE_AUTOFIX_LIFETIME_LIMIT} free fixes used`}
+            contextDetail={`${FREE_AUTOFIX_LIFETIME_LIMIT} of ${FREE_AUTOFIX_LIFETIME_LIMIT} free fixes used`}
             onDismiss={() => setShowUpgradeGate(false)}
           />
         )}

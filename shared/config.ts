@@ -16,6 +16,9 @@ export const FREE_DAILY_LIMIT = 7
 /** Maximum cloud workbooks for free users (Pro unlimited) */
 export const FREE_CLOUD_WORKBOOK_LIMIT = 1
 
+/** Lifetime auditor auto-fixes for free users (Pro unlimited) */
+export const FREE_AUTOFIX_LIFETIME_LIMIT = 3
+
 // ─── AI / LLM Configuration ─────────────────────────────────────────────────
 
 /** Max conversation history messages sent to cloud LLM providers */

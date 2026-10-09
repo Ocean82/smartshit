@@ -6,15 +6,19 @@
  * so client and server stay aligned.
  */
 
-import { FREE_DAILY_LIMIT, FREE_CLOUD_WORKBOOK_LIMIT as SHARED_CLOUD_LIMIT } from '../../shared/config'
+import {
+  FREE_DAILY_LIMIT,
+  FREE_CLOUD_WORKBOOK_LIMIT as SHARED_CLOUD_LIMIT,
+  FREE_AUTOFIX_LIFETIME_LIMIT as SHARED_AUTOFIX_LIMIT,
+} from '../../shared/config'
 
 // ─── Limits ──────────────────────────────────────────────────────────────────
 
 /** AI chat questions per day for free users */
 export const FREE_DAILY_CHAT_LIMIT = FREE_DAILY_LIMIT
 
-/** Lifetime auto-fix uses before gate (free users get a taste) */
-export const FREE_AUTOFIX_LIFETIME_LIMIT = 3
+/** Lifetime auto-fix uses before gate (free users get a taste); the server enforces it */
+export const FREE_AUTOFIX_LIFETIME_LIMIT = SHARED_AUTOFIX_LIMIT
 
 /** Maximum cloud workbooks for free users */
 export const FREE_CLOUD_WORKBOOK_LIMIT = SHARED_CLOUD_LIMIT
@@ -75,7 +79,7 @@ export const FEATURE_GATE_COPY: Record<GatedFeature, FeatureGateConfig> = {
 
 export const AUTOFIX_USAGE_KEY = 'smartsht_autofix_used'
 
-/** Get lifetime auto-fix usage from localStorage */
+/** Get lifetime auto-fix usage from localStorage (a cache of the server count) */
 export function getAutoFixUsed(): number {
   try {
     const val = localStorage.getItem(AUTOFIX_USAGE_KEY)
@@ -85,24 +89,29 @@ export function getAutoFixUsed(): number {
   }
 }
 
-/** Record an auto-fix use */
-export function recordAutoFixUse(): void {
+/** Store the server's authoritative auto-fix count */
+export function setAutoFixUsed(used: number): void {
   try {
-    const current = getAutoFixUsed()
-    localStorage.setItem(AUTOFIX_USAGE_KEY, String(current + 1))
+    localStorage.setItem(AUTOFIX_USAGE_KEY, String(used))
   } catch {
     // Storage unavailable
   }
 }
 
-/** Check if user can auto-fix (Pro or under limit) */
-export function canAutoFix(isPro: boolean): boolean {
-  if (isPro) return true
-  return getAutoFixUsed() < FREE_AUTOFIX_LIFETIME_LIMIT
+export interface AutoFixDecision {
+  allowed: boolean
+  /** null = unlimited */
+  used: number | null
+  limit: number | null
 }
 
-/** Get remaining auto-fix uses */
-export function autoFixRemaining(isPro: boolean): number {
-  if (isPro) return Infinity
-  return Math.max(0, FREE_AUTOFIX_LIFETIME_LIMIT - getAutoFixUsed())
+/** Local-only reservation: dev mode (no auth) and the fallback when the server can't be reached. */
+export function reserveAutoFixLocally(isPro: boolean): AutoFixDecision {
+  if (isPro) return { allowed: true, used: null, limit: null }
+  const used = getAutoFixUsed()
+  if (used >= FREE_AUTOFIX_LIFETIME_LIMIT) {
+    return { allowed: false, used, limit: FREE_AUTOFIX_LIFETIME_LIMIT }
+  }
+  setAutoFixUsed(used + 1)
+  return { allowed: true, used: used + 1, limit: FREE_AUTOFIX_LIFETIME_LIMIT }
 }
