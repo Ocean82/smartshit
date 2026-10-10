@@ -39,10 +39,8 @@ export interface OpenAICompatibleCallOptions {
   /** Cancels a non-streaming request (combined with the built-in 30s timeout). */
   signal?: AbortSignal
   /**
-   * Ask the provider to skip its reasoning phase — OpenRouter honours
-   * `reasoning: { exclude: true }`, which keeps fallback output as clean as
-   * Groq's `reasoning_effort: 'none'` and stops us paying for tokens we
-   * discard.
+   * Ask the provider to skip its reasoning phase (see `SUPPRESSED_REASONING`),
+   * matching Groq's `reasoning_effort: 'none'`.
    *
    * Opt-in and off by default. HuggingFace's router support for this field is
    * inconsistent, and an unrecognised key can fail the request outright — which
@@ -51,6 +49,15 @@ export interface OpenAICompatibleCallOptions {
    */
   suppressReasoning?: boolean
 }
+
+/**
+ * OpenRouter reasoning control. `exclude` alone only hides the reasoning: the
+ * model still generates and bills it, and it eats the max_tokens cap.
+ * `effort: 'none'` skips it (live on qwen3.8-27b, 2026-10-10: 226 reasoning
+ * tokens to 0, ~3x cheaper). `exclude` stays as a guard for any routed upstream
+ * that ignores `effort`.
+ */
+const SUPPRESSED_REASONING = { effort: 'none', exclude: true } as const
 
 /** Fetch signal that fires on the caller's abort or after `timeoutMs`. */
 export function withRequestTimeout(signal: AbortSignal | undefined, timeoutMs: number): AbortSignal {
@@ -86,7 +93,7 @@ export async function chatWithOpenAiCompatible(
   }
 
   if (suppressReasoning) {
-    body.reasoning = { exclude: true }
+    body.reasoning = SUPPRESSED_REASONING
   }
 
   const res = await fetch(buildUrl(params.baseUrl), {
@@ -141,7 +148,7 @@ export async function chatWithOpenAiCompatibleStream(
   }
 
   if (suppressReasoning) {
-    body.reasoning = { exclude: true }
+    body.reasoning = SUPPRESSED_REASONING
   }
 
   const res = await fetch(buildUrl(params.baseUrl), {

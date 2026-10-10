@@ -174,8 +174,8 @@ describe('openaiCompatible finish_reason capture (F11d)', () => {
 /**
  * Reasoning suppression (PRODUCTION-TODO Option 2).
  *
- * OpenRouter honours `reasoning: { exclude: true }`, which stops the fallback
- * path paying for a reasoning phase it would otherwise discard. It must be
+ * OpenRouter honours `reasoning: { effort: 'none', exclude: true }`, which stops
+ * the fallback path paying for a reasoning phase it would otherwise discard. It must be
  * opt-in: HuggingFace's router support is inconsistent and an unrecognised key
  * can fail the request, taking down the very fallback this protects.
  */
@@ -193,7 +193,7 @@ describe('openaiCompatible reasoning suppression', () => {
       }),
     )
     await chatWithOpenAiCompatible(params, messages, { suppressReasoning: true })
-    expect(sentBody(fetchMock)).toMatchObject({ reasoning: { exclude: true } })
+    expect(sentBody(fetchMock)).toMatchObject({ reasoning: { effort: 'none', exclude: true } })
   })
 
   it('sends reasoning.exclude when suppressReasoning is set (streaming)', async () => {
@@ -201,7 +201,7 @@ describe('openaiCompatible reasoning suppression', () => {
     await chatWithOpenAiCompatibleStream(params, messages, () => {}, undefined, {
       suppressReasoning: true,
     })
-    expect(sentBody(fetchMock)).toMatchObject({ reasoning: { exclude: true } })
+    expect(sentBody(fetchMock)).toMatchObject({ reasoning: { effort: 'none', exclude: true } })
   })
 
   it('omits the field by default, so unknown providers are never sent it', async () => {
@@ -231,7 +231,7 @@ describe('openaiCompatible reasoning suppression', () => {
     await chatWithOpenAiCompatible(params, messages, { jsonMode: true, suppressReasoning: true })
     expect(sentBody(fetchMock)).toMatchObject({
       response_format: { type: 'json_object' },
-      reasoning: { exclude: true },
+      reasoning: { effort: 'none', exclude: true },
     })
   })
 })

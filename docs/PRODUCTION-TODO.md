@@ -8,9 +8,9 @@ Items are added as local development work creates production requirements. Check
 
 ## Pending
 
-- [ ] **OpenRouter still pays for hidden reasoning** — added 2026-10-09 (optional)
-  - `reasoning: { exclude: true }` hides the reasoning but the model still reasons: a "reply PROBE_OK" call used 48 completion tokens with the flag vs 56 without (~40 of the 48 are reasoning). Those tokens also count against the 1024 cap.
-  - If credits or truncation become a problem, try OpenRouter's `reasoning: { effort: "none" }` / `enabled: false` for `qwen/qwen3.8-27b` (verify the model accepts it first; a rejected field breaks the fallback).
+- [x] **OpenRouter still pays for hidden reasoning** — done 2026-10-10
+  - `reasoning: { exclude: true }` only hid the reasoning; the model still generated and billed it, and it counted against the 1024 cap.
+  - Now `{ effort: "none", exclude: true }` (`server/src/openaiCompatible.ts`). Live on `qwen/qwen3.8-27b` from the box: a spreadsheet question went from 226 reasoning tokens to 0 (cost $0.00083 → $0.00022). JSON mode parsed and streaming had no reasoning deltas (first content 434 ms).
 
 - [x] **Ollama's role on this box** — decided 2026-10-08: keep as last fallback
   - Host is 2 CPU cores, 7.6 GB RAM, no GPU. `smartshit` (Qwen3 4B Q4) took 55.6 s for a 40-token reply; the logs show "Request aborted while streaming from ollama". Expect it to time out when both cloud providers fail.
