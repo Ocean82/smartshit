@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useAuth, useSession } from '@clerk/react'
 
 /** Poll budget after returning from checkout. */
@@ -102,60 +102,116 @@ export function createSubscriptionStatusPoller(
   return { start, stop }
 }
 
+// ─── Shared session singleton ──────────────────────────────────────────────
+// The hook is mounted more than once (ClerkUserSync for the sign-on check, plus
+// the chat revocation banner). A per-instance check/poll meant N copies each hit
+// POST /api/usage at sign-on and, after checkout, each ran its own 10-tick poll
+// (≈2× the sign-on calls and N× the poll traffic). This module-level singleton
+// coordinates exactly one check and one poller per session and broadcasts the
+// result to every mounted hook — mirroring useUsage's usageSubscribers pattern.
+
+type SharedSnapshot = {
+  isPro: boolean | null
+  revocationReason: string | null
+  confirmingUpgrade: boolean
+}
+
+let shared: SharedSnapshot = { isPro: null, revocationReason: null, confirmingUpgrade: false }
+const statusSubscribers = new Set<(s: SharedSnapshot) => void>()
+let checkedSessionId: string | null = null
+let activePoller: { stop: () => void } | null = null
+
+function setShared(next: Partial<SharedSnapshot>): void {
+  shared = { ...shared, ...next }
+  for (const notify of statusSubscribers) notify(shared)
+}
+
+/**
+ * Run the authoritative plan check at most once per session, shared across all
+ * mounted hook instances. After a checkout redirect (`?upgraded=true`), a single
+ * poller waits for the webhook to land. Subsequent callers in the same session
+ * are no-ops — they just read the shared snapshot.
+ */
+export function startSessionCheck(
+  sessionId: string,
+  getToken: () => Promise<string | null>,
+  fetchImpl: PlanFetch = fetch,
+): void {
+  if (checkedSessionId === sessionId) return
+  checkedSessionId = sessionId
+  activePoller?.stop()
+  activePoller = null
+
+  const check = async (): Promise<boolean> => {
+    const { ok, data } = await requestPlanStatus(getToken, fetchImpl)
+    if (!ok || !data) return false
+    setShared(planStatusFrom(data))
+    return data.isPro === true
+  }
+
+  const afterCheckout =
+    typeof window !== 'undefined' &&
+    new URLSearchParams(window.location.search).get('upgraded') === 'true'
+
+  if (!afterCheckout) {
+    void check()
+    return
+  }
+
+  // The webhook lands asynchronously, so poll briefly rather than showing the
+  // paywall to someone who just paid.
+  setShared({ confirmingUpgrade: true })
+  const poller = createSubscriptionStatusPoller(check)
+  activePoller = poller
+  poller.start(() => {
+    activePoller = null
+    setShared({ confirmingUpgrade: false })
+  })
+}
+
+/** Test-only: reset the module singleton between cases. */
+export function __resetSubscriptionStatusForTests(): void {
+  shared = { isPro: null, revocationReason: null, confirmingUpgrade: false }
+  statusSubscribers.clear()
+  checkedSessionId = null
+  activePoller?.stop()
+  activePoller = null
+}
+
 /**
  * Authoritative plan state for the current session.
  *
  * Reads from the server rather than Clerk's JWT claims, because the claims in a
  * live session token are a stale snapshot of a webhook that may have landed
- * after the token was issued.
+ * after the token was issued. All mounted instances share one check/poll via the
+ * module singleton above.
  */
 export function useSubscriptionStatus(): SubscriptionStatus {
   const { isSignedIn, getToken } = useAuth()
   const { session } = useSession()
-  const [status, setStatus] = useState<{ isPro: boolean | null; revocationReason: string | null }>({
-    isPro: null,
-    revocationReason: null,
-  })
-  const [confirmingUpgrade, setConfirmingUpgrade] = useState(false)
-  const checkedSession = useRef<string | null>(null)
+  const [snapshot, setSnapshot] = useState<SharedSnapshot>(shared)
 
-  const check = useCallback(async (): Promise<boolean> => {
-    const { ok, data } = await requestPlanStatus(getToken)
-    if (!ok || !data) return false
-    setStatus(planStatusFrom(data))
-    return data.isPro === true
-  }, [getToken])
+  useEffect(() => {
+    statusSubscribers.add(setSnapshot)
+    setSnapshot(shared) // sync to current shared state on mount
+    return () => {
+      statusSubscribers.delete(setSnapshot)
+    }
+  }, [])
 
   useEffect(() => {
     if (!isSignedIn || !session?.id) return
-    if (checkedSession.current === session.id) return
-    checkedSession.current = session.id
-
-    const afterCheckout =
-      typeof window !== 'undefined' &&
-      new URLSearchParams(window.location.search).get('upgraded') === 'true'
-
-    if (!afterCheckout) {
-      void check()
-      return
-    }
-
-    // The webhook lands asynchronously, so poll briefly rather than showing the
-    // paywall to someone who just paid.
-    setConfirmingUpgrade(true)
-    const poller = createSubscriptionStatusPoller(check)
-    poller.start(() => setConfirmingUpgrade(false))
-    return () => poller.stop()
-  }, [isSignedIn, session?.id, check])
+    startSessionCheck(session.id, getToken)
+  }, [isSignedIn, session?.id, getToken])
 
   const dismissNotice = useCallback(() => {
-    setStatus((s) => (s.revocationReason === null ? s : { ...s, revocationReason: null }))
+    if (shared.revocationReason !== null) setShared({ revocationReason: null })
   }, [])
 
   return {
-    isPro: status.isPro,
-    revocationReason: status.revocationReason,
-    confirmingUpgrade,
+    isPro: snapshot.isPro,
+    revocationReason: snapshot.revocationReason,
+    confirmingUpgrade: snapshot.confirmingUpgrade,
     dismissNotice,
   }
 }

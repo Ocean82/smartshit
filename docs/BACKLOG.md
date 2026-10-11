@@ -211,8 +211,11 @@ M 1–2 days, L more.
     true (the brief post-checkout poll), mounted in `RevocationBannerInner` (`ChatPanel.tsx`)
     alongside the revocation banner. Uses the app's standard `Loader2 animate-spin` pattern.
     Verified: tsc clean, client build OK, auth tests 38/38.
-  - STILL OPEN (separate concern): the hook is called in both `ClerkUserSync.tsx` and
-    `ChatPanel.tsx`, each with its own `/api/usage` check effect — possible duplicate polling.
+  - Duplicate `/api/usage` polling fixed 2026-10-11: `useSubscriptionStatus` now coordinates one
+    check + one post-checkout poller per session through a module-level singleton (subscribe/notify,
+    mirroring `useUsage`'s `usageSubscribers`), so the two mounted callers (`ClerkUserSync.tsx`,
+    `ChatPanel.tsx`) share a single request instead of each polling. 2 dedup tests. tsc + eslint
+    clean, auth tests 40/40, build OK.
 - [x] **`/health?strict=1` is public and returns raw DB/S3 errors** — S (done 2026-10-11)
   - The strict branch (`server/src/index.ts`) now returns status only (`ok`/`mode`/`liveness`)
     to anonymous public callers; the per-subsystem `critical` object — which carries raw DB/S3

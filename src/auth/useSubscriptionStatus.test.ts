@@ -21,6 +21,8 @@ import {
   planStatusFrom,
   requestPlanStatus,
   createSubscriptionStatusPoller,
+  startSessionCheck,
+  __resetSubscriptionStatusForTests,
   UPGRADE_POLL_ATTEMPTS,
 } from './useSubscriptionStatus'
 
@@ -188,5 +190,39 @@ describe('createSubscriptionStatusPoller', () => {
     await vi.advanceTimersByTimeAsync(0)
 
     expect(onSettled).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('startSessionCheck — shared-session dedup', () => {
+  beforeEach(() => __resetSubscriptionStatusForTests())
+  afterEach(() => __resetSubscriptionStatusForTests())
+
+  const okResponse = () => ({ ok: true, json: async () => ({ isPro: false, revocationReason: null }) })
+
+  it('fetches /api/usage only once when the same session is checked by multiple callers', async () => {
+    const getToken = vi.fn(async () => 'tok')
+    const fetchMock = vi.fn(async () => okResponse())
+
+    // Two mounted hook instances (e.g. ClerkUserSync + chat banner) both run the
+    // sign-on check for the same session.
+    startSessionCheck('sess_A', getToken, fetchMock)
+    startSessionCheck('sess_A', getToken, fetchMock)
+    startSessionCheck('sess_A', getToken, fetchMock)
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('checks again for a genuinely new session', async () => {
+    const getToken = vi.fn(async () => 'tok')
+    const fetchMock = vi.fn(async () => okResponse())
+
+    startSessionCheck('sess_A', getToken, fetchMock)
+    await Promise.resolve()
+    startSessionCheck('sess_B', getToken, fetchMock)
+    await Promise.resolve()
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 })
