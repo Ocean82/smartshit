@@ -21,6 +21,8 @@ interface Deps {
   dbHealthCheck: () => Promise<SubsystemHealth>
   s3HealthCheck: () => Promise<SubsystemHealth>
   clerkConfigured: boolean
+  /** Simulate an authenticated operator (production reads getRequestUserId). */
+  authenticated?: boolean
 }
 
 function createHealthApp(deps: Deps) {
@@ -31,7 +33,23 @@ function createHealthApp(deps: Deps) {
       const [db, s3] = await Promise.all([deps.dbHealthCheck(), deps.s3HealthCheck()])
       const clerk = { ok: deps.clerkConfigured, error: deps.clerkConfigured ? undefined : 'CLERK_SECRET_KEY not configured' }
       const ready = db.ok && s3.ok && clerk.ok
-      res.status(ready ? 200 : 503).json({ ok: ready, mode: 'strict', liveness: isOk, critical: { database: db, s3, clerk } })
+
+      // Mirror production: the `critical` diagnostics object (raw DB/S3 driver
+      // errors) is only exposed to a direct-loopback request or an authenticated
+      // operator — never to an anonymous public caller. Peer is the real TCP
+      // socket address (never req.ip, which trust-proxy makes spoofable). The
+      // `X-Test-Peer` override exists ONLY in this test replica to simulate a
+      // non-loopback public caller; production has no such header.
+      const peer = (req.header('X-Test-Peer') ?? req.socket.remoteAddress) ?? ''
+      const isLoopback = peer === '127.0.0.1' || peer === '::1' || peer === '::ffff:127.0.0.1'
+      const showDiagnostics = isLoopback || Boolean(deps.authenticated)
+
+      res.status(ready ? 200 : 503).json({
+        ok: ready,
+        mode: 'strict',
+        liveness: isOk,
+        ...(showDiagnostics ? { critical: { database: db, s3, clerk } } : {}),
+      })
       return
     }
     res.json({ ok: isOk, service: 'smartsht-server' })
@@ -85,5 +103,32 @@ describe('/health strict readiness', () => {
     const app = createHealthApp({ ...healthy, dbHealthCheck: async () => ({ ok: false }) })
     const res = await request(app).get('/health?strict=0')
     expect(res.status).toBe(200)
+  })
+
+  // ─── Diagnostics leak guard ────────────────────────────────────────────────
+  // The strict body must not leak raw DB/S3 driver errors to the public. The
+  // deploy gate (loopback) and authenticated operators still see them.
+
+  it('loopback caller still gets the critical diagnostics (deploy gate path)', async () => {
+    // supertest connects over loopback, so no override needed.
+    const app = createHealthApp({ ...healthy, dbHealthCheck: async () => ({ ok: false, error: 'ECONNREFUSED db.internal:5432' }) })
+    const res = await request(app).get('/health?strict=1')
+    expect(res.status).toBe(503)
+    expect(res.body.critical.database.error).toBe('ECONNREFUSED db.internal:5432')
+  })
+
+  it('anonymous public caller gets status only — no critical diagnostics', async () => {
+    const app = createHealthApp({ ...healthy, dbHealthCheck: async () => ({ ok: false, error: 'ECONNREFUSED db.internal:5432' }) })
+    const res = await request(app).get('/health?strict=1').set('X-Test-Peer', '203.0.113.7')
+    expect(res.status).toBe(503) // status still reflects readiness
+    expect(res.body.ok).toBe(false)
+    expect(res.body.critical).toBeUndefined() // but no raw error leaks
+  })
+
+  it('authenticated operator from a public peer still gets diagnostics', async () => {
+    const app = createHealthApp({ ...healthy, authenticated: true, dbHealthCheck: async () => ({ ok: false, error: 'ECONNREFUSED' }) })
+    const res = await request(app).get('/health?strict=1').set('X-Test-Peer', '203.0.113.7')
+    expect(res.status).toBe(503)
+    expect(res.body.critical.database.ok).toBe(false)
   })
 })
