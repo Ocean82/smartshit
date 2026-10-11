@@ -12,7 +12,7 @@ import { suggestionChipLabel } from '@/ai/capabilities/clarifyChips'
 import { exportChatAsReport } from '@/lib/exportChat'
 import { persistenceCaveat } from '@/lib/styleRecipes'
 import { collectStaleActionIds } from '@/lib/actionScope'
-import { useUsage, UpgradePrompt, useSubscriptionStatus, SubscriptionNotice, startCheckout } from '@/auth'
+import { useUsage, UpgradePrompt, useSubscriptionStatus, SubscriptionNotice, ConfirmingUpgradeNotice, startCheckout } from '@/auth'
 import { ApiKeySettings } from './ApiKeySettings'
 import { ChatMarkdown } from './ChatMarkdown'
 import {
@@ -707,13 +707,16 @@ function RevocationBanner() {
 }
 
 function RevocationBannerInner() {
-  const { revocationReason, dismissNotice } = useSubscriptionStatus()
+  const { revocationReason, confirmingUpgrade, dismissNotice } = useSubscriptionStatus()
   return (
-    <SubscriptionNotice
-      reason={revocationReason}
-      onResubscribe={startCheckout}
-      onDismiss={dismissNotice}
-    />
+    <>
+      <ConfirmingUpgradeNotice confirming={confirmingUpgrade} />
+      <SubscriptionNotice
+        reason={revocationReason}
+        onResubscribe={startCheckout}
+        onDismiss={dismissNotice}
+      />
+    </>
   )
 }
 
