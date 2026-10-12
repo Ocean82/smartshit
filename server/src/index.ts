@@ -669,14 +669,25 @@ app.get('/health', async (req, res) => {
   if (req.query.strict !== undefined && req.query.strict !== '0') {
     const [db, s3] = await Promise.all([dbHealthCheck(), s3HealthCheck()])
     const clerk = { ok: Boolean(config.clerkSecretKey), error: config.clerkSecretKey ? undefined : 'CLERK_SECRET_KEY not configured' }
-    const critical = { database: db, s3, clerk }
     const ready = db.ok && s3.ok && clerk.ok
+
+    // The deploy gate only reads the HTTP status (curl -f → 503 rolls back), so
+    // the per-subsystem `critical` object — which carries raw DB/S3 driver error
+    // messages (dbHealthCheck/s3HealthCheck return err.message) — must not reach
+    // an anonymous public caller. Expose it only to an authenticated operator or
+    // a direct-loopback request (the deploy curl hits 127.0.0.1). `trust proxy`
+    // makes req.ip spoofable via X-Forwarded-For, so gate on the real TCP peer
+    // (req.socket.remoteAddress), never req.ip.
+    const peer = req.socket.remoteAddress ?? ''
+    const isLoopback = peer === '127.0.0.1' || peer === '::1' || peer === '::ffff:127.0.0.1'
+    const showDiagnostics = isLoopback || Boolean(getRequestUserId(req))
+
     res.status(ready ? 200 : 503).json({
       ok: ready,
       service: 'smartsht-server',
       mode: 'strict',
       liveness: isOk,
-      critical,
+      ...(showDiagnostics ? { critical: { database: db, s3, clerk } } : {}),
     })
     return
   }

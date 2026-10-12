@@ -24,7 +24,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { EmptyGridGuide } from '@/components/EmptyGridGuide'
 import { ImportInsightsOverlay } from '@/components/ImportInsightsOverlay'
 import { Sparkles, Zap, Cloud, CloudOff, Loader2, Share2, MessageSquare, SquarePen, Search } from 'lucide-react'
-import { UserNav } from '@/auth'
+import { UserNav, SubscriptionNoticeSlot } from '@/auth'
 import {
   getSyncStatus,
   onSyncStatusChange,
@@ -244,6 +244,10 @@ const {
         </div>
       )}
       {showFormulaBar && <FormulaBar />}
+
+      {/* Subscription notices — always-mounted top-level slot so a revocation
+          banner is visible regardless of which dock/panel is open. */}
+      <SubscriptionNoticeSlot />
 
       <div className="flex-1 flex overflow-hidden min-h-0">
         <FileExplorer />
