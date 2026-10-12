@@ -208,11 +208,16 @@ describe('handleStripeWebhook', () => {
   })
 
   describe('customer.subscription.updated', () => {
-    it('downgrades on past_due status', async () => {
+    it('RETAINS Pro on past_due status (Stripe may still retry the payment)', async () => {
+      // Policy regression guard: past_due is a PRO_STATUS (see subscriptions.ts).
+      // The webhook must agree with the reconciler / verifySubscriptionForUser and
+      // not demote a paying user on a dunning retry. A prior hardcoded revoke list
+      // wrongly downgraded here.
       const result = await handleStripeWebhook({
         type: 'customer.subscription.updated',
         data: {
           object: {
+            id: 'sub_pd',
             status: 'past_due',
             metadata: { userId: 'user_pd' },
           },
@@ -220,8 +225,8 @@ describe('handleStripeWebhook', () => {
       })
       expect(result).toEqual({
         userId: 'user_pd',
-        plan: 'free',
-        stripeSubscriptionId: null,
+        plan: 'pro',
+        stripeSubscriptionId: 'sub_pd',
       })
     })
 
@@ -277,17 +282,24 @@ describe('handleStripeWebhook', () => {
       })
     })
 
-    it('returns null for trialing status (no action needed)', async () => {
+    it('grants Pro on trialing status (trialing is a Pro status)', async () => {
+      // trialing is in PRO_STATUSES, so the updated branch now routes it to pro
+      // via mapStatusToPlan rather than ignoring it.
       const result = await handleStripeWebhook({
         type: 'customer.subscription.updated',
         data: {
           object: {
+            id: 'sub_trial',
             status: 'trialing',
             metadata: { userId: 'user_t' },
           },
         },
       })
-      expect(result).toBeNull()
+      expect(result).toEqual({
+        userId: 'user_t',
+        plan: 'pro',
+        stripeSubscriptionId: 'sub_trial',
+      })
     })
 
     it('returns null when metadata has no userId', async () => {

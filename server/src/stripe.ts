@@ -1,6 +1,6 @@
 import Stripe from 'stripe'
 import { config } from './config.js'
-import { resolveUserIdFromPayload, resolveUserIdByEmail } from './subscriptions.js'
+import { resolveUserIdFromPayload, resolveUserIdByEmail, mapStatusToPlan } from './subscriptions.js'
 
 interface CheckoutSession {
   url: string | null
@@ -191,18 +191,20 @@ export async function handleStripeWebhook(
     }
   }
 
-  // Handle subscription status changes (past_due, canceled, unpaid)
+  // Handle subscription status changes. Route through the single policy mapper
+  // (`mapStatusToPlan`) so the webhook agrees with the reconciler and
+  // verifySubscriptionForUser: `past_due`/`trialing` RETAIN Pro (Stripe may still
+  // retry the payment), only a definite non-paying status revokes. Hardcoding a
+  // revoke list here previously demoted a paying user on `past_due`, contradicting
+  // the stated policy until the next reconcile sweep corrected it.
   if (event.type === 'customer.subscription.updated') {
     const metadata = obj.metadata as Record<string, string> | undefined
     const userId = metadata?.userId
     const status = obj.status as string | undefined
-    if (userId && (status === 'past_due' || status === 'canceled' || status === 'unpaid')) {
-      return { userId, plan: 'free', stripeSubscriptionId: null }
-    }
-    // If subscription is re-activated (active), restore Pro
-    if (userId && status === 'active') {
-      const subId = typeof obj.id === 'string' ? obj.id : null
-      return { userId, plan: 'pro', stripeSubscriptionId: subId }
+    if (userId) {
+      const plan = mapStatusToPlan(status)
+      const subId = plan === 'pro' && typeof obj.id === 'string' ? obj.id : null
+      return { userId, plan, stripeSubscriptionId: subId }
     }
   }
 
