@@ -12,7 +12,7 @@ import { suggestionChipLabel } from '@/ai/capabilities/clarifyChips'
 import { exportChatAsReport } from '@/lib/exportChat'
 import { persistenceCaveat } from '@/lib/styleRecipes'
 import { collectStaleActionIds } from '@/lib/actionScope'
-import { useUsage, UpgradePrompt, useSubscriptionStatus, SubscriptionNotice, ConfirmingUpgradeNotice, startCheckout } from '@/auth'
+import { useUsage, UpgradePrompt } from '@/auth'
 import { ApiKeySettings } from './ApiKeySettings'
 import { ChatMarkdown } from './ChatMarkdown'
 import {
@@ -695,31 +695,6 @@ function ProgressSteps({ waitSeconds }: { waitSeconds: number }) {
 
 // ─── ChatInputArea ────────────────────────────────────────────────────────────
 
-const CLERK_PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ?? ''
-
-/**
- * Revocation banner. Guarded like UpgradePrompt/UserNav: dev-without-Clerk
- * renders nothing, and the hook is only called once a ClerkProvider is mounted.
- */
-function RevocationBanner() {
-  if (!CLERK_PUBLISHABLE_KEY) return null
-  return <RevocationBannerInner />
-}
-
-function RevocationBannerInner() {
-  const { revocationReason, confirmingUpgrade, dismissNotice } = useSubscriptionStatus()
-  return (
-    <>
-      <ConfirmingUpgradeNotice confirming={confirmingUpgrade} />
-      <SubscriptionNotice
-        reason={revocationReason}
-        onResubscribe={startCheckout}
-        onDismiss={dismissNotice}
-      />
-    </>
-  )
-}
-
 interface ChatInputAreaProps {
   chatInput: string
   setChatInput: (v: string) => void
@@ -747,7 +722,6 @@ function ChatInputArea({
 }: ChatInputAreaProps) {
   return (
     <div className="px-3 py-3 border-t border-gray-200 bg-slate-50/80">
-      <RevocationBanner />
       {!isPro && <UpgradePrompt remaining={remaining} dailyLimit={dailyLimit} />}
 
       {attachedFilePreview && (
