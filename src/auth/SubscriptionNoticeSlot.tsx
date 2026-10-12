@@ -31,14 +31,28 @@ function SubscriptionNoticeSlotInner() {
   // so the slot takes no vertical space in the common case.
   if (!revocationReason && !confirmingUpgrade) return null
 
+  // Full-width strip framing the notice above the grid, with a divider from the
+  // content below. The inner notices are capped to a readable max-width and
+  // centered so they don't stretch edge-to-edge on wide screens (the margins
+  // that used to tune this lived in the notices themselves when they sat in the
+  // narrow chat panel; the slot owns that layout now).
   return (
-    <div className="shrink-0">
-      <ConfirmingUpgradeNotice confirming={confirmingUpgrade} />
-      <SubscriptionNotice
-        reason={revocationReason}
-        onResubscribe={startCheckout}
-        onDismiss={dismissNotice}
-      />
+    <div
+      className="shrink-0"
+      style={{
+        padding: '8px 16px',
+        borderBottom: '1px solid var(--border-subtle, #e2e2e2)',
+        background: 'var(--surface-body, #fff)',
+      }}
+    >
+      <div style={{ maxWidth: 880, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <ConfirmingUpgradeNotice confirming={confirmingUpgrade} />
+        <SubscriptionNotice
+          reason={revocationReason}
+          onResubscribe={startCheckout}
+          onDismiss={dismissNotice}
+        />
+      </div>
     </div>
   )
 }

@@ -26,7 +26,6 @@ export function SubscriptionNotice({
     <div
       role="status"
       data-testid="subscription-notice"
-      className="mx-3 mb-2"
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -78,7 +77,6 @@ export function ConfirmingUpgradeNotice({ confirming }: { confirming: boolean })
       role="status"
       aria-live="polite"
       data-testid="confirming-upgrade-notice"
-      className="mx-3 mb-2"
       style={{
         display: 'flex',
         alignItems: 'center',
