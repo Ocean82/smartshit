@@ -27,7 +27,7 @@ import {
 } from './structuredRetry.js'
 import { resolveIntent, isWeakResponse } from './intent.js'
 import { classifyMode, isLlmOnlyMode } from './mode.js'
-import { parseUserIntent as parseIntentWithKeyword } from './intentParser.js'
+import { resolveServerRouting } from './routing.js'
 import type { UserIntent } from '../../shared/intentTypes.js'
 import { getContextualServerSuggestions } from './suggestions.js'
 import {
@@ -781,9 +781,6 @@ app.post('/api/chat/stream', requireAuth, chatRateLimiter, validateBody(chatStre
     return
   }
 
-  const mode = classifyMode(userMessage)
-  const userIntent = parseIntentWithKeyword(userMessage)
-
   // Generate contextual suggestions using sheet metadata when available
   const sheetCtx = body.context ? {
     detectedPurpose: body.context.profile?.detectedPurpose,
@@ -797,11 +794,14 @@ app.post('/api/chat/stream', requireAuth, chatRateLimiter, validateBody(chatStre
   } : undefined
   const suggestions = getContextualServerSuggestions(userMessage, sheetCtx)
 
-  const intent = resolveIntent(userMessage)
+  const { mode, userIntent, intent, decidedBy } = resolveServerRouting(userMessage, body.clientRouting)
   const llmOnly = isLlmOnlyMode(mode) || body.forceLlm
 
-  // Low-confidence intent — clarify only when no template already resolved it
-  if (!body.forceLlm && shouldClarifyLowConfidence(userIntent, mode, intent.actions.length)) {
+  // Low-confidence intent — clarify only when no template already resolved it.
+  // Gate on decidedBy === 'server': a trusted client decision must not be
+  // second-guessed by the weak keyword gate — fall through to the planner.
+  if (!body.forceLlm && decidedBy === 'server'
+    && shouldClarifyLowConfidence(userIntent, mode, intent.actions.length)) {
     res.setHeader('Content-Type', 'text/event-stream')
     res.setHeader('Cache-Control', 'no-cache')
     res.setHeader('Connection', 'keep-alive')
@@ -966,9 +966,6 @@ app.post('/api/chat', requireAuth, chatRateLimiter, validateBody(chatBodySchema)
     return
   }
 
-  const mode = classifyMode(userMessage)
-  const userIntent = parseIntentWithKeyword(userMessage)
-
   // Generate contextual suggestions using sheet metadata when available
   const sheetCtx = body.context ? {
     detectedPurpose: body.context.profile?.detectedPurpose,
@@ -982,11 +979,14 @@ app.post('/api/chat', requireAuth, chatRateLimiter, validateBody(chatBodySchema)
   } : undefined
   const suggestions = getContextualServerSuggestions(userMessage, sheetCtx)
 
-  const intent = resolveIntent(userMessage)
+  const { mode, userIntent, intent, decidedBy } = resolveServerRouting(userMessage, body.clientRouting)
   const llmOnly = isLlmOnlyMode(mode) || body.forceLlm
 
-  // Low-confidence intent — clarify only when no template already resolved it
-  if (!body.forceLlm && shouldClarifyLowConfidence(userIntent, mode, intent.actions.length)) {
+  // Low-confidence intent — clarify only when no template already resolved it.
+  // Gate on decidedBy === 'server': a trusted client decision must not be
+  // second-guessed by the weak keyword gate — fall through to the planner.
+  if (!body.forceLlm && decidedBy === 'server'
+    && shouldClarifyLowConfidence(userIntent, mode, intent.actions.length)) {
     // Non-LLM early return: the gate reserved a slot it won't spend — release it.
     if (!isPro) await releaseUsage(userId)
     res.json({

@@ -1,6 +1,7 @@
 import { v4 as uuid } from 'uuid'
 import type { AgentAction, ChatMessage, ProviderMeta } from '@/types'
 import type { SpreadsheetContextPayload } from '@/ai/buildContext'
+import type { ClientRouting } from '@shared/clientRouting'
 import { getAuthHeaders } from '@/lib/cloudSync'
 import { getByokPayload } from '@/lib/userApiKey'
 import { readAgentSseStream } from '@/ai/agentSse'
@@ -106,6 +107,8 @@ export interface AgentChatRequest {
   message: string
   context: SpreadsheetContextPayload
   history: AgentChatTurn[]
+  /** Client's authoritative routing decision — optional, untrusted server-side. */
+  clientRouting?: ClientRouting
 }
 
 export interface AgentStreamChatRequest extends AgentChatRequest {
@@ -148,6 +151,7 @@ async function postAgentChat(
     history: request.history,
   }
   if (byok) payload.byok = byok
+  if (request.clientRouting) payload.clientRouting = request.clientRouting
 
   return fetch(`${API_BASE}${path}`, {
     method: 'POST',
