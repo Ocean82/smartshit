@@ -48,6 +48,24 @@ const contextSchema = z.object({
   focusData: z.string().max(20_000).optional(),
 }).passthrough()
 
+/**
+ * Client's authoritative routing decision — OPTIONAL and UNTRUSTED.
+ * `.strict()` whitelist: reject unknown keys so no extra field is smuggled.
+ * Enum literals are the exact members of the shared unions (AgentMode[5],
+ * IntentType[18], routingSource[3]) and are kept in sync by the enum-sync
+ * guard in server/src/routing.test.ts (test 7).
+ */
+const clientRoutingSchema = z.object({
+  mode: z.enum(['explain', 'advise', 'act', 'help', 'chat']),
+  intentType: z.enum([
+    'read', 'analyze', 'write', 'format', 'create_chart', 'create_formula',
+    'summarize', 'filter', 'sort', 'clean', 'budget', 'report', 'compare',
+    'find', 'calculate', 'export', 'chat', 'unknown',
+  ]),
+  routingSource: z.enum(['nlp', 'llm', 'regex']),
+  confidence: z.number().min(0).max(1),
+}).strict()
+
 /** POST /api/chat/stream request body. */
 export const chatStreamBodySchema = z.object({
   message: z.string().min(1, 'message is required').max(10_000, 'message too long'),
@@ -55,6 +73,7 @@ export const chatStreamBodySchema = z.object({
   context: contextSchema.optional(),
   forceLlm: z.boolean().optional(),
   byok: byokSchema.nullable().optional(),
+  clientRouting: clientRoutingSchema.optional(),
 })
 
 /** POST /api/chat (non-streaming) — same schema as streaming. */

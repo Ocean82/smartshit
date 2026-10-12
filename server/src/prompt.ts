@@ -109,6 +109,8 @@ export interface ChatRequestBody {
     model: string
     baseUrl: string
   }
+  /** Client's authoritative routing decision — optional, untrusted (validated by Zod). */
+  clientRouting?: import('../../shared/clientRouting.js').ClientRouting
 }
 
 export interface ChatResponseBody {

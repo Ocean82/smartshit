@@ -103,6 +103,14 @@ export function createLLMGatewayStage(): PipelineStage {
           ...(focusData ? { focusData } : {}),
         },
         history: context.history ?? [],
+        clientRouting: context.mode && context.intent
+          ? {
+              mode: context.mode,
+              intentType: context.intent.intentType,
+              routingSource: context.intent.routingSource ?? 'regex',
+              confidence: context.intent.confidence,
+            }
+          : undefined,
         onToken,
         signal: context.signal,
       })
