@@ -382,7 +382,7 @@ describe('chatService — F15(d) insights scope-bound to workbook/sheet/revision
     await processChatMessage(CURRENT_INPUT, 'stream-1', makeDeps())
 
     expect(serverStream).toHaveBeenCalledTimes(1)
-    expect(priorInsightsArg()).toContain('Prior turn insights still apply')
+    expect(priorInsightsArg()).toContain('follow-up question')
   })
 
   it('silently drops a snapshot from a different sheet (no priorInsights line)', async () => {
@@ -568,7 +568,8 @@ describe('chatService — open-ended questions reach the model with relevant dat
     await processChatMessage('Explain the totals again', 'stream-1', makeDeps())
 
     const summary = sentRequest().context.deterministicSummary ?? ''
-    expect(summary).toContain('Prior turn insights still apply')
+    // insightsBlock is present — the hint is suppressed (would be redundant noise)
+    expect(summary).not.toContain('follow-up question')
     expect(summary).toContain('Deterministic sheet findings')
   })
 

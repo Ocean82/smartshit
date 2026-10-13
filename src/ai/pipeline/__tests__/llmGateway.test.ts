@@ -407,7 +407,7 @@ describe('LLMGateway stage', () => {
     })
   })
 
-  it('keeps the full insights write-up on follow-up turns', async () => {
+  it('keeps the full insights write-up on follow-up turns but omits the redundant continuation hint', async () => {
     vi.mocked(isLlmOnlyMode).mockReturnValue(true)
     vi.mocked(formatInsights).mockReturnValue('### Sheet insights\nTotal: $5000')
     vi.mocked(chatWithAgentServerStream).mockResolvedValue({ message: 'LLM', actions: [], source: 'llm' })
@@ -418,8 +418,48 @@ describe('LLMGateway stage', () => {
     }))
 
     const summary = vi.mocked(chatWithAgentServerStream).mock.lastCall![0].context.deterministicSummary
-    expect(summary).toContain('Prior turn insights still apply')
+    // insightsBlock is present — the model sees data directly, hint is redundant
     expect(summary).toContain('Total: $5000')
+    expect(summary).not.toContain('follow-up question')
+  })
+
+  it('emits a lean continuation hint when there is prior context but no richer context block', async () => {
+    // `help` mode is genuinely NOT llm-only (unlike chat/explain/advise), so the
+    // insightsBlock is empty and no localAnalysis is set → the continuation hint
+    // is the only data-context signal and should fire. (A chat/explain follow-up
+    // keeps a non-empty insightsBlock, so the hint is correctly suppressed there —
+    // covered by the test above.)
+    vi.mocked(isLlmOnlyMode).mockReturnValue(false)
+    vi.mocked(formatInsights).mockReturnValue('')
+    vi.mocked(chatWithAgentServerStream).mockResolvedValue({ message: 'LLM', actions: [], source: 'llm' })
+
+    await createLLMGatewayStage().process(makeContext({
+      mode: 'help',
+      history: [{ role: 'user', content: 'hello' }, { role: 'assistant', content: 'hi' }],
+      priorInsights: { headers: ['Date', 'Amount'] } as unknown as PipelineContext['priorInsights'],
+    }))
+
+    const summary = vi.mocked(chatWithAgentServerStream).mock.lastCall![0].context.deterministicSummary
+    expect(summary).toContain('follow-up question')
+  })
+
+  it('suppresses the continuation hint when an insightsBlock is present (llm-only mode)', async () => {
+    // explain/advise/chat are llm-only → insightsBlock is non-empty → hasRicherContext
+    // is true → the continuation hint is redundant noise and must be omitted even
+    // when priorInsights is set.
+    vi.mocked(isLlmOnlyMode).mockReturnValue(true)
+    vi.mocked(formatInsights).mockReturnValue('### Sheet insights\nTotal: $1200')
+    vi.mocked(chatWithAgentServerStream).mockResolvedValue({ message: 'LLM', actions: [], source: 'llm' })
+
+    await createLLMGatewayStage().process(makeContext({
+      mode: 'chat',
+      history: [{ role: 'user', content: 'hello' }, { role: 'assistant', content: 'hi' }],
+      priorInsights: { headers: ['Date', 'Amount'] } as unknown as PipelineContext['priorInsights'],
+    }))
+
+    const summary = vi.mocked(chatWithAgentServerStream).mock.lastCall![0].context.deterministicSummary
+    expect(summary).toContain('Total: $1200')
+    expect(summary).not.toContain('follow-up question')
   })
 
   it('uses a no-op token callback when context.onToken is undefined', async () => {
