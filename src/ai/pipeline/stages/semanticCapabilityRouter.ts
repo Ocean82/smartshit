@@ -239,6 +239,15 @@ async function fulfillResolvedCapability(
   })
 }
 
+/**
+ * Turn the best-scoring capability match into a stage result.
+ *
+ * Resolves the capability's parameters, returning a clarification when a param
+ * is missing and passing (`null`) when a question-framed message must defer a
+ * destructive tool to the LLM. For a safe mutation it honors the apply posture:
+ * auto-apply the low-risk allowlist (`shouldAutoApply`), otherwise return an
+ * Apply/Reject action. Read-only capabilities and goals execute inline.
+ */
 async function fulfillCapabilityScore(
   best: CapabilityScore,
   top3: CapabilityRouterTelemetryPayload['top3Capabilities'],

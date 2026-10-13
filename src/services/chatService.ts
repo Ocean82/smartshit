@@ -367,6 +367,16 @@ function isProviderMeta(value: unknown): value is ProviderMeta {
  * (`deterministic-dispatcher`, `llm-gateway`) get full action preview rendering.
  * `macro-planner` / `agent-parser` with actions use the same path.
  */
+/**
+ * Convert a pipeline {@link StageResult} into a chat {@link ChatMessage}.
+ *
+ * LLM/deterministic results have their model-authored action params sanitized,
+ * surface a server refusal verbatim, and fall back to local analysis on failure
+ * in non-llm-only modes. Stages that return actions for confirmation
+ * (agent-parser, goal-router, macro-planner, semantic-capability-router,
+ * template-resolver) are rendered with the Apply/Reject preview UI; everything
+ * else becomes a plain text message.
+ */
 function stageResultToChatMessage(
   result: StageResult,
   msgId: string,

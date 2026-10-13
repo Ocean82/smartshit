@@ -13,11 +13,23 @@ import { buildSpreadsheetContext } from '@/ai/buildContext'
 import { executeGoal, listSuggestedGoals, matchGoal } from '@/ai/goals'
 import { shouldAutoApply } from '@/lib/applyPosture'
 
+/** Store-backed collaborators the goal-router stage needs to execute matched goals. */
 export interface GoalRouterDeps {
+  /** Build an {@link ExecutionContext} for running tools; `suppressHistory` defers the undo entry to the caller. */
   buildExecContext: (opts?: { suppressHistory?: boolean }) => ExecutionContext
+  /** Open a single undo group describing the goal before its tool calls run. */
   pushHistory: (desc: string) => void
 }
 
+/**
+ * Create the goal-router pipeline stage.
+ *
+ * Matches the user's message to a known goal (via `matchGoal`), then: returns a
+ * clarifying question for an ambiguous match, passes (`null`) for an unmatched
+ * one, or executes the matched goal's tool calls. Mutating goals honor the
+ * apply posture — auto-applying only when every action is on the low-risk
+ * allowlist, otherwise returning Apply/Reject actions for the user to confirm.
+ */
 export function createGoalRouterStage(deps: GoalRouterDeps): PipelineStage {
   return {
     name: 'goal-router',

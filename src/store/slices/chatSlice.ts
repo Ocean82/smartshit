@@ -115,6 +115,16 @@ export interface ChatActions {
   rejectAction: (actionId: string) => void
 }
 
+/**
+ * Build the chat store actions (send/stop, message management, and the
+ * Apply/Reject lifecycle).
+ *
+ * `sendMessage` serializes turns, streams the reply, and — under `auto` posture
+ * — clicks Apply for the user on any low-risk pending action via the normal
+ * `applyAction` path (so scope/stale/high-impact guards still hold). `applyAction`
+ * runs an action after scope-binding and preview gates, surfacing an Undo toast
+ * on success; `rejectAction` discards a pending proposal.
+ */
 export function createChatActions(
   set: (fn: (s: ChatStoreAccess) => void) => void,
   get: () => ChatStoreAccess,
