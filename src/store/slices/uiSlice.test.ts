@@ -47,3 +47,31 @@ describe('view prefs localStorage', () => {
     expect(state.showGridlines).toBe(false)
   })
 })
+
+describe('applyPosture localStorage', () => {
+  beforeEach(() => {
+    mockLocalStorage().clear()
+  })
+
+  it('defaults to preview when the key is absent', () => {
+    expect(createUIState().applyPosture).toBe('preview')
+  })
+
+  it('persists auto and re-hydrates it', () => {
+    let state = createUIState()
+    const get = () => state
+    const set = (fn: (s: typeof state) => void) => { fn(state) }
+    const actions = createUIActions(set, get)
+
+    actions.setApplyPosture('auto')
+    expect(localStorage.getItem('smartsht-apply-posture')).toBe('auto')
+
+    state = createUIState()
+    expect(state.applyPosture).toBe('auto')
+  })
+
+  it('hydrates an unknown stored value to preview', () => {
+    localStorage.setItem('smartsht-apply-posture', 'bogus')
+    expect(createUIState().applyPosture).toBe('preview')
+  })
+})

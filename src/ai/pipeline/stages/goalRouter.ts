@@ -11,6 +11,7 @@ import { executeTool } from '@/agent'
 import { getToolDefinition } from '@shared/toolRegistry'
 import { buildSpreadsheetContext } from '@/ai/buildContext'
 import { executeGoal, listSuggestedGoals, matchGoal } from '@/ai/goals'
+import { shouldAutoApply } from '@/lib/applyPosture'
 
 export interface GoalRouterDeps {
   buildExecContext: (opts?: { suppressHistory?: boolean }) => ExecutionContext
@@ -70,6 +71,28 @@ export function createGoalRouterStage(deps: GoalRouterDeps): PipelineStage {
         const category = getToolDefinition(action.tool)?.category
         return category === 'mutate' || category === 'template'
       })
+
+      // Posture gate (mutations only — read-only goals always run inline):
+      // auto-apply only when every action in the batch is on the low-risk
+      // allowlist (a mixed batch previews as one unit so its single undo group
+      // is never fragmented). Everything else returns Apply/Reject actions
+      // through the same pending-action path the semantic router uses.
+      const posture = context.applyPosture ?? 'preview'
+      const everyActionAutoApplies = execution.actions.every((a) => shouldAutoApply(a.tool, posture))
+      if (hasMutation && !everyActionAutoApplies) {
+        const confirming = /\?\s*$/.test(context.message.trim())
+          ? `Yes — I can **${execution.message}**.`
+          : execution.message
+        return {
+          success: true,
+          message: `${confirming}\n\nReview, then choose Apply or Reject.`,
+          actions: execution.actions.map((a) => ({ tool: a.tool, params: a.params, description: a.description })),
+          suggestions,
+          stageName: 'goal-router',
+          metadata: { goalId: match.goal?.id, matchStatus: 'matched', explain: match.explain, preview: true },
+        }
+      }
+
       if (hasMutation) {
         deps.pushHistory(`Goal: ${match.goal?.title ?? 'action'}`)
       }

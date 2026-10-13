@@ -12,6 +12,7 @@
  */
 
 import type { PipelineContext, PipelineStage, StageResult } from '../types'
+import type { ApplyPosture } from '@/types'
 import type { ExecutionContext } from '@/agent/executor'
 import type { SheetContext, ParsedToolCall } from '@/agent/parser'
 import { parseMessage, executeTool } from '@/agent'
@@ -20,6 +21,7 @@ import { findHeaderRow, findLastDataRow } from '@/lib/sheetSort'
 import { cellToRef } from '@/engine/spreadsheet'
 import { findDeleteRowMatches, resolveDeleteRow } from '@/lib/deleteRowPreview'
 import { buildSpreadsheetContext } from '@/ai/buildContext'
+import { shouldAutoApply } from '@/lib/applyPosture'
 
 export interface AgentParserDeps {
   buildExecContext: (opts?: { suppressHistory?: boolean }) => ExecutionContext
@@ -94,7 +96,7 @@ export function createAgentParserStage(deps: AgentParserDeps): PipelineStage {
 
       // ─── Execute tool calls ─────────────────────────────────────────────
       if (parsed.calls.length > 0) {
-        return executeToolCalls(parsed.calls, parsed.explanation, deps)
+        return executeToolCalls(parsed.calls, parsed.explanation, deps, context.applyPosture ?? 'preview')
       }
 
       // Edge case: understood === true but no calls and no explanation
@@ -184,11 +186,29 @@ async function executeToolCalls(
   calls: ParsedToolCall[],
   explanation: string | undefined,
   deps: AgentParserDeps,
+  posture: ApplyPosture,
 ): Promise<StageResult> {
   const hasMutation = calls.some((call) => {
     const category = getToolDefinition(call.tool)?.category
     return category === 'mutate' || category === 'template'
   })
+
+  // Posture gate (mutations only — read-only calls always run inline): auto-apply
+  // only when every parsed call is on the low-risk allowlist. Otherwise return
+  // Apply/Reject actions (same shape the destructive preview returns) so the
+  // user confirms before anything changes.
+  const everyCallAutoApplies = calls.every((c) => shouldAutoApply(c.tool, posture))
+  if (hasMutation && !everyCallAutoApplies) {
+    const base = explanation ?? calls.map((c) => c.description).join(', then ')
+    return {
+      success: true,
+      message: `${base}\n\nReview, then choose Apply or Reject.`,
+      actions: calls.map((c) => ({ tool: c.tool, params: c.params, description: c.description })),
+      stageName: 'agent-parser',
+      metadata: { toolUsed: 'preview' },
+    }
+  }
+
   if (hasMutation) {
     deps.pushHistory(`AI: ${explanation || calls.map((c) => c.description).join(', ')}`)
   }

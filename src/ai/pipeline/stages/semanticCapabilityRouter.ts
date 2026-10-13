@@ -36,6 +36,7 @@ import {
 } from '@/ai/telemetry'
 import type { CapabilityDef } from '@shared/capabilities.js'
 import { getCapability } from '@shared/capabilities.js'
+import { shouldAutoApply } from '@/lib/applyPosture'
 import {
   capabilitySkipMessage,
   capabilityPickMessage,
@@ -323,6 +324,21 @@ async function fulfillCapabilityScore(
   const isMutation = category === 'mutate' || category === 'template'
 
   if (isMutation) {
+    const posture = context.applyPosture ?? 'preview'
+    // Auto posture fast-applies the low-risk allowlist (Undo only). The
+    // destructive override lives inside shouldAutoApply, so a dangerous tool
+    // can never reach this branch regardless of posture.
+    if (shouldAutoApply(resolved.tool, posture)) {
+      logRoute({
+        outcome: 'claim',
+        message: context.message,
+        top3Capabilities: top3,
+        score: best.score,
+        mode,
+      })
+      return executeCapabilityTool(resolved, best.capabilityId, best.score, top3, deps)
+    }
+
     logRoute({
       outcome: 'preview',
       message: context.message,
@@ -330,9 +346,14 @@ async function fulfillCapabilityScore(
       score: best.score,
       mode,
     })
+    // Q2 copy: a question-framed safe mutation that reached preview reads as a
+    // confirming "Yes — I can …" instead of the declarative "I will …".
+    const message = isQuestionFraming(context.message)
+      ? `Yes — I can **${resolved.description}**. Review, then choose Apply or Reject.`
+      : `I will **${resolved.description}**. Review, then choose Apply or Reject.`
     return {
       success: true,
-      message: `I will **${resolved.description}**. Review, then choose Apply or Reject.`,
+      message,
       actions: [{
         tool: resolved.tool,
         params: resolved.params,

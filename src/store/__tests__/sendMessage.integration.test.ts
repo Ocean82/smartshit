@@ -22,7 +22,19 @@ function resetStore(sheetName = 'Integration Test') {
     redoStack: [],
     chatInput: '',
     isAiProcessing: false,
+    // Default posture is 'preview': goal/regex edits now stage a pending action
+    // instead of applying instantly. Tests that assert the sheet changed apply
+    // the pending action explicitly via applyPending().
+    applyPosture: 'preview',
   })
+}
+
+/** Click Apply on every pending action on the latest assistant message. */
+function applyPending() {
+  const actions = useStore.getState().messages.at(-1)?.actions ?? []
+  for (const action of actions) {
+    if (action.status === 'pending') useStore.getState().applyAction(action.id)
+  }
 }
 
 function seedBudgetData() {
@@ -53,13 +65,18 @@ async function sendAndWait(input: string) {
 describe('sendMessage integration — local parser path', () => {
   beforeEach(() => resetStore())
 
-  it('sorts a sheet by column via natural language', async () => {
+  it('sorts a sheet by column via natural language (preview then Apply)', async () => {
     seedBudgetData()
-    await sendAndWait('sort by amount highest first')
+    await sendAndWait('sort by amount lowest first')
 
-    // The parser should have produced a successful response
+    // Default posture previews: a pending sort action is staged, not applied.
     const lastMsg = [...useStore.getState().messages].reverse().find(m => m.role === 'assistant')
-    expect(lastMsg?.content).toContain('✓')
+    expect(lastMsg?.content).toMatch(/Apply or Reject/i)
+    expect(lastMsg?.actions?.[0]?.status).toBe('pending')
+
+    applyPending()
+    // Lowest-first: the smallest amount (15) should now be at the top data row.
+    expect(useStore.getState().getActiveSheet().cells.B2?.value).toBe(15)
   })
 
   it('adds a row via natural language', async () => {
@@ -72,9 +89,10 @@ describe('sendMessage integration — local parser path', () => {
     expect(lastMsg?.content).toBeTruthy()
   })
 
-  it('formats cells via natural language', async () => {
+  it('formats cells via natural language (preview then Apply)', async () => {
     seedBudgetData()
     await sendAndWait('bold the headers')
+    applyPending()
 
     const sheet = useStore.getState().getActiveSheet()
     // Row 1 (header) should have bold formatting on at least one cell
@@ -83,9 +101,10 @@ describe('sendMessage integration — local parser path', () => {
     expect(anyBold).toBe(true)
   })
 
-  it('applies a SUM formula via natural language', async () => {
+  it('applies a SUM formula via natural language (preview then Apply)', async () => {
     seedBudgetData()
     await sendAndWait('sum column B')
+    applyPending()
 
     const sheet = useStore.getState().getActiveSheet()
     // Should have a SUM formula somewhere in the sheet
@@ -106,11 +125,14 @@ describe('sendMessage integration — local parser path', () => {
     expect(lastAssistant?.content).toBeTruthy()
   })
 
-  it('all parser actions are undoable', async () => {
+  it('applied parser actions are undoable', async () => {
     seedBudgetData()
     const beforeValue = useStore.getState().getActiveSheet().cells['B2']?.value
 
     await sendAndWait('sort by amount lowest first')
+    applyPending()
+    // Sanity: the sort actually changed the top data row before we undo.
+    expect(useStore.getState().getActiveSheet().cells['B2']?.value).not.toBe(beforeValue)
 
     // Undo should restore original state
     useStore.getState().undo()

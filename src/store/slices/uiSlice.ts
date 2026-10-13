@@ -6,10 +6,13 @@
  * (components selecting only UI state won't re-render on workbook mutations).
  */
 
-import type { Toast, ConfirmDialogState } from '@/types'
+import type { Toast, ConfirmDialogState, ApplyPosture } from '@/types'
 import { v4 as uuid } from 'uuid'
 
 export interface UIState {
+  // Chat apply posture ('auto' = instant low-risk edits, 'preview' = wait for Apply)
+  applyPosture: ApplyPosture
+
   // Grid zoom level (50–200, percent)
   gridZoom: number
 
@@ -75,6 +78,7 @@ export interface UIActions {
   setShowNameManagerDialog: (show: boolean) => void
   setContextMenu: (menu: { x: number; y: number; cell: string } | null) => void
   setScrollPosition: (row: number, col: number) => void
+  setApplyPosture: (posture: ApplyPosture) => void
   showToast: (toast: Omit<Toast, 'id'>) => void
   dismissToast: (id: string) => void
   showConfirm: (dialog: ConfirmDialogState) => void
@@ -96,7 +100,12 @@ export function createUIState(): UIState {
   const storedZoom = Number(storage?.getItem('smartsht-grid-zoom') || 100)
   const initialZoom = Number.isFinite(storedZoom) ? Math.min(200, Math.max(50, storedZoom)) : 100
 
+  // Default + unknown-value guard: anything that isn't exactly 'auto' is 'preview'.
+  const storedPosture = storage?.getItem('smartsht-apply-posture')
+  const initialApplyPosture: ApplyPosture = storedPosture === 'auto' ? 'auto' : 'preview'
+
   return {
+    applyPosture: initialApplyPosture,
     gridZoom: initialZoom,
     showChat: initialShowChat,
     chatWidth: initialChatWidth,
@@ -205,6 +214,10 @@ export function createUIActions(
     setShowNameManagerDialog: (show) => set((s) => { s.showNameManagerDialog = show }),
     setContextMenu: (menu) => set((s) => { s.contextMenu = menu }),
     setScrollPosition: (row, col) => set((s) => { s.scrollRow = row; s.scrollCol = col }),
+    setApplyPosture: (posture) => {
+      set((s) => { s.applyPosture = posture })
+      try { storage?.setItem('smartsht-apply-posture', posture) } catch { /* ignore */ }
+    },
     showToast: (toast) => {
       const id = uuid()
       set((s) => {

@@ -84,6 +84,8 @@ export interface ChatServiceDeps {
   resolvedCapabilityId?: string
   /** Aborts the server call when the user presses Stop */
   signal?: AbortSignal
+  /** Current user apply posture ('auto' | 'preview'); defaults to 'preview'. */
+  getApplyPosture?: () => import('@/types').ApplyPosture
 }
 
 // ─── Service ─────────────────────────────────────────────────────────────────
@@ -284,6 +286,7 @@ export async function processChatMessage(
       skipCapabilityRouter,
       resolvedCapabilityId,
       clarificationSource: resolvedCapabilityId ? 'clarification_chip' : undefined,
+      applyPosture: deps.getApplyPosture?.() ?? 'preview',
     }
 
     // ─── Create and run pipeline ─────────────────────────────────────────
@@ -420,6 +423,7 @@ function stageResultToChatMessage(
   if (
     (
       result.stageName === 'agent-parser'
+      || result.stageName === 'goal-router'
       || result.stageName === 'macro-planner'
       || result.stageName === 'semantic-capability-router'
       || result.stageName === 'template-resolver'
