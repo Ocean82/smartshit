@@ -61,8 +61,11 @@ export function createLLMGatewayStage(): PipelineStage {
         getSheetComputedValue: target.getSheetComputedValue,
       })
 
-      // Build deterministic summary for LLM context enrichment. Follow-ups keep
-      // the full write-up: the model has no memory of the prior turn's context.
+      // Build deterministic summary for LLM context enrichment. The insights
+      // block (pre-computed totals, top expenses, outliers) is sent for the
+      // LLM-only modes — explain, advise, and chat — so the model builds on the
+      // computed figures instead of re-deriving them from raw cells. `act`/`help`
+      // omit it (act emits tool calls; help is static guidance).
       const insightsBlock = isLlmOnlyMode(mode)
         ? formatInsights(sheetContext.insights)
         : ''
@@ -217,7 +220,14 @@ export function createLLMGatewayStage(): PipelineStage {
 
 /**
  * Build the deterministic summary string passed to the LLM for context.
- * Combines insights, audit findings, and prior-turn continuity hints.
+ * Combines insights, audit findings, local analysis, and prior-turn continuity hints.
+ *
+ * Prior-turn hint strategy:
+ * - When `insightsBlock` or `localAnalysis` is present, those blocks already give
+ *   the model full data context for this turn — the hint is redundant noise.
+ * - When neither is present (e.g. a follow-up chat-mode message) the model has no
+ *   data context in the summary at all. A lightweight hint signals continuation
+ *   without reinjecting the full write-up.
  */
 function buildSummary(
   insightsBlock: string,
@@ -227,8 +237,11 @@ function buildSummary(
 ): string {
   const parts: string[] = []
 
-  if (priorInsights) {
-    parts.push('Prior turn insights still apply for follow-up questions.')
+  // Only emit the continuation hint when no richer context block is present.
+  // If we have insights or a local analysis the model can see the data directly.
+  const hasRicherContext = Boolean(insightsBlock || localAnalysis)
+  if (priorInsights && !hasRicherContext) {
+    parts.push('This is a follow-up question in an ongoing conversation about the same sheet.')
   }
   if (localAnalysis) {
     parts.push(`Local budget analysis computed from this sheet (build on it with judgment; do not just repeat it):\n${localAnalysis.message}`)
