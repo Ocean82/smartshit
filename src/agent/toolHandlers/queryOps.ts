@@ -3,6 +3,7 @@
  */
 import type { SheetData } from '@/types'
 import { cellToRef } from '@/engine/spreadsheet'
+import { parseNumericDisplay } from '@/lib/conditionalFormat'
 import { findHeaderRow, findLastDataRow } from '@/lib/sheetSort'
 import { findSummaryRowIndexes } from '@/lib/sheetRows'
 import type { ToolHandler } from './types'
@@ -32,11 +33,12 @@ export const handleCountRows: ToolHandler = (params, ctx, sheet) => {
   }
 
   const operator = String(params.operator ?? 'equals').toLowerCase()
-  const supported = new Set(['equals', 'contains', 'gt', 'gte', 'lt', 'lte', 'not_empty'])
+  const supported = new Set(['equals', 'contains', 'gt', 'gte', 'lt', 'lte', 'not_empty', 'is_number'])
   if (!supported.has(operator)) {
     return { success: false, message: `Unsupported count condition "${operator}"`, modified: 0 }
   }
-  if (operator !== 'not_empty' && params.value == null) {
+  // not_empty and is_number take no comparison value.
+  if (operator !== 'not_empty' && operator !== 'is_number' && params.value == null) {
     return { success: false, message: 'count_rows requires a comparison value', modified: 0 }
   }
 
@@ -140,6 +142,7 @@ function findExtreme(
 function countValueMatches(displayed: string, operator: string, rawTarget: unknown): boolean {
   const value = displayed.trim()
   if (operator === 'not_empty') return value !== ''
+  if (operator === 'is_number') return value !== '' && Number.isFinite(parseNumericDisplay(value))
 
   const targetText = String(rawTarget ?? '').trim()
   if (operator === 'contains') return value.toLowerCase().includes(targetText.toLowerCase())

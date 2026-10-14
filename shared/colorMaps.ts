@@ -1,3 +1,7 @@
+/** Recognized color words — single source of truth for parser, templates, and
+ *  capability param resolution (keeps the color vocabulary from drifting). */
+export const COLOR_WORD_RE = /\b(red|blue|green|yellow|orange|purple|pink|black|white|gray|grey)\b/
+
 /** Vivid hexes for font colors — single source of truth for parser + templates */
 export const FONT_COLOR_HEX: Record<string, string> = {
   red: '#FF0000',

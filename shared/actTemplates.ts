@@ -82,6 +82,27 @@ function resolveFormattingTemplate(lower: string, colorWord: string | undefined)
     }
   }
 
+  // Highlight numeric cells (type condition) — after negative/equals, before contains.
+  // PLURAL-only trigger + number-format exclusion, mirroring the client Tier-1 block.
+  // The server number_format RULE already returns before this branch is reached, so the
+  // !number-format guard is belt-and-suspenders against a future RULES reorder.
+  if (
+    (/\bnumbers\b|\bnumeric\b/.test(lower)) &&
+    !/\bnumber\s+format\b|\bformat(?:ted)?\s+as\b/.test(lower)
+  ) {
+    const numBg = (colorWord && HIGHLIGHT_BG_HEX[colorWord]) || HIGHLIGHT_BG_HEX.red
+    return {
+      message: colorWord
+        ? `I will highlight cells that contain numbers in ${colorWord}. Click Apply to confirm.`
+        : 'I will highlight cells that contain numbers. Click Apply to confirm.',
+      actions: [{
+        tool: 'format_cells',
+        params: { condition: { operator: 'is_number' }, bgColor: numBg },
+        description: colorWord ? `Highlight numeric cells ${colorWord}` : 'Highlight numeric cells',
+      }],
+    }
+  }
+
   // Highlight cells containing a value (shared article/noun stripper with client parser)
   const containsValue = extractCellContainsValue(lower)
   if (containsValue) {

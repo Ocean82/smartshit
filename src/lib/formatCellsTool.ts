@@ -86,14 +86,14 @@ export function normalizeCondition(raw: unknown): FormatCondition | null {
 
   if (typeof raw === 'string') {
     const s = raw.toLowerCase()
-    if (s === 'negative' || s === 'positive') return { operator: s }
+    if (s === 'negative' || s === 'positive' || s === 'is_number') return { operator: s }
     return null
   }
 
   if (typeof raw !== 'object') return null
   const obj = raw as Record<string, unknown>
 
-  const validOps = ['eq', 'lt', 'gt', 'lte', 'gte', 'contains', 'negative', 'positive'] as const
+  const validOps = ['eq', 'lt', 'gt', 'lte', 'gte', 'contains', 'negative', 'positive', 'is_number'] as const
   const op = typeof obj.operator === 'string' ? obj.operator.toLowerCase() : null
   if (op && (validOps as readonly string[]).includes(op)) {
     return {
@@ -135,6 +135,9 @@ export function cellMatchesCondition(computed: string, condition: FormatConditio
 
   const num = parseNumericDisplay(display)
 
+  // is_number: cell is numeric iff a non-blank display parses to a finite number.
+  // Blank guard is required because parseNumericDisplay('') is 0 (finite).
+  if (condition.operator === 'is_number') return display.trim() !== '' && Number.isFinite(num)
   if (condition.operator === 'negative') return Number.isFinite(num) && num < 0
   if (condition.operator === 'positive') return Number.isFinite(num) && num > 0
 

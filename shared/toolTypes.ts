@@ -17,6 +17,7 @@ export type FormatConditionOperator =
   | 'contains'
   | 'negative'
   | 'positive'
+  | 'is_number'
 
 /** Value-based targeting for format_cells ("highlight cells containing 4"). */
 export interface FormatCondition {

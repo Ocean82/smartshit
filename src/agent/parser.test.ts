@@ -57,6 +57,35 @@ describe('parseMessage — format/color intents', () => {
     })
   })
 
+  it('routes "change all cells with numbers to red" to is_number (red fill), not contains', () => {
+    const result = parseMessage('change all cells with numbers to red')
+    expect(result.understood).toBe(true)
+    expect(result.calls).toHaveLength(1)
+    expect(result.calls[0].tool).toBe('format_cells')
+    expect(result.calls[0].params.condition).toEqual({ operator: 'is_number' })
+    expect(result.calls[0].params.bgColor).toBe('#FEE2E2')
+  })
+
+  it('routes "highlight cells that contain numbers red" to is_number', () => {
+    const result = parseMessage('highlight cells that contain numbers red')
+    expect(result.calls[0].tool).toBe('format_cells')
+    expect(result.calls[0].params.condition).toEqual({ operator: 'is_number' })
+    expect(result.calls[0].params.bgColor).toBe('#FEE2E2')
+  })
+
+  it('keeps "highlight negative numbers" as the negative condition (not is_number)', () => {
+    const result = parseMessage('highlight negative numbers')
+    expect(result.calls[0].tool).toBe('format_cells')
+    expect(result.calls[0].params.condition).toEqual({ operator: 'negative' })
+  })
+
+  it('does NOT steal number-format phrasing ("change the number format to currency")', () => {
+    const result = parseMessage('change the number format to currency')
+    const call = result.calls[0]
+    expect(call?.params.condition).toBeUndefined()
+    expect(call).toMatchObject({ tool: 'format_cells', params: { numberFormat: 'currency' } })
+  })
+
   it('parses filter phrases', () => {
     expect(parseMessage('filter where Status is Paid').calls[0]).toMatchObject({
       tool: 'filter',
