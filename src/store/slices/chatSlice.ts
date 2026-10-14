@@ -84,6 +84,8 @@ export interface ChatStoreAccess extends ChatState {
   showToast: (toast: Omit<import('@/types').Toast, 'id'>) => void
   pushHistory: (desc: string) => void
   undo: () => void
+  /** Undo history; the chat slice reads only the top entry's id to guard the Undo toast. */
+  undoStack: ReadonlyArray<{ id: string }>
   applyAction: (actionId: string) => void
   importWorkbook: (workbook: WorkbookData, meta?: { fileName?: string; warnings?: string[] }) => void
   setCellValue: (cellId: string, value: string | number | boolean | null, formula?: string) => void
@@ -524,14 +526,23 @@ export function createChatActions(
           }
           markActionStatus(actionId, result.success ? 'applied' : 'failed')
           if (result.success) {
-            // Applied-state Undo affordance: a self-expiring toast whose
-            // undoAction pops the top of the global LIFO undo stack at click
-            // time. This maps to "undo the thing I just did" without the
-            // stale-stack hazard of a persistent per-action button.
+            // Applied-state Undo affordance: a self-expiring toast. Capture the
+            // identity of the undo entry this action just created (the current
+            // top of the LIFO stack) and only undo if it is STILL on top at
+            // click time. Within the toast's lifetime the user can make another
+            // edit, which would push a newer entry; a bare get().undo() would
+            // then revert THAT edit instead of this one. Validating the id keeps
+            // newer history untouched (and makes the Undo a no-op if this
+            // action's entry has already been undone or buried).
+            const undoEntryId = get().undoStack.at(-1)?.id
             get().showToast({
               type: 'success',
               message: `Applied: ${action.description ?? action.tool}`,
-              undoAction: () => get().undo(),
+              undoAction: () => {
+                if (!undoEntryId) return
+                if (get().undoStack.at(-1)?.id !== undoEntryId) return
+                get().undo()
+              },
             })
           } else {
             pushAssistant(`⚠️ ${result.message}`)

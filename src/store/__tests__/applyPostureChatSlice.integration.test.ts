@@ -127,6 +127,31 @@ describe('apply-posture — Undo toast (§9)', () => {
     expect(useStore.getState().getActiveSheet().cells['A1']?.value).toBe('Item')
     showToast.mockRestore()
   })
+
+  it('the toast undoAction is a no-op once a newer edit is on top of the undo stack', () => {
+    // Stale-stack guard: the toast lives ~4s, during which the user can make
+    // another edit. A bare undo() would then revert THAT edit, not the AI one.
+    // The captured undo-entry id must gate the undo so newer history is safe.
+    seedData()
+    const actionId = injectAction('set_range', { startCell: 'A1', values: [['Replaced']] })
+    let captured: (() => void) | undefined
+    const showToast = vi.spyOn(useStore.getState(), 'showToast')
+      .mockImplementation((toast) => { captured = toast.undoAction })
+
+    useStore.getState().applyAction(actionId)
+    expect(useStore.getState().getActiveSheet().cells['A1']?.value).toBe('Replaced')
+
+    // User makes a newer edit AFTER the AI action — pushes a newer undo entry.
+    useStore.getState().pushHistory('user edit')
+    useStore.getState().setCellValue('C3', 'typed-by-user')
+
+    // Clicking the (still-visible) toast Undo must NOT revert the user's newer
+    // edit, and must leave the AI change in place (its entry is no longer top).
+    captured!()
+    expect(useStore.getState().getActiveSheet().cells['C3']?.value).toBe('typed-by-user')
+    expect(useStore.getState().getActiveSheet().cells['A1']?.value).toBe('Replaced')
+    showToast.mockRestore()
+  })
 })
 
 describe('apply-posture — auto-apply gate (§6)', () => {
