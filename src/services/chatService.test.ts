@@ -107,9 +107,16 @@ describe('chatService — non-commands never mutate', () => {
     serverStream.mockResolvedValue(null)
   })
 
-  it('executes an explicit direct command immediately (unchanged behaviour)', async () => {
-    await send('set A1 to 100')
-    expect(activeSheet().cells['A1']?.value).toBe(100)
+  it('proposes an explicit direct command as a pending action (preview posture)', async () => {
+    // Default posture is 'preview': a direct mutation command is claimed and
+    // returned as a pending Apply/Reject action rather than applied inline.
+    // The invariant this suite guards is that NON-commands never reach this
+    // path at all (they produce no action and do not mutate).
+    const reply = await send('set A1 to 100')
+    expect(activeSheet().cells['A1']).toBeUndefined()
+    const action = reply?.actions?.[0]
+    expect(action?.tool).toBe('set_cell')
+    expect(action?.status).toBe('pending')
   })
 
   it('does not mutate for a negated command', async () => {

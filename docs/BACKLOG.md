@@ -33,11 +33,16 @@ M 1–2 days, L more.
 - [ ] **Community template marketplace is live** (2026-10-09)
   - `src/lib/communityTemplates.ts` and the community tab in `TemplateGallery`; the strategy's
     non-goals and `project_outline/roadmap-v1.md` rule a marketplace out. Keep, flag off, or remove.
-- [ ] **Instant edits from the goal and regex routes** (2026-10-09, chat review F1)
+- [x] **Instant edits from the goal and regex routes** (2026-10-09, chat review F1)
   - `src/ai/pipeline/stages/goalRouter.ts` and `.../agentParser.ts` apply NON-destructive edits
     with Undo (`executeTool` + `pushHistory`) but no Apply step; destructive tools (`delete_row`,
     `DESTRUCTIVE_TOOLS`) do get a preview/confirm flow. The review accepts the no-Apply path only
     as a stated policy; write it down or route them through a preview. (Verified open 2026-10-11.)
+  - Decided 2026-10-12: posture is now an explicit user preference (`applyPosture`, default
+    `preview`). The goal/regex routes auto-apply ONLY the low-risk allowlist (`format_cells`,
+    `set_column_width`, `set_row_height`, `auto_fit`, `rename_header`) and ONLY when posture is
+    `auto`; everything else previews. Destructive tools always preview regardless of posture.
+    See `.agents/tasks/apply-posture-design.md`.
 
 ---
 

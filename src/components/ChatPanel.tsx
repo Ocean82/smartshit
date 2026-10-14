@@ -14,6 +14,7 @@ import { persistenceCaveat } from '@/lib/styleRecipes'
 import { collectStaleActionIds } from '@/lib/actionScope'
 import { useUsage, UpgradePrompt } from '@/auth'
 import { ApiKeySettings } from './ApiKeySettings'
+import { ApplyPostureToggle } from './ApplyPostureToggle'
 import { ChatMarkdown } from './ChatMarkdown'
 import {
   useMessages,
@@ -369,6 +370,7 @@ function ChatHeader({ messageCount, confirmClear, onClear, onExport, onToggle, o
         </div>
       </div>
       <div className="flex items-center gap-1 shrink-0">
+        <ApplyPostureToggle variant="dark" />
         {messageCount > 1 && (
           <button
             type="button"

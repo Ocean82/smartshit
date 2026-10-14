@@ -19,6 +19,7 @@ import type { ExecutionResult } from '@/agent'
 import { buildScriptPreview } from '@/lib/scriptPreview'
 import { scriptPatchSignature } from '@/lib/scriptPatch'
 import { captureActionScope, validateActionScope } from '@/lib/actionScope'
+import { shouldAutoApply } from '@/lib/applyPosture'
 import { v4 as uuid } from 'uuid'
 import {
   processAICommand,
@@ -74,12 +75,18 @@ export interface ChatStoreAccess extends ChatState {
   /** Monotonic workbook revision used to stale-check pending actions. */
   workbookRevision: number
   showChat: boolean
+  /** User apply posture; drives the auto-apply post-process in sendMessage. */
+  applyPosture: import('@/types').ApplyPosture
   getActiveSheet: () => SheetData
   getComputedValue: (row: number, col: number) => string
   setShowChat: (v: boolean) => void
   setActivePanel: (panel: 'chat' | 'insights' | 'auditor' | 'inspector' | null) => void
   showToast: (toast: Omit<import('@/types').Toast, 'id'>) => void
   pushHistory: (desc: string) => void
+  undo: () => void
+  /** Undo history; the chat slice reads only the top entry's id to guard the Undo toast. */
+  undoStack: ReadonlyArray<{ id: string }>
+  applyAction: (actionId: string) => void
   importWorkbook: (workbook: WorkbookData, meta?: { fileName?: string; warnings?: string[] }) => void
   setCellValue: (cellId: string, value: string | number | boolean | null, formula?: string) => void
   setCellFormat: (cellId: string, format: Partial<import('@/types').CellFormat>) => void
@@ -110,6 +117,16 @@ export interface ChatActions {
   rejectAction: (actionId: string) => void
 }
 
+/**
+ * Build the chat store actions (send/stop, message management, and the
+ * Apply/Reject lifecycle).
+ *
+ * `sendMessage` serializes turns, streams the reply, and — under `auto` posture
+ * — clicks Apply for the user on any low-risk pending action via the normal
+ * `applyAction` path (so scope/stale/high-impact guards still hold). `applyAction`
+ * runs an action after scope-binding and preview gates, surfacing an Undo toast
+ * on success; `rejectAction` discards a pending proposal.
+ */
 export function createChatActions(
   set: (fn: (s: ChatStoreAccess) => void) => void,
   get: () => ChatStoreAccess,
@@ -257,7 +274,22 @@ export function createChatActions(
           processLocalFallback: (fallbackInput) => processAICommand(fallbackInput, get as never),
           skipCapabilityRouter,
           resolvedCapabilityId,
+          getApplyPosture: () => get().applyPosture,
           signal: turnAbort.signal,
+        }).then(() => {
+          // Auto posture: after the message is finalized, click Apply for the
+          // user on any low-risk pending action. Routing through the existing
+          // applyAction keeps scope/stale/requiresPreview guards in force, so a
+          // high-impact tool or anything off the allowlist stays pending.
+          if (!isCurrentTurn()) return
+          if (get().applyPosture !== 'auto') return
+          const msg = get().messages.find((m) => m.id === streamingMsgId)
+          if (!msg?.actions) return
+          for (const action of msg.actions) {
+            if (action.status === 'pending' && shouldAutoApply(action.tool, 'auto')) {
+              get().applyAction(action.id)
+            }
+          }
         })
       ).finally(() => {
         if (activeTurnAbort === turnAbort) activeTurnAbort = null
@@ -493,7 +525,26 @@ export function createChatActions(
             return
           }
           markActionStatus(actionId, result.success ? 'applied' : 'failed')
-          if (!result.success) {
+          if (result.success) {
+            // Applied-state Undo affordance: a self-expiring toast. Capture the
+            // identity of the undo entry this action just created (the current
+            // top of the LIFO stack) and only undo if it is STILL on top at
+            // click time. Within the toast's lifetime the user can make another
+            // edit, which would push a newer entry; a bare get().undo() would
+            // then revert THAT edit instead of this one. Validating the id keeps
+            // newer history untouched (and makes the Undo a no-op if this
+            // action's entry has already been undone or buried).
+            const undoEntryId = get().undoStack.at(-1)?.id
+            get().showToast({
+              type: 'success',
+              message: `Applied: ${action.description ?? action.tool}`,
+              undoAction: () => {
+                if (!undoEntryId) return
+                if (get().undoStack.at(-1)?.id !== undoEntryId) return
+                get().undo()
+              },
+            })
+          } else {
             pushAssistant(`⚠️ ${result.message}`)
           }
         }

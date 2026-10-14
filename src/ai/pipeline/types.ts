@@ -3,7 +3,7 @@
  * for the unified intent routing pipeline.
  */
 
-import type { Selection, SheetData, WorkbookData } from '@/types'
+import type { Selection, SheetData, WorkbookData, ApplyPosture } from '@/types'
 import type { AttachedFilePreview } from '@/ai/types'
 import type { SheetInsights } from '@/ai/sheetInsights'
 import type { UserIntent } from '@shared/intentTypes'
@@ -50,6 +50,8 @@ export interface PipelineContext {
   resolvedCapabilityId?: string
   /** Provenance for telemetry / short-circuit paths. */
   clarificationSource?: 'clarification_chip'
+  /** User's apply posture; defaults to 'preview' when the reader is absent. */
+  applyPosture?: ApplyPosture
 
   // ─── Enriched by IntentClassifier stage ─────────────────────────────────
   /** Classified intent (set by IntentClassifier stage) */

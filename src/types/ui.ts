@@ -58,6 +58,9 @@ export interface PanelDef {
   maxWidth: number;
 }
 
+/** Whether low-risk chat edits apply instantly ('auto') or wait for Apply ('preview'). */
+export type ApplyPosture = 'auto' | 'preview';
+
 export interface UserPreferences {
   theme: 'light' | 'dark' | 'system';
   defaultSheetName: string;
@@ -67,6 +70,8 @@ export interface UserPreferences {
   showSheetTabs: boolean;
   fontSize: number;
   fontFamily: string;
+  /** Whether low-risk edits apply instantly ('auto') or wait for Apply ('preview'). Default 'preview'. */
+  applyPosture: ApplyPosture;
 }
 
 export interface SyncStatus {

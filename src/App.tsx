@@ -23,6 +23,7 @@ import { ToastContainer } from '@/components/Toast'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { EmptyGridGuide } from '@/components/EmptyGridGuide'
 import { ImportInsightsOverlay } from '@/components/ImportInsightsOverlay'
+import { ApplyPostureToggle } from '@/components/ApplyPostureToggle'
 import { Sparkles, Zap, Cloud, CloudOff, Loader2, Share2, MessageSquare, SquarePen, Search } from 'lucide-react'
 import { UserNav, SubscriptionNoticeSlot } from '@/auth'
 import {
@@ -567,22 +568,25 @@ function ChatDockActions() {
     }
   }
 
-  if (messageCount <= 1) return null
-
   return (
-    <button
-      type="button"
-      onClick={handleClear}
-      className={`p-1 rounded transition-colors ${
-        confirmClear
-          ? 'bg-red-100 text-red-600 hover:bg-red-200'
-          : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
-      }`}
-      title={confirmClear ? 'Click again to confirm' : 'New conversation'}
-      aria-label={confirmClear ? 'Confirm clear chat' : 'Start new conversation'}
-    >
-      <SquarePen size={13} />
-    </button>
+    <div className="flex items-center gap-1.5">
+      <ApplyPostureToggle />
+      {messageCount > 1 && (
+        <button
+          type="button"
+          onClick={handleClear}
+          className={`p-1 rounded transition-colors ${
+            confirmClear
+              ? 'bg-red-100 text-red-600 hover:bg-red-200'
+              : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
+          }`}
+          title={confirmClear ? 'Click again to confirm' : 'New conversation'}
+          aria-label={confirmClear ? 'Confirm clear chat' : 'Start new conversation'}
+        >
+          <SquarePen size={13} />
+        </button>
+      )}
+    </div>
   )
 }
 

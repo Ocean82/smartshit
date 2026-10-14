@@ -46,13 +46,14 @@ import { createAgentParserStage } from '../stages/agentParser'
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-function makeContext(message = 'sort by amount'): PipelineContext {
+function makeContext(message = 'sort by amount', applyPosture?: PipelineContext['applyPosture']): PipelineContext {
   return {
     message,
     workbook: { sheets: [], name: 'test' } as unknown as PipelineContext['workbook'],
     sheet: { cells: {} } as unknown as PipelineContext['sheet'],
     selection: null,
     getComputedValue: () => '',
+    applyPosture,
   }
 }
 
@@ -70,15 +71,13 @@ describe('AgentParser stage', () => {
     vi.restoreAllMocks()
   })
 
-  it('claims the input when parseMessage returns understood=true with tool calls', async () => {
+  it('previews (returns actions, no execute) for a non-allowlisted tool under default posture', async () => {
     const mockParseMessage = vi.mocked(parseMessage)
     mockParseMessage.mockReturnValue({
       understood: true,
       calls: [{ tool: 'sort_column', params: { column: 'Amount', direction: 'desc' }, description: 'Sort by Amount' }],
       explanation: 'Sorting by Amount descending',
     })
-
-    vi.mocked(executeTool).mockReturnValue({ success: true, message: 'Sorted', modified: 5 })
 
     const deps = makeDeps()
     const stage = createAgentParserStage(deps)
@@ -87,6 +86,39 @@ describe('AgentParser stage', () => {
     expect(result).not.toBeNull()
     expect(result!.stageName).toBe('agent-parser')
     expect(result!.success).toBe(true)
+    expect(executeTool).not.toHaveBeenCalled()
+    expect(result!.actions).toEqual([expect.objectContaining({ tool: 'sort_column' })])
+    expect(result!.message).toMatch(/Apply or Reject/i)
+  })
+
+  it('auto + low-risk (format_cells) executes immediately', async () => {
+    vi.mocked(parseMessage).mockReturnValue({
+      understood: true,
+      calls: [{ tool: 'format_cells', params: { range: 'A1:C1', bold: true }, description: 'Bold headers' }],
+      explanation: 'Bold the header row',
+    })
+    vi.mocked(executeTool).mockReturnValue({ success: true, message: 'Formatted', modified: 3 })
+
+    const result = await createAgentParserStage(makeDeps()).process(makeContext('bold the headers', 'auto'))
+
+    expect(executeTool).toHaveBeenCalledWith(
+      expect.objectContaining({ tool: 'format_cells' }),
+      expect.anything(),
+    )
+    expect(result!.actions).toBeUndefined()
+  })
+
+  it('preview + low-risk (format_cells) returns actions, does not execute', async () => {
+    vi.mocked(parseMessage).mockReturnValue({
+      understood: true,
+      calls: [{ tool: 'format_cells', params: { range: 'A1:C1', bold: true }, description: 'Bold headers' }],
+      explanation: 'Bold the header row',
+    })
+
+    const result = await createAgentParserStage(makeDeps()).process(makeContext('bold the headers', 'preview'))
+
+    expect(executeTool).not.toHaveBeenCalled()
+    expect(result!.actions).toEqual([expect.objectContaining({ tool: 'format_cells' })])
   })
 
   it('claims the input when parseMessage returns understood=true with explanation only (ambiguity)', async () => {
@@ -127,25 +159,25 @@ describe('AgentParser stage', () => {
     expect(stage.name).toBe('agent-parser')
   })
 
-  it('executes multiple tool calls sequentially', async () => {
+  it('executes multiple low-risk tool calls sequentially under auto', async () => {
     const mockParseMessage = vi.mocked(parseMessage)
     mockParseMessage.mockReturnValue({
       understood: true,
       calls: [
-        { tool: 'set_cell', params: { cell: 'A1', value: '10' }, description: 'Set A1' },
-        { tool: 'set_cell', params: { cell: 'A2', value: '20' }, description: 'Set A2' },
+        { tool: 'format_cells', params: { range: 'A1', bold: true }, description: 'Bold A1' },
+        { tool: 'set_column_width', params: { column: 'A', width: 120 }, description: 'Widen A' },
       ],
-      explanation: 'Setting cells',
+      explanation: 'Formatting',
     })
 
     const mockExecute = vi.mocked(executeTool)
     mockExecute
-      .mockReturnValueOnce({ success: true, message: 'Set A1', modified: 1 })
-      .mockReturnValueOnce({ success: true, message: 'Set A2', modified: 1 })
+      .mockReturnValueOnce({ success: true, message: 'Bold A1', modified: 1 })
+      .mockReturnValueOnce({ success: true, message: 'Widen A', modified: 1 })
 
     const deps = makeDeps()
     const stage = createAgentParserStage(deps)
-    const result = await stage.process(makeContext('set A1 to 10 and A2 to 20'))
+    const result = await stage.process(makeContext('bold A1 and widen A', 'auto'))
 
     expect(result).not.toBeNull()
     expect(result!.success).toBe(true)
@@ -156,10 +188,10 @@ describe('AgentParser stage', () => {
     vi.mocked(parseMessage).mockReturnValue({
       understood: true,
       calls: [
-        { tool: 'set_cell', params: { cell: 'A1', value: '10' }, description: 'Set A1' },
-        { tool: 'set_cell', params: { cell: 'A2', value: '20' }, description: 'Set A2' },
+        { tool: 'format_cells', params: { range: 'A1', bold: true }, description: 'Bold A1' },
+        { tool: 'set_column_width', params: { column: 'A', width: 120 }, description: 'Widen A' },
       ],
-      explanation: 'Setting cells',
+      explanation: 'Formatting',
     })
     // pushHistory finalizes its diff in a microtask; steps that run after it are lost to undo.
     let historyFinalized = false
@@ -174,7 +206,7 @@ describe('AgentParser stage', () => {
       pushHistory: vi.fn(() => queueMicrotask(() => { historyFinalized = true })),
     }
 
-    await createAgentParserStage(deps).process(makeContext('set A1 to 10 and A2 to 20'))
+    await createAgentParserStage(deps).process(makeContext('bold A1 and widen A', 'auto'))
 
     expect(finalizedAtStep).toEqual([false, false])
   })

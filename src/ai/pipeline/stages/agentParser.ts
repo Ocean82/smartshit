@@ -12,6 +12,7 @@
  */
 
 import type { PipelineContext, PipelineStage, StageResult } from '../types'
+import type { ApplyPosture } from '@/types'
 import type { ExecutionContext } from '@/agent/executor'
 import type { SheetContext, ParsedToolCall } from '@/agent/parser'
 import { parseMessage, executeTool } from '@/agent'
@@ -20,9 +21,13 @@ import { findHeaderRow, findLastDataRow } from '@/lib/sheetSort'
 import { cellToRef } from '@/engine/spreadsheet'
 import { findDeleteRowMatches, resolveDeleteRow } from '@/lib/deleteRowPreview'
 import { buildSpreadsheetContext } from '@/ai/buildContext'
+import { shouldAutoApply } from '@/lib/applyPosture'
 
+/** Store-backed collaborators the agent-parser stage needs to execute parsed tool calls. */
 export interface AgentParserDeps {
+  /** Build an {@link ExecutionContext} for running tools; `suppressHistory` defers the undo entry to the caller. */
   buildExecContext: (opts?: { suppressHistory?: boolean }) => ExecutionContext
+  /** Open a single undo group describing the parsed command before its tool calls run. */
   pushHistory: (desc: string) => void
 }
 
@@ -32,6 +37,14 @@ export interface AgentParserDeps {
  */
 const DESTRUCTIVE_TOOLS = new Set(['clear_sheet'])
 
+/**
+ * Create the regex agent-parser pipeline stage (no LLM).
+ *
+ * Runs `parseMessage` over the user's text; passes (`null`) when the command
+ * isn't understood. Understood commands route to the delete-row or destructive
+ * preview/confirm flows, or to {@link executeToolCalls}, which honors the apply
+ * posture (auto-apply the low-risk allowlist, otherwise Apply/Reject).
+ */
 export function createAgentParserStage(deps: AgentParserDeps): PipelineStage {
   return {
     name: 'agent-parser',
@@ -94,7 +107,7 @@ export function createAgentParserStage(deps: AgentParserDeps): PipelineStage {
 
       // ─── Execute tool calls ─────────────────────────────────────────────
       if (parsed.calls.length > 0) {
-        return executeToolCalls(parsed.calls, parsed.explanation, deps)
+        return executeToolCalls(parsed.calls, parsed.explanation, deps, context.applyPosture ?? 'preview')
       }
 
       // Edge case: understood === true but no calls and no explanation
@@ -105,6 +118,14 @@ export function createAgentParserStage(deps: AgentParserDeps): PipelineStage {
 
 // ─── Delete Row Handler ─────────────────────────────────────────────────────
 
+/**
+ * Resolve a parsed `delete_row` call to a confirmable preview.
+ *
+ * Returns a clarifying message when the match is ambiguous (multiple rows) or
+ * unresolvable (no row found), and otherwise an Apply/Reject action carrying the
+ * exact row number plus a signature so the row can't shift before Apply. Delete
+ * always previews — it never auto-executes.
+ */
 function handleDeleteRow(
   call: ParsedToolCall,
   context: PipelineContext,
@@ -180,15 +201,41 @@ function handleDestructivePreview(
 
 // ─── Tool Execution ─────────────────────────────────────────────────────────
 
+/**
+ * Execute (or preview) the parsed tool calls under the current apply posture.
+ *
+ * Read-only calls always run inline. Mutating calls auto-apply as one undo group
+ * only when every call is on the low-risk allowlist (`shouldAutoApply`);
+ * otherwise the whole batch is returned as Apply/Reject actions so the user
+ * confirms before anything changes.
+ */
 async function executeToolCalls(
   calls: ParsedToolCall[],
   explanation: string | undefined,
   deps: AgentParserDeps,
+  posture: ApplyPosture,
 ): Promise<StageResult> {
   const hasMutation = calls.some((call) => {
     const category = getToolDefinition(call.tool)?.category
     return category === 'mutate' || category === 'template'
   })
+
+  // Posture gate (mutations only — read-only calls always run inline): auto-apply
+  // only when every parsed call is on the low-risk allowlist. Otherwise return
+  // Apply/Reject actions (same shape the destructive preview returns) so the
+  // user confirms before anything changes.
+  const everyCallAutoApplies = calls.every((c) => shouldAutoApply(c.tool, posture))
+  if (hasMutation && !everyCallAutoApplies) {
+    const base = explanation ?? calls.map((c) => c.description).join(', then ')
+    return {
+      success: true,
+      message: `${base}\n\nReview, then choose Apply or Reject.`,
+      actions: calls.map((c) => ({ tool: c.tool, params: c.params, description: c.description })),
+      stageName: 'agent-parser',
+      metadata: { toolUsed: 'preview' },
+    }
+  }
+
   if (hasMutation) {
     deps.pushHistory(`AI: ${explanation || calls.map((c) => c.description).join(', ')}`)
   }

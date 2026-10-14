@@ -276,6 +276,78 @@ describe('semanticCapabilityRouter', () => {
     )
   })
 
+  it('auto posture executes a low-risk mutation (bold_headers → format_cells)', async () => {
+    setCapabilityEmbeddingsForTests([
+      { capabilityId: 'bold_headers', embedding: unitVec(0), phrases: ['bold the headers'] },
+      { capabilityId: 'sort_column', embedding: unitVec(50), phrases: [] },
+    ])
+
+    const stage = createSemanticCapabilityRouterStage(makeDeps())
+    const ctx = makeContext('bold the headers')
+    ctx.mode = 'act'
+    ctx.applyPosture = 'auto'
+    const result = await stage.process(ctx)
+
+    expect(result?.metadata?.capabilityId).toBe('bold_headers')
+    expect(result?.metadata?.toolUsed).toBe('format_cells')
+    expect(result?.actions).toBeUndefined()
+    expect(executeToolAsync).toHaveBeenCalledWith(
+      expect.objectContaining({ tool: 'format_cells' }),
+      expect.anything(),
+    )
+  })
+
+  it('preview posture returns a Apply preview for the same low-risk mutation', async () => {
+    setCapabilityEmbeddingsForTests([
+      { capabilityId: 'bold_headers', embedding: unitVec(0), phrases: ['bold the headers'] },
+      { capabilityId: 'sort_column', embedding: unitVec(50), phrases: [] },
+    ])
+
+    const stage = createSemanticCapabilityRouterStage(makeDeps())
+    const ctx = makeContext('bold the headers')
+    ctx.mode = 'act'
+    ctx.applyPosture = 'preview'
+    const result = await stage.process(ctx)
+
+    expect(result?.metadata?.preview).toBe(true)
+    expect(result?.actions?.[0]?.tool).toBe('format_cells')
+    expect(executeToolAsync).not.toHaveBeenCalled()
+  })
+
+  it('Q2 copy: a question-framed safe mutation preview opens with "Yes — I can"', async () => {
+    setCapabilityEmbeddingsForTests([
+      { capabilityId: 'bold_headers', embedding: unitVec(0), phrases: ['bold the headers'] },
+    ])
+
+    const stage = createSemanticCapabilityRouterStage(makeDeps())
+    // Question prefix, no trailing '?', non-destructive tool → reaches preview.
+    const ctx = makeContext('can you bold the headers')
+    ctx.mode = 'act'
+    ctx.applyPosture = 'preview'
+    const result = await stage.process(ctx)
+
+    expect(result?.metadata?.preview).toBe(true)
+    expect(result?.message).toMatch(/^Yes — I can/)
+    expect(executeToolAsync).not.toHaveBeenCalled()
+  })
+
+  it('destructive tool under auto still previews (hard override)', async () => {
+    setCapabilityEmbeddingsForTests([
+      { capabilityId: 'sort_column', embedding: unitVec(0), phrases: ['sort by amount'] },
+    ])
+
+    const stage = createSemanticCapabilityRouterStage(makeDeps())
+    const ctx = makeContext('sort by amount descending')
+    ctx.mode = 'act'
+    ctx.applyPosture = 'auto'
+    const result = await stage.process(ctx)
+
+    // sort_column resolves to sort_sheet (destructive, not allowlisted) → preview.
+    expect(result?.metadata?.preview).toBe(true)
+    expect(result?.actions?.[0]?.tool).toBe('sort_sheet')
+    expect(executeToolAsync).not.toHaveBeenCalled()
+  })
+
   it('passes question framings for destructive tools', async () => {
     setCapabilityEmbeddingsForTests([
       { capabilityId: 'sort_column', embedding: unitVec(0), phrases: [] },
