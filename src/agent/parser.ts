@@ -856,18 +856,24 @@ function parseMessageInternal(message: string, sheetContext?: SheetContext): Par
   // PLURAL/typed trigger only (singular `number` is used in number-FORMAT phrasing);
   // the number-format block already returns earlier, the !number-format guard is
   // belt-and-suspenders against a future block reorder.
+  //
+  // Requires EXPLICIT highlight/fill intent — a highlight verb OR a color word —
+  // because this branch only produces a background fill. Bare `change`/`make`
+  // without a color (e.g. "make numeric cells bold", "change the numeric values")
+  // must NOT be swallowed as a highlight; they fall through to the right handler
+  // or the LLM. "make numbers red" still works via the color word.
+  const numericColorWord = lower.match(COLOR_WORD_RE)?.[1]
   if (
     (/\bnumbers\b|\bnumeric\b/.test(lower)) &&
-    /\bhighlight\b|colou?r|\bmark\b|\bshade\b|\bchange\b|\bmake\b/.test(lower) &&
+    (/\bhighlight\b|colou?r|\bmark\b|\bshade\b|\bfill\b/.test(lower) || numericColorWord) &&
     !/\bnegative\b/.test(lower) &&
     !/\bnumber\s+format\b|\bformat(?:ted)?\s+as\b/.test(lower)
   ) {
-    const colorWord = lower.match(COLOR_WORD_RE)?.[1]
-    const bgColor = (colorWord && HIGHLIGHT_BG_HEX[colorWord]) || HIGHLIGHT_BG_HEX.red
+    const bgColor = (numericColorWord && HIGHLIGHT_BG_HEX[numericColorWord]) || HIGHLIGHT_BG_HEX.red
     calls.push({
       tool: 'format_cells',
       params: { condition: { operator: 'is_number' }, bgColor },
-      description: colorWord ? `Highlight numeric cells ${colorWord}` : 'Highlight numeric cells',
+      description: numericColorWord ? `Highlight numeric cells ${numericColorWord}` : 'Highlight numeric cells',
     })
     return { calls, understood: true, explanation: 'Highlighting cells that contain numbers.' }
   }

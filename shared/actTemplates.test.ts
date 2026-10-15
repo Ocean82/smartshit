@@ -59,3 +59,32 @@ describe('resolveActTemplates — other rules still resolve', () => {
     expect(resolveActTemplates('what if I sort by amount?').actions).toHaveLength(0)
   })
 })
+
+describe('resolveActTemplates — numeric-highlight gating', () => {
+  function operatorOf(message: string): string | undefined {
+    const params = resolveActTemplates(message).actions[0]?.params as
+      | { condition?: { operator?: string } }
+      | undefined
+    return params?.condition?.operator
+  }
+
+  it('routes an explicit highlight/color numeric request to is_number', () => {
+    expect(operatorOf('highlight cells that contain numbers')).toBe('is_number')
+    expect(operatorOf('color numeric cells blue')).toBe('is_number')
+    expect(operatorOf('make cells with numbers red')).toBe('is_number')
+  })
+
+  it('does NOT swallow "make numeric cells bold" as an is_number highlight', () => {
+    // bold reaches the formatting resolver, but the numeric FILL branch must not
+    // claim it — it falls through to the generic bold handler.
+    const action = resolveActTemplates('make numeric cells bold').actions[0]
+    expect((action?.params as { condition?: unknown })?.condition).toBeUndefined()
+    expect(action?.params).toMatchObject({ bold: true })
+  })
+
+  it('does NOT swallow a numeric font-color request as an is_number highlight', () => {
+    // "numeric font color blue" is a font-color intent, not a background fill.
+    const op = operatorOf('change the numeric font color to blue')
+    expect(op).not.toBe('is_number')
+  })
+})
