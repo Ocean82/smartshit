@@ -82,6 +82,39 @@ function resolveFormattingTemplate(lower: string, colorWord: string | undefined)
     }
   }
 
+  // Highlight numeric cells (type condition) — after negative/equals, before contains.
+  // PLURAL-only trigger + number-format exclusion, mirroring the client Tier-1 block.
+  // The server number_format RULE already returns before this branch is reached, so the
+  // !number-format guard is belt-and-suspenders against a future RULES reorder.
+  //
+  // This branch only produces a background FILL, so it must claim ONLY on
+  // explicit highlight/fill or color-word intent. Numeric requests for a
+  // different style — "make numeric cells bold", "numeric font color blue" —
+  // must fall through to the bold / font-color handlers below instead of being
+  // swallowed as a highlight. (The formatting RULE's own gate already requires a
+  // bold/format/highlight/color token to reach this resolver at all.)
+  const wantsNumericHighlight =
+    /\bhighlight\b|colou?r|\bmark\b|\bshade\b|\bfill\b/.test(lower) || Boolean(colorWord)
+  const wantsBoldOrFont = lower.includes('bold') || /\b(text|font|writing)\b/.test(lower)
+  if (
+    (/\bnumbers\b|\bnumeric\b/.test(lower)) &&
+    wantsNumericHighlight &&
+    !wantsBoldOrFont &&
+    !/\bnumber\s+format\b|\bformat(?:ted)?\s+as\b/.test(lower)
+  ) {
+    const numBg = (colorWord && HIGHLIGHT_BG_HEX[colorWord]) || HIGHLIGHT_BG_HEX.red
+    return {
+      message: colorWord
+        ? `I will highlight cells that contain numbers in ${colorWord}. Click Apply to confirm.`
+        : 'I will highlight cells that contain numbers. Click Apply to confirm.',
+      actions: [{
+        tool: 'format_cells',
+        params: { condition: { operator: 'is_number' }, bgColor: numBg },
+        description: colorWord ? `Highlight numeric cells ${colorWord}` : 'Highlight numeric cells',
+      }],
+    }
+  }
+
   // Highlight cells containing a value (shared article/noun stripper with client parser)
   const containsValue = extractCellContainsValue(lower)
   if (containsValue) {

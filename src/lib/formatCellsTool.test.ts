@@ -89,6 +89,11 @@ describe('normalizeCondition', () => {
     expect(normalizeCondition(42)).toBeNull()
     expect(normalizeCondition(null)).toBeNull()
   })
+
+  it('accepts is_number as an object and a bare string', () => {
+    expect(normalizeCondition({ operator: 'is_number' })).toEqual({ operator: 'is_number' })
+    expect(normalizeCondition('is_number')).toEqual({ operator: 'is_number' })
+  })
 })
 
 describe('cellMatchesCondition', () => {
@@ -119,6 +124,21 @@ describe('cellMatchesCondition', () => {
     expect(cellMatchesCondition('-3', { operator: 'negative' })).toBe(true)
     expect(cellMatchesCondition('abc', { operator: 'negative' })).toBe(false)
   })
+
+  it('is_number matches numeric displays (incl. currency/percent/paren) and nothing else', () => {
+    const cond = { operator: 'is_number' as const }
+    expect(cellMatchesCondition('4', cond)).toBe(true)
+    expect(cellMatchesCondition('-3.5', cond)).toBe(true)
+    expect(cellMatchesCondition('$1,200', cond)).toBe(true)
+    expect(cellMatchesCondition('(500)', cond)).toBe(true)
+    expect(cellMatchesCondition('45%', cond)).toBe(true)
+    // non-numeric and blanks
+    expect(cellMatchesCondition('hello', cond)).toBe(false)
+    expect(cellMatchesCondition('', cond)).toBe(false)
+    expect(cellMatchesCondition('   ', cond)).toBe(false)
+    expect(cellMatchesCondition('N/A', cond)).toBe(false)
+    expect(cellMatchesCondition('1a', cond)).toBe(false)
+  })
 })
 
 describe('applyFormatCells', () => {
@@ -135,6 +155,22 @@ describe('applyFormatCells', () => {
     expect(result.modified).toBe(2)
     expect(Object.keys(formats).sort()).toEqual(['B2', 'B4'])
     expect(formats.B2.bgColor).toBe('#FFF9C4')
+  })
+
+  it('is_number fills only numeric cells across a mixed sheet (bgColor red)', () => {
+    const sheet = makeSheet({ A1: 4, B2: 'hello', C3: '$1,200', D4: '', E5: '45%', F6: 'N/A' })
+    const { ctx, formats } = makeContext(sheet)
+
+    const result = applyFormatCells(
+      { condition: { operator: 'is_number' }, bgColor: '#FEE2E2' },
+      ctx,
+    )
+
+    expect(result.success).toBe(true)
+    // A1 (4), C3 ($1,200), E5 (45%) are numeric; blank D4 is excluded by populatedCellIds anyway
+    expect(Object.keys(formats).sort()).toEqual(['A1', 'C3', 'E5'])
+    expect(result.modified).toBe(3)
+    expect(formats.A1.bgColor).toBe('#FEE2E2')
   })
 
   it('contains "4" matches 14, 4, and Room 4 across the sheet', () => {

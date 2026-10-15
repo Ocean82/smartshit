@@ -11,6 +11,7 @@ export type ParamStrategy =
   | 'header_row_bold'
   | 'currency_selection'
   | 'contains_value'
+  | 'numeric_format'
   | 'filter_predicate'
   | 'negatives'
   | 'goal_by_category'

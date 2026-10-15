@@ -38,6 +38,7 @@ describe('capabilities catalog', () => {
       'format_currency',
       'format_as_table',
       'highlight_contains',
+      'highlight_numbers',
       'highlight_negatives',
       'totals_by_category',
     ]))
@@ -140,6 +141,50 @@ describe('resolveCapabilityParams', () => {
     expect(result).toMatchObject({
       tool: 'format_cells',
       params: { condition: { operator: 'contains', value: '4' } },
+    })
+  })
+
+  it('resolves highlight_contains "containing 4" to the literal (regression)', () => {
+    const cap = getCapability('highlight_contains')!
+    const result = resolveCapabilityParams(cap, 'highlight cells containing 4', ctx, columns)
+    expect(result).toMatchObject({
+      tool: 'format_cells',
+      params: { condition: { operator: 'contains', value: '4' } },
+    })
+  })
+
+  it('highlight_contains defers "contain numbers red" to a clarification, not a bogus literal', () => {
+    const cap = getCapability('highlight_contains')!
+    expect(resolveCapabilityParams(cap, 'highlight cells that contain numbers red', ctx, columns))
+      .toHaveProperty('clarification')
+    expect(resolveCapabilityParams(cap, 'change all cells with numbers to red', ctx, columns))
+      .toHaveProperty('clarification')
+  })
+
+  it('resolves highlight_numbers to is_number + red default fill', () => {
+    const cap = getCapability('highlight_numbers')!
+    const result = resolveCapabilityParams(cap, 'highlight numeric values', ctx, columns)
+    expect(result).toMatchObject({
+      tool: 'format_cells',
+      params: { condition: { operator: 'is_number' }, bgColor: '#FEE2E2' },
+    })
+  })
+
+  it('resolves highlight_numbers "change all cells with numbers to red" to is_number red', () => {
+    const cap = getCapability('highlight_numbers')!
+    const result = resolveCapabilityParams(cap, 'change all cells with numbers to red', ctx, columns)
+    expect(result).toMatchObject({
+      tool: 'format_cells',
+      params: { condition: { operator: 'is_number' }, bgColor: '#FEE2E2' },
+    })
+  })
+
+  it('resolves highlight_numbers with an explicit non-default color', () => {
+    const cap = getCapability('highlight_numbers')!
+    const result = resolveCapabilityParams(cap, 'make numeric cells blue', ctx, columns)
+    expect(result).toMatchObject({
+      tool: 'format_cells',
+      params: { condition: { operator: 'is_number' }, bgColor: '#DBEAFE' },
     })
   })
 

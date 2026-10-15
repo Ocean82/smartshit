@@ -13,7 +13,7 @@
  */
 
 /**
- * @typedef {'none' | 'amount_column_sort' | 'amount_column_desc' | 'header_row_bold' | 'currency_selection' | 'contains_value' | 'filter_predicate' | 'negatives' | 'goal_by_category'} ParamStrategy
+ * @typedef {'none' | 'amount_column_sort' | 'amount_column_desc' | 'header_row_bold' | 'currency_selection' | 'contains_value' | 'numeric_format' | 'filter_predicate' | 'negatives' | 'goal_by_category'} ParamStrategy
  */
 
 /**
@@ -118,6 +118,21 @@ export const CAPABILITIES = [
     tool: 'format_cells',
     requiresParams: ['condition'],
     paramStrategy: 'contains_value',
+  },
+  {
+    id: 'highlight_numbers',
+    kind: 'tool',
+    description: 'Highlight or color cells whose value is numeric (a number).',
+    examples: [
+      'highlight cells that contain numbers',
+      'color cells with numbers red',
+      'change all cells with numbers to red',
+      'make numeric cells red',
+      'highlight numeric values',
+      'highlight all the numbers',
+    ],
+    tool: 'format_cells',
+    paramStrategy: 'numeric_format',
   },
   {
     id: 'highlight_negatives',

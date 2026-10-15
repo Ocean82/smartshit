@@ -6,6 +6,7 @@
  */
 
 import { refToCell, cellToRef, letterToCol, colToLetter } from '@/engine/spreadsheet'
+import { parseNumericDisplay } from '@/lib/conditionalFormat'
 import type { SheetData } from '@/types'
 import type { MutationCollector } from './types'
 import { MAX_MUTATIONS, MAX_LOG_LINES, MAX_RANGE_CELLS } from './limits'
@@ -153,7 +154,7 @@ export function buildHostAPI(ctx: HostAPIContext) {
 
   function findCells(
     column: string,
-    condition: 'empty' | 'notEmpty' | 'equals' | 'contains' | 'gt' | 'lt',
+    condition: 'empty' | 'notEmpty' | 'equals' | 'contains' | 'gt' | 'lt' | 'is_number',
     value?: unknown,
   ): string[] {
     const colIdx = /^[A-Z]{1,3}$/i.test(column)
@@ -190,6 +191,11 @@ export function buildHostAPI(ctx: HostAPIContext) {
           match = !isNaN(num) && num < Number(value)
           break
         }
+        // Snake_case 'is_number' is a deliberate exception in this camelCase,
+        // non-shared union to keep parity with the shared operator name.
+        case 'is_number':
+          match = computed.trim() !== '' && Number.isFinite(parseNumericDisplay(computed))
+          break
       }
       if (match) matches.push(cellRef)
     }

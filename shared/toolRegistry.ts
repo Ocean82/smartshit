@@ -186,7 +186,7 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
         name: 'condition',
         type: 'object',
         description:
-          'Only format matching cells: {operator: "eq"|"lt"|"gt"|"lte"|"gte"|"contains"|"negative"|"positive", value?: string|number}',
+          'Only format matching cells: {operator: "eq"|"lt"|"gt"|"lte"|"gte"|"contains"|"negative"|"positive"|"is_number", value?: string|number}',
       },
     ],
     examples: [

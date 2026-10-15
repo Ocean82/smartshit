@@ -3,7 +3,8 @@
  */
 
 import type { CapabilityDef } from '@shared/capabilities.js'
-import { extractCellContainsValue } from '@shared/formatContains'
+import { extractCellContainsValue, CONTAINS_STOP_WORDS } from '@shared/formatContains'
+import { COLOR_WORD_RE, HIGHLIGHT_BG_HEX } from '@shared/colorMaps'
 import { parseFilterPhrase, parseNumberFormatPhrase } from '@shared/spreadsheetPhrases'
 import type { ColumnProfile } from '@/ai/types'
 import type { PipelineContext } from '@/ai/pipeline/types'
@@ -109,8 +110,17 @@ export function resolveCapabilityParams(
     }
 
     case 'contains_value': {
-      const value = extractCellContainsValue(message)
-        ?? message.match(/\b(?:contain(?:ing|s)?|have|has|with)\s+(?:a\s+|an\s+|the\s+)?["']?([\w.$-]+)["']?/i)?.[1]
+      // Primary extractor is quote-aware: it already keeps an explicitly quoted
+      // stop word (e.g. `containing "red"`) and rejects an unquoted one, so trust
+      // its result directly. The STOP guard only applies to the looser fallback
+      // regex below (which does not lowercase and is not quote-aware), so a bare
+      // 'contains numbers' still defers to highlight_numbers.
+      const primary = extractCellContainsValue(message)
+      let value = primary
+      if (value == null) {
+        const fallback = message.match(/\b(?:contain(?:ing|s)?|have|has|with)\s+(?:a\s+|an\s+|the\s+)?["']?([\w.$-]+)["']?/i)?.[1]
+        value = fallback && !CONTAINS_STOP_WORDS.has(fallback.toLowerCase()) ? fallback : null
+      }
       if (!value) {
         return { clarification: 'Which value should I highlight cells for?' }
       }
@@ -121,6 +131,17 @@ export function resolveCapabilityParams(
           bgColor: '#FFF9C4',
         },
         description: `Highlight cells containing ${value}`,
+      }
+    }
+
+    case 'numeric_format': {
+      const colorWord = message.toLowerCase().match(COLOR_WORD_RE)?.[1]
+      // Background fill, matching every other highlight path. Default red (#FEE2E2).
+      const bgColor = (colorWord && HIGHLIGHT_BG_HEX[colorWord]) || HIGHLIGHT_BG_HEX.red
+      return {
+        tool: 'format_cells',
+        params: { condition: { operator: 'is_number' }, bgColor },
+        description: colorWord ? `Highlight numeric cells ${colorWord}` : 'Highlight numeric cells',
       }
     }
 

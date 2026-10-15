@@ -57,6 +57,67 @@ describe('parseMessage — format/color intents', () => {
     })
   })
 
+  it('routes "change all cells with numbers to red" to is_number (red fill), not contains', () => {
+    const result = parseMessage('change all cells with numbers to red')
+    expect(result.understood).toBe(true)
+    expect(result.calls).toHaveLength(1)
+    expect(result.calls[0].tool).toBe('format_cells')
+    expect(result.calls[0].params.condition).toEqual({ operator: 'is_number' })
+    expect(result.calls[0].params.bgColor).toBe('#FEE2E2')
+  })
+
+  it('routes "highlight cells that contain numbers red" to is_number', () => {
+    const result = parseMessage('highlight cells that contain numbers red')
+    expect(result.calls[0].tool).toBe('format_cells')
+    expect(result.calls[0].params.condition).toEqual({ operator: 'is_number' })
+    expect(result.calls[0].params.bgColor).toBe('#FEE2E2')
+  })
+
+  it('keeps "highlight negative numbers" as the negative condition (not is_number)', () => {
+    const result = parseMessage('highlight negative numbers')
+    expect(result.calls[0].tool).toBe('format_cells')
+    expect(result.calls[0].params.condition).toEqual({ operator: 'negative' })
+  })
+
+  it('still routes a color-word numeric request ("color numeric cells blue") to is_number', () => {
+    const result = parseMessage('color numeric cells blue')
+    expect(result.calls[0].tool).toBe('format_cells')
+    expect(result.calls[0].params.condition).toEqual({ operator: 'is_number' })
+  })
+
+  it('still routes a highlight-verb numeric request ("highlight cells with numbers") to is_number', () => {
+    const result = parseMessage('highlight cells with numbers')
+    expect(result.calls[0].tool).toBe('format_cells')
+    expect(result.calls[0].params.condition).toEqual({ operator: 'is_number' })
+  })
+
+  it('does NOT swallow "make all numeric cells bold" as an is_number highlight', () => {
+    // No highlight verb and no color word → the numeric-FILL branch must not claim;
+    // the request falls through so bold reaches its proper handler (or the LLM).
+    const result = parseMessage('make all numeric cells bold')
+    const isNumberHighlight = result.calls.some(
+      (c) => c.tool === 'format_cells'
+        && (c.params.condition as { operator?: string } | undefined)?.operator === 'is_number',
+    )
+    expect(isNumberHighlight).toBe(false)
+  })
+
+  it('does NOT swallow "change the numeric values to 0" as an is_number highlight', () => {
+    const result = parseMessage('change the numeric values to 0')
+    const isNumberHighlight = result.calls.some(
+      (c) => c.tool === 'format_cells'
+        && (c.params.condition as { operator?: string } | undefined)?.operator === 'is_number',
+    )
+    expect(isNumberHighlight).toBe(false)
+  })
+
+  it('does NOT steal number-format phrasing ("change the number format to currency")', () => {
+    const result = parseMessage('change the number format to currency')
+    const call = result.calls[0]
+    expect(call?.params.condition).toBeUndefined()
+    expect(call).toMatchObject({ tool: 'format_cells', params: { numberFormat: 'currency' } })
+  })
+
   it('parses filter phrases', () => {
     expect(parseMessage('filter where Status is Paid').calls[0]).toMatchObject({
       tool: 'filter',
