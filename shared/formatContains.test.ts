@@ -31,6 +31,14 @@ describe('extractCellContainsValue', () => {
     expect(extractCellContainsValue('color cells with a number red')).toBeNull()
   })
 
+  it('keeps an explicitly quoted stop/color word as a literal search value', () => {
+    // Quotes signal a deliberate literal (e.g. a status column of "red"/"green"),
+    // so the stop-word guard is skipped — unlike the unquoted color-cue case above.
+    expect(extractCellContainsValue('highlight cells containing "red"')).toBe('red')
+    expect(extractCellContainsValue("highlight cells containing 'green'")).toBe('green')
+    expect(extractCellContainsValue('highlight cells that contain "numbers"')).toBe('numbers')
+  })
+
   it('still returns real literals after the numbers fix (regression)', () => {
     expect(extractCellContainsValue('identify cells that contain the number 4')).toBe('4')
     expect(extractCellContainsValue('highlight cells containing 4')).toBe('4')

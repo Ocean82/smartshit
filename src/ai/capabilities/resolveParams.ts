@@ -110,13 +110,17 @@ export function resolveCapabilityParams(
     }
 
     case 'contains_value': {
-      const fallback = message.match(/\b(?:contain(?:ing|s)?|have|has|with)\s+(?:a\s+|an\s+|the\s+)?["']?([\w.$-]+)["']?/i)?.[1]
-      const raw = extractCellContainsValue(message) ?? fallback
-      // Reject STOP words (type words / colors) so a 'contains numbers' phrase defers
-      // to highlight_numbers instead of becoming a bogus literal `contains "numbers"`.
-      // extractCellContainsValue already STOP-filters; the guard only matters for the
-      // fallback branch (which does not lowercase its capture).
-      const value = raw && !CONTAINS_STOP_WORDS.has(raw.toLowerCase()) ? raw : null
+      // Primary extractor is quote-aware: it already keeps an explicitly quoted
+      // stop word (e.g. `containing "red"`) and rejects an unquoted one, so trust
+      // its result directly. The STOP guard only applies to the looser fallback
+      // regex below (which does not lowercase and is not quote-aware), so a bare
+      // 'contains numbers' still defers to highlight_numbers.
+      const primary = extractCellContainsValue(message)
+      let value = primary
+      if (value == null) {
+        const fallback = message.match(/\b(?:contain(?:ing|s)?|have|has|with)\s+(?:a\s+|an\s+|the\s+)?["']?([\w.$-]+)["']?/i)?.[1]
+        value = fallback && !CONTAINS_STOP_WORDS.has(fallback.toLowerCase()) ? fallback : null
+      }
       if (!value) {
         return { clarification: 'Which value should I highlight cells for?' }
       }
