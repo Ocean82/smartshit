@@ -267,6 +267,22 @@ async function fulfillCapabilityScore(
   )
   const columns = spreadsheetCtx.profile?.columns
 
+  // Recipe capabilities (e.g. professionalize_sheet) are catalog/discoverability
+  // entries only — they are resolved by the Tier-1 regex parser with the real
+  // buildMakeoverPlan, never by Tier-2. The default 'none' paramStrategy would
+  // otherwise resolve to a steps-less execute_macro, which fails closed with a
+  // user-facing error. Defer to Tier-1/LLM instead so the invariant holds.
+  if (best.capability.kind === 'recipe') {
+    logRoute({
+      outcome: 'pass_safety',
+      message: context.message,
+      top3Capabilities: top3,
+      score: best.score,
+      mode,
+    })
+    return null
+  }
+
   if (best.capability.kind === 'goal' && best.capability.goalId) {
     if (!fromChip && isQuestionFraming(context.message)) {
       logRoute({

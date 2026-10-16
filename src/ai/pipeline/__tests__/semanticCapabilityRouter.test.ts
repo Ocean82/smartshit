@@ -389,6 +389,28 @@ describe('semanticCapabilityRouter', () => {
     expect(result).toBeNull()
     expect(executeToolAsync).not.toHaveBeenCalled()
   })
+
+  it('defers kind:recipe (professionalize_sheet) to Tier-1/LLM, never a steps-less execute_macro', async () => {
+    // A paraphrase that the Tier-1 regex misses can still score high on the
+    // recipe examples. The router must pass (return null) rather than resolve to
+    // an empty execute_macro, which would surface an internal error.
+    setCapabilityEmbeddingsForTests([
+      { capabilityId: 'professionalize_sheet', embedding: unitVec(0), phrases: ['make this look professional'] },
+      { capabilityId: 'sort_column', embedding: unitVec(50), phrases: [] },
+    ])
+
+    const stage = createSemanticCapabilityRouterStage(makeDeps())
+    const ctx = makeContext('give the whole sheet a polished professional makeover')
+    ctx.mode = 'act'
+    ctx.applyPosture = 'auto'
+    const result = await stage.process(ctx)
+
+    expect(result).toBeNull()
+    expect(executeToolAsync).not.toHaveBeenCalled()
+    expect(recordCapabilityRouterTelemetry).toHaveBeenCalledWith(
+      expect.objectContaining({ outcome: 'pass_safety', routedTier: 2 }),
+    )
+  })
 })
 
 describe('scoreCapabilities top-N', () => {
