@@ -84,6 +84,58 @@ describe('previewBuilders', () => {
   })
 })
 
+describe('previewBuilders — execute_macro (format-only)', () => {
+  it('flattens format_cells steps into format-only changes', () => {
+    const sheet = sheetWithColB()
+    const preview = buildActionPreview(
+      'execute_macro',
+      {
+        steps: [
+          { tool: 'format_cells', params: { range: 'B1:B1', bold: true }, description: 'Header' },
+          { tool: 'format_cells', params: { range: 'B2:B3', numberFormat: 'currency' }, description: 'Amount' },
+          { tool: 'auto_fit', params: {}, description: 'Fit rows' },
+        ],
+      },
+      sheet,
+      () => '',
+    )
+    expect(preview?.changes.map((c) => c.cell)).toEqual(['B1', 'B2', 'B3'])
+    // B2 keeps its old value and writes nothing new.
+    expect(preview?.changes.find((c) => c.cell === 'B2')).toMatchObject({
+      oldValue: 10,
+      newValue: null,
+      newFormula: undefined,
+    })
+  })
+
+  it('never emits a non-null newValue or newFormula', () => {
+    const sheet = sheetWithColB()
+    const preview = buildActionPreview(
+      'execute_macro',
+      {
+        steps: [
+          { tool: 'format_cells', params: { range: 'A1:B3', bgColor: '#eee' }, description: 'Fill' },
+        ],
+      },
+      sheet,
+      () => '',
+    )
+    expect(preview?.changes.length).toBeGreaterThan(0)
+    for (const change of preview!.changes) {
+      expect(change.newValue).toBeNull()
+      expect(change.newFormula).toBeUndefined()
+    }
+  })
+
+  it('returns undefined when there are no steps or no cell changes', () => {
+    const sheet = sheetWithColB()
+    expect(buildActionPreview('execute_macro', { steps: [] }, sheet, () => '')).toBeUndefined()
+    expect(
+      buildActionPreview('execute_macro', { steps: [{ tool: 'auto_fit', params: {}, description: 'Fit' }] }, sheet, () => ''),
+    ).toBeUndefined()
+  })
+})
+
 describe('previewBuilders — clear_sheet', () => {
   function sheetWithContent(): SheetData {
     return {

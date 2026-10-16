@@ -1,10 +1,12 @@
 import type { CellChange, SheetData } from '@/types'
+import type { ActionStep } from '@/ai/nlp/types'
 import { cellToRef, refToCell, letterToCol } from '@/engine/spreadsheet'
 import { findLastDataRow } from '@/lib/sheetSort'
 import { resolveDeleteRow } from '@/lib/deleteRowPreview'
 import { getColumnDataRows } from '@/lib/sheetRows'
 import { buildRecipePlan, isStyleRecipe, planToPreviewChanges } from '@/lib/styleRecipes'
 import { detectFormulaRangeGapRisk } from '@/lib/formulaGapRisk'
+import { expandRange } from '@/lib/formatCellsTool'
 import { resolveColumnIndex } from '@/agent/toolHandlers/types'
 
 /**
@@ -150,6 +152,37 @@ export function previewClearSheet(sheet: SheetData): CellChange[] {
   return changes
 }
 
+/**
+ * Preview an `execute_macro`: flatten each `format_cells` step into format-only
+ * CellChange[]. The makeover macro (src/lib/sheetMakeover.ts) emits ONLY
+ * formatting/layout steps, so every change carries the old value and a null
+ * newValue / undefined newFormula — the diff can never show a data write.
+ * Layout steps (auto_fit / set_column_width / set_row_height) touch no cell
+ * contents and contribute nothing to the diff.
+ */
+export function previewExecuteMacro(sheet: SheetData, steps: ActionStep[]): CellChange[] {
+  const changes: CellChange[] = []
+  for (const step of steps) {
+    if (step.tool !== 'format_cells') continue // layout steps have no cell changes
+    const range = step.params?.range
+    if (typeof range !== 'string' || !range.trim()) continue
+    const cellIds = expandRange(range, sheet)
+    if (!cellIds) continue
+    for (const cellId of cellIds) {
+      const current = sheet.cells[cellId]
+      changes.push({
+        cell: cellId,
+        oldValue: current?.value ?? null,
+        newValue: null, // format-only: value is untouched
+        oldFormula: current?.formula,
+        newFormula: undefined, // format-only: formula is untouched
+        description: step.description,
+      })
+    }
+  }
+  return changes
+}
+
 /** Attach preview.changes onto an action when the tool supports it. */
 export function buildActionPreview(
   tool: string,
@@ -196,6 +229,10 @@ export function buildActionPreview(
   if (tool === 'delete_row') {
     const resolved = resolveDeleteRow(sheet, params, getComputedValue)
     return resolved?.changes.length ? { changes: resolved.changes } : undefined
+  }
+  if (tool === 'execute_macro' && Array.isArray(params.steps)) {
+    const changes = previewExecuteMacro(sheet, params.steps as ActionStep[])
+    return changes.length ? { changes } : undefined
   }
   // `clean_sheet_data` is the one tool whose deterministic skill attaches its
   // own preview rows in params. Anything else carrying `previewChanges` is

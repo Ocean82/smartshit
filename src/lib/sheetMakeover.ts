@@ -1,0 +1,202 @@
+/**
+ * sheetMakeover — the value-safe "professionalize my sheet" plan builder.
+ *
+ * Produces an ordered list of formatting {@link ActionStep}s that style a sheet
+ * like a pro WITHOUT writing any cell values or formulas. Every emitted step's
+ * tool is a member of {@link AUTO_APPLY_LOW_RISK_TOOLS} (format_cells + layout),
+ * so the whole plan is a zero-data-write diff: it can only change formatting,
+ * never contents. The data-writing totals recipe (`style_recipe: total_row`)
+ * is deliberately NOT part of this plan — it stays an opt-in, preview-only
+ * follow-up (see docs/spreadsheet-styling-standard.md §2 and the plan).
+ *
+ * No NL wiring lives here; FEAT-002 triggers this builder and FEAT-003 catalogs
+ * it. This module is a pure library over the existing profile + table-range
+ * detection.
+ */
+
+import type { CellFormat, SheetData } from '@/types'
+import type { ColumnRole, SheetProfile, SheetPurpose } from '@/ai/types'
+import type { ActionStep } from '@/ai/nlp/types'
+import { colToLetter } from '@/engine/spreadsheet'
+import { AUTO_APPLY_LOW_RISK_TOOLS } from '@/lib/applyPosture'
+import { detectTableRange, TABLE_THEMES } from '@/lib/formatAsTable'
+
+/**
+ * Map a column's inferred role (+ the sheet's detected purpose) to the
+ * numberFormat token format_cells should apply, or null to leave the column as
+ * text (id/category/label/description/unknown). Mirrors the plan's Build-order
+ * step 2 table.
+ */
+export function roleToNumberFormat(role: ColumnRole, purpose: SheetPurpose): string | null {
+  switch (role) {
+    case 'date':
+      return 'date'
+    case 'percentage':
+      return 'percent'
+    case 'quantity':
+      return 'number-int'
+    case 'amount':
+      // Currency only for money-shaped purposes; generic sheets get a plain
+      // number so we never assume a currency the data may not carry.
+      return purpose === 'budget' || purpose === 'invoice' || purpose === 'inventory' || purpose === 'sales'
+        ? 'currency'
+        : 'number'
+    // id / category / label / description / unknown → leave as text (no step).
+    default:
+      return null
+  }
+}
+
+/** The theme used to color the header row, keyed by detected purpose. */
+function themeForPurpose(purpose: SheetPurpose): (typeof TABLE_THEMES)[string] {
+  const key: Record<SheetPurpose, string> = {
+    budget: 'green',
+    invoice: 'slate',
+    inventory: 'orange',
+    sales: 'purple',
+    generic: 'blue',
+  }
+  return TABLE_THEMES[key[purpose]] ?? TABLE_THEMES.blue
+}
+
+/** Does the header-row cell already carry every key the makeover would set? */
+function headerAlreadyStyled(fmt: CellFormat | undefined, theme: (typeof TABLE_THEMES)[string]): boolean {
+  if (!fmt) return false
+  return Boolean(fmt.bold) && fmt.bgColor === theme.headerBg && Boolean(fmt.borders?.bottom)
+}
+
+/**
+ * Build the value-safe makeover plan: ordered, format-only {@link ActionStep}s.
+ *
+ * Order (spec Part 2): (1) header styling, (2) per-column numberFormat,
+ * (3) layout (auto_fit), (4) at most one conditional emphasis on an amount
+ * column. The spec §3 "already-styled" guard skips steps whose formatting is
+ * already present, keeping re-runs near-idempotent.
+ *
+ * @param getComputedValue reserved for callers that resolve displayed values;
+ *   detection already receives it, kept in the signature for parity with the
+ *   profile/table-range helpers FEAT-002 passes through.
+ */
+export function buildMakeoverPlan(
+  sheet: SheetData,
+  profile: SheetProfile,
+  getComputedValue: (row: number, col: number) => string,
+): { steps: ActionStep[]; summary: string } {
+  const steps: ActionStep[] = []
+
+  const range = detectTableRange(sheet, getComputedValue)
+  if (!range) {
+    return { steps, summary: 'Nothing to format — the sheet is empty.' }
+  }
+
+  const { headerRow, startCol, endCol, endRow } = range
+  const purpose = profile.detectedPurpose
+  const theme = themeForPurpose(purpose)
+  const dataStartRow = headerRow + 1
+
+  // ── (1) Header styling: bold + fill + bottom border on the header row ──────
+  // Skip if the whole header row already carries those keys (§3 guard).
+  const headerFullyStyled = (() => {
+    for (let c = startCol; c <= endCol; c++) {
+      const fmt = sheet.cells[`${colToLetter(c)}${headerRow + 1}`]?.format
+      if (!headerAlreadyStyled(fmt, theme)) return false
+    }
+    return true
+  })()
+
+  if (!headerFullyStyled) {
+    const headerRange = `${colToLetter(startCol)}${headerRow + 1}:${colToLetter(endCol)}${headerRow + 1}`
+    steps.push({
+      tool: 'format_cells',
+      params: {
+        range: headerRange,
+        bold: true,
+        bgColor: theme.headerBg,
+        fontColor: theme.headerFontColor,
+        borders: { bottom: `2px solid ${theme.accentColor}` },
+      },
+      description: `Style the header row (${headerRange}) bold with a ${theme.name.toLowerCase()} fill`,
+    })
+  }
+
+  // ── (2) Per-column numberFormat for roles that map to a format ─────────────
+  // Only when data rows exist, and only when the column's data cells don't
+  // already all carry that format (§3 guard).
+  if (endRow >= dataStartRow) {
+    for (let colIdx = 0; colIdx < profile.columns.length; colIdx++) {
+      // profile.columns[c] is built per spreadsheet column index c (0-based),
+      // so the array index IS the column index. Only style columns within the
+      // detected table rectangle.
+      if (colIdx < startCol || colIdx > endCol) continue
+      const col = profile.columns[colIdx]
+      const numberFormat = roleToNumberFormat(col.role, purpose)
+      if (!numberFormat) continue
+
+      const letter = colToLetter(colIdx)
+      const alreadyFormatted = (() => {
+        for (let r = dataStartRow; r <= endRow; r++) {
+          const cell = sheet.cells[`${letter}${r + 1}`]
+          // A blank cell carries no format and shouldn't block the step.
+          if (!cell || (cell.value == null && !cell.formula)) continue
+          if (cell.format?.numberFormat !== numberFormat) return false
+        }
+        return true
+      })()
+      if (alreadyFormatted) continue
+
+      const colRange = `${letter}${dataStartRow + 1}:${letter}${endRow + 1}`
+      steps.push({
+        tool: 'format_cells',
+        params: { range: colRange, numberFormat },
+        description: `Format ${col.name} (${colRange}) as ${numberFormat}`,
+      })
+    }
+  }
+
+  // ── (3) Layout: auto-fit so the restyled content isn't clipped ─────────────
+  steps.push({
+    tool: 'auto_fit',
+    params: {},
+    description: 'Auto-fit rows so nothing is clipped',
+  })
+
+  // ── (4) At most ONE conditional emphasis: red fill on negative amounts ─────
+  if (endRow >= dataStartRow) {
+    const colIdx = profile.columns.findIndex((c) => c.role === 'amount')
+    const amountCol = colIdx >= 0 ? profile.columns[colIdx] : undefined
+    if (amountCol) {
+      if (colIdx >= startCol && colIdx <= endCol) {
+        const letter = colToLetter(colIdx)
+        const colRange = `${letter}${dataStartRow + 1}:${letter}${endRow + 1}`
+        steps.push({
+          tool: 'format_cells',
+          params: {
+            range: colRange,
+            condition: { operator: 'negative' },
+            bgColor: '#fee2e2',
+            fontColor: '#b91c1c',
+          },
+          description: `Highlight negative ${amountCol.name} values in red`,
+        })
+      }
+    }
+  }
+
+  // ponytail: value-safety self-check — a makeover must NEVER emit a
+  // data-writing tool. Assert every step is on the auto-apply allowlist
+  // (format_cells + layout only); throwing here is a loud dev-time guard, not a
+  // silent downgrade. Ceiling: trusts AUTO_APPLY_LOW_RISK_TOOLS as the single
+  // source of truth; if a data-writing tool is ever added to that set this
+  // check stops protecting us (upgrade: a dedicated value-safe allowlist).
+  for (const step of steps) {
+    if (!AUTO_APPLY_LOW_RISK_TOOLS.has(step.tool)) {
+      throw new Error(`sheetMakeover produced a non-value-safe step: ${step.tool}`)
+    }
+  }
+
+  const summary = steps.length === 1 && steps[0].tool === 'auto_fit'
+    ? 'This sheet already looks styled — just tidying the layout.'
+    : `Professionalize ${profile.name}: ${steps.length} formatting step${steps.length === 1 ? '' : 's'}, no data changes.`
+
+  return { steps, summary }
+}
