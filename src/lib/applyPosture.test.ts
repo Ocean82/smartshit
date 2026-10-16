@@ -74,4 +74,15 @@ describe('shouldAutoApply — posture decision predicate', () => {
       expect(denylist.has(tool)).toBe(false)
     }
   })
+
+  // The makeover's opt-in totals step (style_recipe: total_row) and the macro
+  // carrier (execute_macro) must stay preview-only and off the auto-apply
+  // allowlist — they are the only steps that could ever write cell data.
+  it('totals step and macro carrier are preview-only, never auto-applied', () => {
+    expect(shouldAutoApply('style_recipe', 'auto')).toBe(false)
+    expect(shouldAutoApply('execute_macro', 'auto')).toBe(false)
+    for (const tool of ['style_recipe', 'execute_macro', 'set_cell', 'apply_formula']) {
+      expect(AUTO_APPLY_LOW_RISK_TOOLS.has(tool)).toBe(false)
+    }
+  })
 })
