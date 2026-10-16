@@ -12,9 +12,12 @@ import {
   parseLayoutPhrase,
   parseMultiSortPhrase,
   parseNumberFormatPhrase,
+  parseProfessionalizePhrase,
   parseStyleRecipePhrase,
 } from '../../shared/spreadsheetPhrases'
-import type { ColumnProfile } from '@/ai/types'
+import type { ColumnProfile, SheetProfile } from '@/ai/types'
+import type { SheetData } from '@/types'
+import { buildMakeoverPlan } from '@/lib/sheetMakeover'
 import { parseAdvancedFormula } from './formulaPatterns'
 import { escapeRegex, letterToCol } from '@/lib'
 import { isNonCommandRequest } from '../../shared/requestSafety'
@@ -76,7 +79,7 @@ const QUESTION_PREFIXES_RE = /^(?:can\s+(?:i|you|we)|should\s+(?:i|we|the)|would
  */
 const DESTRUCTIVE_TOOLS = new Set([
   'delete_row', 'clear_sheet', 'modify_column', 'sort_sheet', 'multi_sort', 'find_and_replace',
-  'format_as_table', 'style_recipe',
+  'format_as_table', 'style_recipe', 'execute_macro',
 ])
 
 /**
@@ -269,6 +272,37 @@ export function parseMessage(message: string, sheetContext?: SheetContext): Pars
 function parseMessageInternal(message: string, sheetContext?: SheetContext): ParseResult {
   const lower = message.toLowerCase().trim()
   const calls: ParsedToolCall[] = []
+
+  // ─── Professionalize / value-safe makeover (BEFORE the narrow recipes) ───────
+  // A general "make this look professional" out-ranks format-as-table and the
+  // style recipes so it claims whole-sheet polish; the specific phrases they own
+  // are excluded inside parseProfessionalizePhrase, so they still defer here and
+  // match below. The plan comes ONLY from buildMakeoverPlan (FEAT-001 guarantees
+  // allowlist-only, zero data-writing steps), so execute_macro never carries a
+  // style_recipe or any data-writing tool. The totals row stays a SEPARATE,
+  // opt-in, data-writing follow-up surfaced in the explanation — never part of
+  // this macro. Needs the full sheet/profile/value accessor (live pipeline
+  // path); without them we defer to the LLM rather than guess.
+  if (
+    parseProfessionalizePhrase(message)
+    && sheetContext?.sheet
+    && sheetContext.profile
+    && sheetContext.getComputedValue
+  ) {
+    const plan = buildMakeoverPlan(sheetContext.sheet, sheetContext.profile, sheetContext.getComputedValue)
+    if (plan.steps.length > 0) {
+      calls.push({
+        tool: 'execute_macro',
+        params: { steps: plan.steps },
+        description: 'Professionalize sheet',
+      })
+      return {
+        calls,
+        understood: true,
+        explanation: `${plan.summary} Want a totals row? Say "add a totals row" — that writes SUM formulas and is applied only after you confirm.`,
+      }
+    }
+  }
 
   // ─── Format as table ────────────────────────────────────────────────────────
   const tablePhrase = parseFormatAsTablePhrase(message)
@@ -922,4 +956,13 @@ export interface SheetContext {
   headers: string[]
   /** Profile metadata powers safe defaults (roles, numeric columns, samples). */
   columns?: ColumnProfile[]
+  /**
+   * Full sheet + profile + value accessor, supplied by the pipeline's
+   * agent-parser stage. Only populated on the live pipeline path (not the
+   * minimal test contexts), so the makeover block builds its plan only when all
+   * three are present and otherwise defers to the LLM.
+   */
+  sheet?: SheetData
+  profile?: SheetProfile
+  getComputedValue?: (row: number, col: number) => string
 }

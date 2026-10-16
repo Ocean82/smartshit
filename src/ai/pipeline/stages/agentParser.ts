@@ -77,6 +77,11 @@ export function createAgentParserStage(deps: AgentParserDeps): PipelineStage {
         lastDataCol: lastDataColIdx,
         headers,
         columns: spreadsheetCtx.profile?.columns,
+        // Full sheet + profile + value accessor so the value-safe makeover block
+        // can build its plan via buildMakeoverPlan on this live pipeline path.
+        sheet,
+        profile: spreadsheetCtx.profile,
+        getComputedValue,
       }
 
       const parsed = parseMessage(message, sheetCtx)

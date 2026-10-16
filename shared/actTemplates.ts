@@ -8,6 +8,7 @@ import {
   parseLayoutPhrase,
   parseMultiSortPhrase,
   parseNumberFormatPhrase,
+  parseProfessionalizePhrase,
   parseStyleRecipePhrase,
 } from './spreadsheetPhrases.js'
 
@@ -246,6 +247,23 @@ const RULES: TemplateRule[] = [
         actions: [{ tool: 'create_chart', params: { type: chartType }, description: `Create ${chartType} chart` }],
       }
     },
+  },
+
+  // Professionalize / value-safe makeover — BEFORE format_as_table and
+  // style_recipe so a general "make this look professional" out-ranks the narrow
+  // recipes here too (parseProfessionalizePhrase already excludes the phrases
+  // those recipes own). The value-safe plan comes from buildMakeoverPlan, which
+  // needs a live sheet + profile + value accessor — none of which exist in this
+  // local-fallback string-only path. So this rule only CLAIMS the general phrase
+  // (keeping the narrow recipes below from stealing it) and defers the actual
+  // makeover to the pipeline's agent-parser stage, which has the profile. We
+  // return an empty result (no action) rather than emit a profile-less,
+  // best-effort plan that could mis-format the sheet.
+  // ponytail: local fallback has no profile — deferring beats guessing a plan.
+  {
+    id: 'professionalize',
+    match: (l) => parseProfessionalizePhrase(l),
+    resolve: () => ({ message: '', actions: [] }),
   },
 
   // Format as table (before generic formatting)
