@@ -120,6 +120,9 @@ and the user hasn't overridden these:
 - Negatives red and in parentheses: `(500)`, not `-500` (`accounting-neg`).
 - Units in the header: "Revenue ($mm)", not a bare "Revenue".
 - Totals sum the contiguous range directly above, with a border above the total.
+  (Styling an *existing* total — bold + top border — is value-safe formatting;
+  *creating* a totals row writes data and belongs to the opt-in totals step in
+  Part 2, not the value-safe pass.)
 - Section headers that span columns: left-justified, dark fill, white text.
 - Numeric column labels (dates) right-aligned to match the data; row labels
   left-justified, sub-metrics indented.
@@ -136,32 +139,64 @@ format steps are each auto-eligible, but a whole-sheet makeover is substantial
 enough that previewing the batch is the safer default — confirm this policy when
 building.
 
-Recommended ordered plan (skip any step that doesn't apply to the detected
-sheet shape):
+### Two passes: value-safe formatting, and an opt-in data step
+
+Not every styling primitive is value-safe. `style_recipe: header` is pure
+formatting, but **`style_recipe: total_row` and `style_recipe: table_polish`
+WRITE cell contents** — `total_row` adds a "Total" label and SUM formulas, and
+`table_polish` internally calls `generateTableTotals`, so both produce
+`cellUpdates` and carry `persistenceCaveat('style_recipe')`. They are NOT
+reversible beyond the session once the file is saved and reopened. So the
+makeover is split:
+
+- **Formatting pass (default, value-safe):** header styling, per-column number
+  formats, column widths, and conditional emphasis. These change only
+  presentation, never a cell's value — safely reversible.
+- **Totals step (opt-in, writes data):** adding or refreshing a totals row. This
+  is a separate, explicitly-surfaced step that writes values/formulas. It must
+  NOT run silently as part of "make it look nice": either (a) the user asked for
+  totals ("add a totals row", "with a sum at the bottom"), or (b) the makeover
+  offers it as a distinct, separately-confirmed action carrying the persistence
+  caveat. It is never auto-applied, regardless of posture.
+
+### Formatting pass — ordered plan (value-safe)
+
+Skip any step that doesn't apply to the detected sheet shape.
 
 1. **Detect the table region and header row** (reuse the auditor / `styleRecipes`
    table-range detection — do not reinvent).
 2. **Header** — `style_recipe: header` (bold + fill + bottom border, freeze the
-   header row if supported).
+   header row if supported). Format-only.
 3. **Number formats per column** — infer each column's role (currency / percent /
    date / count) from its values and apply the matching `numberFormat` via
-   `format_cells` on the column range. This is the highest-impact single step.
-4. **Totals** — `style_recipe: total_row` where a totals row exists or is wanted
-   (idempotent — must not stack a second total row).
-5. **Column widths** — `auto_fit` (or `set_column_width` with label-wider-than-
+   `format_cells` on the column range. This is the highest-impact single step,
+   and it is pure formatting.
+4. **Column widths** — `auto_fit` (or `set_column_width` with label-wider-than-
    figure heuristics) so nothing is clipped or swimming in space.
-6. **Standout emphasis** — at most one accent: e.g. negatives red
+5. **Standout emphasis** — at most one accent: e.g. negatives red
    (`condition: negative`) on financial columns, or a KPI highlight. Do not pile
-   on multiple conditional rules.
-7. **(Finance sheets only)** apply §1.7 extras.
+   on multiple conditional rules. Format-only (live `condition`, no value write).
+
+For a banded-table look, prefer a **format-only** banding step (header + row-fill
+alternation via `format_cells`) rather than `table_polish`, because
+`table_polish` also writes a totals row. Only reach for `table_polish` when the
+user explicitly wants the totals it generates — in which case it belongs in the
+opt-in data step below, not the value-safe pass.
+
+### Totals step (separate, opt-in, writes data)
+
+- `style_recipe: total_row`, idempotent (must not stack a second total row), with
+  the §1.7 total conventions (sum the contiguous range above, border above).
+- Surfaced as its own confirm carrying the persistence caveat; never auto-applied.
 
 Boundaries:
-- Reuse `table_polish` where it already does banded-table styling rather than
-  hand-rolling bands.
-- Every step is a format/layout op — no data mutation, no row deletion. The
-  makeover must never change a cell VALUE (that keeps it safely reversible and
-  honest).
-- One `execute_macro` → one undo entry.
+- The **formatting pass never changes a cell VALUE** — only presentation — so it
+  is safely reversible and honest. The **totals step does write values**, is
+  opt-in, carries the caveat, and is never silent or auto-applied.
+- No row deletion anywhere in the makeover.
+- One `execute_macro` → one undo entry. If both passes run they still commit as a
+  single undo group, but the user has seen the data-writing totals step called
+  out before confirming.
 
 ---
 
@@ -189,17 +224,22 @@ trigger phrases the MiniLM router matches, resolving to the tool/plan noted.
 Build these on the existing capability + Apply/Reject + posture machinery — no
 new mechanism.
 
-| Trigger intent | Example phrases | Resolves to |
-| --- | --- | --- |
-| Professionalize whole sheet | "make this look professional", "clean up the formatting", "format this like a pro" | the §2 `execute_macro` plan |
-| Style the header | "bold the headers", "make a header row", "style the top row" | `style_recipe: header` |
-| Add/strike a totals row | "add a totals row", "sum at the bottom" | `style_recipe: total_row` |
-| Banded table | "format as a table", "make it a nice table", "add zebra striping" | `style_recipe: table_polish` (or `format_as_table`) |
-| Currency column | "format column B as money", "make amounts currency" | `format_cells` numberFormat currency |
-| Percent column | "show these as percentages" | `format_cells` numberFormat percent |
-| Red negatives | "make negatives red", "flag negative numbers" | `format_cells` condition negative |
-| Highlight numeric cells | "highlight cells with numbers", "color numeric cells" | `format_cells` condition is_number |
-| Fit columns | "fix the column widths", "auto-size the columns" | `auto_fit` / `set_column_width` |
+The **Writes data?** column flags the entries that change cell contents (not just
+presentation). Those carry `persistenceCaveat('style_recipe')`, are preview-only,
+and are never auto-applied — even under Auto posture, which is limited to the
+value-safe formatting tools.
+
+| Trigger intent | Example phrases | Resolves to | Writes data? |
+| --- | --- | --- | --- |
+| Professionalize whole sheet | "make this look professional", "clean up the formatting", "format this like a pro" | the §2 makeover (value-safe formatting pass; totals only if asked/opted-in) | formatting pass no; opt-in totals yes |
+| Style the header | "bold the headers", "make a header row", "style the top row" | `style_recipe: header` | no (format-only) |
+| Add/refresh a totals row | "add a totals row", "sum at the bottom" | `style_recipe: total_row` | **yes** — label + SUM formulas (caveat, preview-only) |
+| Banded table | "format as a table", "make it a nice table", "add zebra striping" | format-only banding via `format_cells`; use `style_recipe: table_polish` only when the user also wants its generated totals | `table_polish` **yes**; format-only banding no |
+| Currency column | "format column B as money", "make amounts currency" | `format_cells` numberFormat currency | no |
+| Percent column | "show these as percentages" | `format_cells` numberFormat percent | no |
+| Red negatives | "make negatives red", "flag negative numbers" | `format_cells` condition negative | no |
+| Highlight numeric cells | "highlight cells with numbers", "color numeric cells" | `format_cells` condition is_number | no |
+| Fit columns | "fix the column widths", "auto-size the columns" | `auto_fit` / `set_column_width` | no |
 
 Guard the whole-sheet makeover trigger so it out-ranks the narrow single-tool
 recipes when the phrasing is general ("make it look nice") but defers to the
