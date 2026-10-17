@@ -110,6 +110,7 @@ export function buildMakeoverPlan(
   // on the right columns. (finding #5)
   const headerLabels: string[] = []
   const rolesByCol = new Map<number, ColumnRole>()
+  const valuesByCol = new Map<number, (string | number | null)[]>()
   for (let c = startCol; c <= endCol; c++) {
     const cell = sheet.cells[refToCell(headerRow, c)]
     const computed = getComputedValue(headerRow, c)
@@ -128,6 +129,7 @@ export function buildMakeoverPlan(
       values.push(typeof raw === 'number' ? raw : String(raw))
     }
     rolesByCol.set(c, inferRole(label, values))
+    valuesByCol.set(c, values)
   }
 
   const purpose = detectPurpose(headerLabels)
@@ -207,7 +209,18 @@ export function buildMakeoverPlan(
         break
       }
     }
-    if (amountColIdx >= 0) {
+    // Only emit the negative-emphasis step when the amount column ACTUALLY
+    // holds a negative value. applyFormatCells treats a condition that matches
+    // zero cells as a failure, which would roll back the whole macro; skipping
+    // the step here keeps that "nothing matched = failure" contract meaningful
+    // for genuine user commands while never failing a clean makeover. (finding #6)
+    const hasNegativeAmount =
+      amountColIdx >= 0 &&
+      (valuesByCol.get(amountColIdx) ?? []).some((v) => {
+        const num = typeof v === 'number' ? v : Number.parseFloat(String(v))
+        return Number.isFinite(num) && num < 0
+      })
+    if (amountColIdx >= 0 && hasNegativeAmount) {
       const amountName = headerLabels[amountColIdx - startCol] ?? colToLetter(amountColIdx)
       const letter = colToLetter(amountColIdx)
       const colRange = `${letter}${dataStartRow + 1}:${letter}${endRow + 1}`

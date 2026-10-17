@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import type { CellData, SheetData } from '@/types'
+import type { CellData, CellFormat, SheetData } from '@/types'
 import { buildMakeoverPlan, roleToNumberFormat } from './sheetMakeover'
 import { buildActionPreview } from './previewBuilders'
 import { AUTO_APPLY_LOW_RISK_TOOLS } from './applyPosture'
 import { buildSheetProfile } from '@/ai/sheetProfile'
+import { executeTool, type ExecutionContext } from '@/agent/executor'
+import { executeMacro } from '@/ai/macro/macroExecutor'
+import type { MacroPlan, UndoManager } from '@/ai/nlp/types'
 
 // Tools that write cell values/formulas — a makeover must never emit these.
 // rename_header is here even though it sits in AUTO_APPLY_LOW_RISK_TOOLS:
@@ -243,5 +246,98 @@ describe('buildMakeoverPlan — §3 already-styled guard', () => {
     const { steps } = buildMakeoverPlan(sheet, profile, computed(sheet))
     const headerStep = steps.find((s) => s.tool === 'format_cells' && s.params.bold === true)
     expect(headerStep).toBeDefined()
+  })
+})
+
+// A budget sheet with only non-negative amounts — the negative-emphasis step
+// must NOT be emitted (a zero-match conditional format would fail and roll back
+// the whole macro). No cell carries textWrap, so auto_fit is a legitimate no-op.
+function positiveBudgetSheet(): SheetData {
+  return makeSheet({
+    A1: { value: 'Date' }, B1: { value: 'Category' }, C1: { value: 'Budget' },
+    A2: { value: '2026-01-01' }, B2: { value: 'Rent' }, C2: { value: 1200 },
+    A3: { value: '2026-01-02' }, B3: { value: 'Food' }, C3: { value: 300 },
+  })
+}
+
+describe('buildMakeoverPlan — no-op steps must not roll back the macro (finding #6)', () => {
+  it('omits the negative-emphasis step when the amount column has no negatives', () => {
+    const sheet = positiveBudgetSheet()
+    const profile = buildSheetProfile(sheet, computed(sheet))
+    const { steps } = buildMakeoverPlan(sheet, profile, computed(sheet))
+    const conditional = steps.filter((s) => s.tool === 'format_cells' && s.params.condition)
+    expect(conditional.length).toBe(0)
+    // Styling steps are still present (header + currency + auto_fit).
+    expect(steps.some((s) => s.tool === 'format_cells' && s.params.bold === true)).toBe(true)
+    expect(steps.some((s) => s.params.numberFormat === 'currency')).toBe(true)
+    expect(steps.some((s) => s.tool === 'auto_fit')).toBe(true)
+  })
+
+  it('still emits the negative-emphasis step when a negative amount exists', () => {
+    const sheet = budgetSheet() // C3 = -50
+    const profile = buildSheetProfile(sheet, computed(sheet))
+    const { steps } = buildMakeoverPlan(sheet, profile, computed(sheet))
+    const conditional = steps.filter((s) => s.tool === 'format_cells' && s.params.condition)
+    expect(conditional.length).toBe(1)
+  })
+
+  it('executing the plan on a no-negative, no-wrap sheet SUCCEEDS and keeps the macro committed', async () => {
+    const sheet = positiveBudgetSheet()
+    const profile = buildSheetProfile(sheet, computed(sheet))
+    const { steps } = buildMakeoverPlan(sheet, profile, computed(sheet))
+
+    // A minimal in-memory ExecutionContext: setCellFormat merges onto the cell,
+    // autoFitRows returns 0 (no wrapped content → legitimate no-op). executeTool
+    // dispatches each step to the real handlers.
+    const ctx: ExecutionContext = {
+      getActiveSheet: () => sheet,
+      getSheets: () => [sheet],
+      getComputedValue: (row, col) => {
+        const cell = sheet.cells[`${String.fromCharCode(65 + col)}${row + 1}`]
+        return cell?.value == null ? '' : String(cell.value)
+      },
+      setCellValue: () => { throw new Error('makeover must not write cell values') },
+      setCellFormat: (cellId, format: Partial<CellFormat>) => {
+        const existing = sheet.cells[cellId] ?? { value: null }
+        sheet.cells[cellId] = { ...existing, format: { ...existing.format, ...format } }
+      },
+      bulkSetCells: () => { throw new Error('makeover must not write cell values') },
+      autoFitRows: () => 0, // no wrapped content → nothing resized (the no-op under test)
+      applySortPatch: () => {},
+      setFilters: () => {},
+      deleteRow: () => {},
+      insertRow: () => {},
+      addSheet: () => {},
+      renameSheet: () => ({ ok: false, error: 'not supported in test' }),
+      pushHistory: () => {},
+      getSelection: () => [],
+    }
+
+    let rolledBack = false
+    let committed = false
+    const undoManager: UndoManager = {
+      beginGroup: () => 'g1',
+      commitGroup: () => { committed = true },
+      rollbackGroup: () => { rolledBack = true },
+    }
+    const plan: MacroPlan = { steps, originalText: 'professionalize', truncated: false }
+
+    const result = await executeMacro(
+      plan,
+      { onProgress: () => {}, onStepComplete: () => {}, shouldCancel: () => false },
+      undoManager,
+      async (step) => {
+        const res = executeTool({ tool: step.tool, params: step.params, description: step.description }, ctx)
+        return res.success ? { success: true, data: res } : { success: false, error: res.message }
+      },
+    )
+
+    expect(result.success).toBe(true)
+    expect(committed).toBe(true)
+    expect(rolledBack).toBe(false)
+    // Styling survived: the header row cells carry bold formatting.
+    for (const id of ['A1', 'B1', 'C1']) {
+      expect(sheet.cells[id].format?.bold).toBe(true)
+    }
   })
 })

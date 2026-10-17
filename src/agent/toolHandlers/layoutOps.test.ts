@@ -92,4 +92,19 @@ describe('handleAutoFit', () => {
     const { ctx } = makeCtx(sheet)
     expect(handleAutoFit({}, ctx, sheet).success).toBe(false)
   })
+  it('succeeds as a no-op when rows exist but none needed resizing (finding #6)', () => {
+    // Populated sheet, but autoFitRows reports zero rows changed (no wrapped
+    // content). This must be a SUCCESS so a makeover macro that always appends
+    // auto_fit is not rolled back.
+    const sheet = makeSheet({ A1: 'x', A2: 'y' })
+    const ctx = {
+      getActiveSheet: () => sheet,
+      getComputedValue: () => '',
+      pushHistory: () => {},
+      autoFitRows: () => 0, // nothing had wrapped content
+    } as unknown as ExecutionContext
+    const r = handleAutoFit({}, ctx, sheet)
+    expect(r.success).toBe(true)
+    expect(r.modified).toBe(0)
+  })
 })
