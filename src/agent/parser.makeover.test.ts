@@ -82,6 +82,23 @@ describe('parseMessage — professionalize makeover', () => {
     expect(result.calls).toHaveLength(0)
   })
 
+  it('rejects a negated professionalize request (no execute_macro) — finding #9', () => {
+    const noMacro = (msg: string) => {
+      const result = parseMessage(msg, makeoverContext())
+      expect(result.understood).toBe(false)
+      expect(result.calls).toHaveLength(0)
+      expect(result.calls.some((c) => c.tool === 'execute_macro')).toBe(false)
+    }
+    noMacro("don't professionalize this")
+    noMacro('no need to clean this up')
+  })
+
+  it('still builds ONE execute_macro for a genuine makeover command', () => {
+    const result = parseMessage('make this look professional', makeoverContext())
+    expect(result.understood).toBe(true)
+    expect(result.calls.filter((c) => c.tool === 'execute_macro')).toHaveLength(1)
+  })
+
   it('defers when no live sheet/profile is available (minimal context)', () => {
     // Without sheet/profile/getComputedValue the block can't build a safe plan,
     // so it must fall through rather than guess.

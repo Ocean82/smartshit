@@ -245,6 +245,21 @@ describe('parseProfessionalizePhrase', () => {
     expect(parseProfessionalizePhrase('delete row 5')).toBe(false)
     expect(parseProfessionalizePhrase('what is a professional spreadsheet')).toBe(false)
   })
+
+  it('rejects negated / non-command phrasings (finding #9)', () => {
+    expect(parseProfessionalizePhrase("don't professionalize this")).toBe(false)
+    expect(parseProfessionalizePhrase('do not professionalize my sheet')).toBe(false)
+    expect(parseProfessionalizePhrase('no need to clean this up')).toBe(false)
+    expect(parseProfessionalizePhrase('no need to make this look professional')).toBe(false)
+    expect(parseProfessionalizePhrase('never professionalise my sheet')).toBe(false)
+  })
+
+  it('still matches genuine commands after the negation guard', () => {
+    expect(parseProfessionalizePhrase('make this look professional')).toBe(true)
+    expect(parseProfessionalizePhrase('professionalize my sheet')).toBe(true)
+    expect(parseProfessionalizePhrase('clean up the formatting')).toBe(true)
+    expect(parseProfessionalizePhrase('format this like a pro')).toBe(true)
+  })
 })
 
 describe('resolveActTemplates — professionalize defers to the pipeline', () => {

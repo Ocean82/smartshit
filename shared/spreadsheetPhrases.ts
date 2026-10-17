@@ -3,6 +3,8 @@
  * Used by the client agent-parser and server actTemplates so coverage stays aligned.
  */
 
+import { isNonCommandRequest } from './requestSafety'
+
 /** Map spoken format names to format_cells numberFormat keys. */
 const NUMBER_FORMAT_ALIASES: Record<string, string> = {
   currency: 'currency',
@@ -322,6 +324,11 @@ export function parseStyleRecipePhrase(text: string): StyleRecipePhrase | null {
  */
 export function parseProfessionalizePhrase(text: string): boolean {
   const lower = text.toLowerCase().trim()
+
+  // Belt-and-braces: never build a makeover for a negated/explanatory/quoted
+  // utterance ("don't professionalize this", "no need to clean this up"), even
+  // for callers that do not pre-gate with isNonCommandRequest.
+  if (isNonCommandRequest(lower)) return false
 
   // Defer the narrow phrases to their owning parsers — a general makeover must
   // never swallow "add a total row" / "style the header" / "polish this table"
