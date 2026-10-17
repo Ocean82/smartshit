@@ -103,6 +103,16 @@ export function normalizeColumnRef(token: string): string {
 export function parseNumberFormatPhrase(text: string): NumberFormatPhrase | null {
   const trimmed = text.trim()
 
+  // Bare percent phrasing with no explicit column — the §4 example
+  // "show these as percentages" and "show as a percentage". Requires a
+  // show/make/format/display verb so unrelated "percent" questions don't match,
+  // and a pronoun/"a" target (these/those/this/it/them/a) so a real column name
+  // still falls through to the column-aware paths below.
+  const barePercent = trimmed.match(
+    /\b(?:show|make|format|display)\s+(?:(?:these|those|this|it|them)\s+)?(?:(?:numbers?|values?|cells?|column)\s+)?(?:as|to|like|into)\s+(?:a\s+)?percent(?:age)?s?\b\s*$/i,
+  )
+  if (barePercent) return { numberFormat: 'percent' }
+
   const applyMatch = trimmed.match(
     /\b(?:apply|use)\s+(currency|percent(?:age)?|date|number|accounting|money|dollars?)\s+(?:formatting|format|style)\s*(?:to\s+(?:column\s+)?([a-z0-9_ ]+?))?\s*$/i,
   )

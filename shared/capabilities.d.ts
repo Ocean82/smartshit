@@ -10,6 +10,7 @@ export type ParamStrategy =
   | 'amount_column_desc'
   | 'header_row_bold'
   | 'currency_selection'
+  | 'percent_selection'
   | 'contains_value'
   | 'numeric_format'
   | 'filter_predicate'

@@ -48,6 +48,28 @@ describe('capabilities catalog', () => {
     expect(capabilityPhrasesHash()).toBe(capabilityPhrasesHash())
     expect(getCapability('sort_column')?.tool).toBe('sort_sheet')
   })
+
+  it('exposes the §4 styling-catalog entries with the correct kind/tool', () => {
+    // Compound style_recipe-backed outcomes are kind:'recipe' (router-inert,
+    // resolved via Tier-1). They document the style_recipe target for consumers.
+    expect(getCapability('style_header')?.kind).toBe('recipe')
+    expect(getCapability('style_header')?.tool).toBe('style_recipe')
+    expect(getCapability('add_totals_row')?.kind).toBe('recipe')
+    expect(getCapability('add_totals_row')?.tool).toBe('style_recipe')
+    expect(getCapability('table_polish')?.kind).toBe('recipe')
+    expect(getCapability('table_polish')?.tool).toBe('style_recipe')
+
+    // Single-tool, value-safe percent formatting is kind:'tool' so the router
+    // can resolve its paraphrases to format_cells.
+    expect(getCapability('format_percent')?.kind).toBe('tool')
+    expect(getCapability('format_percent')?.tool).toBe('format_cells')
+
+    // fit_columns is discoverability-only: kind:'recipe' (router-inert) because
+    // there is no column auto-fit mechanism yet. tool:'auto_fit' documents the
+    // intended target only.
+    expect(getCapability('fit_columns')?.kind).toBe('recipe')
+    expect(getCapability('fit_columns')?.tool).toBe('auto_fit')
+  })
 })
 
 describe('scoreCapabilities', () => {
@@ -132,6 +154,15 @@ describe('resolveCapabilityParams', () => {
     expect(result).toMatchObject({
       tool: 'format_as_table',
       params: { theme: 'blue' },
+    })
+  })
+
+  it('resolves format_percent to format_cells numberFormat percent', () => {
+    const cap = getCapability('format_percent')!
+    const result = resolveCapabilityParams(cap, 'show these as percentages', ctx, columns)
+    expect(result).toMatchObject({
+      tool: 'format_cells',
+      params: { numberFormat: 'percent' },
     })
   })
 

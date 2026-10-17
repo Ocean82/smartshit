@@ -37,6 +37,25 @@ describe('parseNumberFormatPhrase', () => {
       numberFormat: 'currency',
     })
   })
+
+  it('parses bare "percent" phrasing with no explicit column (§4 Q4 catalog)', () => {
+    expect(parseNumberFormatPhrase('show these as percentages')).toEqual({
+      numberFormat: 'percent',
+    })
+    expect(parseNumberFormatPhrase('show as a percentage')).toEqual({
+      numberFormat: 'percent',
+    })
+    expect(parseNumberFormatPhrase('format these as percent')).toEqual({
+      numberFormat: 'percent',
+    })
+  })
+
+  it('still extracts an explicit column for percent (bare branch does not steal it)', () => {
+    expect(parseNumberFormatPhrase('format column B as percent')).toEqual({
+      numberFormat: 'percent',
+      range: 'B',
+    })
+  })
 })
 
 describe('parseFilterPhrase', () => {

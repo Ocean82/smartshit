@@ -135,3 +135,46 @@ describe('parseMessage — narrow phrases keep their existing routing', () => {
     expect(result.calls[0].tool).toBe('format_as_table')
   })
 })
+
+// Q4 styling-catalog (§4) precedence: the newly-cataloged recipe intents defer
+// to their narrow Tier-1 recipe when named, so adding the catalog entries did
+// NOT shift the makeover-vs-narrow ranking. Recipe entries are router-inert
+// (kind:'recipe'); these assert the Tier-1 dispatch the catalog documents.
+describe('parseMessage — Q4 catalog intents keep narrow routing (precedence preserved)', () => {
+  it('"style the header row" routes to style_recipe header (not the makeover, not plain bold)', () => {
+    const result = parseMessage('style the header row', makeoverContext())
+    expect(result.understood).toBe(true)
+    expect(result.calls[0].tool).toBe('style_recipe')
+    expect(result.calls[0].params.recipe).toBe('header')
+  })
+
+  it('"add a totals row" routes to style_recipe total_row (data-writing recipe, preview-only)', () => {
+    const result = parseMessage('add a totals row', makeoverContext())
+    expect(result.understood).toBe(true)
+    expect(result.calls[0].tool).toBe('style_recipe')
+    expect(result.calls[0].params.recipe).toBe('total_row')
+  })
+
+  it('"polish this table" routes to style_recipe table_polish (data-writing recipe)', () => {
+    const result = parseMessage('polish this table', makeoverContext())
+    expect(result.understood).toBe(true)
+    expect(result.calls[0].tool).toBe('style_recipe')
+    expect(result.calls[0].params.recipe).toBe('table_polish')
+  })
+
+  it('general "make it look nice" still OUT-RANKS the narrow recipes → makeover, no style_recipe step', () => {
+    const result = parseMessage('make this look nice', makeoverContext())
+    expect(result.understood).toBe(true)
+    expect(result.calls).toHaveLength(1)
+    expect(result.calls[0].tool).toBe('execute_macro')
+    const steps = result.calls[0].params.steps as ActionStep[]
+    for (const step of steps) expect(step.tool).not.toBe('style_recipe')
+  })
+
+  it('"show these as percentages" routes to format_cells numberFormat percent (value-safe)', () => {
+    const result = parseMessage('show these as percentages', makeoverContext())
+    expect(result.understood).toBe(true)
+    expect(result.calls[0].tool).toBe('format_cells')
+    expect(result.calls[0].params.numberFormat).toBe('percent')
+  })
+})

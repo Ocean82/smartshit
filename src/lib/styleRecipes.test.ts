@@ -47,6 +47,21 @@ describe('persistenceCaveat', () => {
     expect(persistenceCaveat('format_cells')).toBeNull()
     expect(persistenceCaveat('format_as_table')).toBeNull()
     expect(persistenceCaveat('set_column_width')).toBeNull()
+    // auto_fit (the value-safe Q4 "fit columns"/row-fit layout tool) writes no
+    // cell values, so it carries no persistence caveat.
+    expect(persistenceCaveat('auto_fit')).toBeNull()
+  })
+
+  // Q4 styling-catalog (§4): the data-writing catalog entries add_totals_row and
+  // table_polish both resolve (via Tier-1) to the style_recipe tool, so they
+  // inherit this non-null caveat and the preview-only / never-auto-applied
+  // guarantees (style_recipe is excluded from AUTO_APPLY_LOW_RISK_TOOLS). The
+  // value-safe entries (style_header stays format-only; format_percent →
+  // format_cells; fit/auto_fit) write no data and carry no caveat.
+  it('flags the §4 data-writing recipes (add_totals_row / table_polish → style_recipe) and clears value-safe ones', () => {
+    expect(persistenceCaveat('style_recipe')).not.toBeNull()
+    expect(persistenceCaveat('format_cells')).toBeNull()
+    expect(persistenceCaveat('auto_fit')).toBeNull()
   })
 })
 
