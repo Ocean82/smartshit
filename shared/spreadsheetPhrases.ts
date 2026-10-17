@@ -3,6 +3,8 @@
  * Used by the client agent-parser and server actTemplates so coverage stays aligned.
  */
 
+import { isNonCommandRequest } from './requestSafety.js'
+
 /** Map spoken format names to format_cells numberFormat keys. */
 const NUMBER_FORMAT_ALIASES: Record<string, string> = {
   currency: 'currency',
@@ -307,4 +309,50 @@ export function parseStyleRecipePhrase(text: string): StyleRecipePhrase | null {
   }
 
   return null
+}
+
+/**
+ * General "make my sheet look professional" phrasing → the value-safe makeover.
+ *
+ * Matches broad, whole-sheet polish requests ("make this look professional",
+ * "clean up the formatting", "format this like a pro", "professionalize my
+ * sheet") so a general ask out-ranks the narrow recipes. It MUST NOT steal the
+ * specific phrases those recipes own — "bold/style the header", "add a total
+ * row", "polish this table" (parseStyleRecipePhrase) or "format as a table"
+ * (parseFormatAsTablePhrase) — so those keep their existing routing. Narrow
+ * phrases are excluded by deferring to the recipe parsers.
+ */
+export function parseProfessionalizePhrase(text: string): boolean {
+  const lower = text.toLowerCase().trim()
+
+  // Belt-and-braces: never build a makeover for a negated/explanatory/quoted
+  // utterance ("don't professionalize this", "no need to clean this up"), even
+  // for callers that do not pre-gate with isNonCommandRequest.
+  if (isNonCommandRequest(lower)) return false
+
+  // Defer the narrow phrases to their owning parsers — a general makeover must
+  // never swallow "add a total row" / "style the header" / "polish this table"
+  // / "format as a table".
+  if (parseStyleRecipePhrase(lower) != null) return false
+  if (parseFormatAsTablePhrase(lower) != null) return false
+
+  // "make (this|it|my sheet|the sheet) look professional/nice/clean/presentable"
+  if (/\bmake\s+(?:this|it|my\s+(?:sheet|spreadsheet|data)|the\s+(?:sheet|spreadsheet|data))\s+look\s+(?:professional|nice|clean|presentable|polished)\b/.test(lower)) {
+    return true
+  }
+
+  // "professionalize (this|my sheet)"
+  if (/\bprofessionali[sz]e\b/.test(lower)) return true
+
+  // "clean up the formatting" / "clean up this sheet"
+  if (/\bclean\s+up\s+(?:the\s+)?(?:formatting|format|styling|style|this|my\s+(?:sheet|spreadsheet|data)|the\s+(?:sheet|spreadsheet|data))\b/.test(lower)) {
+    return true
+  }
+
+  // "format (this|it|my sheet) like a pro / professionally"
+  if (/\bformat\s+(?:this|it|my\s+(?:sheet|spreadsheet|data)|the\s+(?:sheet|spreadsheet|data))?\s*(?:like\s+a\s+pro|professionally)\b/.test(lower)) {
+    return true
+  }
+
+  return false
 }

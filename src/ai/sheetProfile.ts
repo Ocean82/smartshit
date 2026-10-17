@@ -5,7 +5,7 @@ import type { ColumnProfile, ColumnRole, SheetProfile, SheetPurpose } from '@/ai
 import { findSummaryRowIndexes } from '@/lib/sheetRows'
 import { parseNumeric } from '@/ai/utils'
 
-function inferRole(header: string, values: (string | number | null)[]): ColumnRole {
+export function inferRole(header: string, values: (string | number | null)[]): ColumnRole {
   const h = header.toLowerCase()
   if (/date|month|year|due/.test(h)) return 'date'
   if (/category|item|description|name|vendor|merchant/.test(h)) return 'category'
@@ -20,7 +20,7 @@ function inferRole(header: string, values: (string | number | null)[]): ColumnRo
   return 'unknown'
 }
 
-function detectPurpose(headers: string[]): SheetPurpose {
+export function detectPurpose(headers: string[]): SheetPurpose {
   const joined = headers.join(' ').toLowerCase()
   if (/budget|expense|income|spending|savings|variance|actual|planned/.test(joined)) return 'budget'
   if (/invoice|bill|client|subtotal|tax/.test(joined)) return 'invoice'

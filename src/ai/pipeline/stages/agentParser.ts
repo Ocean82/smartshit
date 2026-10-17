@@ -77,6 +77,11 @@ export function createAgentParserStage(deps: AgentParserDeps): PipelineStage {
         lastDataCol: lastDataColIdx,
         headers,
         columns: spreadsheetCtx.profile?.columns,
+        // Full sheet + profile + value accessor so the value-safe makeover block
+        // can build its plan via buildMakeoverPlan on this live pipeline path.
+        sheet,
+        profile: spreadsheetCtx.profile,
+        getComputedValue,
       }
 
       const parsed = parseMessage(message, sheetCtx)
@@ -94,6 +99,19 @@ export function createAgentParserStage(deps: AgentParserDeps): PipelineStage {
       // treatment as delete_row to prevent accidental data loss.
       if (parsed.calls.length >= 1 && parsed.calls.some((c) => DESTRUCTIVE_TOOLS.has(c.tool))) {
         return handleDestructivePreview(parsed.calls, parsed.explanation)
+      }
+
+      // ─── execute_macro preview/confirm flow ─────────────────────────────
+      // execute_macro (the value-safe sheet makeover) is intentionally NOT in
+      // toolRegistry, so executeToolCalls would see category=undefined, treat it
+      // as a read, and run it inline — where executeTool returns
+      // "Unknown tool: execute_macro". It must instead be returned as an
+      // Apply/Reject action so responseBuilder attaches the format-only preview
+      // from buildActionPreview. It never auto-applies and is never executed
+      // inline here; the store's executeMacroAction runs it as one undo group on
+      // Apply.
+      if (parsed.calls.length === 1 && parsed.calls[0].tool === 'execute_macro') {
+        return handleMacroPreview(parsed.calls[0], parsed.explanation)
       }
 
       // ─── Ambiguity clarification (understood but no calls) ──────────────
@@ -196,6 +214,28 @@ function handleDestructivePreview(
     actions,
     stageName: 'agent-parser',
     metadata: { toolUsed: 'destructive-preview' },
+  }
+}
+
+// ─── execute_macro Preview ───────────────────────────────────────────────────
+
+/**
+ * Return the value-safe makeover's `execute_macro` call as an Apply/Reject
+ * action. The format-only preview is attached downstream by responseBuilder
+ * (buildActionPreview handles execute_macro). Never auto-applied, never run
+ * inline — Apply routes to executeMacroAction, which commits one undo group.
+ */
+function handleMacroPreview(
+  call: ParsedToolCall,
+  explanation: string | undefined,
+): StageResult {
+  const message = explanation ?? call.description
+  return {
+    success: true,
+    message: `${message}\n\nReview, then choose Apply or Reject.`,
+    actions: [{ tool: call.tool, params: call.params, description: call.description }],
+    stageName: 'agent-parser',
+    metadata: { toolUsed: 'execute-macro-preview' },
   }
 }
 

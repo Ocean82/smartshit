@@ -153,6 +153,29 @@ export const CAPABILITIES = [
     paramStrategy: 'negatives',
   },
   {
+    id: 'professionalize_sheet',
+    kind: 'recipe',
+    // RESOLVED VIA THE TIER-1 REGEX PARSER (shared/spreadsheetPhrases.ts /
+    // src/agent/parser.ts), NOT the semantic router. This recipe IS embedded and
+    // scored by Tier-2 (bootstrapCapabilityEmbeddings iterates all examples), but
+    // semanticCapabilityRouter.ts explicitly passes on kind:'recipe'
+    // (fulfillCapabilityScore returns null) so a paraphrase that scores here
+    // defers to Tier-1/LLM instead of resolving to a steps-less execute_macro.
+    // This entry exists for catalog documentation/discoverability only (spec §4,
+    // plan decision 6). The makeover is a value-safe, format-only execute_macro
+    // pass; the totals row is a separate, opt-in, preview-only follow-up.
+    description:
+      'Professionalize the whole sheet: value-safe formatting pass; totals only if explicitly asked.',
+    examples: [
+      'make this look professional',
+      'clean up the formatting',
+      'format this like a pro',
+      'professionalize my sheet',
+      'make my spreadsheet look professional',
+    ],
+    tool: 'execute_macro',
+  },
+  {
     id: 'totals_by_category',
     kind: 'goal',
     description: 'Show totals grouped by category (chart or summary).',

@@ -123,7 +123,11 @@ export const handleAutoFit: ToolHandler = (params: ToolParams, ctx, sheet) => {
   ctx.pushHistory(target.length === 1 ? 'Autofit row height' : 'Autofit row heights')
   const changed = ctx.autoFitRows(target)
   if (changed === 0) {
-    return { success: false, message: 'No rows needed resizing (no wrapped content).', modified: 0 }
+    // Rows existed to consider but none had wrapped content to resize — a
+    // legitimate no-op, not a failure. Reporting success keeps a makeover macro
+    // (which always appends auto_fit) from rolling back its earlier styling when
+    // the sheet has no wrapped cells. (finding #6)
+    return { success: true, message: 'No rows needed resizing (no wrapped content).', modified: 0 }
   }
   return { success: true, message: `Auto-fit ${changed} row${changed === 1 ? '' : 's'} to content`, modified: changed }
 }

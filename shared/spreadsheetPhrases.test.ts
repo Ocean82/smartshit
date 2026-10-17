@@ -5,6 +5,7 @@ import {
   parseMultiSortPhrase,
   parseFormatAsTablePhrase,
   parseLayoutPhrase,
+  parseProfessionalizePhrase,
   parseStyleRecipePhrase,
   isMultiSortPhrase,
 } from './spreadsheetPhrases'
@@ -214,5 +215,65 @@ describe('resolveActTemplates — style recipes', () => {
       params: { recipe: 'total_row' },
     })
     expect(resolveActTemplates('polish this table').actions[0]?.tool).toBe('style_recipe')
+  })
+})
+
+describe('parseProfessionalizePhrase', () => {
+  it('matches general whole-sheet polish phrasings', () => {
+    expect(parseProfessionalizePhrase('make this look professional')).toBe(true)
+    expect(parseProfessionalizePhrase('make my sheet look professional')).toBe(true)
+    expect(parseProfessionalizePhrase('professionalize this')).toBe(true)
+    expect(parseProfessionalizePhrase('professionalise my sheet')).toBe(true)
+    expect(parseProfessionalizePhrase('clean up the formatting')).toBe(true)
+    expect(parseProfessionalizePhrase('format this like a pro')).toBe(true)
+    expect(parseProfessionalizePhrase('format it professionally')).toBe(true)
+  })
+
+  it('does NOT steal the narrow recipe phrases', () => {
+    // style_recipe-owned
+    expect(parseProfessionalizePhrase('bold the headers')).toBe(false)
+    expect(parseProfessionalizePhrase('style the header row')).toBe(false)
+    expect(parseProfessionalizePhrase('add a total row')).toBe(false)
+    expect(parseProfessionalizePhrase('polish this table')).toBe(false)
+    // format_as_table-owned
+    expect(parseProfessionalizePhrase('format this as a table')).toBe(false)
+    expect(parseProfessionalizePhrase('make it a table')).toBe(false)
+  })
+
+  it('ignores unrelated requests', () => {
+    expect(parseProfessionalizePhrase('sort by amount')).toBe(false)
+    expect(parseProfessionalizePhrase('delete row 5')).toBe(false)
+    expect(parseProfessionalizePhrase('what is a professional spreadsheet')).toBe(false)
+  })
+
+  it('rejects negated / non-command phrasings (finding #9)', () => {
+    expect(parseProfessionalizePhrase("don't professionalize this")).toBe(false)
+    expect(parseProfessionalizePhrase('do not professionalize my sheet')).toBe(false)
+    expect(parseProfessionalizePhrase('no need to clean this up')).toBe(false)
+    expect(parseProfessionalizePhrase('no need to make this look professional')).toBe(false)
+    expect(parseProfessionalizePhrase('never professionalise my sheet')).toBe(false)
+  })
+
+  it('still matches genuine commands after the negation guard', () => {
+    expect(parseProfessionalizePhrase('make this look professional')).toBe(true)
+    expect(parseProfessionalizePhrase('professionalize my sheet')).toBe(true)
+    expect(parseProfessionalizePhrase('clean up the formatting')).toBe(true)
+    expect(parseProfessionalizePhrase('format this like a pro')).toBe(true)
+  })
+})
+
+describe('resolveActTemplates — professionalize defers to the pipeline', () => {
+  // The local fallback lacks a live sheet/profile, so the professionalize rule
+  // claims the general phrase (keeping the narrow recipes from stealing it) but
+  // returns no action — the pipeline's agent-parser builds the real plan.
+  it('returns an empty (deferred) result for a general makeover phrase', () => {
+    const result = resolveActTemplates('make this look professional')
+    expect(result.actions).toEqual([])
+    expect(result.message).toBe('')
+  })
+
+  it('still routes the narrow recipes (not stolen by professionalize)', () => {
+    expect(resolveActTemplates('add a total row').actions[0]?.tool).toBe('style_recipe')
+    expect(resolveActTemplates('format this as a table').actions[0]?.tool).toBe('format_as_table')
   })
 })

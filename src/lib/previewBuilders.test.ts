@@ -84,6 +84,72 @@ describe('previewBuilders', () => {
   })
 })
 
+describe('previewBuilders — execute_macro (format-only)', () => {
+  it('flattens format_cells steps into format-only changes', () => {
+    const sheet = sheetWithColB()
+    const preview = buildActionPreview(
+      'execute_macro',
+      {
+        steps: [
+          { tool: 'format_cells', params: { range: 'B1:B1', bold: true }, description: 'Header' },
+          { tool: 'format_cells', params: { range: 'B2:B3', numberFormat: 'currency' }, description: 'Amount' },
+          { tool: 'auto_fit', params: {}, description: 'Fit rows' },
+        ],
+      },
+      sheet,
+      () => '',
+    )
+    // format_cells cells (B1,B2,B3) plus the auto_fit layout anchor (A2, the
+    // first populated cell) — every executable step is represented.
+    expect(new Set(preview?.changes.map((c) => c.cell))).toEqual(new Set(['B1', 'B2', 'B3', 'A2']))
+    // B2 keeps its old value AND formula — the preview preserves data, it does
+    // not blank the cell (value-safe makeover contract).
+    expect(preview?.changes.find((c) => c.cell === 'B2')).toMatchObject({
+      oldValue: 10,
+      newValue: 10,
+      newFormula: undefined,
+    })
+  })
+
+  it('preserves each cell value and formula instead of blanking it', () => {
+    const sheet = sheetWithColB()
+    const preview = buildActionPreview(
+      'execute_macro',
+      {
+        steps: [
+          { tool: 'format_cells', params: { range: 'A1:B3', bgColor: '#eee' }, description: 'Fill' },
+        ],
+      },
+      sheet,
+      () => '',
+    )
+    expect(preview?.changes.length).toBeGreaterThan(0)
+    for (const change of preview!.changes) {
+      const current = sheet.cells[change.cell]
+      expect(change.newValue).toBe(current?.value ?? null)
+      expect(change.newFormula).toBe(current?.formula)
+    }
+  })
+
+  it('returns undefined for no steps, but previews a layout-only plan', () => {
+    const sheet = sheetWithColB()
+    expect(buildActionPreview('execute_macro', { steps: [] }, sheet, () => '')).toBeUndefined()
+    // A layout-only (auto_fit) plan must still produce a non-empty preview so
+    // the action cannot be applied with nothing shown (finding #1).
+    const layoutPreview = buildActionPreview(
+      'execute_macro',
+      { steps: [{ tool: 'auto_fit', params: {}, description: 'Fit' }] },
+      sheet,
+      () => '',
+    )
+    expect(layoutPreview?.changes.length).toBeGreaterThan(0)
+    const anchor = layoutPreview!.changes[0]
+    const current = sheet.cells[anchor.cell]
+    expect(anchor.newValue).toBe(current?.value ?? null)
+    expect(anchor.newFormula).toBe(current?.formula)
+  })
+})
+
 describe('previewBuilders — clear_sheet', () => {
   function sheetWithContent(): SheetData {
     return {

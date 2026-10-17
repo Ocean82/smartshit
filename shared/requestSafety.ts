@@ -36,7 +36,7 @@ const COMMAND_VERBS = [
   'color', 'colour', 'highlight', 'rename', 'replace', 'update', 'change', 'modify', 'create',
   'build', 'make', 'generate', 'export', 'download', 'fill', 'apply', 'move', 'copy',
   'duplicate', 'hide', 'show', 'merge', 'sum', 'total', 'average', 'count', 'chart', 'graph',
-  'overwrite', 'populate', 'blank',
+  'overwrite', 'populate', 'blank', 'professionalize', 'professionalise',
   // Irregular past forms the suffix rules below cannot derive.
   'made', 'built', 'wrote',
 ]
