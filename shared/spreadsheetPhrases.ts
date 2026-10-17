@@ -3,7 +3,7 @@
  * Used by the client agent-parser and server actTemplates so coverage stays aligned.
  */
 
-import { isNonCommandRequest } from './requestSafety'
+import { isNonCommandRequest } from './requestSafety.js'
 
 /** Map spoken format names to format_cells numberFormat keys. */
 const NUMBER_FORMAT_ALIASES: Record<string, string> = {
