@@ -6,7 +6,7 @@ import { resolveDeleteRow } from '@/lib/deleteRowPreview'
 import { getColumnDataRows } from '@/lib/sheetRows'
 import { buildRecipePlan, isStyleRecipe, planToPreviewChanges } from '@/lib/styleRecipes'
 import { detectFormulaRangeGapRisk } from '@/lib/formulaGapRisk'
-import { expandRange } from '@/lib/formatCellsTool'
+import { expandRange, normalizeCondition, findMatchingCellIds } from '@/lib/formatCellsTool'
 import { resolveColumnIndex } from '@/agent/toolHandlers/types'
 
 /**
@@ -216,8 +216,23 @@ function layoutAnchorCell(sheet: SheetData, step: ActionStep): string | null {
  * - cells covered by overlapping ranges are emitted once (dedupe), and the
  *   total is bounded by MAX_PREVIEW_CELLS; when the cap is hit, a single
  *   value-preserving summary change notes the remaining count.
+ * - a format_cells step carrying a `condition` (e.g. the makeover's
+ *   negative-amount emphasis) previews ONLY the cells Apply would actually
+ *   format: the condition is evaluated against each cell's computed value with
+ *   the SAME predicate Apply uses (findMatchingCellIds), so the preview can't
+ *   highlight positive/zero cells Apply leaves untouched. (finding #7)
+ *
+ * @param getComputedValue resolves a cell's displayed value for condition
+ *   evaluation. Falls back to the stored cell value when omitted, so callers
+ *   without an engine (tests) still match on raw values.
  */
-export function previewExecuteMacro(sheet: SheetData, steps: ActionStep[]): CellChange[] {
+export function previewExecuteMacro(
+  sheet: SheetData,
+  steps: ActionStep[],
+  getComputedValue?: (row: number, col: number) => string,
+): CellChange[] {
+  const computed = getComputedValue
+    ?? ((row, col) => String(sheet.cells[refToCell(row, col)]?.value ?? ''))
   const changes: CellChange[] = []
   const seen = new Set<string>()
   let capped = false
@@ -239,7 +254,12 @@ export function previewExecuteMacro(sheet: SheetData, steps: ActionStep[]): Cell
       if (typeof range !== 'string' || !range.trim()) continue
       const cellIds = expandRange(range, sheet)
       if (!cellIds) continue
-      for (const cellId of cellIds) {
+      // A conditional format (e.g. the makeover's negative-amount emphasis) only
+      // formats cells whose computed value matches on Apply. Narrow the preview
+      // to those same cells so it never overstates the change. (finding #7)
+      const cond = normalizeCondition(step.params?.condition)
+      const previewIds = cond ? findMatchingCellIds(sheet, cellIds, cond, computed) : cellIds
+      for (const cellId of previewIds) {
         if (!emit(cellId, step.description)) break
       }
     } else if (MACRO_LAYOUT_TOOLS.has(step.tool)) {
@@ -320,7 +340,7 @@ export function buildActionPreview(
     return resolved?.changes.length ? { changes: resolved.changes } : undefined
   }
   if (tool === 'execute_macro' && Array.isArray(params.steps)) {
-    const changes = previewExecuteMacro(sheet, params.steps as ActionStep[])
+    const changes = previewExecuteMacro(sheet, params.steps as ActionStep[], getComputedValue)
     return changes.length ? { changes } : undefined
   }
   // `clean_sheet_data` is the one tool whose deterministic skill attaches its

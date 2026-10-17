@@ -60,6 +60,46 @@ describe('previewExecuteMacro — value-safe makeover preview', () => {
     expect(new Set(ids)).toEqual(new Set(['A1', 'A2', 'A3']))
   })
 
+  it('(e) a conditional negative-emphasis step previews ONLY the negative cells (finding #7)', () => {
+    const sheet = makeSheet({
+      C1: { value: 'Budget' },
+      C2: { value: 1200 },  // positive — Apply would NOT format
+      C3: { value: -50 },   // negative — Apply WOULD format
+      C4: { value: 0 },     // zero — Apply would NOT format
+      C5: { value: -300 },  // negative — Apply WOULD format
+    })
+    const computed = (r: number, c: number): string => {
+      const cell = sheet.cells[`${String.fromCharCode(65 + c)}${r + 1}`]
+      return cell?.value == null ? '' : String(cell.value)
+    }
+    const steps: ActionStep[] = [
+      {
+        tool: 'format_cells',
+        params: { range: 'C2:C5', condition: { operator: 'negative' }, bgColor: '#fee2e2' },
+        description: 'Highlight negative Budget values in red',
+      },
+    ]
+    const changes = previewExecuteMacro(sheet, steps, computed)
+    const ids = changes.map((c) => c.cell).sort()
+    // Only the two negative cells are previewed; positive/zero are excluded.
+    expect(ids).toEqual(['C3', 'C5'])
+    // Still value/formula-preserving (never a data write).
+    for (const change of changes) {
+      const current = sheet.cells[change.cell]
+      expect(change.newValue).toBe(current?.value ?? null)
+      expect(change.newFormula).toBe(current?.formula)
+    }
+  })
+
+  it('(f) an unconditional format_cells step still previews every cell in range', () => {
+    const sheet = makeSheet({ C2: { value: 1200 }, C3: { value: -50 }, C4: { value: 0 } })
+    const steps: ActionStep[] = [
+      { tool: 'format_cells', params: { range: 'C2:C4', bold: true }, description: 'Bold C2:C4' },
+    ]
+    const changes = previewExecuteMacro(sheet, steps)
+    expect(changes.map((c) => c.cell).sort()).toEqual(['C2', 'C3', 'C4'])
+  })
+
   it('(d) a very large range is capped at the preview constant', () => {
     // 500 populated cells in column A; the range targets all of them.
     const cells: Record<string, CellData> = {}
