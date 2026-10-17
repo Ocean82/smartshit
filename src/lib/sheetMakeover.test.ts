@@ -6,7 +6,10 @@ import { AUTO_APPLY_LOW_RISK_TOOLS } from './applyPosture'
 import { buildSheetProfile } from '@/ai/sheetProfile'
 
 // Tools that write cell values/formulas — a makeover must never emit these.
-const DATA_WRITING_TOOLS = ['set_cell', 'set_range', 'apply_formula', 'style_recipe', 'clear_sheet', 'modify_column']
+// rename_header is here even though it sits in AUTO_APPLY_LOW_RISK_TOOLS:
+// handleRenameHeader writes via ctx.setCellValue, so it is data-writing and the
+// value-safe makeover must never emit it (findings #10/#11).
+const DATA_WRITING_TOOLS = ['set_cell', 'set_range', 'apply_formula', 'style_recipe', 'clear_sheet', 'modify_column', 'rename_header']
 
 function makeSheet(cells: Record<string, CellData>): SheetData {
   return { id: 's1', name: 'Sheet1', cells, columnWidths: {}, rowHeights: {} }

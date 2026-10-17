@@ -90,12 +90,33 @@ describe('AgentParser stage — makeover execute_macro preview (real toolRegistr
       const preview = buildActionPreview(action.tool, action.params, sheet, makeContext(sheet, phrase).getComputedValue)
       expect(preview).toBeDefined()
       expect(preview!.changes.length).toBeGreaterThan(0)
+      // Value-safe contract (finding #4): a format-only preview preserves each
+      // cell's CURRENT value/formula rather than blanking it to null — a
+      // null newValue would render as an empty cell and look like data deletion.
       for (const change of preview!.changes) {
-        expect(change.newValue).toBeNull() // format-only: value untouched
-        expect(change.newFormula).toBeUndefined() // format-only: formula untouched
+        const current = sheet.cells[change.cell]
+        expect(change.newValue).toBe(current?.value ?? null) // value untouched
+        expect(change.newFormula).toBe(current?.formula) // formula untouched
       }
     },
   )
+
+  it('routes a real makeover to the execute_macro preview, NOT the destructive "remove all data" warning (finding #7)', async () => {
+    const sheet = budgetSheet()
+    const { deps } = makeDeps()
+
+    const result = await createAgentParserStage(deps).process(makeContext(sheet, 'make this look professional'))
+
+    // Ordering/routing pin: a makeover must land on handleMacroPreview, never
+    // handleDestructivePreview. execute_macro stays out of the pipeline's
+    // DESTRUCTIVE_TOOLS set ({'clear_sheet'} only), so the user never sees the
+    // destructive "remove all data" warning for a format-only makeover.
+    expect(result).not.toBeNull()
+    expect(result!.metadata?.toolUsed).toBe('execute-macro-preview')
+    expect(result!.metadata?.toolUsed).not.toBe('destructive-preview')
+    expect(result!.message).not.toMatch(/remove all data/i)
+    expect(result!.message).not.toMatch(/⚠️/)
+  })
 
   it('still defers a question-framed professionalize request to the next stage (null)', async () => {
     const sheet = budgetSheet()
