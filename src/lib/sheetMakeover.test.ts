@@ -82,9 +82,12 @@ describe('buildMakeoverPlan — value safety', () => {
     const { steps } = buildMakeoverPlan(sheet, profile, computed(sheet))
     const preview = buildActionPreview('execute_macro', { steps }, sheet, computed(sheet))
     expect(preview?.changes.length).toBeGreaterThan(0)
+    // Value-safe contract: every change leaves BOTH value and formula equal to
+    // the cell's CURRENT content — the preview preserves data, never blanks it.
     for (const change of preview!.changes) {
-      expect(change.newValue).toBeNull()
-      expect(change.newFormula).toBeUndefined()
+      const current = sheet.cells[change.cell]
+      expect(change.newValue).toBe(current?.value ?? null)
+      expect(change.newFormula).toBe(current?.formula)
     }
   })
 })

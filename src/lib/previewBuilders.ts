@@ -152,34 +152,123 @@ export function previewClearSheet(sheet: SheetData): CellChange[] {
   return changes
 }
 
+/** Layout tools that change sizing, not cell contents. */
+const MACRO_LAYOUT_TOOLS = new Set(['auto_fit', 'set_column_width', 'set_row_height'])
+
+/** Cap on per-cell preview entries — mirrors previewClearSheet's convention so
+ *  a huge/sparse/column-spec range can't allocate a CellChange per cell. */
+const MAX_PREVIEW_CELLS = 200
+
+/** A value/formula-preserving CellChange for `cellId`: newValue === oldValue and
+ *  newFormula === oldFormula, so the overlay renders the UNCHANGED content and
+ *  the diff can never show a data write. */
+function preserveChange(sheet: SheetData, cellId: string, description: string): CellChange {
+  const current = sheet.cells[cellId]
+  const value = current?.value ?? null
+  return {
+    cell: cellId,
+    oldValue: value,
+    newValue: value, // value preserved — display-only, never a data write
+    oldFormula: current?.formula,
+    newFormula: current?.formula, // formula preserved
+    description,
+  }
+}
+
+/** First populated cell id (value or formula), in A1 sort order, or null. */
+function firstPopulatedCellId(sheet: SheetData): string | null {
+  const ids = Object.keys(sheet.cells)
+    .filter((id) => {
+      const c = sheet.cells[id]
+      return c && ((c.value != null && c.value !== '') || c.formula)
+    })
+    .sort()
+  return ids[0] ?? null
+}
+
+/** Pick an anchor cell for a layout step so a layout-only plan still previews.
+ *  Uses the step's range/column when present, else the first populated cell. */
+function layoutAnchorCell(sheet: SheetData, step: ActionStep): string | null {
+  const range = step.params?.range
+  if (typeof range === 'string' && range.trim()) {
+    const ids = expandRange(range, sheet)
+    if (ids && ids.length) return ids[0]
+  }
+  const column = step.params?.column
+  if (typeof column === 'string' && column.trim()) {
+    const ids = expandRange(column, sheet)
+    if (ids && ids.length) return ids[0]
+  }
+  return firstPopulatedCellId(sheet)
+}
+
 /**
- * Preview an `execute_macro`: flatten each `format_cells` step into format-only
- * CellChange[]. The makeover macro (src/lib/sheetMakeover.ts) emits ONLY
- * formatting/layout steps, so every change carries the old value and a null
- * newValue / undefined newFormula — the diff can never show a data write.
- * Layout steps (auto_fit / set_column_width / set_row_height) touch no cell
- * contents and contribute nothing to the diff.
+ * Preview an `execute_macro`: flatten every executable step into
+ * value/formula-preserving CellChange[]. The makeover macro
+ * (src/lib/sheetMakeover.ts) emits ONLY formatting/layout steps, so every
+ * emitted change leaves BOTH value and formula untouched (newValue === oldValue,
+ * newFormula === oldFormula) — the diff can never show a data write.
+ *
+ * - format_cells steps emit one preserving change per cell in the range.
+ * - layout steps (auto_fit / set_column_width / set_row_height) emit one
+ *   preserving anchor change so a layout-only plan still produces a non-empty
+ *   preview (no executable step is applyable without being previewed).
+ * - cells covered by overlapping ranges are emitted once (dedupe), and the
+ *   total is bounded by MAX_PREVIEW_CELLS; when the cap is hit, a single
+ *   value-preserving summary change notes the remaining count.
  */
 export function previewExecuteMacro(sheet: SheetData, steps: ActionStep[]): CellChange[] {
   const changes: CellChange[] = []
+  const seen = new Set<string>()
+  let capped = false
+
+  const emit = (cellId: string, description: string): boolean => {
+    if (seen.has(cellId)) return true // dedupe across overlapping ranges
+    if (changes.length >= MAX_PREVIEW_CELLS) {
+      capped = true
+      return false
+    }
+    seen.add(cellId)
+    changes.push(preserveChange(sheet, cellId, description))
+    return true
+  }
+
   for (const step of steps) {
-    if (step.tool !== 'format_cells') continue // layout steps have no cell changes
-    const range = step.params?.range
-    if (typeof range !== 'string' || !range.trim()) continue
-    const cellIds = expandRange(range, sheet)
-    if (!cellIds) continue
-    for (const cellId of cellIds) {
-      const current = sheet.cells[cellId]
+    if (step.tool === 'format_cells') {
+      const range = step.params?.range
+      if (typeof range !== 'string' || !range.trim()) continue
+      const cellIds = expandRange(range, sheet)
+      if (!cellIds) continue
+      for (const cellId of cellIds) {
+        if (!emit(cellId, step.description)) break
+      }
+    } else if (MACRO_LAYOUT_TOOLS.has(step.tool)) {
+      // Layout changes no cell contents; still emit a representative preserving
+      // change so a layout-only plan is previewable and cannot apply unseen.
+      const anchor = layoutAnchorCell(sheet, step)
+      if (anchor) emit(anchor, step.description)
+    }
+    if (capped) break
+  }
+
+  if (capped) {
+    // One value-preserving summary row so the UI signals the preview was
+    // bounded rather than silently dropping cells. No cell data is written.
+    const anchor = firstPopulatedCellId(sheet)
+    if (anchor) {
+      const current = sheet.cells[anchor]
+      const value = current?.value ?? null
       changes.push({
-        cell: cellId,
-        oldValue: current?.value ?? null,
-        newValue: null, // format-only: value is untouched
+        cell: anchor,
+        oldValue: value,
+        newValue: value,
         oldFormula: current?.formula,
-        newFormula: undefined, // format-only: formula is untouched
-        description: step.description,
+        newFormula: current?.formula,
+        description: `Preview limited to ${MAX_PREVIEW_CELLS} cells; more cells will be formatted`,
       })
     }
   }
+
   return changes
 }
 
