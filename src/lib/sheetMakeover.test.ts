@@ -35,6 +35,20 @@ function genericSheet(): SheetData {
   })
 }
 
+// A budget sheet whose row 0 is a non-data title and the REAL header is on
+// row 1. findHeaderRow returns the first row with >= 2 populated cells, so the
+// single-cell title row (A1 only) is skipped and row 1 (A2:C2) is detected as
+// the header. The row-0 profile would misclassify these columns; the makeover
+// must re-infer roles/purpose from the detected header. (finding #5)
+function titledBudgetSheet(): SheetData {
+  return makeSheet({
+    A1: { value: 'Q1 Budget Report' },
+    A2: { value: 'Date' }, B2: { value: 'Category' }, C2: { value: 'Budget' },
+    A3: { value: '2026-01-01' }, B3: { value: 'Rent' }, C3: { value: 1200 },
+    A4: { value: '2026-01-02' }, B4: { value: 'Food' }, C4: { value: 300 },
+  })
+}
+
 const computed = (sheet: SheetData) => (r: number, c: number): string => {
   const cell = sheet.cells[`${String.fromCharCode(65 + c)}${r + 1}`]
   return cell?.value == null ? '' : String(cell.value)
@@ -137,6 +151,30 @@ describe('buildMakeoverPlan — content', () => {
   })
 })
 
+describe('buildMakeoverPlan — detected header below row 0 (finding #5)', () => {
+  it('infers roles/purpose from the DETECTED header row, not row 0', () => {
+    const sheet = titledBudgetSheet()
+    const profile = buildSheetProfile(sheet, computed(sheet))
+    const { steps } = buildMakeoverPlan(sheet, profile, computed(sheet))
+
+    // The Budget column (C) data lives in C3:C4; with the header detected on
+    // row 1, purpose='budget' and role='amount' -> currency on the data rows.
+    const currencyStep = steps.find(
+      (s) => s.tool === 'format_cells' && s.params.numberFormat === 'currency',
+    )
+    expect(currencyStep).toBeDefined()
+    const range = String(currencyStep!.params.range)
+    expect(range).toContain('C')
+    // Data rows start at row 2 (1-based row 3), below the detected header.
+    expect(range).toBe('C3:C4')
+
+    // Header styling targets the DETECTED header row (row 2, 1-based), not row 1.
+    const headerStep = steps.find((s) => s.tool === 'format_cells' && s.params.bold === true)
+    expect(headerStep).toBeDefined()
+    expect(String(headerStep!.params.range)).toBe('A2:C2')
+  })
+})
+
 describe('buildMakeoverPlan — §3 already-styled guard', () => {
   it('skips a column numberFormat step when every data cell already carries it', () => {
     const sheet = budgetSheet()
@@ -150,10 +188,16 @@ describe('buildMakeoverPlan — §3 already-styled guard', () => {
     expect(currencyStep).toBeUndefined()
   })
 
-  it('skips header styling when the header row already carries it', () => {
+  it('skips header styling when the header row already carries EVERY key', () => {
     const sheet = budgetSheet()
-    // Pre-style the header row (A1:C1) to match what the makeover would set.
-    const headerFmt = { bold: true, bgColor: '#166534', borders: { bottom: '2px solid #22c55e' } }
+    // Pre-style the header row (A1:C1) to match EVERY key the makeover sets:
+    // bold, bgColor, fontColor, and the exact 2px accent bottom border.
+    const headerFmt = {
+      bold: true,
+      bgColor: '#166534',
+      fontColor: '#ffffff',
+      borders: { bottom: '2px solid #22c55e' },
+    }
     for (const id of ['A1', 'B1', 'C1']) {
       sheet.cells[id] = { ...sheet.cells[id], format: headerFmt }
     }
@@ -161,5 +205,40 @@ describe('buildMakeoverPlan — §3 already-styled guard', () => {
     const { steps } = buildMakeoverPlan(sheet, profile, computed(sheet))
     const headerStep = steps.find((s) => s.tool === 'format_cells' && s.params.bold === true)
     expect(headerStep).toBeUndefined()
+  })
+
+  it('still styles a header that matches bold+bg but has a DIFFERENT fontColor (finding #8)', () => {
+    const sheet = budgetSheet()
+    // Correct bold + bg, but a mismatched fontColor -> NOT already styled.
+    const headerFmt = {
+      bold: true,
+      bgColor: '#166534',
+      fontColor: '#000000',
+      borders: { bottom: '2px solid #22c55e' },
+    }
+    for (const id of ['A1', 'B1', 'C1']) {
+      sheet.cells[id] = { ...sheet.cells[id], format: headerFmt }
+    }
+    const profile = buildSheetProfile(sheet, computed(sheet))
+    const { steps } = buildMakeoverPlan(sheet, profile, computed(sheet))
+    const headerStep = steps.find((s) => s.tool === 'format_cells' && s.params.bold === true)
+    expect(headerStep).toBeDefined()
+  })
+
+  it('still styles a header whose bottom border is 1px, not the 2px accent (finding #8)', () => {
+    const sheet = budgetSheet()
+    const headerFmt = {
+      bold: true,
+      bgColor: '#166534',
+      fontColor: '#ffffff',
+      borders: { bottom: '1px solid #22c55e' },
+    }
+    for (const id of ['A1', 'B1', 'C1']) {
+      sheet.cells[id] = { ...sheet.cells[id], format: headerFmt }
+    }
+    const profile = buildSheetProfile(sheet, computed(sheet))
+    const { steps } = buildMakeoverPlan(sheet, profile, computed(sheet))
+    const headerStep = steps.find((s) => s.tool === 'format_cells' && s.params.bold === true)
+    expect(headerStep).toBeDefined()
   })
 })

@@ -17,9 +17,10 @@
 import type { CellFormat, SheetData } from '@/types'
 import type { ColumnRole, SheetProfile, SheetPurpose } from '@/ai/types'
 import type { ActionStep } from '@/ai/nlp/types'
-import { colToLetter } from '@/engine/spreadsheet'
+import { colToLetter, refToCell } from '@/engine/spreadsheet'
 import { AUTO_APPLY_LOW_RISK_TOOLS } from '@/lib/applyPosture'
 import { detectTableRange, TABLE_THEMES } from '@/lib/formatAsTable'
+import { detectPurpose, inferRole } from '@/ai/sheetProfile'
 
 /**
  * Map a column's inferred role (+ the sheet's detected purpose) to the
@@ -62,7 +63,16 @@ function themeForPurpose(purpose: SheetPurpose): (typeof TABLE_THEMES)[string] {
 /** Does the header-row cell already carry every key the makeover would set? */
 function headerAlreadyStyled(fmt: CellFormat | undefined, theme: (typeof TABLE_THEMES)[string]): boolean {
   if (!fmt) return false
-  return Boolean(fmt.bold) && fmt.bgColor === theme.headerBg && Boolean(fmt.borders?.bottom)
+  // Compare EVERY property the header-format step sets (see buildMakeoverPlan's
+  // (1) header styling). A cell that matches bold+bg but carries a different
+  // fontColor or a non-exact bottom border is NOT already styled — otherwise
+  // the guard would skip the step and leave headers inconsistently styled.
+  return (
+    fmt.bold === true &&
+    fmt.bgColor === theme.headerBg &&
+    fmt.fontColor === theme.headerFontColor &&
+    fmt.borders?.bottom === `2px solid ${theme.accentColor}`
+  )
 }
 
 /**
@@ -90,9 +100,38 @@ export function buildMakeoverPlan(
   }
 
   const { headerRow, startCol, endCol, endRow } = range
-  const purpose = profile.detectedPurpose
-  const theme = themeForPurpose(purpose)
   const dataStartRow = headerRow + 1
+
+  // Role/purpose inference MUST honor the DETECTED header row. buildSheetProfile
+  // (the `profile` arg) hardcodes headerRow=0, so when detectTableRange finds a
+  // header below row 0 (e.g. a title row at row 0), profile.columns roles and
+  // profile.detectedPurpose describe the wrong row. Re-infer both from the
+  // detected header labels + the data rows beneath them so number formats land
+  // on the right columns. (finding #5)
+  const headerLabels: string[] = []
+  const rolesByCol = new Map<number, ColumnRole>()
+  for (let c = startCol; c <= endCol; c++) {
+    const cell = sheet.cells[refToCell(headerRow, c)]
+    const computed = getComputedValue(headerRow, c)
+    const fallback = `Column ${colToLetter(c)}`
+    const label = String(cell?.value ?? computed ?? fallback).trim() || fallback
+    headerLabels.push(label)
+
+    const values: (string | number | null)[] = []
+    for (let r = dataStartRow; r <= endRow; r++) {
+      const dataCell = sheet.cells[refToCell(r, c)]
+      const dataComputed = getComputedValue(r, c)
+      const raw = dataCell?.formula
+        ? (dataComputed !== '' ? dataComputed : (dataCell.value ?? null))
+        : (dataCell?.value ?? (dataComputed || null))
+      if (raw === null || raw === '') continue
+      values.push(typeof raw === 'number' ? raw : String(raw))
+    }
+    rolesByCol.set(c, inferRole(label, values))
+  }
+
+  const purpose = detectPurpose(headerLabels)
+  const theme = themeForPurpose(purpose)
 
   // ── (1) Header styling: bold + fill + bottom border on the header row ──────
   // Skip if the whole header row already carries those keys (§3 guard).
@@ -123,15 +162,14 @@ export function buildMakeoverPlan(
   // Only when data rows exist, and only when the column's data cells don't
   // already all carry that format (§3 guard).
   if (endRow >= dataStartRow) {
-    for (let colIdx = 0; colIdx < profile.columns.length; colIdx++) {
-      // profile.columns[c] is built per spreadsheet column index c (0-based),
-      // so the array index IS the column index. Only style columns within the
-      // detected table rectangle.
-      if (colIdx < startCol || colIdx > endCol) continue
-      const col = profile.columns[colIdx]
-      const numberFormat = roleToNumberFormat(col.role, purpose)
+    for (let colIdx = startCol; colIdx <= endCol; colIdx++) {
+      // Roles are inferred from the DETECTED header row (rolesByCol), keyed by
+      // spreadsheet column index — not profile.columns, which assumes row 0.
+      const role = rolesByCol.get(colIdx) ?? 'unknown'
+      const numberFormat = roleToNumberFormat(role, purpose)
       if (!numberFormat) continue
 
+      const colName = headerLabels[colIdx - startCol] ?? colToLetter(colIdx)
       const letter = colToLetter(colIdx)
       const alreadyFormatted = (() => {
         for (let r = dataStartRow; r <= endRow; r++) {
@@ -148,7 +186,7 @@ export function buildMakeoverPlan(
       steps.push({
         tool: 'format_cells',
         params: { range: colRange, numberFormat },
-        description: `Format ${col.name} (${colRange}) as ${numberFormat}`,
+        description: `Format ${colName} (${colRange}) as ${numberFormat}`,
       })
     }
   }
@@ -162,23 +200,27 @@ export function buildMakeoverPlan(
 
   // ── (4) At most ONE conditional emphasis: red fill on negative amounts ─────
   if (endRow >= dataStartRow) {
-    const colIdx = profile.columns.findIndex((c) => c.role === 'amount')
-    const amountCol = colIdx >= 0 ? profile.columns[colIdx] : undefined
-    if (amountCol) {
-      if (colIdx >= startCol && colIdx <= endCol) {
-        const letter = colToLetter(colIdx)
-        const colRange = `${letter}${dataStartRow + 1}:${letter}${endRow + 1}`
-        steps.push({
-          tool: 'format_cells',
-          params: {
-            range: colRange,
-            condition: { operator: 'negative' },
-            bgColor: '#fee2e2',
-            fontColor: '#b91c1c',
-          },
-          description: `Highlight negative ${amountCol.name} values in red`,
-        })
+    let amountColIdx = -1
+    for (let c = startCol; c <= endCol; c++) {
+      if (rolesByCol.get(c) === 'amount') {
+        amountColIdx = c
+        break
       }
+    }
+    if (amountColIdx >= 0) {
+      const amountName = headerLabels[amountColIdx - startCol] ?? colToLetter(amountColIdx)
+      const letter = colToLetter(amountColIdx)
+      const colRange = `${letter}${dataStartRow + 1}:${letter}${endRow + 1}`
+      steps.push({
+        tool: 'format_cells',
+        params: {
+          range: colRange,
+          condition: { operator: 'negative' },
+          bgColor: '#fee2e2',
+          fontColor: '#b91c1c',
+        },
+        description: `Highlight negative ${amountName} values in red`,
+      })
     }
   }
 
