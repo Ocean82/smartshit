@@ -13,18 +13,21 @@
 smartsht is a browser-based spreadsheet with a natural-language assistant. Users describe what they want ("build a monthly budget", "check my formulas") and the app creates or edits real spreadsheet data with preview-before-apply safety.
 
 Key capabilities:
-- Full spreadsheet engine (formulas, charts, pivot tables, conditional formatting)
+- Full spreadsheet engine (formulas, charts, pivot tables, conditional formatting, filtering, sorting)
+- AI functions in cells (AI.SUMMARIZE, AI.CLASSIFY, AI.TRANSLATE, AI.PREDICT, AI.EXTRACT, AI.SENTIMENT, and more)
 - Formula auditor (range gaps, inconsistent formulas, outliers)
-- 50+ templates (budgets, invoices, trackers, and more)
-- Excel (.xlsx) and CSV import/export
+- 100+ templates (budgets, invoices, trackers, and more)
+- Excel (.xlsx) and CSV import/export; print and save to PDF
 - Privacy-first: data stays in the browser by default
+- Installable web app that works offline
 - Optional cloud backup, version history (Pro)
 - Bring Your Own Key (OpenRouter, Groq, OpenAI-compatible) for unlimited AI on the user's own account
 
 ## Pricing (accurate)
 
-- Free: $0 — full spreadsheet + templates + auditor + 3 AI questions/day + 1 cloud workbook + view-only share links + BYOK
-- Pro: $7/month early adopter rate — unlimited AI, unlimited auto-fix, unlimited cloud sync, version history
+- Free: $0 — full spreadsheet + templates + auditor + 7 AI questions/day + 1 cloud workbook + view-only share links + BYOK
+- Pro: $7/month early adopter rate (listed vs $12/mo) — unlimited AI, unlimited auto-fix, unlimited cloud sync, version history
+- Pro Annual: $59/year ($4.92/mo, save 30%) — same features as Pro, billed yearly
 
 Collaborative edit-sharing is not available yet. Share links are view-only.
 

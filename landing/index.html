@@ -101,7 +101,7 @@
         "mainEntity": { "@id": "https://smartsht.com/#app" },
         "publisher": { "@id": "https://smartsht.com/#organization" },
         "inLanguage": "en-US",
-        "dateModified": "2026-08-16"
+        "dateModified": "2026-10-17"
       },
       {
         "@type": "ImageObject",
@@ -126,11 +126,24 @@
         "description": "AI-powered spreadsheet that understands plain English. Build budgets, track expenses, generate invoices, and catch formula errors automatically. Free AI budget planner and expense tracker — an Excel and Google Sheets alternative for people who hate formulas.",
         "featureList": [
           "Natural language spreadsheet commands",
+          "Spreadsheet formulas and functions",
+          "AI functions in cells (AI.SUMMARIZE, AI.CLASSIFY, AI.TRANSLATE, AI.PREDICT, and more)",
           "Formula error auditor",
+          "Charts (bar, line, pie, scatter, area, column)",
+          "Pivot tables",
+          "Conditional formatting",
+          "Filtering and sorting",
           "Budget and expense templates",
           "Invoice generator",
+          "100+ ready-made templates",
           "Excel and CSV import/export",
+          "Print and save to PDF",
           "Privacy-first local storage",
+          "Works offline (installable web app)",
+          "Cloud backup and sync",
+          "Version history",
+          "View-only share links",
+          "Images in sheets",
           "Bring Your Own Key (BYOK)",
           "Visual action previews before changes"
         ],
@@ -196,7 +209,7 @@
               "price": 7.00,
               "priceCurrency": "USD",
               "availability": "https://schema.org/InStock",
-              "priceValidUntil": "2026-12-31",
+              "priceValidUntil": "2027-12-31",
               "seller": { "@id": "https://smartsht.com/#organization" },
               "priceSpecification": {
                 "@type": "UnitPriceSpecification",
@@ -210,6 +223,29 @@
                 }
               },
               "description": "Unlimited AI questions, unlimited auto-fix, unlimited cloud backup and sync, version history. Early adopter rate."
+            },
+            {
+              "@type": "Offer",
+              "@id": "https://smartsht.com/#offer-pro-annual",
+              "name": "Pro Annual",
+              "url": "https://smartsht.com/#pricing",
+              "price": 59.00,
+              "priceCurrency": "USD",
+              "availability": "https://schema.org/InStock",
+              "priceValidUntil": "2027-12-31",
+              "seller": { "@id": "https://smartsht.com/#organization" },
+              "priceSpecification": {
+                "@type": "UnitPriceSpecification",
+                "price": 59.00,
+                "priceCurrency": "USD",
+                "billingDuration": "P1Y",
+                "referenceQuantity": {
+                  "@type": "QuantitativeValue",
+                  "value": 1,
+                  "unitCode": "ANN"
+                }
+              },
+              "description": "Everything in Pro, billed yearly at $59/year ($4.92/mo) — save 30% vs monthly."
             }
           ]
         }
@@ -725,6 +761,15 @@
       font-size: 0.88rem;
       color: var(--ink-secondary);
       line-height: 1.6;
+    }
+    .value-item code {
+      font-family: ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospace;
+      font-size: 0.82em;
+      padding: 1px 6px;
+      border-radius: 6px;
+      background: var(--accent-soft);
+      color: var(--accent-hover);
+      white-space: nowrap;
     }
 
     /* ─── Pricing ─── */
@@ -1354,6 +1399,10 @@
           <h3>Preview before anything changes</h3>
           <p>Every AI suggestion shows an interactive diff preview first. Approve or reject with one click. Your data is never modified without explicit consent — building trust that no other AI spreadsheet tool offers.</p>
         </div>
+        <div class="value-item value-featured">
+          <h3>AI functions, right in your cells</h3>
+          <p>Type <code>=AI.CLASSIFY</code>, <code>=AI.SUMMARIZE</code>, <code>=AI.TRANSLATE</code>, or <code>=AI.PREDICT</code> like any formula. Classify support tickets, summarize notes, translate text, or forecast next month — no scripts, no add-ons. It recalculates like a normal cell.</p>
+        </div>
         <div class="value-item">
           <h3>The workbook stays in your browser</h3>
           <p>The file is not uploaded unless you turn on cloud backup. The auditor stays local. An AI question sends that question and a cell summary to our server, or to your own provider if you bring a key.</p>
@@ -1371,7 +1420,7 @@
           <p>Common requests like budgets, invoices, sorting, and formatting resolve locally in milliseconds — no API round-trip needed. Complex questions use cloud AI with streaming responses so you're never waiting on a blank screen.</p>
         </div>
         <div class="value-item">
-          <h3>50+ ready-made templates</h3>
+          <h3>100+ ready-made templates</h3>
           <p>Monthly budgets, expense trackers, invoice generators, sales dashboards, project trackers, GPA calculators, workout logs, and more. Professional-grade spreadsheet templates built by AI in seconds.</p>
         </div>
         <div class="value-item">

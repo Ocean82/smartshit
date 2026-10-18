@@ -2,7 +2,7 @@
   "id": "/app/",
   "name": "smartsh!t",
   "short_name": "smartsht",
-  "description": "AI-powered spreadsheet for budgets and expenses. Chat instead of formulas.",
+  "description": "AI spreadsheet for budgets, expenses, and invoices. Build in plain English, catch formula errors, import Excel. Charts, pivot tables, and 100+ templates. Works offline.",
   "lang": "en-US",
   "start_url": "/app/",
   "scope": "/app/",
