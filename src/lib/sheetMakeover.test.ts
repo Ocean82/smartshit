@@ -67,11 +67,14 @@ describe('roleToNumberFormat', () => {
     expect(roleToNumberFormat('quantity', 'generic')).toBe('number-int')
   })
 
-  it('amount is currency for money purposes and number for generic', () => {
-    expect(roleToNumberFormat('amount', 'budget')).toBe('currency')
-    expect(roleToNumberFormat('amount', 'invoice')).toBe('currency')
-    expect(roleToNumberFormat('amount', 'inventory')).toBe('currency')
-    expect(roleToNumberFormat('amount', 'sales')).toBe('currency')
+  it('amount is accounting-neg for money purposes and number for generic', () => {
+    // Finance purposes get the finance convention (red parenthesised negatives
+    // + zero-as-dash) via accounting-neg (spec §1.7); generic stays a plain
+    // number so we never assume a currency the data may not carry.
+    expect(roleToNumberFormat('amount', 'budget')).toBe('accounting-neg')
+    expect(roleToNumberFormat('amount', 'invoice')).toBe('accounting-neg')
+    expect(roleToNumberFormat('amount', 'inventory')).toBe('accounting-neg')
+    expect(roleToNumberFormat('amount', 'sales')).toBe('accounting-neg')
     expect(roleToNumberFormat('amount', 'generic')).toBe('number')
   })
 
@@ -113,15 +116,17 @@ describe('buildMakeoverPlan — value safety', () => {
 })
 
 describe('buildMakeoverPlan — content', () => {
-  it('formats a budget Amount column as currency', () => {
+  it('formats a budget Amount column as accounting-neg and right-aligns it', () => {
     const sheet = budgetSheet()
     const profile = buildSheetProfile(sheet, computed(sheet))
     const { steps } = buildMakeoverPlan(sheet, profile, computed(sheet))
-    const currencyStep = steps.find(
-      (s) => s.tool === 'format_cells' && s.params.numberFormat === 'currency',
+    const amountStep = steps.find(
+      (s) => s.tool === 'format_cells' && s.params.numberFormat === 'accounting-neg',
     )
-    expect(currencyStep).toBeDefined()
-    expect(String(currencyStep!.params.range)).toContain('C')
+    expect(amountStep).toBeDefined()
+    expect(String(amountStep!.params.range)).toContain('C')
+    // Numeric money columns are explicitly right-aligned (spec §1.7).
+    expect(amountStep!.params.textAlign).toBe('right')
   })
 
   it('formats a generic numeric column as number, not currency', () => {
@@ -164,12 +169,12 @@ describe('buildMakeoverPlan — detected header below row 0 (finding #5)', () =>
     const { steps } = buildMakeoverPlan(sheet, profile, computed(sheet))
 
     // The Budget column (C) data lives in C3:C4; with the header detected on
-    // row 1, purpose='budget' and role='amount' -> currency on the data rows.
-    const currencyStep = steps.find(
-      (s) => s.tool === 'format_cells' && s.params.numberFormat === 'currency',
+    // row 1, purpose='budget' and role='amount' -> accounting-neg on the data rows.
+    const amountStep = steps.find(
+      (s) => s.tool === 'format_cells' && s.params.numberFormat === 'accounting-neg',
     )
-    expect(currencyStep).toBeDefined()
-    const range = String(currencyStep!.params.range)
+    expect(amountStep).toBeDefined()
+    const range = String(amountStep!.params.range)
     expect(range).toContain('C')
     // Data rows start at row 2 (1-based row 3), below the detected header.
     expect(range).toBe('C3:C4')
@@ -182,16 +187,22 @@ describe('buildMakeoverPlan — detected header below row 0 (finding #5)', () =>
 })
 
 describe('buildMakeoverPlan — §3 already-styled guard', () => {
-  it('skips a column numberFormat step when every data cell already carries it', () => {
+  it('skips the amount numberFormat step when every data cell already carries a user format', () => {
     const sheet = budgetSheet()
-    // Pre-format the Amount column (C2:C4) as currency.
+    // Pre-format the Amount column (C2:C4) with a DELIBERATE user format
+    // (currency) that differs from the house default (accounting-neg). The §3
+    // presence-based guard must leave it untouched — no accounting-neg step and
+    // no numberFormat/textAlign step on column C at all (no overwrite).
     for (const id of ['C2', 'C3', 'C4']) {
       sheet.cells[id] = { ...sheet.cells[id], format: { numberFormat: 'currency' } }
     }
     const profile = buildSheetProfile(sheet, computed(sheet))
     const { steps } = buildMakeoverPlan(sheet, profile, computed(sheet))
-    const currencyStep = steps.find((s) => s.params.numberFormat === 'currency')
-    expect(currencyStep).toBeUndefined()
+    expect(steps.some((s) => s.params.numberFormat === 'accounting-neg')).toBe(false)
+    const touchesC = steps.some(
+      (s) => s.params.numberFormat != null && String(s.params.range).includes('C'),
+    )
+    expect(touchesC).toBe(false)
   })
 
   it('skips header styling when the header row already carries EVERY key', () => {
@@ -320,7 +331,7 @@ describe('buildMakeoverPlan — §3 respect an already-styled sheet (5 edge case
     const { steps } = buildMakeoverPlan(sheet, profile, computed(sheet))
 
     expect(steps.some((s) => s.tool === 'format_cells' && s.params.bold === true)).toBe(true)
-    expect(steps.some((s) => s.params.numberFormat === 'currency' && String(s.params.range).includes('C'))).toBe(true)
+    expect(steps.some((s) => s.params.numberFormat === 'accounting-neg' && String(s.params.range).includes('C'))).toBe(true)
     expect(steps.some((s) => s.params.numberFormat === 'date' && String(s.params.range).startsWith('A'))).toBe(true)
     expect(steps.some((s) => s.tool === 'auto_fit')).toBe(true)
     expect(steps.some((s) => s.tool === 'format_cells' && s.params.condition)).toBe(true)
@@ -339,7 +350,7 @@ describe('buildMakeoverPlan — §3 respect an already-styled sheet (5 edge case
     // Header step skipped...
     expect(steps.some((s) => s.tool === 'format_cells' && s.params.bold === true)).toBe(false)
     // ...but number formats still run for the unformatted columns.
-    expect(steps.some((s) => s.params.numberFormat === 'currency')).toBe(true)
+    expect(steps.some((s) => s.params.numberFormat === 'accounting-neg')).toBe(true)
     expect(steps.some((s) => s.params.numberFormat === 'date')).toBe(true)
     assertZeroDataWrite(steps)
   })
@@ -401,9 +412,9 @@ describe('buildMakeoverPlan — no-op steps must not roll back the macro (findin
     const { steps } = buildMakeoverPlan(sheet, profile, computed(sheet))
     const conditional = steps.filter((s) => s.tool === 'format_cells' && s.params.condition)
     expect(conditional.length).toBe(0)
-    // Styling steps are still present (header + currency + auto_fit).
+    // Styling steps are still present (header + accounting-neg + auto_fit).
     expect(steps.some((s) => s.tool === 'format_cells' && s.params.bold === true)).toBe(true)
-    expect(steps.some((s) => s.params.numberFormat === 'currency')).toBe(true)
+    expect(steps.some((s) => s.params.numberFormat === 'accounting-neg')).toBe(true)
     expect(steps.some((s) => s.tool === 'auto_fit')).toBe(true)
   })
 
