@@ -349,6 +349,16 @@ function parseMessageInternal(message: string, sheetContext?: SheetContext): Par
       return { calls, understood: true, explanation: `Setting row ${layoutPhrase.row} height to ${layoutPhrase.height}px.` }
     }
     // autofit
+    if (layoutPhrase.axis === 'columns') {
+      const params: Record<string, unknown> = { target: 'columns' }
+      if (layoutPhrase.column) params.column = layoutPhrase.column
+      calls.push({
+        tool: 'auto_fit',
+        params,
+        description: layoutPhrase.column ? `Auto-fit columns ${layoutPhrase.column} to content` : 'Auto-fit column widths to content',
+      })
+      return { calls, understood: true, explanation: 'Auto-fitting column widths to content.' }
+    }
     const params: Record<string, unknown> = {}
     if (layoutPhrase.row) params.row = layoutPhrase.row
     calls.push({

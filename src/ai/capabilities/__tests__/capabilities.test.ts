@@ -64,11 +64,12 @@ describe('capabilities catalog', () => {
     expect(getCapability('format_percent')?.kind).toBe('tool')
     expect(getCapability('format_percent')?.tool).toBe('format_cells')
 
-    // fit_columns is discoverability-only: kind:'recipe' (router-inert) because
-    // there is no column auto-fit mechanism yet. tool:'auto_fit' documents the
-    // intended target only.
-    expect(getCapability('fit_columns')?.kind).toBe('recipe')
+    // fit_columns is now a REAL resolvable entry: kind:'tool' → auto_fit with a
+    // static target:'columns', backed by the column auto-fit mechanism.
+    // Value-safe (changes only columnWidths), so the router can resolve it.
+    expect(getCapability('fit_columns')?.kind).toBe('tool')
     expect(getCapability('fit_columns')?.tool).toBe('auto_fit')
+    expect(getCapability('fit_columns')?.staticParams).toMatchObject({ target: 'columns' })
   })
 })
 

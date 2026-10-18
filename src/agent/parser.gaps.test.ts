@@ -206,6 +206,27 @@ describe('reported agent gap regressions', () => {
     })
   })
 
+  it('routes column-fit phrases to auto_fit with target:columns, leaving the row path unchanged (col-autofit)', () => {
+    for (const phrase of [
+      'auto-size the columns',
+      'fix the column widths',
+      'fit the columns',
+      'resize columns to fit',
+      'auto-fit the columns',
+    ]) {
+      const call = parseMessage(phrase, expenseContext).calls[0]
+      expect(call, phrase).toMatchObject({ tool: 'auto_fit', params: { target: 'columns' } })
+    }
+
+    // Row phrases must NOT gain a target (row path byte-for-byte unchanged).
+    const rowFit = parseMessage('auto-fit the rows', expenseContext).calls[0]
+    expect(rowFit.tool).toBe('auto_fit')
+    expect(rowFit.params.target).toBeUndefined()
+    const rowResize = parseMessage('resize rows to fit content', expenseContext).calls[0]
+    expect(rowResize.tool).toBe('auto_fit')
+    expect(rowResize.params.target).toBeUndefined()
+  })
+
   it('routes style-recipe phrases and leaves plain bold/table phrasing intact (P1.4)', () => {
     expect(parseMessage('style the header row', expenseContext).calls[0]).toMatchObject({
       tool: 'style_recipe',

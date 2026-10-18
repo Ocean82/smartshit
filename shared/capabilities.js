@@ -252,29 +252,26 @@ export const CAPABILITIES = [
   },
   {
     id: 'fit_columns',
-    kind: 'recipe',
-    // DISCOVERABILITY-ONLY, and INTENTIONALLY ROUTER-INERT (kind:'recipe' →
-    // semanticCapabilityRouter.ts fulfillCapabilityScore returns null). It is
-    // embedded + scored by Tier-2 but NEVER resolved, exactly like
-    // professionalize_sheet.
-    //
-    // IMPORTANT — there is NO backing mechanism for true COLUMN auto-fit yet:
-    // the auto_fit tool is row-only (handleAutoFit → ctx.autoFitRows), and
-    // set_column_width needs an explicit numeric width (no "auto" mode). So this
-    // entry is catalog metadata ONLY; `tool: 'auto_fit'` below documents the
-    // intended target, NOT a working route. There is deliberately NO Tier-1
-    // regex for "auto-size the columns" / "fix the column widths" either, because
-    // routing those to row auto_fit (wrong) or widthless set_column_width
-    // (failing) would ship broken behavior. Adding a real column-autofit
-    // mechanism is a SEPARATE follow-up / backlog item.
+    kind: 'tool',
+    // REAL, RESOLVABLE entry. Resolves (via the Tier-2 router's default
+    // paramStrategy:'none' branch in resolveParams.ts, which spreads staticParams
+    // into the emitted params) to `auto_fit` with `target:'columns'`, backed by
+    // the column auto-fit mechanism (handleAutoFit's column branch → ctx.autoFitColumns
+    // → autoFitColumnWidths). Value-safe: changes ONLY columnWidths, writes zero
+    // cell data. Because it reuses the `auto_fit` tool name it inherits that tool's
+    // AUTO_APPLY_LOW_RISK_TOOLS membership (src/lib/applyPosture.ts) with no
+    // allowlist edit, so it is eligible for the same auto-apply posture as row
+    // auto_fit.
     description:
-      'Fit column widths to their content (discoverability only; no column auto-fit mechanism yet).',
+      'Auto-fit column widths to their content (value-safe; changes only column widths).',
     examples: [
       'fix the column widths',
       'auto-size the columns',
       'auto-fit the columns',
     ],
     tool: 'auto_fit',
+    staticParams: { target: 'columns' },
+    paramStrategy: 'none',
   },
   {
     id: 'totals_by_category',

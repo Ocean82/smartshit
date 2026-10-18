@@ -151,6 +151,12 @@ describe('resolveActTemplates — new phrase coverage', () => {
       params: { row: '1', height: 44 },
     })
     expect(resolveActTemplates('auto-fit the rows').actions[0]?.tool).toBe('auto_fit')
+    // Row fit carries no target; column fit carries target:'columns'.
+    expect(resolveActTemplates('auto-fit the rows').actions[0]?.params).not.toHaveProperty('target')
+    expect(resolveActTemplates('auto-size the columns').actions[0]).toMatchObject({
+      tool: 'auto_fit',
+      params: { target: 'columns' },
+    })
   })
 
   it('multi-sorts by two columns', () => {
@@ -185,10 +191,24 @@ describe('parseLayoutPhrase', () => {
     expect(parseLayoutPhrase('make row 1 taller')).toEqual({ kind: 'height', row: '1', height: 44 })
   })
 
-  it('parses auto-fit with and without a row spec', () => {
+  it('parses auto-fit with and without a row spec (row path unchanged — no axis key)', () => {
     expect(parseLayoutPhrase('auto-fit the rows')).toEqual({ kind: 'autofit' })
     expect(parseLayoutPhrase('resize rows to fit content')).toEqual({ kind: 'autofit' })
     expect(parseLayoutPhrase('auto fit rows 2:10')).toEqual({ kind: 'autofit', row: '2:10' })
+  })
+
+  it('parses column auto-fit phrases into axis:columns, gated so row phrases never match', () => {
+    expect(parseLayoutPhrase('auto-size the columns')).toEqual({ kind: 'autofit', axis: 'columns' })
+    expect(parseLayoutPhrase('fix the column widths')).toEqual({ kind: 'autofit', axis: 'columns' })
+    expect(parseLayoutPhrase('fit the columns')).toEqual({ kind: 'autofit', axis: 'columns' })
+    expect(parseLayoutPhrase('resize columns to fit')).toEqual({ kind: 'autofit', axis: 'columns' })
+    // Previously misrouted into the row branch — now correctly a column fit.
+    expect(parseLayoutPhrase('auto-fit the columns')).toEqual({ kind: 'autofit', axis: 'columns' })
+    // Explicit column spec is captured.
+    expect(parseLayoutPhrase('auto-fit columns B:D')).toEqual({ kind: 'autofit', axis: 'columns', column: 'B:D' })
+    // Row phrases must NOT gain axis:columns.
+    expect(parseLayoutPhrase('auto-fit the rows')).toEqual({ kind: 'autofit' })
+    expect(parseLayoutPhrase('resize rows to fit')).toEqual({ kind: 'autofit' })
   })
 
   it('ignores non-layout phrases', () => {

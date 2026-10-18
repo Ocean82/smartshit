@@ -60,7 +60,7 @@ export interface FormatAsTablePhrase {
 export type LayoutPhrase =
   | { kind: 'width'; column: string; width: number }
   | { kind: 'height'; row: string; height: number }
-  | { kind: 'autofit'; row?: string }
+  | { kind: 'autofit'; axis?: 'rows' | 'columns'; row?: string; column?: string }
 
 export type StyleRecipeName = 'header' | 'total_row' | 'table_polish'
 
@@ -243,7 +243,29 @@ export function parseLayoutPhrase(text: string): LayoutPhrase | null {
   const t = text.trim()
   const lower = t.toLowerCase()
 
-  // Auto-fit — checked first so "resize rows to fit" doesn't fall into height.
+  // Column auto-fit — checked BEFORE the row branch, gated on a column noun so
+  // it never swallows "auto-fit the rows" / "resize rows to fit". Covers
+  // "auto-size the columns", "fix the column widths", "fit the columns",
+  // "resize columns to fit", and "auto-fit the columns" (the last previously
+  // misrouted into the row branch — that is the bug this fixes).
+  const columnFitIntent =
+    (/\bauto[-\s]?fit\b/.test(lower) && /\bcolumns?\b/.test(lower))
+    || /\bauto[-\s]?size\s+(?:the\s+)?columns?\b/.test(lower)
+    || /\bfix\s+(?:the\s+)?columns?(?:\s+widths?)?\b/.test(lower)
+    || /\bfit\s+(?:the\s+)?columns?\b/.test(lower)
+    || /\bresize\s+(?:the\s+)?columns?\s+to\s+fit\b/.test(lower)
+  if (columnFitIntent) {
+    const colSpec = t.match(/\bcolumns?\s+([a-z]{1,3}(?::[a-z]{1,3})?)\b/i)?.[1]
+    // Exclude English connectors that happen to be valid column refs ("to",
+    // "by", "of", "fit") so "resize columns to fit" fits ALL columns, not "TO".
+    const isConnector = colSpec != null && /^(?:to|by|of|fit)$/i.test(colSpec)
+    const column = colSpec && !isConnector ? normalizeColumnSpec(colSpec) : null
+    return column ? { kind: 'autofit', axis: 'columns', column } : { kind: 'autofit', axis: 'columns' }
+  }
+
+  // Auto-fit (rows) — checked first so "resize rows to fit" doesn't fall into
+  // height. Returns no `axis` key (defaults to rows) so the row path stays
+  // byte-for-byte unchanged for existing consumers and tests.
   if (/\bauto[-\s]?fit\b/.test(lower) || /\bresize\s+rows?\s+to\s+fit\b/.test(lower) || /\bfit\s+rows?\s+to\s+(?:the\s+)?content\b/.test(lower)) {
     const rowSpec = lower.match(/\brows?\s+(\d+(?::\d+)?)\b/)?.[1]
     return rowSpec ? { kind: 'autofit', row: rowSpec } : { kind: 'autofit' }
