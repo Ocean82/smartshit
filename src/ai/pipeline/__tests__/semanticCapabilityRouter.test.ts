@@ -411,6 +411,30 @@ describe('semanticCapabilityRouter', () => {
       expect.objectContaining({ outcome: 'pass_safety', routedTier: 2 }),
     )
   })
+
+  it('defers kind:recipe (fit_columns) to Tier-1/LLM — no steps-less/column call (§4 Q4 catalog)', async () => {
+    // fit_columns is a DISCOVERABILITY-only recipe: there is no column auto-fit
+    // mechanism, so the router must pass (return null) on a high-scoring column
+    // paraphrase rather than resolve to a wrong (row auto_fit) or failing
+    // (widthless set_column_width) tool call — same inert contract as
+    // professionalize_sheet.
+    setCapabilityEmbeddingsForTests([
+      { capabilityId: 'fit_columns', embedding: unitVec(0), phrases: ['auto-size the columns'] },
+      { capabilityId: 'sort_column', embedding: unitVec(50), phrases: [] },
+    ])
+
+    const stage = createSemanticCapabilityRouterStage(makeDeps())
+    const ctx = makeContext('make all the columns fit their contents')
+    ctx.mode = 'act'
+    ctx.applyPosture = 'auto'
+    const result = await stage.process(ctx)
+
+    expect(result).toBeNull()
+    expect(executeToolAsync).not.toHaveBeenCalled()
+    expect(recordCapabilityRouterTelemetry).toHaveBeenCalledWith(
+      expect.objectContaining({ outcome: 'pass_safety', routedTier: 2 }),
+    )
+  })
 })
 
 describe('scoreCapabilities top-N', () => {

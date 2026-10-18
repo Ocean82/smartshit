@@ -13,7 +13,7 @@
  */
 
 /**
- * @typedef {'none' | 'amount_column_sort' | 'amount_column_desc' | 'header_row_bold' | 'currency_selection' | 'contains_value' | 'numeric_format' | 'filter_predicate' | 'negatives' | 'goal_by_category'} ParamStrategy
+ * @typedef {'none' | 'amount_column_sort' | 'amount_column_desc' | 'header_row_bold' | 'currency_selection' | 'percent_selection' | 'contains_value' | 'numeric_format' | 'filter_predicate' | 'negatives' | 'goal_by_category'} ParamStrategy
  */
 
 /**
@@ -89,6 +89,20 @@ export const CAPABILITIES = [
     ],
     tool: 'format_cells',
     paramStrategy: 'currency_selection',
+  },
+  {
+    id: 'format_percent',
+    kind: 'tool',
+    description: 'Format numbers as percentages.',
+    examples: [
+      'show these as percentages',
+      'format as percent',
+      'make this column percentages',
+      'show as a percentage',
+      'display these numbers as percentages',
+    ],
+    tool: 'format_cells',
+    paramStrategy: 'percent_selection',
   },
   {
     id: 'format_as_table',
@@ -174,6 +188,93 @@ export const CAPABILITIES = [
       'make my spreadsheet look professional',
     ],
     tool: 'execute_macro',
+  },
+  {
+    id: 'style_header',
+    kind: 'recipe',
+    // RESOLVED VIA THE TIER-1 REGEX PARSER (parseStyleRecipePhrase →
+    // src/agent/parser.ts), NOT the semantic router. Like professionalize_sheet
+    // this recipe IS embedded + scored by Tier-2, but semanticCapabilityRouter.ts
+    // passes on kind:'recipe' (fulfillCapabilityScore returns null), so a
+    // paraphrase that scores here defers to Tier-1/LLM instead of resolving to a
+    // steps-less tool call. Catalog documentation/discoverability only (spec §4).
+    // Format-only (bold + fill + bottom border) — writes no cell values. Kept
+    // DISTINCT from bold_headers (plain bold via format_cells) so the two do not
+    // collide in embedding space.
+    description:
+      'Style the header row as a proper header (bold, fill, bottom border), not just plain bold.',
+    examples: [
+      'style the header row',
+      'make a header row',
+      'style the top row',
+      'format the header row',
+    ],
+    tool: 'style_recipe',
+  },
+  {
+    id: 'add_totals_row',
+    kind: 'recipe',
+    // RESOLVED VIA THE TIER-1 REGEX PARSER (parseStyleRecipePhrase →
+    // src/agent/parser.ts), NOT the semantic router (kind:'recipe' is router-inert
+    // per semanticCapabilityRouter.ts). Catalog documentation/discoverability only.
+    // WRITES DATA: adds a "Total" label + SUM formulas, so it resolves to the
+    // style_recipe tool, carries persistenceCaveat('style_recipe'), is preview-only,
+    // and is NEVER auto-applied — even under Auto posture (style_recipe is excluded
+    // from AUTO_APPLY_LOW_RISK_TOOLS in src/lib/applyPosture.ts).
+    description:
+      'Add or refresh a totals row at the bottom (label + SUM formulas). Writes cell values; preview-only.',
+    examples: [
+      'add a totals row',
+      'sum at the bottom',
+      'add a grand total row',
+    ],
+    tool: 'style_recipe',
+  },
+  {
+    id: 'table_polish',
+    kind: 'recipe',
+    // RESOLVED VIA THE TIER-1 REGEX PARSER (parseStyleRecipePhrase →
+    // src/agent/parser.ts), NOT the semantic router (kind:'recipe' is router-inert
+    // per semanticCapabilityRouter.ts). Catalog documentation/discoverability only.
+    // WRITES DATA: calls generateTableTotals, so it resolves to the style_recipe
+    // tool, carries persistenceCaveat('style_recipe'), is preview-only, and is
+    // NEVER auto-applied (style_recipe is excluded from AUTO_APPLY_LOW_RISK_TOOLS).
+    // "format as a table" / banded-table styling stays owned by format_as_table
+    // (a value-safe format_cells pass); this entry owns the explicit "polish"
+    // request that also generates totals.
+    description:
+      'Polish the table with full styling and generated totals. Writes cell values; preview-only.',
+    examples: [
+      'polish this table',
+      'make this table look polished',
+    ],
+    tool: 'style_recipe',
+  },
+  {
+    id: 'fit_columns',
+    kind: 'recipe',
+    // DISCOVERABILITY-ONLY, and INTENTIONALLY ROUTER-INERT (kind:'recipe' →
+    // semanticCapabilityRouter.ts fulfillCapabilityScore returns null). It is
+    // embedded + scored by Tier-2 but NEVER resolved, exactly like
+    // professionalize_sheet.
+    //
+    // IMPORTANT — there is NO backing mechanism for true COLUMN auto-fit yet:
+    // the auto_fit tool is row-only (handleAutoFit → ctx.autoFitRows), and
+    // set_column_width needs an explicit numeric width (no "auto" mode). So this
+    // entry is catalog metadata ONLY; `tool: 'auto_fit'` below documents the
+    // intended target, NOT a working route. There is deliberately NO Tier-1
+    // regex for "auto-size the columns" / "fix the column widths" either, because
+    // routing those to row auto_fit (wrong) or widthless set_column_width
+    // (failing) would ship broken behavior. Adding a real column-autofit
+    // mechanism is a SEPARATE follow-up / backlog item.
+    description:
+      'Fit column widths to their content (discoverability only; no column auto-fit mechanism yet).',
+    examples: [
+      'fix the column widths',
+      'auto-size the columns',
+      'auto-fit the columns',
+    ],
+    tool: 'auto_fit',
   },
   {
     id: 'totals_by_category',

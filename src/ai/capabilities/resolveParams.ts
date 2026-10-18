@@ -109,6 +109,22 @@ export function resolveCapabilityParams(
       }
     }
 
+    case 'percent_selection': {
+      const parsed = parseNumberFormatPhrase(message)
+      const params: Record<string, unknown> = {
+        numberFormat: parsed?.numberFormat ?? 'percent',
+        ...(capability.staticParams ?? {}),
+      }
+      if (parsed?.range) params.range = parsed.range
+      return {
+        tool: 'format_cells',
+        params,
+        description: params.range
+          ? `Format ${params.range} as percent`
+          : 'Format selection as percent',
+      }
+    }
+
     case 'contains_value': {
       // Primary extractor is quote-aware: it already keeps an explicitly quoted
       // stop word (e.g. `containing "red"`) and rejects an unquoted one, so trust
