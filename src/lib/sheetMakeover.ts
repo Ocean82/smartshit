@@ -161,8 +161,15 @@ export function buildMakeoverPlan(
   }
 
   // ── (2) Per-column numberFormat for roles that map to a format ─────────────
-  // Only when data rows exist, and only when the column's data cells don't
-  // already all carry that format (§3 guard).
+  // Only when data rows exist, and only when the column isn't already the
+  // user's (§3 guard). §3 says never strip a user's deliberate formatting to
+  // impose the house default, so the predicate is PRESENCE of ANY user-set
+  // numberFormat token — not equality with the token the makeover would apply.
+  // A column the user gave a *different* format (accounting, currency-eur, a
+  // date variant) is their territory; apply only to columns with NO user
+  // number format. Per-column granularity (Option A): a column is either fully
+  // the user's (skipped) or has no user number format (full house default on
+  // the whole data range). Blank cells never count as "styled".
   if (endRow >= dataStartRow) {
     for (let colIdx = startCol; colIdx <= endCol; colIdx++) {
       // Roles are inferred from the DETECTED header row (rolesByCol), keyed by
@@ -178,9 +185,9 @@ export function buildMakeoverPlan(
           const cell = sheet.cells[`${letter}${r + 1}`]
           // A blank cell carries no format and shouldn't block the step.
           if (!cell || (cell.value == null && !cell.formula)) continue
-          if (cell.format?.numberFormat !== numberFormat) return false
+          if (typeof cell.format?.numberFormat === 'string') return true
         }
-        return true
+        return false
       })()
       if (alreadyFormatted) continue
 
@@ -220,7 +227,25 @@ export function buildMakeoverPlan(
         const num = typeof v === 'number' ? v : Number.parseFloat(String(v))
         return Number.isFinite(num) && num < 0
       })
-    if (amountColIdx >= 0 && hasNegativeAmount) {
+    // §3 guard: if the user already gave the amount column its own fill/font
+    // convention, that IS their house style — don't paint the house red over
+    // it. Presence of ANY user bgColor/fontColor on a non-blank data cell means
+    // hands off (per-column skip, matching the live-condition's whole-column
+    // granularity). Blank cells never count. §3 outranks the house accent, so
+    // the live-condition emphasis is sacrificed rather than overwriting a
+    // user's deliberate fill.
+    const amountColUserFilled =
+      amountColIdx >= 0 &&
+      (() => {
+        const letter = colToLetter(amountColIdx)
+        for (let r = dataStartRow; r <= endRow; r++) {
+          const cell = sheet.cells[`${letter}${r + 1}`]
+          if (!cell || (cell.value == null && !cell.formula)) continue
+          if (cell.format?.bgColor != null || cell.format?.fontColor != null) return true
+        }
+        return false
+      })()
+    if (amountColIdx >= 0 && hasNegativeAmount && !amountColUserFilled) {
       const amountName = headerLabels[amountColIdx - startCol] ?? colToLetter(amountColIdx)
       const letter = colToLetter(amountColIdx)
       const colRange = `${letter}${dataStartRow + 1}:${letter}${endRow + 1}`

@@ -249,6 +249,140 @@ describe('buildMakeoverPlan — §3 already-styled guard', () => {
   })
 })
 
+describe('buildMakeoverPlan — §3 respect an already-styled sheet (5 edge cases)', () => {
+  // Shared zero-data-write assertion: every emitted step is a format-only
+  // auto-apply tool and NONE is on the data-writing denylist (incl. rename_header).
+  const assertZeroDataWrite = (steps: ReadonlyArray<{ tool: string }>) => {
+    for (const step of steps) {
+      expect(AUTO_APPLY_LOW_RISK_TOOLS.has(step.tool)).toBe(true)
+      expect(DATA_WRITING_TOOLS).not.toContain(step.tool)
+    }
+  }
+
+  // The exact keys the header-format step sets for a 'budget' (green) theme.
+  const styledHeaderFmt: CellFormat = {
+    bold: true,
+    bgColor: '#166534',
+    fontColor: '#ffffff',
+    borders: { bottom: '2px solid #22c55e' },
+  }
+
+  it('(1) fully user-styled sheet → minimal/no changes, never overwrites', () => {
+    const sheet = budgetSheet()
+    // Header fully styled, A given a user date variant, C given a user money
+    // format AND a user fill/font — the whole sheet is the user's house style.
+    for (const id of ['A1', 'B1', 'C1']) {
+      sheet.cells[id] = { ...sheet.cells[id], format: { ...styledHeaderFmt } }
+    }
+    for (const id of ['A2', 'A3', 'A4']) {
+      sheet.cells[id] = { ...sheet.cells[id], format: { numberFormat: 'date-iso' } }
+    }
+    for (const id of ['C2', 'C3', 'C4']) {
+      sheet.cells[id] = { ...sheet.cells[id], format: { numberFormat: 'accounting', bgColor: '#eef2ff', fontColor: '#1e3a8a' } }
+    }
+    const profile = buildSheetProfile(sheet, computed(sheet))
+    const { steps, summary } = buildMakeoverPlan(sheet, profile, computed(sheet))
+
+    // No header step, no numberFormat step, no emphasis step — only layout.
+    expect(steps.some((s) => s.tool === 'format_cells' && s.params.bold === true)).toBe(false)
+    expect(steps.some((s) => s.params.numberFormat != null)).toBe(false)
+    expect(steps.some((s) => s.tool === 'format_cells' && s.params.condition)).toBe(false)
+    expect(steps).toEqual([{ tool: 'auto_fit', params: {}, description: expect.any(String) }])
+    expect(summary).toBe('This sheet already looks styled — just tidying the layout.')
+    assertZeroDataWrite(steps)
+  })
+
+  it('(2) partially styled → formats only unformatted columns, leaves formatted ones untouched', () => {
+    const sheet = budgetSheet()
+    // C (Budget) carries a DELIBERATE non-house token; A (Date) is unformatted.
+    for (const id of ['C2', 'C3', 'C4']) {
+      sheet.cells[id] = { ...sheet.cells[id], format: { numberFormat: 'accounting' } }
+    }
+    const profile = buildSheetProfile(sheet, computed(sheet))
+    const { steps } = buildMakeoverPlan(sheet, profile, computed(sheet))
+
+    // The old (equality) predicate would have re-applied 'currency' over the
+    // user's 'accounting'. Presence-based: C is skipped, A gets its date step.
+    const touchesC = steps.some(
+      (s) => s.params.numberFormat != null && String(s.params.range).includes('C'),
+    )
+    expect(touchesC).toBe(false)
+    const dateStepForA = steps.find(
+      (s) => s.params.numberFormat === 'date' && String(s.params.range).startsWith('A'),
+    )
+    expect(dateStepForA).toBeDefined()
+    assertZeroDataWrite(steps)
+  })
+
+  it('(3) unstyled → full house default unchanged (no regression)', () => {
+    const sheet = budgetSheet()
+    const profile = buildSheetProfile(sheet, computed(sheet))
+    const { steps } = buildMakeoverPlan(sheet, profile, computed(sheet))
+
+    expect(steps.some((s) => s.tool === 'format_cells' && s.params.bold === true)).toBe(true)
+    expect(steps.some((s) => s.params.numberFormat === 'currency' && String(s.params.range).includes('C'))).toBe(true)
+    expect(steps.some((s) => s.params.numberFormat === 'date' && String(s.params.range).startsWith('A'))).toBe(true)
+    expect(steps.some((s) => s.tool === 'auto_fit')).toBe(true)
+    expect(steps.some((s) => s.tool === 'format_cells' && s.params.condition)).toBe(true)
+    assertZeroDataWrite(steps)
+  })
+
+  it('(4) header already styled → header skipped, unformatted columns still format', () => {
+    const sheet = budgetSheet()
+    // Header matches EVERY key; data columns remain the user-unset house case.
+    for (const id of ['A1', 'B1', 'C1']) {
+      sheet.cells[id] = { ...sheet.cells[id], format: { ...styledHeaderFmt } }
+    }
+    const profile = buildSheetProfile(sheet, computed(sheet))
+    const { steps } = buildMakeoverPlan(sheet, profile, computed(sheet))
+
+    // Header step skipped...
+    expect(steps.some((s) => s.tool === 'format_cells' && s.params.bold === true)).toBe(false)
+    // ...but number formats still run for the unformatted columns.
+    expect(steps.some((s) => s.params.numberFormat === 'currency')).toBe(true)
+    expect(steps.some((s) => s.params.numberFormat === 'date')).toBe(true)
+    assertZeroDataWrite(steps)
+  })
+
+  it('(5) re-running is near-idempotent → second pass emits no format/header steps', () => {
+    const sheet = budgetSheet()
+    const profile1 = buildSheetProfile(sheet, computed(sheet))
+    const { steps: firstSteps } = buildMakeoverPlan(sheet, profile1, computed(sheet))
+
+    // Apply the plan's format_cells steps onto the sheet (merge params into
+    // cell.format across each step's range), mirroring the executor.
+    const parseRange = (range: string): string[] => {
+      const [a, b] = range.split(':')
+      const startCol = a.charCodeAt(0)
+      const startRow = Number.parseInt(a.slice(1), 10)
+      const endCol = (b ?? a).charCodeAt(0)
+      const endRow = Number.parseInt((b ?? a).slice(1), 10)
+      const ids: string[] = []
+      for (let c = startCol; c <= endCol; c++) {
+        for (let r = startRow; r <= endRow; r++) ids.push(`${String.fromCharCode(c)}${r}`)
+      }
+      return ids
+    }
+    for (const step of firstSteps) {
+      if (step.tool !== 'format_cells') continue
+      const { range, condition, ...fmt } = step.params as Record<string, unknown>
+      if (condition) continue // live conditional emphasis isn't a static cell format
+      for (const id of parseRange(String(range))) {
+        const existing = sheet.cells[id] ?? { value: null }
+        sheet.cells[id] = { ...existing, format: { ...existing.format, ...(fmt as Partial<CellFormat>) } }
+      }
+    }
+
+    // Second pass on the now-styled sheet: the guards converge — no header,
+    // no numberFormat steps (only possibly layout).
+    const profile2 = buildSheetProfile(sheet, computed(sheet))
+    const { steps: secondSteps } = buildMakeoverPlan(sheet, profile2, computed(sheet))
+    expect(secondSteps.some((s) => s.tool === 'format_cells' && s.params.bold === true)).toBe(false)
+    expect(secondSteps.some((s) => s.params.numberFormat != null)).toBe(false)
+    assertZeroDataWrite(secondSteps)
+  })
+})
+
 // A budget sheet with only non-negative amounts — the negative-emphasis step
 // must NOT be emitted (a zero-match conditional format would fail and roll back
 // the whole macro). No cell carries textWrap, so auto_fit is a legitimate no-op.
