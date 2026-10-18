@@ -69,6 +69,16 @@ function populatedRows(sheet: SheetData): number[] {
   return [...rows].sort((a, b) => a - b)
 }
 
+/** All column indices that contain at least one populated cell. */
+function populatedCols(sheet: SheetData): number[] {
+  const cols = new Set<number>()
+  for (const [cellId, cell] of Object.entries(sheet.cells)) {
+    if (cell.value == null && !cell.formula) continue
+    cols.add(cellToRef(cellId).col)
+  }
+  return [...cols].sort((a, b) => a - b)
+}
+
 function colLabel(idx: number): string {
   let n = idx, s = ''
   do { s = String.fromCharCode(65 + (n % 26)) + s; n = Math.floor(n / 26) - 1 } while (n >= 0)
@@ -112,6 +122,30 @@ export const handleSetRowHeight: ToolHandler = (params: ToolParams, ctx) => {
 }
 
 export const handleAutoFit: ToolHandler = (params: ToolParams, ctx, sheet) => {
+  const axis = String(params.target ?? 'rows').toLowerCase()
+
+  // ─── Column auto-fit (natural content width) ─────────────────────────────
+  if (axis === 'columns') {
+    if (!ctx.autoFitColumns) {
+      return { success: false, message: 'Column auto-fit is not available here', modified: 0 }
+    }
+    const explicit = parseColumns(params.column ?? params.columns ?? params.range)
+    const cols = explicit.length > 0 ? explicit : populatedCols(sheet)
+    if (cols.length === 0) {
+      return { success: false, message: 'Nothing to auto-fit — the sheet is empty', modified: 0 }
+    }
+    ctx.pushHistory(cols.length === 1 ? 'Autofit column width' : 'Autofit column widths')
+    const changed = ctx.autoFitColumns(cols)
+    if (changed === 0) {
+      // Columns existed to consider but none needed a width change — a
+      // legitimate no-op, not a failure, so a makeover macro that appends a
+      // column-fit step is never rolled back. (finding #6)
+      return { success: true, message: 'No columns needed resizing.', modified: 0 }
+    }
+    return { success: true, message: `Auto-fit ${changed} column${changed === 1 ? '' : 's'} to content`, modified: changed }
+  }
+
+  // ─── Row auto-fit (wrapped content height) — existing behavior, unchanged ──
   if (!ctx.autoFitRows) {
     return { success: false, message: 'Auto-fit is not available here', modified: 0 }
   }

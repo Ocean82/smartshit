@@ -5,9 +5,10 @@
 
 import type { ChatMessage, AgentAction, Selection, WorkbookData, SheetData } from '@/types'
 import { refToCell } from '@/engine/spreadsheet'
-import { setColAt } from '@/lib/colLayout'
+import { setColAt, getColWidth } from '@/lib/colLayout'
 import { setRowAt, getRowHeight } from '@/lib/rowLayout'
 import { autoFitRowHeights, createCanvasTextMeasurer } from '@/lib/rowAutoFit'
+import { autoFitColumnWidths } from '@/lib/columnAutoFit'
 import { executeTool, executeToolAsync, type ExecutionContext, type ExecutionResult } from '@/agent'
 import { executeTemplateTool, resolveGalleryTemplate } from '@/templates'
 import { MUTATION_TOOL_NAMES } from '@shared/toolRegistry'
@@ -340,6 +341,24 @@ export function buildExecutionContext(
         const sh = resolveTargetSheet(s);
         if (!sh) return;
         sh.rowHeights = next;
+        s.workbook.updatedAt = Date.now();
+      });
+      return changed.length;
+    },
+    autoFitColumns: (cols) => {
+      const unique = [...new Set(cols.filter((c) => c >= 0 && Number.isFinite(c)))];
+      if (unique.length === 0) return 0;
+      const sheet = ctx.getActiveSheet();
+      const next = autoFitColumnWidths(sheet, unique, (row, col) => {
+        const computed = ctx.getComputedValue(row, col);
+        return computed || String(sheet.cells[refToCell(row, col)]?.value ?? '');
+      }, createCanvasTextMeasurer());
+      const changed = unique.filter((c) => getColWidth(next, c) !== getColWidth(sheet.columnWidths, c));
+      if (changed.length === 0) return 0;
+      set((s: AppState) => {
+        const sh = resolveTargetSheet(s);
+        if (!sh) return;
+        sh.columnWidths = next;
         s.workbook.updatedAt = Date.now();
       });
       return changed.length;

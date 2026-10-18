@@ -177,4 +177,19 @@ describe('parseMessage — Q4 catalog intents keep narrow routing (precedence pr
     expect(result.calls[0].tool).toBe('format_cells')
     expect(result.calls[0].params.numberFormat).toBe('percent')
   })
+
+  it('"fit the columns" routes to the column auto_fit, NOT the makeover (col-autofit precedence)', () => {
+    const result = parseMessage('fit the columns', makeoverContext())
+    expect(result.understood).toBe(true)
+    expect(result.calls).toHaveLength(1)
+    expect(result.calls[0].tool).toBe('auto_fit')
+    expect(result.calls[0].params).toMatchObject({ target: 'columns' })
+  })
+
+  it('general "make it look professional" still routes to the makeover, NOT column-fit (col-autofit precedence)', () => {
+    const result = parseMessage('make this look professional', makeoverContext())
+    expect(result.understood).toBe(true)
+    expect(result.calls).toHaveLength(1)
+    expect(result.calls[0].tool).toBe('execute_macro')
+  })
 })

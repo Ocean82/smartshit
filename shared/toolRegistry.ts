@@ -264,11 +264,13 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
   {
     name: 'auto_fit',
     category: 'mutate',
-    description: 'Auto-fit row heights to wrapped cell content. Omit "row" to fit all populated rows.',
+    description: "Auto-fit row heights to wrapped content (default) or column widths to natural content when target is 'columns'. Omit the row/column selector to fit all populated rows/columns.",
     params: [
+      { name: 'target', type: 'string', description: "Axis to fit: 'rows' (default) or 'columns'." },
       { name: 'row', type: 'string', description: 'Row number, range, or comma list to fit. Omit for all populated rows.' },
+      { name: 'column', type: 'string', description: "Column letter, range, or comma list to fit when target is 'columns'. Omit for all populated columns." },
     ],
-    examples: ['auto-fit the rows', 'resize rows to fit content', 'auto fit row heights'],
+    examples: ['auto-fit the rows', 'resize rows to fit content', 'auto fit row heights', 'auto-size the columns', 'fit the columns'],
   },
   // ─── Cell operations ──────────────────────────────────────────────────────
   {

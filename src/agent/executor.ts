@@ -29,6 +29,8 @@ export interface ExecutionContext {
   setRowHeight?: (row: number, height: number) => void
   /** Autofit the given 0-indexed rows to wrapped content. Returns rows changed. */
   autoFitRows?: (rows: number[]) => number
+  /** Autofit the given 0-indexed columns to natural content width. Returns columns changed. */
+  autoFitColumns?: (cols: number[]) => number
   applySortPatch: (patch: SortPatch) => void
   setFilters: (filters: FilterConfig[]) => void
   deleteRow: (row: number) => void

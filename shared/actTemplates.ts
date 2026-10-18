@@ -313,6 +313,14 @@ const RULES: TemplateRule[] = [
           actions: [{ tool: 'set_row_height', params: { row: phrase.row, height: phrase.height }, description: `Set row ${phrase.row} height to ${phrase.height}px` }],
         }
       }
+      if (phrase.axis === 'columns') {
+        const colParams: Record<string, unknown> = { target: 'columns' }
+        if (phrase.column) colParams.column = phrase.column
+        return {
+          message: 'I will auto-fit column widths to content. Click Apply to confirm.',
+          actions: [{ tool: 'auto_fit', params: colParams, description: phrase.column ? `Auto-fit columns ${phrase.column} to content` : 'Auto-fit column widths to content' }],
+        }
+      }
       const params: Record<string, unknown> = {}
       if (phrase.row) params.row = phrase.row
       return {
