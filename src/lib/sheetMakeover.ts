@@ -37,10 +37,13 @@ export function roleToNumberFormat(role: ColumnRole, purpose: SheetPurpose): str
     case 'quantity':
       return 'number-int'
     case 'amount':
-      // Currency only for money-shaped purposes; generic sheets get a plain
-      // number so we never assume a currency the data may not carry.
+      // Finance-shaped purposes get the finance convention (accounting-neg):
+      // red parenthesised negatives + zero-as-dash (spec §1.7). Already
+      // implemented and rendered — this is a mapping choice, not new renderer
+      // work. Generic sheets get a plain number so we never assume a currency
+      // the data may not carry.
       return purpose === 'budget' || purpose === 'invoice' || purpose === 'inventory' || purpose === 'sales'
-        ? 'currency'
+        ? 'accounting-neg'
         : 'number'
     // id / category / label / description / unknown → leave as text (no step).
     default:
@@ -192,9 +195,17 @@ export function buildMakeoverPlan(
       if (alreadyFormatted) continue
 
       const colRange = `${letter}${dataStartRow + 1}:${letter}${endRow + 1}`
+      // Right-align the numeric money/quantity columns explicitly (spec §1.7).
+      // The grid already defaults numeric cells to right-aligned, so this is
+      // belt-and-suspenders: it pins the alignment on the amount/quantity
+      // columns that carry a numeric format. textAlign is a presentation-only
+      // CellFormat field — it writes no cell data, so the plan stays value-safe.
+      const rightAlign = role === 'amount' || role === 'quantity'
       steps.push({
         tool: 'format_cells',
-        params: { range: colRange, numberFormat },
+        params: rightAlign
+          ? { range: colRange, numberFormat, textAlign: 'right' }
+          : { range: colRange, numberFormat },
         description: `Format ${colName} (${colRange}) as ${numberFormat}`,
       })
     }
