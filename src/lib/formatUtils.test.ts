@@ -6,13 +6,15 @@ describe('formatCellValue', () => {
     expect(formatCellValue(1234.5, 'currency')).toBe('$1,234.50')
   })
 
-  it('formats percent from percent points (>1)', () => {
-    expect(formatCellValue(12.35, 'percent')).toBe('12.35%')
+  it('formats percent from percent points (>1) to one decimal', () => {
+    expect(formatCellValue(12.35, 'percent')).toBe('12.4%')
+    expect(formatCellValue(12, 'percent')).toBe('12.0%')
   })
 
-  it('formats percent from ratio (|n|<=1)', () => {
-    expect(formatCellValue(0.1235, 'percent')).toBe('12.35%')
-    expect(formatCellValue(1, 'percent')).toBe('100.00%')
+  it('formats percent from ratio (|n|<=1) to one decimal', () => {
+    expect(formatCellValue(0.1235, 'percent')).toBe('12.4%')
+    expect(formatCellValue(0.12, 'percent')).toBe('12.0%')
+    expect(formatCellValue(1, 'percent')).toBe('100.0%')
   })
 
   it('formats date from ISO string', () => {

@@ -55,7 +55,7 @@ export const NUMBER_FORMATS: NumberFormatOption[] = [
   { value: 'datetime', label: '7/11/2026 3:45 PM', group: 'Time' },
 
   // Percentage
-  { value: 'percent', label: '12.35%', group: 'Percentage' },
+  { value: 'percent', label: '12.3%', group: 'Percentage' },
   { value: 'percent-int', label: '12% (no decimals)', group: 'Percentage' },
 
   // Fraction
@@ -155,7 +155,7 @@ export function formatCellValue(value: string | number | boolean | null, numberF
       if (isNaN(num)) return String(value);
       // |n| <= 1 → ratio (0.12 → 12%); otherwise percent points (12 → 12%)
       const ratio = Math.abs(num) <= 1 ? num : num / 100;
-      return ratio.toLocaleString('en-US', { style: 'percent', minimumFractionDigits: 2 });
+      return ratio.toLocaleString('en-US', { style: 'percent', minimumFractionDigits: 1, maximumFractionDigits: 1 });
     }
     case 'percent-int': {
       if (isNaN(num)) return String(value);
