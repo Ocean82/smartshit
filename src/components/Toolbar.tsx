@@ -576,7 +576,3 @@ function nudgeAuditorOnce(imported: boolean) {
     duration: 6000,
   });
 }
-
-// Keep Plus icon export for sheet tabs
-import { Plus } from 'lucide-react';
-export { Plus };
