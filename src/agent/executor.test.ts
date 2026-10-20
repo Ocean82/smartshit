@@ -13,6 +13,7 @@ interface Harness {
   writes: Array<{ cell: string; value: unknown; formula?: string }>
   deletions: number[]
   exports: string[]
+  validations: Array<{ cell: string; validation: unknown }>
   bulkCalls: () => number
 }
 
@@ -29,6 +30,7 @@ function harness(cells: SheetData['cells'] = {}): Harness {
   const writes: Harness['writes'] = []
   const deletions: number[] = []
   const exports: string[] = []
+  const validations: Harness['validations'] = []
   let bulkCalls = 0
 
   const ctx = {
@@ -53,10 +55,11 @@ function harness(cells: SheetData['cells'] = {}): Harness {
     renameSheet: () => ({ ok: true }),
     pushHistory: () => {},
     exportData: (format) => exports.push(format),
+    setCellValidation: (cell, validation) => validations.push({ cell, validation }),
     getSheets: () => [],
   } as ExecutionContext
 
-  return { ctx, writes, deletions, exports, bulkCalls: () => bulkCalls }
+  return { ctx, writes, deletions, exports, validations, bulkCalls: () => bulkCalls }
 }
 
 const run = (h: Harness, tool: string, params: Record<string, unknown>) =>
@@ -325,6 +328,92 @@ describe('multi-sort validation', () => {
     const result = run(h, 'multi_sort', { rules: [{ column: 'Missing', direction: 'asc' }] })
     expect(result.success).toBe(false)
     expect(result.message).toMatch(/Could not resolve/i)
+  })
+})
+
+describe('set_validation', () => {
+  it('sets a list/dropdown validation on each cell in a range', () => {
+    const h = harness()
+    const result = run(h, 'set_validation', {
+      range: 'B2:B4',
+      type: 'list',
+      values: ['High', 'Medium', 'Low'],
+    })
+    expect(result.success).toBe(true)
+    expect(result.modified).toBe(3)
+    expect(h.validations.map((v) => v.cell)).toEqual(['B2', 'B3', 'B4'])
+    for (const v of h.validations) {
+      expect(v.validation).toEqual({ type: 'list', values: ['High', 'Medium', 'Low'] })
+    }
+  })
+
+  it('sets a numeric min/max validation on a single cell', () => {
+    const h = harness()
+    const result = run(h, 'set_validation', { range: 'C2', type: 'number', min: 0, max: 100 })
+    expect(result.success).toBe(true)
+    expect(result.modified).toBe(1)
+    expect(h.validations).toEqual([{ cell: 'C2', validation: { type: 'number', min: 0, max: 100 } }])
+  })
+
+  it('clears validation (null) across a range with type "none"', () => {
+    const h = harness()
+    const result = run(h, 'set_validation', { range: 'D2:D3', type: 'none' })
+    expect(result.success).toBe(true)
+    expect(result.modified).toBe(2)
+    expect(h.validations).toEqual([
+      { cell: 'D2', validation: null },
+      { cell: 'D3', validation: null },
+    ])
+  })
+
+  it('rejects an unknown validation type', () => {
+    const h = harness()
+    const result = run(h, 'set_validation', { range: 'A1', type: 'evil' })
+    expect(result.success).toBe(false)
+    expect(result.modified).toBe(0)
+    expect(h.validations).toHaveLength(0)
+  })
+
+  it('fails a list with no usable values and never attaches forged keys', () => {
+    const h = harness()
+    const empty = run(h, 'set_validation', { range: 'A1', type: 'list', values: [null, '', '  '] })
+    expect(empty.success).toBe(false)
+    expect(h.validations).toHaveLength(0)
+
+    // Forged/extra keys survive sanitizeActionParams (blocklist) but must never
+    // reach the built DataValidation.
+    const h2 = harness()
+    run(h2, 'set_validation', {
+      range: 'A1',
+      type: 'list',
+      values: [1, 'Yes'],
+      foo: true,
+      criteria: 'injected',
+      checkedValue: 'hacked',
+    })
+    expect(h2.validations[0].validation).toEqual({ type: 'list', values: ['1', 'Yes'] })
+  })
+
+  it('swaps numeric bounds when min > max', () => {
+    const h = harness()
+    run(h, 'set_validation', { range: 'C2', type: 'number', min: 5, max: 1 })
+    expect(h.validations[0].validation).toEqual({ type: 'number', min: 1, max: 5 })
+  })
+
+  it('treats a valid range that expands to zero cells as a success no-op', () => {
+    // An empty column "Z" has no populated cells to target.
+    const h = harness({ A1: { value: 'x' } })
+    const result = run(h, 'set_validation', { range: 'Z', type: 'list', values: ['a'] })
+    expect(result.success).toBe(true)
+    expect(result.modified).toBe(0)
+    expect(h.validations).toHaveLength(0)
+  })
+
+  it('fails cleanly when range is missing', () => {
+    const h = harness()
+    const result = run(h, 'set_validation', { type: 'list', values: ['a'] })
+    expect(result.success).toBe(false)
+    expect(result.modified).toBe(0)
   })
 })
 
