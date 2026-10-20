@@ -18,6 +18,7 @@ import {
   handleAddNote,
   handleRemoveNote,
   handleSetCheckbox,
+  handleSetValidation,
 } from './miscOps'
 
 /** Registry of all tool handlers keyed by resolved tool name. */
@@ -50,6 +51,7 @@ export const TOOL_HANDLERS: Record<string, ToolHandler> = {
   add_note: handleAddNote,
   remove_note: handleRemoveNote,
   set_checkbox: handleSetCheckbox,
+  set_validation: handleSetValidation,
 }
 
 export type { ToolHandler, ToolParams } from './types'

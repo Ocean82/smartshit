@@ -446,6 +446,30 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
     examples: ['make C2:C10 checkboxes', 'add a checkbox to D3', 'set D3 as a paid/unpaid toggle'],
   },
   {
+    name: 'set_validation',
+    category: 'mutate',
+    description:
+      'Add data validation to a cell or range: a dropdown list (type "list" with values), numeric min/max (type "number"), text length/contains (type "text"), or a date range (type "date"). Use type "none" to clear existing validation.',
+    params: [
+      { name: 'range', type: 'string', description: 'A1-style range ("B2:B10"), column letter ("B"), or single cell ("B2")', required: true },
+      { name: 'type', type: 'string', description: 'Validation type: "list" | "number" | "text" | "date" | "none" (none clears validation)', required: true },
+      { name: 'values', type: 'array', description: 'Allowed string options for the dropdown when type is "list"' },
+      { name: 'min', type: 'number', description: 'Minimum value (type "number") or minimum length (type "text")' },
+      { name: 'max', type: 'number', description: 'Maximum value (type "number") or maximum length (type "text")' },
+      { name: 'containsText', type: 'string', description: 'Required substring for type "text"' },
+      { name: 'dateMin', type: 'string', description: 'Earliest allowed date (ISO string) for type "date"' },
+      { name: 'dateMax', type: 'string', description: 'Latest allowed date (ISO string) for type "date"' },
+      { name: 'message', type: 'string', description: 'Custom error message shown on invalid input' },
+    ],
+    examples: [
+      'add a dropdown with High, Medium, Low to B2:B10',
+      'restrict column C to numbers 0-100',
+      'only allow dates in column D this year',
+      'make column E require text containing @',
+      'clear validation on D2:D20',
+    ],
+  },
+  {
     name: 'clear_sheet',
     category: 'mutate',
     description: 'Clear all data from the current sheet',
