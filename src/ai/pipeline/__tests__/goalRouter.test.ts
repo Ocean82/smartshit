@@ -47,6 +47,7 @@ function makeContext(message: string, applyPosture?: ApplyPosture): PipelineCont
     selection: null,
     getComputedValue: () => '',
     applyPosture,
+    mode: 'act',
   }
 }
 

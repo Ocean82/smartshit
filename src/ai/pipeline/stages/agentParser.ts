@@ -16,6 +16,7 @@ import type { ApplyPosture } from '@/types'
 import type { ExecutionContext } from '@/agent/executor'
 import type { SheetContext, ParsedToolCall } from '@/agent/parser'
 import { parseMessage, executeTool } from '@/agent'
+import { allowsFastPathMutation } from '@shared/mode'
 import { getToolDefinition } from '@shared/toolRegistry'
 import { findHeaderRow, findLastDataRow } from '@/lib/sheetSort'
 import { cellToRef } from '@/engine/spreadsheet'
@@ -50,6 +51,8 @@ export function createAgentParserStage(deps: AgentParserDeps): PipelineStage {
     name: 'agent-parser',
 
     async process(context: PipelineContext): Promise<StageResult | null> {
+      if (!allowsFastPathMutation(context.mode)) return null
+
       const { message, sheet, getComputedValue, selection } = context
 
       // Build sheet context for the parser

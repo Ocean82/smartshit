@@ -47,6 +47,7 @@ function makeContext(sheet: SheetData, message: string): PipelineContext {
     selection: null,
     getComputedValue,
     applyPosture: 'preview',
+    mode: 'act',
   }
 }
 

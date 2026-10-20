@@ -13,7 +13,9 @@ import {
   isCapabilitySkipMessage,
   stripCapabilitySkipPrefix,
   parseCapabilityPickMessage,
+  parseModePickMessage,
 } from '@/ai/capabilities/clarifyChips'
+import type { AgentMode } from '@shared/mode'
 import { AI_ANALYSIS_CONFIG } from '@/ai/config'
 import type { ExecutionResult } from '@/agent'
 import { buildScriptPreview } from '@/lib/scriptPreview'
@@ -175,16 +177,23 @@ export function createChatActions(
 
       let skipCapabilityRouter = false
       let resolvedCapabilityId: string | undefined
-      // Strip capability-skip / pick encoding so the bubble shows NL only.
+      let resolvedMode: AgentMode | undefined
+      // Strip capability-skip / pick / mode-pick encoding so the bubble shows NL only.
       if (isCapabilitySkipMessage(input)) {
         skipCapabilityRouter = true
         input = stripCapabilitySkipPrefix(input).trim()
         if (!input) return Promise.resolve()
       } else {
-        const pick = parseCapabilityPickMessage(input)
-        if (pick) {
-          resolvedCapabilityId = pick.capabilityId
-          input = pick.label
+        const modePick = parseModePickMessage(input)
+        if (modePick) {
+          resolvedMode = modePick.mode
+          input = modePick.original
+        } else {
+          const pick = parseCapabilityPickMessage(input)
+          if (pick) {
+            resolvedCapabilityId = pick.capabilityId
+            input = pick.label
+          }
         }
       }
 
@@ -274,6 +283,7 @@ export function createChatActions(
           processLocalFallback: (fallbackInput) => processAICommand(fallbackInput, get as never),
           skipCapabilityRouter,
           resolvedCapabilityId,
+          resolvedMode,
           getApplyPosture: () => get().applyPosture,
           signal: turnAbort.signal,
         }).then(() => {

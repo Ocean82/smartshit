@@ -8,6 +8,7 @@
 import type { PipelineContext, PipelineStage, StageResult } from '../types'
 import type { ExecutionContext } from '@/agent/executor'
 import { executeTool } from '@/agent'
+import { allowsFastPathMutation } from '@shared/mode'
 import { getToolDefinition } from '@shared/toolRegistry'
 import { buildSpreadsheetContext } from '@/ai/buildContext'
 import { executeGoal, listSuggestedGoals, matchGoal } from '@/ai/goals'
@@ -35,6 +36,8 @@ export function createGoalRouterStage(deps: GoalRouterDeps): PipelineStage {
     name: 'goal-router',
 
     async process(context: PipelineContext): Promise<StageResult | null> {
+      if (!allowsFastPathMutation(context.mode)) return null
+
       const spreadsheetCtx = buildSpreadsheetContext(
         context.workbook,
         context.sheet,

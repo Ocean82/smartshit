@@ -187,10 +187,10 @@ import { defaultIntent, makeContext, makeDeps } from './helpers'
 function buildPipeline() {
   const deps = makeDeps()
   const router = createPipelineRouter([
+    createIntentClassifierStage(),
     createGoalRouterStage(deps),
     createAgentParserStage(deps),
     createTemplateResolverStage(deps),
-    createIntentClassifierStage(),
     createSemanticCapabilityRouterStage(deps),
     createDeterministicDispatcherStage(),
     createLLMGatewayStage(),
@@ -222,6 +222,7 @@ describe('Pipeline Integration: end-to-end routing', () => {
 
   it('"sort by amount" → AgentParser claims (stage 1)', async () => {
     // AgentParser understands this command
+    vi.mocked(classifyMode).mockReturnValue('act')
     vi.mocked(parseMessage).mockReturnValue({
       understood: true,
       calls: [{ tool: 'sort_column', params: { column: 'Amount', direction: 'asc' }, description: 'Sort by Amount' }],
@@ -244,6 +245,7 @@ describe('Pipeline Integration: end-to-end routing', () => {
   })
 
   it('"Create a monthly budget" → TemplateResolver claims (stage 2)', async () => {
+    vi.mocked(classifyMode).mockReturnValue('act')
     // AgentParser doesn't understand this
     vi.mocked(parseMessage).mockReturnValue({
       understood: false,
@@ -391,6 +393,7 @@ describe('Pipeline Integration: end-to-end routing', () => {
 
   it('pipeline stages execute in priority order', async () => {
     // Both AgentParser AND TemplateResolver would claim, but AgentParser wins
+    vi.mocked(classifyMode).mockReturnValue('act')
     vi.mocked(parseMessage).mockReturnValue({
       understood: true,
       calls: [{ tool: 'set_cell', params: { cell: 'A1', value: 'Budget' }, description: 'Set A1' }],
@@ -411,7 +414,7 @@ describe('Pipeline Integration: end-to-end routing', () => {
     const { router } = buildPipeline()
     const result = await router.process(makeContext('Create a budget'))
 
-    // AgentParser wins because it's first in pipeline
+    // AgentParser wins because it runs before TemplateResolver (after IntentClassifier)
     expect(result.stageName).toBe('agent-parser')
     // TemplateResolver never called because AgentParser already claimed
     expect(resolveGalleryTemplate).not.toHaveBeenCalled()

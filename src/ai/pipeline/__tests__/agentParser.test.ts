@@ -46,7 +46,11 @@ import { createAgentParserStage } from '../stages/agentParser'
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-function makeContext(message = 'sort by amount', applyPosture?: PipelineContext['applyPosture']): PipelineContext {
+function makeContext(
+  message = 'sort by amount',
+  applyPosture?: PipelineContext['applyPosture'],
+  mode: PipelineContext['mode'] = 'act',
+): PipelineContext {
   return {
     message,
     workbook: { sheets: [], name: 'test' } as unknown as PipelineContext['workbook'],
@@ -54,6 +58,7 @@ function makeContext(message = 'sort by amount', applyPosture?: PipelineContext[
     selection: null,
     getComputedValue: () => '',
     applyPosture,
+    mode,
   }
 }
 
@@ -151,6 +156,21 @@ describe('AgentParser stage', () => {
     const result = await stage.process(makeContext('explain my data'))
 
     expect(result).toBeNull()
+  })
+
+  it('passes (returns null) when mode is not act, even if parse would match', async () => {
+    vi.mocked(parseMessage).mockReturnValue({
+      understood: true,
+      calls: [{ tool: 'sort_column', params: {}, description: 'Sort' }],
+      explanation: 'Sorting',
+    })
+
+    const result = await createAgentParserStage(makeDeps()).process(
+      makeContext('can you sort by amount?', undefined, 'chat'),
+    )
+
+    expect(result).toBeNull()
+    expect(parseMessage).not.toHaveBeenCalled()
   })
 
   it('has the correct stage name', () => {

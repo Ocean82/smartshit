@@ -186,10 +186,10 @@ import { defaultIntent, makeContext, makeDeps } from './helpers'
 function buildPipeline() {
   const deps = makeDeps()
   const router = createPipelineRouter([
+    createIntentClassifierStage(),
     createGoalRouterStage(deps),
     createAgentParserStage(deps),
     createTemplateResolverStage(deps),
-    createIntentClassifierStage(),
     createSemanticCapabilityRouterStage(deps),
     createDeterministicDispatcherStage(),
     createLLMGatewayStage(),
@@ -220,6 +220,7 @@ describe('Smoke Test: Top commands routing verification', () => {
   })
 
   it('"Sort by Amount descending" → AgentParser claims (instant)', async () => {
+    vi.mocked(classifyMode).mockReturnValue('act')
     vi.mocked(parseMessage).mockReturnValue({
       understood: true,
       calls: [{ tool: 'sort_sheet', params: { column: 'Amount', direction: 'desc' }, description: 'Sort by Amount descending' }],
@@ -243,6 +244,7 @@ describe('Smoke Test: Top commands routing verification', () => {
   })
 
   it('"Highlight cells over 500 red" → AgentParser claims (instant)', async () => {
+    vi.mocked(classifyMode).mockReturnValue('act')
     vi.mocked(parseMessage).mockReturnValue({
       understood: true,
       calls: [{
@@ -269,6 +271,7 @@ describe('Smoke Test: Top commands routing verification', () => {
   })
 
   it('"Create a monthly budget" → TemplateResolver claims (instant)', async () => {
+    vi.mocked(classifyMode).mockReturnValue('act')
     // AgentParser doesn't understand this
     vi.mocked(parseMessage).mockReturnValue({
       understood: false,
@@ -360,6 +363,7 @@ describe('Smoke Test: Top commands routing verification', () => {
   })
 
   it('"Delete row Netflix" → AgentParser claims with preview/confirm flow', async () => {
+    vi.mocked(classifyMode).mockReturnValue('act')
     // AgentParser recognizes delete row pattern
     vi.mocked(parseMessage).mockReturnValue({
       understood: true,

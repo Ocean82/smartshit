@@ -13,6 +13,7 @@
 
 import type { PipelineContext, PipelineStage, StageResult } from '../types'
 import type { ExecutionContext } from '@/agent/executor'
+import { allowsFastPathMutation } from '@shared/mode'
 import { resolveGalleryTemplate, executeTemplateTool } from '@/templates'
 
 export interface TemplateResolverDeps {
@@ -25,6 +26,8 @@ export function createTemplateResolverStage(deps: TemplateResolverDeps): Pipelin
     name: 'template-resolver',
 
     async process(context: PipelineContext): Promise<StageResult | null> {
+      if (!allowsFastPathMutation(context.mode)) return null
+
       const match = resolveGalleryTemplate(context.message)
       if (!match) return null
 

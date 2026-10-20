@@ -29,6 +29,7 @@ function makeContext(message = 'Create a monthly budget'): PipelineContext {
     sheet: { cells: {} } as unknown as PipelineContext['sheet'],
     selection: null,
     getComputedValue: () => '',
+    mode: 'act',
   }
 }
 

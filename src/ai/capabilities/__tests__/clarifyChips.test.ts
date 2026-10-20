@@ -9,6 +9,9 @@ import {
   parseCapabilityPickMessage,
   stripCapabilitySkipPrefix,
   suggestionChipLabel,
+  modePickMessage,
+  parseModePickMessage,
+  isModePickMessage,
 } from '@/ai/capabilities/clarifyChips'
 
 describe('clarifyChips', () => {
@@ -39,5 +42,18 @@ describe('clarifyChips', () => {
 
   it('uses a stable skip prefix', () => {
     expect(CAPABILITY_SKIP_PREFIX).toContain('capability-skip:')
+  })
+
+  it('encodes mode-pick with original utterance', () => {
+    const encoded = modePickMessage('act', 'sort by Amount')
+    expect(isModePickMessage(encoded)).toBe(true)
+    expect(parseModePickMessage(encoded)).toEqual({
+      mode: 'act',
+      original: 'sort by Amount',
+    })
+    expect(suggestionChipLabel(encoded)).toBe('Change the sheet')
+    expect(suggestionChipLabel(modePickMessage('explain', 'sort by Amount'))).toBe(
+      'Analyze / explain',
+    )
   })
 })

@@ -48,6 +48,11 @@ export interface PipelineContext {
    * Tier 2 must fulfill it without re-entering ambiguity clarify.
    */
   resolvedCapabilityId?: string
+  /**
+   * User picked act vs analyze after an intent-classifier conflict chip.
+   * Forces mode and skips re-clarify on the same utterance.
+   */
+  resolvedMode?: AgentMode
   /** Provenance for telemetry / short-circuit paths. */
   clarificationSource?: 'clarification_chip'
   /** User's apply posture; defaults to 'preview' when the reader is absent. */

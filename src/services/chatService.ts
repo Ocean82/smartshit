@@ -82,6 +82,8 @@ export interface ChatServiceDeps {
   skipCapabilityRouter?: boolean
   /** User clarified to this capability — Tier 2 short-circuits (no re-clarify). */
   resolvedCapabilityId?: string
+  /** User picked act vs analyze after intent conflict — forces mode, skips re-clarify. */
+  resolvedMode?: import('@shared/mode').AgentMode
   /** Aborts the server call when the user presses Stop */
   signal?: AbortSignal
   /** Current user apply posture ('auto' | 'preview'); defaults to 'preview'. */
@@ -94,13 +96,12 @@ export interface ChatServiceDeps {
  * Process a user chat message through the unified pipeline.
  *
  * Stage order (first to claim wins):
- * 2. GoalRouter — Total / By Category / By Month
- * 3. AgentParser — instant regex tool calls (sort, filter, add/delete row, etc.)
- * 4. TemplateResolver — gallery template matching ("Create a budget")
- * 5. IntentClassifier — enriches context with intent/mode (never claims)
- * 6. MacroPlanner — multi-clause plans as pending execute_macro
- * 7. DeterministicDispatcher — local skills (may claim or pass)
- * 8. LLMGateway — server LLM (always claims)
+ * 1. IntentClassifier — mode/intent enrich; claims only on mutate↔analyze conflict
+ * 2. GoalRouter / AgentParser / TemplateResolver — act mode only (fast path)
+ * 3. SemanticCapabilityRouter — MiniLM capability match / ambiguity clarify
+ * 4. MacroPlanner — multi-clause plans as pending execute_macro
+ * 5. DeterministicDispatcher — local skills (may claim or pass)
+ * 6. LLMGateway — server LLM (always claims)
  */
 /** Store snapshot `captureActionScope` needs, derived from the deps callbacks. */
 function getScopeSource(deps: ChatServiceDeps) {
@@ -172,20 +173,18 @@ function insightsScopeMatches(snapshotScope: InsightsScope | undefined, current:
 /**
  * Build the stage chain.
  *
- * `isNonCommand` drops the three stages that mutate immediately (goal router,
- * agent parser, template resolver) so a negated / explanatory / hypothetical /
- * quoted utterance can never change the sheet, no matter which command
- * fragments it contains. Explicit direct commands keep their existing
- * immediate-execution behaviour.
+ * IntentClassifier always runs first so mode/intent exist before any fast path.
+ * `isNonCommand` drops Goal/AgentParser/Template so negation / explain /
+ * hypothetical / quoted fragments cannot mutate. Those stages also no-op unless
+ * mode is `act` (set by IntentClassifier or a mode-pick chip).
  */
 function buildStages(deps: ChatServiceDeps, isNonCommand: boolean): PipelineStage[] {
-  const stages: PipelineStage[] = []
+  const stages: PipelineStage[] = [createIntentClassifierStage()]
   if (!isNonCommand) {
     stages.push(createGoalRouterStage({ buildExecContext: deps.buildExecContext, pushHistory: deps.pushHistory }))
     stages.push(createAgentParserStage({ buildExecContext: deps.buildExecContext, pushHistory: deps.pushHistory }))
     stages.push(createTemplateResolverStage({ buildExecContext: deps.buildExecContext, pushHistory: deps.pushHistory }))
   }
-  stages.push(createIntentClassifierStage())
   stages.push(createSemanticCapabilityRouterStage({ buildExecContext: deps.buildExecContext, pushHistory: deps.pushHistory }))
   stages.push(createMacroPlannerStage())
   stages.push(createDeterministicDispatcherStage())
@@ -214,6 +213,7 @@ export async function processChatMessage(
     processLocalFallback,
     skipCapabilityRouter = false,
     resolvedCapabilityId,
+    resolvedMode,
   } = deps
 
   try {
@@ -285,6 +285,7 @@ export async function processChatMessage(
       signal: deps.signal,
       skipCapabilityRouter,
       resolvedCapabilityId,
+      resolvedMode,
       clarificationSource: resolvedCapabilityId ? 'clarification_chip' : undefined,
       applyPosture: deps.getApplyPosture?.() ?? 'preview',
     }

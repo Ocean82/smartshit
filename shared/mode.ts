@@ -160,6 +160,14 @@ export function isLlmOnlyMode(mode: AgentMode): boolean {
   return mode === 'explain' || mode === 'advise' || mode === 'chat'
 }
 
+/**
+ * Goal / agent-parser / template may mutate only in act mode.
+ * Explain, advise, help, and chat must fall through to semantic / LLM paths.
+ */
+export function allowsFastPathMutation(mode: AgentMode | undefined): boolean {
+  return mode === 'act'
+}
+
 export function getHelpResponse(): string {
   return `I can help you:
 
