@@ -8,9 +8,14 @@
  *
  * The invariant that is the POINT of this test: no deterministic branch emits
  * `execute_script`. `execute_script` is only reachable via the Tier-3 (LLM)
- * fallback, which cannot be exercised deterministically. These assertions were
- * written to match the OBSERVED behaviour of the current code, and PASS by
- * documenting it — not by changing production code.
+ * fallback, which cannot be exercised deterministically.
+ *
+ * These two assertions now verify the FIX: Tier-1 cannot faithfully represent a
+ * computed/aggregate-into-a-cell or a filter-into-a-new-range request, so it
+ * DEFERS (`understood === false`, zero calls) instead of emitting a wrong
+ * declarative call. Deferral lets the request fall through to Tier-3, where the
+ * LLM emits `execute_script` (the prompt guidance in server/src/prompt.ts). They
+ * previously documented the mis-serve bug; they now assert defer-to-LLM.
  */
 
 import { describe, expect, it } from 'vitest'
@@ -60,42 +65,28 @@ describe('computed-range NL routing reality check', () => {
       ctx,
     )
 
-    // Characterization: NL computed-range requests do not currently route to
-    // execute_script via Tier-1/Tier-2; closing this is the prompt-guidance
-    // follow-up.
-    //
-    // The TRUTH (observed from the deterministic router): the "put it in F1"
-    // tail wins a set_cell pattern, so the request is mis-served as
-    // set_cell F1 = "it". The weighting — indeed the whole computation — is
-    // dropped. It is NOT an =AVERAGE, and crucially NOT execute_script.
+    // Tier-1 cannot faithfully represent "weighted average of C weighted by D"
+    // destined for a cell — the pronoun "it" is the only thing the set_cell
+    // regex could capture, and that would drop the whole computation. So Tier-1
+    // now DEFERS (understood === false, zero calls) instead of mis-serving it as
+    // set_cell F1 = "it". Deferral routes the ask to Tier-3, where the LLM emits
+    // execute_script. Tier-1 itself still never emits execute_script directly.
     expect(wavg.calls.every((c) => c.tool !== 'execute_script')).toBe(true)
-    expect(wavg.understood).toBe(true)
-    expect(wavg.calls).toHaveLength(1)
-    expect(wavg.calls[0]).toMatchObject({
-      tool: 'set_cell',
-      params: { cell: 'F1', value: 'it' },
-    })
+    expect(wavg.understood).toBe(false)
+    expect(wavg.calls).toHaveLength(0)
   })
 
   it('a "filter … into a new range" request never routes to execute_script', () => {
     const filt = parseMessage('filter the rows where status is open into a new range', ctx)
 
-    // Characterization: 'filter … into a new range' routes to the declarative
-    // 'filter' tool, never to execute_script. The TRUTH (observed): the filter
-    // regex is greedy — it swallows the leading "rows where status" into the
-    // column group and the trailing "into a new range" into the value group,
-    // producing a semantically wrong but deterministic 'filter' call. There is
-    // no deterministic path that reaches the sandbox / execute_script.
+    // A declarative 'filter' narrows the current rows; it has no destination,
+    // so "into a new range" is intrinsically beyond it, and "rows where status"
+    // is not a real column. Rather than emit the old greedy/nonsense filter
+    // call, Tier-1 now DEFERS (understood === false, zero calls). Deferral
+    // routes the ask to Tier-3, where the LLM emits execute_script. Tier-1
+    // itself still never emits execute_script directly.
     expect(filt.calls.every((c) => c.tool !== 'execute_script')).toBe(true)
-    expect(filt.understood).toBe(true)
-    expect(filt.calls).toHaveLength(1)
-    expect(filt.calls[0]).toMatchObject({
-      tool: 'filter',
-      params: {
-        column: 'rows where status',
-        condition: 'equals',
-        value: 'open into a new range',
-      },
-    })
+    expect(filt.understood).toBe(false)
+    expect(filt.calls).toHaveLength(0)
   })
 })

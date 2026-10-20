@@ -38,6 +38,17 @@ describe('formatContextBlock via buildActionPrompt', () => {
   })
 })
 
+describe('execute_script routing guidance (computed-range / filter-into-new-range)', () => {
+  it('tells the model to route computed-range transforms to execute_script, not set_cell/filter', () => {
+    const prompt = buildActionPrompt(context)
+    // The routing rule that makes deferred computed-range asks become execute_script.
+    expect(prompt).toContain('→ execute_script, never set_cell/filter')
+    // Concrete few-shot anchors for the two mis-routed phrasings this fixes.
+    expect(prompt).toContain('weighted average of column C (weighted by column D)')
+    expect(prompt).toContain('into a new range (columns F:G)')
+  })
+})
+
 describe('untrusted-data fencing (chat review §5)', () => {
   it('wraps the spreadsheet context in a labeled fence with a data-not-instructions notice', () => {
     const prompt = buildActionPrompt(context)

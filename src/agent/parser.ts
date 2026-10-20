@@ -470,6 +470,18 @@ function parseMessageInternal(message: string, sheetContext?: SheetContext): Par
   if (putIn) {
     const value = putIn[1].replace(/^["']|["']$/g, '').trim()
     const cell = putIn[2].toUpperCase()
+    // A pronoun value ("put it in F1") paired with a computed/aggregate phrase
+    // elsewhere in the sentence means the real payload is a computation the
+    // regex dropped (e.g. "weighted average of C weighted by D"). Emitting
+    // set_cell with the literal "it" would be garbage — defer so the LLM emits
+    // execute_script. Non-pronoun values ("put 100 in A1", "put =SUM(A1:A2) in
+    // C1") are untouched; both the pronoun AND an aggregate phrase are required.
+    if (
+      /^(?:it|that|this|them|the\s+result|the\s+answer|the\s+value)$/i.test(value)
+      && /\b(?:weighted\s+average|weighted\s+by|average\s+of|sum\s+of|mean\s+of|median|std(?:ev)?|variance|ratio\s+of|percent(?:age)?\s+of|correlat|normali[sz]e|aggregate|compute|calculate)\b/i.test(lower)
+    ) {
+      return { calls: [], understood: false }
+    }
     const numVal = parseFloat(value.replace(/[$,]/g, ''))
     const finalVal = !isNaN(numVal) && !/[a-z]/i.test(value.replace(/[$,.\d\s]/g, '')) ? String(numVal) : value
     calls.push({ tool: 'set_cell', params: { cell, value: finalVal }, description: `Set ${cell} to ${value}` })

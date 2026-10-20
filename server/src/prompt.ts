@@ -442,10 +442,13 @@ execute_script examples:
 - Fill blanks with value above: {"tool":"execute_script","params":{"code":"const rows = getRowCount()\\nfor (let row = 1; row < rows; row++) {\\n  const ref = cellRef(row, 1)\\n  if (getCell(ref) === null) {\\n    const above = getCell(cellRef(row - 1, 1))\\n    if (above !== null) setCell(ref, above)\\n  }\\n}","description":"Fill blank cells in column B with the value from the row above"}}
 - Running total: {"tool":"execute_script","params":{"code":"let running = 0\\nfor (let row = 1; row < getRowCount(); row++) {\\n  const val = Number(getCell(cellRef(row, 2)))\\n  if (!isNaN(val)) { running += val; setCell(cellRef(row, 3), running) }\\n}","description":"Add running total in column D based on column C"}}
 - Highlight high values: {"tool":"execute_script","params":{"code":"for (let row = 1; row < getRowCount(); row++) {\\n  const ref = cellRef(row, 4)\\n  const val = Number(String(getCell(ref)).replace(/[$,]/g, ''))\\n  if (!isNaN(val) && val > 1000) setFormat(ref, { bgColor: '#FEE2E2', bold: true })\\n}","description":"Highlight cells over $1000 in column E"}}
+- Weighted average of one column weighted by another → compute, then setCell the single result: {"tool":"execute_script","params":{"code":"let num = 0, den = 0\\nfor (let row = 1; row < getRowCount(); row++) {\\n  const v = Number(getCell(cellRef(row, 2)))\\n  const w = Number(getCell(cellRef(row, 3)))\\n  if (!isNaN(v) && !isNaN(w)) { num += v * w; den += w }\\n}\\nif (den !== 0) setCell('F1', num / den)","description":"Put the weighted average of column C (weighted by column D) in F1"}}
+- Filter rows into a NEW range → read the block, keep matches, write the subset: {"tool":"execute_script","params":{"code":"let out = 1\\nfor (let row = 1; row < getRowCount(); row++) {\\n  if (String(getCell(cellRef(row, 1))) === 'open') {\\n    setCell(cellRef(out, 5), getCell(cellRef(row, 0)))\\n    setCell(cellRef(out, 6), getCell(cellRef(row, 1)))\\n    out++\\n  }\\n}","description":"Copy rows where Status is open into a new range (columns F:G)"}}
 
 When to use execute_script vs other tools:
 - Simple set/format/sort/filter → use the dedicated tool (faster, no script needed)
 - Needs a loop, condition, or multi-cell logic → use execute_script
+- A computation that transforms or aggregates a range into a cell or into a NEW range (weighted average, filter rows into a new range, any "put the <computed thing> in <cell>") → execute_script, never set_cell/filter
 - If in doubt and the request involves "every row", "all blanks", "based on condition" → execute_script
 
 Rules:
