@@ -156,11 +156,23 @@ export function parseFilterPhrase(text: string): FilterPhrase | null {
   )
   if (!whereMatch) return null
 
+  // Free-form "... into a (new) range/sheet/column" has no destination a
+  // declarative filter can honour — a filter narrows the current rows, it does
+  // not write a subset elsewhere. Defer so the LLM emits execute_script.
+  if (/\binto\s+(?:a\s+)?(?:new\s+)?(?:range|sheet|column|tab|area|location)\b/i.test(trimmed)) {
+    return null
+  }
+
   const column = normalizeColumnRef(whereMatch[1])
   const condition = resolveFilterOp(whereMatch[2])
   const value = whereMatch[3].trim().replace(/^["']|["']$/g, '')
   if (!column || !condition || !value) return null
   if (/^(rows?|entries|items|records|data|sheet|the)$/i.test(column)) return null
+  // A captured column that still carries a clause keyword as a whole word
+  // (e.g. "rows where status") was mis-captured from a free-form phrasing the
+  // regex over-matched — it is not a real column. Defer rather than emit a
+  // nonsense filter. Real columns ("Status", "Amount", "Over") are unaffected.
+  if (/\b(?:rows?|where|entries|items|records)\b/i.test(column)) return null
 
   return { column, condition, value }
 }
