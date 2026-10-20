@@ -14,6 +14,21 @@ export interface ParsedFormulaRequest {
   explanation: string
 }
 
+/**
+ * Raw operand tokens extracted from a weighted-average request, before any
+ * SheetContext-dependent resolution/validation. The caller (parser.ts) resolves
+ * the column tokens to indices and applies the numeric/overlap guardrails; this
+ * helper only confirms the phrasing and pulls out the three anchors.
+ */
+export interface ParsedWeightedAverage {
+  /** Value column token: a bare letter ("C") or a header name ("Price"). */
+  valueToken: string
+  /** Weight column token: a bare letter ("D") or a header name ("Weight"). */
+  weightToken: string
+  /** Explicit destination cell ref, e.g. "F1". */
+  targetCell: string
+}
+
 const CELL_REF = '[A-Za-z]{1,3}\\d{1,7}'
 const RANGE_REF = "(?:(?:'[^']+'|[A-Za-z_][A-Za-z0-9_.]*)!)?[A-Za-z]{1,3}(?:\\d{1,7})?:[A-Za-z]{1,3}(?:\\d{1,7})?"
 
@@ -180,4 +195,45 @@ export function parseAdvancedFormula(message: string): ParsedFormulaRequest | nu
   }
 
   return null
+}
+
+/** Strip a leading "column " qualifier and surrounding whitespace from a token. */
+function cleanColumnToken(raw: string): string {
+  return raw.trim().replace(/^column\s+/i, '').trim()
+}
+
+/**
+ * Parse a weighted-average request with THREE keyword-anchored operands:
+ *   "weighted average of <value col> weighted by <weight col> in|into <cell>"
+ *
+ * All three anchors are mandatory. A weighted average has no free-form
+ * expression operand — only two column tokens and a destination cell — so the
+ * captures are deliberately NARROW (no greedy `.+?` over arbitrary text): each
+ * column token is a short word run bounded by the next required anchor, and the
+ * target is a strict cell ref. Returns `null` (defer) if the phrasing does not
+ * match — in particular, a request missing the "weighted by" anchor or the
+ * destination cell falls through to the LLM, exactly like parseAdvancedFormula.
+ *
+ * SheetContext-dependent guardrails (column resolution, numeric dtype,
+ * self-overwrite, value-vs-weight equality, data-extent bounds) are NOT applied
+ * here — this helper returns only the raw tokens so it stays pure and the
+ * context access lives with the rest of the parser's validation.
+ */
+export function parseWeightedAverage(message: string): ParsedWeightedAverage | null {
+  // A column token is a bare letter run OR a bounded word run (letters, digits,
+  // single spaces) stopped by the next literal anchor — never a greedy capture
+  // over free-form text.
+  const COLUMN_TOKEN = '(?:column\\s+)?([A-Za-z][A-Za-z0-9]*(?:\\s+[A-Za-z0-9]+)*?)'
+  const match = message.match(new RegExp(
+    `\\bweighted\\s+average\\s+of\\s+${COLUMN_TOKEN}\\s+weighted\\s+by\\s+${COLUMN_TOKEN}\\s+(?:and\\s+)?(?:put(?:\\s+it)?\\s+)?(?:in|into)\\s+(${CELL_REF})\\b`,
+    'i',
+  ))
+  if (!match) return null
+
+  const valueToken = cleanColumnToken(match[1])
+  const weightToken = cleanColumnToken(match[2])
+  const targetCell = match[3].trim().toUpperCase()
+  if (!valueToken || !weightToken || !targetCell) return null
+
+  return { valueToken, weightToken, targetCell }
 }

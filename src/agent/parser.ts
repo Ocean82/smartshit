@@ -18,8 +18,8 @@ import {
 import type { ColumnProfile, SheetProfile } from '@/ai/types'
 import type { SheetData } from '@/types'
 import { buildMakeoverPlan } from '@/lib/sheetMakeover'
-import { parseAdvancedFormula } from './formulaPatterns'
-import { escapeRegex, letterToCol } from '@/lib'
+import { parseAdvancedFormula, parseWeightedAverage } from './formulaPatterns'
+import { colToLetter, escapeRegex, letterToCol, tryCellToRef } from '@/lib'
 import { isNonCommandRequest } from '../../shared/requestSafety'
 import { getToolDefinition } from '../../shared/toolRegistry'
 
@@ -450,6 +450,88 @@ function parseMessageInternal(message: string, sheetContext?: SheetContext): Par
     if (calls.length > 1) {
       return { calls, understood: true, explanation: 'I\'ll clear the sheet and build a fresh template for you.' }
     }
+  }
+
+  // ─── Weighted average → templated execute_script (confident match only) ─────
+  // The single deterministic computed-range route. "weighted average of C
+  // weighted by D in F1" has three keyword-anchored operands and no free-form
+  // expression, so it extracts cleanly; on a confident match this emits a
+  // templated execute_script (the same num/den loop the LLM route and the #67
+  // characterization test exercise). On ANY extraction miss or guardrail
+  // failure it falls through / defers so the putIn pronoun guard and the LLM
+  // still handle the ambiguous remainder. Placed before parseAdvancedFormula
+  // and the generic putIn matcher so it wins over a bare-pronoun set_cell.
+  const wavg = parseWeightedAverage(message)
+  if (wavg) {
+    const resolveColumn = (token: string): number | null => {
+      if (/^[A-Za-z]{1,3}$/.test(token)) return letterToCol(token)
+      const idx = sheetContext?.headers?.findIndex(
+        (header) => header.trim().toLowerCase() === token.trim().toLowerCase(),
+      )
+      return idx !== undefined && idx >= 0 ? idx : null
+    }
+
+    const valueIndex = resolveColumn(wavg.valueToken)
+    const weightIndex = resolveColumn(wavg.weightToken)
+    const targetRef = tryCellToRef(wavg.targetCell)
+
+    // (b) both columns + the target cell must resolve.
+    if (valueIndex !== null && weightIndex !== null && targetRef) {
+      const targetIndex = targetRef.col
+      const dtypeOf = (index: number): string | undefined =>
+        sheetContext?.columns?.find((column) => column.column === colToLetter(index))?.dtype
+
+      // (c) Source columns must be within the data extent. The TARGET is a
+      // destination — it is expected to live outside the data (e.g. F1), so it
+      // is NOT bounds-checked here (findings §6 guardrail 3 bounds the source
+      // columns only).
+      const outOfBounds = sheetContext
+        ? valueIndex > sheetContext.lastDataCol
+          || weightIndex > sheetContext.lastDataCol
+        : false
+      // (d) numeric dtype required only when profiles are present.
+      const nonNumeric = sheetContext?.columns
+        ? dtypeOf(valueIndex) !== 'number' || dtypeOf(weightIndex) !== 'number'
+        : false
+      // (e) target cell must not sit inside either source column.
+      const selfOverwrite = targetIndex === valueIndex || targetIndex === weightIndex
+      // (f) value and weight columns must differ.
+      const sameColumn = valueIndex === weightIndex
+
+      if (!(outOfBounds || nonNumeric || selfOverwrite || sameColumn)) {
+        const valueLetter = colToLetter(valueIndex)
+        const weightLetter = colToLetter(weightIndex)
+        // Data rows: first = headerRow + 2 (1-indexed), last = lastDataRow + 1.
+        // A trailing overshoot row of nulls is a no-op (0*0 and den += 0), so
+        // the result matches the #67 Scenario-1 weighted average exactly.
+        const firstRow = (sheetContext?.headerRow ?? 0) + 2
+        const lastRow = sheetContext ? sheetContext.lastDataRow + 1 : 100000
+        const valueStart = `${valueLetter}${firstRow}`
+        const valueEnd = `${valueLetter}${lastRow}`
+        const weightStart = `${weightLetter}${firstRow}`
+        const weightEnd = `${weightLetter}${lastRow}`
+        const target = wavg.targetCell
+        const code = [
+          `const vals = getRange("${valueStart}", "${valueEnd}");`,
+          `const wts = getRange("${weightStart}", "${weightEnd}");`,
+          `let num = 0, den = 0;`,
+          `for (let i = 0; i < vals.length; i++) {`,
+          `  const v = Number(vals[i][0]);`,
+          `  const w = Number(wts[i][0]);`,
+          `  if (!isNaN(v) && !isNaN(w)) { num += v * w; den += w; }`,
+          `}`,
+          `setCell("${target}", den === 0 ? 0 : num / den);`,
+        ].join('\n')
+        const description = `Weighted average of ${valueLetter} by ${weightLetter} into ${target}`
+        calls.push({ tool: 'execute_script', params: { code }, description })
+        return {
+          calls,
+          understood: true,
+          explanation: `Computing the weighted average of column ${valueLetter} by column ${weightLetter} into ${target}.`,
+        }
+      }
+    }
+    // Any miss falls through to the branches below (and ultimately the LLM).
   }
 
   // ─── Advanced formulas (explicit destination + operands required) ───────────
