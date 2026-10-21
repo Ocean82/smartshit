@@ -77,24 +77,23 @@ export function createIntentClassifierStage(): PipelineStage {
       }
 
       const engine = getNLPEngine()
-      let nlpIntentType: IntentType | undefined
-      let nlpConfidence = 0
 
       if (engine.isReady && isBootstrapped()) {
         try {
           const nlpResult = await engine.classify(context.message, {
             workbookContext: buildWorkbookContext(context),
           })
-          nlpIntentType = nlpResult.intentType
-          nlpConfidence = nlpResult.confidence
+          const nlpIntentType = nlpResult.intentType
+          const nlpConfidence = nlpResult.confidence
 
           const skipConflictClarify = Boolean(context.resolvedMode)
           const bothConfident =
             regexIntent.confidence >= CONFLICT_CONFIDENCE
             && nlpConfidence >= CONFLICT_CONFIDENCE
-          const crossBucket =
-            nlpIntentType != null
-            && isCrossBucketIntentConflict(regexIntent.intentType, nlpIntentType)
+          const crossBucket = isCrossBucketIntentConflict(
+            regexIntent.intentType,
+            nlpIntentType,
+          )
 
           if (!skipConflictClarify && bothConfident && crossBucket) {
             context.intent = regexIntent
