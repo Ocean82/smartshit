@@ -20,6 +20,20 @@ describe('classifyMode', () => {
     expect(classifyMode('Make an invoice template')).toBe('act')
   })
 
+  it('classifies common spreadsheet imperatives as act', () => {
+    expect(classifyMode('set A1 to 100')).toBe('act')
+    expect(classifyMode('count how many are overdue')).toBe('act')
+    expect(classifyMode('export this as CSV')).toBe('act')
+    expect(classifyMode('remove Netflix')).toBe('act')
+    expect(classifyMode('delete row Netflix')).toBe('act')
+    expect(classifyMode('sort my data')).toBe('act')
+  })
+
+  it('keeps question-framed act keywords out of act mode', () => {
+    expect(classifyMode('can you set A1 to 100?')).toBe('chat')
+    expect(classifyMode('should I remove Netflix?')).toBe('chat')
+  })
+
   it('classifies help requests', () => {
     expect(classifyMode('help')).toBe('help')
     expect(classifyMode('What can you do?')).toBe('help')
