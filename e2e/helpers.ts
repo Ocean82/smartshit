@@ -16,8 +16,35 @@ export async function seedDismissedWelcome(page: Page): Promise<void> {
   })
 }
 
+/**
+ * The app polls /health on load (serverHealth.ts). Vite proxies that to :8787,
+ * which is not running under Playwright — fulfill here so preview logs stay quiet
+ * and UI that watches health does not flap.
+ */
+export async function mockServerHealth(page: Page): Promise<void> {
+  await page.route('**/health', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.continue()
+      return
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        ok: true,
+        ollama: false,
+        modelRegistered: false,
+        modelName: 'e2e',
+        groq: true,
+        openrouter: true,
+      }),
+    })
+  })
+}
+
 export async function gotoApp(page: Page, search = ''): Promise<void> {
   await seedDismissedWelcome(page)
+  await mockServerHealth(page)
   await page.goto(`./${search}`)
   await expect(page.getByRole('grid', { name: 'Spreadsheet grid' })).toBeVisible()
 }

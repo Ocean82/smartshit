@@ -98,4 +98,10 @@ export default defineConfig({
       '/api': 'http://127.0.0.1:8787',
     },
   },
+  // Preview must not inherit the API proxy. E2E runs against `vite preview`
+  // without the Express server; inherited proxies spam ECONNREFUSED for /health.
+  // Chat/API in Playwright are mocked via page.route instead.
+  preview: {
+    proxy: {},
+  },
 });
