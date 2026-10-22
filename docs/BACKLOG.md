@@ -210,6 +210,10 @@ M 1–2 days, L more.
 - [x] **AI health was "configured", not "working"** (done 2026-10-09)
   - `.github/workflows/ai-probe.yml` runs `server/src/scripts/aiProbe.ts` on the box every 30
     minutes (one real completion per cloud provider); a failure opens an `ai-probe` issue.
+- [x] **No real-browser coverage of user paths** — M (done 2026-10-22)
+  - Chromium Playwright suite (`e2e/`, `npm run test:e2e`) against `vite preview` with Clerk
+    off (`scripts/build-e2e.mjs`). Covers import+SUM, auditor finding, keyboard copy/paste,
+    undo, and mocked chat. Wired into CI after the production frontend build.
 - [x] **"Confirming your upgrade…" never shown** — S (done 2026-10-11)
   - New `ConfirmingUpgradeNotice` (`src/auth/SubscriptionNotice.tsx`) renders a spinner +
     "Confirming your upgrade…" status strip while `useSubscriptionStatus().confirmingUpgrade` is

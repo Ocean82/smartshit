@@ -70,8 +70,13 @@ jobs:
       - run: npm run test:realengine
       - run: npm run build --prefix server
       - run: npm run build
+      # Chromium-only Playwright against vite preview (Clerk off, chat mocked).
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
 
   # Advisory-only dependency audit. Runs on the weekly schedule (and on demand).
+
   # Never blocks a merge — instead it opens/updates a tracking issue when a
   # high-or-worse advisory is found, so drift is visible without gating PRs.
   audit:

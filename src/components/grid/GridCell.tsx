@@ -157,6 +157,7 @@ export const GridCell = memo(function GridCell({
     <div
       ref={isEditing ? editContainerRef : undefined}
       role="gridcell"
+      data-cell-id={cellId}
       aria-colindex={col + 2}
       aria-selected={isActive || isSelected}
       aria-readonly={!isEditing}

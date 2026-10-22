@@ -17,11 +17,11 @@ we don't re-derive it.
 - **Partly covered now:** a real-WASM integration tier exists —
   `npm run test:realengine` (`src/engine/formualizer.realengine.test.ts`) covers
   recalc, cross-sheet refs, circular (`#CIRC!`), `#DIV/0!`, `#NAME?`. It runs in
-  CI. What's still missing is *end-to-end through the UI*.
-- **Verify:** Playwright E2E against `vite build && vite preview` — import a real
-  `.xlsx` with formulas → computed values match Excel; delete a referenced row →
-  `#REF!`; create a circular ref → auditor flags it; export → re-import round-trip
-  is lossless.
+  CI. UI path covered by Chromium Playwright (`npm run test:e2e`, 2026-10-22):
+  import `e2e/fixtures/budget.xlsx` → SUM total 1700; auditor surfaces `#DIV/0!`;
+  keyboard copy/paste and undo; chat against a mocked `/api/chat/stream`.
+- **Still open:** delete a referenced row → `#REF!`; circular ref → auditor;
+  export → re-import round-trip; browser matrix beyond Chromium.
 
 ## 2. Live LLM providers (failover, streaming, rate limits)
 

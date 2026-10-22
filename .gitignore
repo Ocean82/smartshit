@@ -53,6 +53,10 @@ server/ecosystem.config.cjs
 coverage/
 *.tsbuildinfo
 .vite/
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
 # Dev debug/test scratch scripts at repo root (never ship).
 # Scoped prefixes instead of a blanket *.sh, which silently ignored any new
 # helper under scripts/ and broke deploys that `git reset --hard` on the server.

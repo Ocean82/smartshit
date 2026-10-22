@@ -41,6 +41,11 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:realengine": "vitest run --config vitest.integration.config.ts",
+    "build:e2e": "node scripts/build-e2e.mjs",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+
+
     "deploy": "node scripts/deploy-dispatch.mjs",
     "deploy:server": "node scripts/deploy-dispatch.mjs --server",
     "deploy:frontend": "node scripts/deploy-dispatch.mjs --frontend",
@@ -69,6 +74,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.64.1",
     "@tailwindcss/vite": "4.1.17",
     "@types/node": "22.19.17",
     "@types/react": "19.2.7",
