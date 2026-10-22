@@ -22,6 +22,10 @@ vi.mock('@/ai/agentClient', () => ({
     v !== null && typeof v === 'object' && (v as { kind?: string }).kind === 'server-error',
 }))
 
+vi.mock('@/agent', () => ({
+  executeTool: vi.fn(),
+}))
+
 vi.mock('@/ai/buildContext', () => ({
   buildSpreadsheetContext: vi.fn(),
 }))
@@ -45,6 +49,7 @@ vi.mock('@/ai/contextualSuggestions', () => ({
 }))
 
 import { chatWithAgentServerStream } from '@/ai/agentClient'
+import { executeTool } from '@/agent'
 import { buildSpreadsheetContext } from '@/ai/buildContext'
 import { formatInsights } from '@/ai/responseBuilder'
 import { isLlmOnlyMode } from '@/ai/mode'
@@ -472,5 +477,46 @@ describe('LLMGateway stage', () => {
     const stage = createLLMGatewayStage()
     // Should not throw when onToken is missing
     await expect(stage.process(makeContext({ onToken: undefined }))).resolves.not.toThrow()
+  })
+
+  it('runs read probes then a follow-up LLM call before returning mutate actions', async () => {
+    vi.mocked(chatWithAgentServerStream)
+      .mockResolvedValueOnce({
+        message: 'Counting overdue rows…',
+        actions: [
+          { tool: 'count_rows', params: { operator: 'equals', value: 'overdue' }, description: 'Count overdue' },
+          { tool: 'format_cells', params: { bold: true }, description: 'Should be discarded from round 1' },
+        ],
+        source: 'llm',
+      })
+      .mockResolvedValueOnce({
+        message: 'Highlighting the overdue rows.',
+        actions: [
+          { tool: 'format_cells', params: { range: 'C', bgColor: '#FEE2E2' }, description: 'Highlight overdue' },
+        ],
+        source: 'llm',
+      })
+    vi.mocked(executeTool).mockReturnValue({
+      success: true,
+      message: 'Found 2 matching rows',
+      modified: 0,
+    })
+
+    const buildExecContext = vi.fn().mockReturnValue({})
+    const stage = createLLMGatewayStage({ buildExecContext })
+    const result = await stage.process(makeContext({ mode: 'act', message: 'highlight overdue rows' }))
+
+    expect(executeTool).toHaveBeenCalledTimes(1)
+    expect(executeTool).toHaveBeenCalledWith(
+      expect.objectContaining({ tool: 'count_rows' }),
+      expect.anything(),
+    )
+    expect(chatWithAgentServerStream).toHaveBeenCalledTimes(2)
+    const followUpHistory = vi.mocked(chatWithAgentServerStream).mock.calls[1][0].history
+    expect(followUpHistory?.at(-1)?.content).toContain('[Read results]')
+    expect(result!.actions).toEqual([
+      expect.objectContaining({ tool: 'format_cells', description: 'Highlight overdue' }),
+    ])
+    expect(result!.metadata?.readProbeFollowUp).toBe(true)
   })
 })

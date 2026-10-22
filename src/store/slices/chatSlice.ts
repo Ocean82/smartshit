@@ -22,6 +22,7 @@ import { buildScriptPreview } from '@/lib/scriptPreview'
 import { scriptPatchSignature } from '@/lib/scriptPatch'
 import { captureActionScope, validateActionScope } from '@/lib/actionScope'
 import { shouldAutoApply } from '@/lib/applyPosture'
+import { validateToolParams } from '@shared/validateToolParams'
 import { v4 as uuid } from 'uuid'
 import {
   processAICommand,
@@ -452,6 +453,17 @@ export function createChatActions(
           pushAssistant(
             `⚠️ I did not apply **${action.tool}** because ${scopeCheck.reason}. ` +
             'Nothing was changed — ask me again and I will re-check the current data.',
+          )
+          return
+        }
+
+        const paramCheck = validateToolParams(action.tool, action.params ?? {})
+        if (!paramCheck.valid) {
+          markActionStatus(actionId, 'rejected')
+          recordTelemetry('previewDeniedActions', `${action.tool}:invalid-params`)
+          pushAssistant(
+            `⚠️ I did not apply **${action.tool}** because ${paramCheck.reason ?? 'its parameters were invalid'}. ` +
+            'Nothing was changed — ask me again with clearer details.',
           )
           return
         }

@@ -5,9 +5,12 @@ import {
   MUTATION_TOOL_NAMES,
   ACTION_TOOL_NAMES,
   TEMPLATE_TOOL_NAMES,
+  PARSE_ACTION_TOOL_NAMES,
+  READ_PROBE_TOOL_NAMES,
   getToolDefinition,
   resolveToolName,
   formatToolsForPrompt,
+  isReadProbeTool,
 } from './toolRegistry'
 
 describe('shared toolRegistry', () => {
@@ -54,6 +57,32 @@ describe('shared toolRegistry', () => {
     expect(ACTION_TOOL_NAMES).not.toContain('find_duplicates')
   })
 
+  it('registers execute_macro as a hidden mutate tool', () => {
+    const def = getToolDefinition('execute_macro')
+    expect(def?.category).toBe('mutate')
+    expect(def?.hidden).toBe(true)
+    expect(MUTATION_TOOL_NAMES).toContain('execute_macro')
+    expect(ACTION_TOOL_NAMES).toContain('execute_macro')
+    expect(formatToolsForPrompt()).not.toContain('execute_macro')
+  })
+
+  it('read probes are parse-only, not Apply action tools', () => {
+    for (const tool of READ_PROBE_TOOL_NAMES) {
+      expect(isReadProbeTool(tool)).toBe(true)
+      expect(ACTION_TOOL_NAMES).not.toContain(tool)
+      expect(PARSE_ACTION_TOOL_NAMES).toContain(tool)
+    }
+  })
+
+  it('formatToolsForPrompt excludes templates and hidden tools', () => {
+    const prompt = formatToolsForPrompt()
+    expect(prompt).toContain('format_cells')
+    expect(prompt).toContain('execute_script')
+    expect(prompt).not.toContain('create_budget_template')
+    expect(prompt).not.toContain('create_wedding_budget')
+    expect(prompt).not.toContain('format_range')
+  })
+
   it('action tools are the union of mutate and template tools', () => {
     expect(new Set(ACTION_TOOL_NAMES)).toEqual(
       new Set([...MUTATION_TOOL_NAMES, ...TEMPLATE_TOOL_NAMES]),
@@ -80,19 +109,20 @@ describe('shared toolRegistry', () => {
     expect(parsed.actions.map((a) => a.tool)).toEqual(['format_cells'])
   })
 
-  it('prompt listing documents canonical tools only', () => {
+  it('prompt listing documents canonical mutate tools only', () => {
     const prompt = formatToolsForPrompt()
     expect(prompt).toContain('format_cells')
+    expect(prompt).toContain('execute_script')
     expect(prompt).not.toContain('format_range')
     expect(prompt).not.toContain('conditional_format')
-    expect(prompt).toContain('create_budget_template')
+    expect(prompt).not.toContain('create_budget_template')
   })
 
-  it('hidden niche templates are registered but excluded from the LLM prompt', () => {
-    const hidden = TOOL_REGISTRY.filter((t) => t.hidden && t.category === 'template')
-    expect(hidden.length).toBe(120)
-    for (const tool of hidden) {
-      expect(tool.category, tool.name).toBe('template')
+  it('all templates are registered but excluded from the LLM prompt', () => {
+    const hiddenTemplates = TOOL_REGISTRY.filter((t) => t.category === 'template')
+    expect(hiddenTemplates.length).toBeGreaterThan(120)
+    for (const tool of hiddenTemplates) {
+      expect(tool.hidden, tool.name).toBe(true)
       expect(TEMPLATE_TOOL_NAMES, tool.name).toContain(tool.name)
       expect(ACTION_TOOL_NAMES, tool.name).toContain(tool.name)
     }

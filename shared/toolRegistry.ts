@@ -531,13 +531,14 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
     params: [],
     examples: ['explain this sheet', 'summarize my expenses'],
   },
-  // ─── Templates (executed by the store's template handlers) ────────────────
+  // ─── Templates (gallery / TemplateResolver; hidden from LLM prompt) ───────
   {
     name: 'create_budget_template',
     category: 'template',
     description: 'Build a monthly budget with income, expenses, totals',
     params: [],
     examples: ['build a monthly budget', 'create a budget'],
+    hidden: true,
   },
   {
     name: 'create_sales_tracker',
@@ -545,6 +546,7 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
     description: 'Create a sales tracking spreadsheet',
     params: [],
     examples: ['track sales', 'revenue tracker'],
+    hidden: true,
   },
   {
     name: 'create_invoice',
@@ -552,6 +554,7 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
     description: 'Generate a professional invoice template',
     params: [],
     examples: ['make an invoice', 'create a bill'],
+    hidden: true,
   },
   {
     name: 'create_project_tracker',
@@ -559,6 +562,7 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
     description: 'Create a project/task tracker',
     params: [],
     examples: ['project tracker', 'task list'],
+    hidden: true,
   },
   {
     name: 'create_employee_roster',
@@ -566,6 +570,7 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
     description: 'Build an employee directory',
     params: [],
     examples: ['employee roster', 'team directory'],
+    hidden: true,
   },
   {
     name: 'create_kpi_dashboard',
@@ -573,6 +578,7 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
     description: 'Create a KPI metrics dashboard',
     params: [],
     examples: ['kpi dashboard', 'metrics dashboard'],
+    hidden: true,
   },
   {
     name: 'create_expense_report',
@@ -580,6 +586,7 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
     description: 'Generate an expense report template',
     params: [],
     examples: ['expense report'],
+    hidden: true,
   },
   {
     name: 'clean_sheet_data',
@@ -587,6 +594,7 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
     description: 'Clean whitespace, normalize headers, trim data',
     params: [],
     examples: ['clean up my data', 'normalize headers'],
+    hidden: true,
   },
   {
     name: 'create_chart',
@@ -597,6 +605,7 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
       { name: 'dataRange', type: 'string', description: 'Data range for the chart' },
     ],
     examples: ['chart my expenses', 'make a pie chart'],
+    hidden: true,
   },
   {
     name: 'formula_analyzer',
@@ -650,6 +659,18 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
       'find duplicates and highlight them',
     ],
   },
+  // Multi-step makeover / macro planner output. Created locally (parser/macro),
+  // not by the LLM prompt — hidden keeps it off formatToolsForPrompt.
+  {
+    name: 'execute_macro',
+    category: 'mutate',
+    description: 'Run a sequenced list of tool steps as one undo group (sheet makeover / multi-clause plan).',
+    params: [
+      { name: 'steps', type: 'array', description: 'Ordered tool steps: [{tool, params, description?}, ...]', required: true },
+    ],
+    examples: [],
+    hidden: true,
+  },
   // ─── Niche gallery templates (hidden from the LLM prompt) ──────────────────
   // Launched from the template gallery; executable everywhere, but excluded
   // from formatToolsForPrompt() to keep the LLM system prompt compact.
@@ -677,12 +698,33 @@ export const TEMPLATE_TOOL_NAMES: string[] = TOOL_REGISTRY
   .map((t) => t.name)
 
 /**
- * Tools the server LLM is allowed to return as actions (mutate + template).
- * Read/analysis queries are answered in prose, never as actions.
+ * Tools the client may Apply as sheet changes (mutate + template).
+ * Read probes are not Apply actions — see READ_PROBE_TOOL_NAMES / PARSE_ACTION_TOOL_NAMES.
  */
 export const ACTION_TOOL_NAMES: string[] = TOOL_REGISTRY
   .filter((t) => t.category === 'mutate' || t.category === 'template')
   .map((t) => t.name)
+
+/**
+ * Read-only probes the act-mode LLM may emit in round 1; the client runs them
+ * and makes one follow-up LLM call before showing mutate Apply actions.
+ */
+export const READ_PROBE_TOOL_NAMES = ['count_rows', 'find_max', 'find_min'] as const
+
+export type ReadProbeToolName = (typeof READ_PROBE_TOOL_NAMES)[number]
+
+/** True when `tool` is a bounded act-mode read probe. */
+export function isReadProbeTool(tool: string): boolean {
+  return (READ_PROBE_TOOL_NAMES as readonly string[]).includes(tool)
+}
+
+/**
+ * Server parse allowlist: Apply tools plus read probes (probes never reach Apply UI).
+ */
+export const PARSE_ACTION_TOOL_NAMES: string[] = [
+  ...ACTION_TOOL_NAMES,
+  ...READ_PROBE_TOOL_NAMES,
+]
 
 /** Look up a tool definition by name (aliases included). */
 export function getToolDefinition(name: string): ToolDefinition | undefined {

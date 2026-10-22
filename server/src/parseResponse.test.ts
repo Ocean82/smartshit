@@ -71,6 +71,14 @@ describe('parseAgentResponse — parameter sanitising', () => {
       { tool: 'clear_sheet', params: {}, description: 'Run clear_sheet' },
     ])
   })
+
+  it('accepts bounded read probe tools for the client follow-up loop', () => {
+    const { actions } = parse([
+      { tool: 'count_rows', params: { operator: 'equals', value: 'overdue' }, description: 'Count overdue' },
+      { tool: 'find_max', params: { column: 'B' }, description: 'Max B' },
+    ])
+    expect(actions.map((a) => a.tool)).toEqual(['count_rows', 'find_max'])
+  })
 })
 
 describe('parseAgentResponse — parameter contract validation (F11)', () => {

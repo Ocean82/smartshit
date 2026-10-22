@@ -105,14 +105,10 @@ export function createAgentParserStage(deps: AgentParserDeps): PipelineStage {
       }
 
       // ─── execute_macro preview/confirm flow ─────────────────────────────
-      // execute_macro (the value-safe sheet makeover) is intentionally NOT in
-      // toolRegistry, so executeToolCalls would see category=undefined, treat it
-      // as a read, and run it inline — where executeTool returns
-      // "Unknown tool: execute_macro". It must instead be returned as an
-      // Apply/Reject action so responseBuilder attaches the format-only preview
-      // from buildActionPreview. It never auto-applies and is never executed
-      // inline here; the store's executeMacroAction runs it as one undo group on
-      // Apply.
+      // execute_macro is a hidden mutate tool in the registry but has no inline
+      // handler — Apply must go through executeMacroAction (one undo group) with
+      // a format-only preview from buildActionPreview. Never auto-apply or run
+      // via executeToolCalls here.
       if (parsed.calls.length === 1 && parsed.calls[0].tool === 'execute_macro') {
         return handleMacroPreview(parsed.calls[0], parsed.explanation)
       }

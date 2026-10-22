@@ -7,28 +7,40 @@
  * Responsibilities:
  * 1. Build the deterministic summary (insights, audit) for LLM context
  * 2. Send user message + context to server via chatWithAgentServerStream()
- * 3. On LLM failure: show DeterministicDispatcher's local analysis when present;
+ * 3. When act-mode returns read probes: run up to 2 client-side, one follow-up LLM call
+ * 4. On LLM failure: show DeterministicDispatcher's local analysis when present;
  *    otherwise fail so chatService runs its local fallback for act/help modes
- * 4. Always returns a StageResult (never null)
- *
- * REQ-7.1: Send message to server-side LLM
- * REQ-7.2: Always claims (terminal stage)
- * REQ-7.3: On LLM failure + non-explain/advise → local fallback (via chatService)
- * REQ-7.4: Pass conversation history, sheet context, deterministic summary
+ * 5. Always returns a StageResult (never null)
  */
 
 import type { LocalAnalysis, PipelineContext, PipelineStage, StageResult } from '../types'
+import type { ExecutionContext } from '@/agent/executor'
+import { executeTool } from '@/agent'
 import { buildFocusData } from '@/ai/focusData'
 import { resolveAnalysisTarget } from '@/ai/analysisTarget'
-import { chatWithAgentServerStream, isAgentServerError } from '@/ai/agentClient'
+import {
+  chatWithAgentServerStream,
+  isAgentServerError,
+  type AgentChatRequest,
+  type ServerAgentAction,
+  type ServerChatResponse,
+} from '@/ai/agentClient'
 import { reportServerUsage } from '@/auth/useUsage'
 import { buildAdaptiveContext, getClientContextBudget } from '@/ai/adaptiveContext'
 import { formatInsights, mergeToolResultContent } from '@/ai/responseBuilder'
 import { isLlmOnlyMode } from '@/ai/mode'
 import { runAudit, formatAuditForContext } from '@/auditor'
 import { getContextualSuggestions } from '@/ai/contextualSuggestions'
+import { isReadProbeTool } from '@shared/toolRegistry'
 
-export function createLLMGatewayStage(): PipelineStage {
+const MAX_READ_PROBES = 2
+
+export interface LLMGatewayDeps {
+  /** Build an execution context for running read probes (no undo history). */
+  buildExecContext: (opts?: { suppressHistory?: boolean }) => ExecutionContext
+}
+
+export function createLLMGatewayStage(deps?: LLMGatewayDeps): PipelineStage {
   return {
     name: 'llm-gateway',
 
@@ -36,8 +48,6 @@ export function createLLMGatewayStage(): PipelineStage {
       const mode = context.mode ?? 'chat'
       const onToken = context.onToken ?? (() => {})
 
-      // Resolve the analysis target the same way the deterministic path does,
-      // so an attached file/preview is analyzed instead of the active sheet.
       const target = resolveAnalysisTarget({
         workbook: context.workbook,
         sheet: context.sheet,
@@ -47,9 +57,7 @@ export function createLLMGatewayStage(): PipelineStage {
         attachedPreview: context.attachedPreview,
       })
 
-      // Build spreadsheet context payload for the server
-      // Use adaptive context for multi-sheet workbooks (budget-aware compression)
-      const isCloudAvailable = true // LLM gateway implies cloud/Ollama is available
+      const isCloudAvailable = true
       const tokenBudget = getClientContextBudget(isCloudAvailable)
 
       const sheetContext = buildAdaptiveContext({
@@ -61,16 +69,10 @@ export function createLLMGatewayStage(): PipelineStage {
         getSheetComputedValue: target.getSheetComputedValue,
       })
 
-      // Build deterministic summary for LLM context enrichment. The insights
-      // block (pre-computed totals, top expenses, outliers) is sent for the
-      // LLM-only modes — explain, advise, and chat — so the model builds on the
-      // computed figures instead of re-deriving them from raw cells. `act`/`help`
-      // omit it (act emits tool calls; help is static guidance).
       const insightsBlock = isLlmOnlyMode(mode)
         ? formatInsights(sheetContext.insights)
         : ''
 
-      // Exact values for cells/columns the question names (non-fatal)
       let focusData = ''
       try {
         focusData = buildFocusData({
@@ -83,7 +85,6 @@ export function createLLMGatewayStage(): PipelineStage {
         // Focus data is an enrichment — continue without it
       }
 
-      // Run auditor for explain/advise modes (non-fatal)
       let auditBlock = ''
       if (isLlmOnlyMode(mode) || mode === 'advise') {
         try {
@@ -97,23 +98,26 @@ export function createLLMGatewayStage(): PipelineStage {
       const localAnalysis = context.localAnalysis
       const deterministicSummary = buildSummary(insightsBlock, auditBlock, context.priorInsights, localAnalysis)
 
-      // REQ-7.1, REQ-7.4: Send message + history + context to server LLM
+      const llmContext: AgentChatRequest['context'] = {
+        ...sheetContext,
+        deterministicSummary,
+        ...(focusData ? { focusData } : {}),
+      }
+
+      const clientRouting: AgentChatRequest['clientRouting'] = context.mode && context.intent
+        ? {
+            mode: context.mode,
+            intentType: context.intent.intentType,
+            routingSource: context.intent.routingSource ?? 'regex',
+            confidence: context.intent.confidence,
+          }
+        : undefined
+
       const serverResult = await chatWithAgentServerStream({
         message: context.message,
-        context: {
-          ...sheetContext,
-          deterministicSummary,
-          ...(focusData ? { focusData } : {}),
-        },
+        context: llmContext,
         history: context.history ?? [],
-        clientRouting: context.mode && context.intent
-          ? {
-              mode: context.mode,
-              intentType: context.intent.intentType,
-              routingSource: context.intent.routingSource ?? 'regex',
-              confidence: context.intent.confidence,
-            }
-          : undefined,
+        clientRouting,
         onToken,
         signal: context.signal,
       })
@@ -127,10 +131,6 @@ export function createLLMGatewayStage(): PipelineStage {
         }
       }
 
-      // Server explicitly refused (auth / rate limit / quota). Surface its
-      // worded message as a real assistant reply so the "sign in / slow down /
-      // upgrade" CTA is never hidden. A local analysis, when present, is shown
-      // with that message appended as a notice.
       if (isAgentServerError(serverResult)) {
         if (localAnalysis) {
           return localAnalysisResult(localAnalysis, serverResult.message, suggestionsForServerError(serverResult.status))
@@ -149,22 +149,44 @@ export function createLLMGatewayStage(): PipelineStage {
         }
       }
 
-      // The server answers with source 'fallback' when every provider failed or
-      // the free-tier quota is used up; the local analysis is still worth showing.
       if (serverResult?.source === 'fallback' && localAnalysis) {
         return localAnalysisResult(localAnalysis, serverResult.message, localAnalysis.suggestions)
       }
 
       if (serverResult) {
-        // Reconcile the client's optimistic usage counter to the server's
-        // authoritative post-request count. Present only when the server
-        // actually metered this turn (free tier, server LLM used) — so local
-        // fallbacks and failed turns no longer leave the local count drifting.
         if (serverResult.usage) {
           reportServerUsage(serverResult.usage.used)
         }
 
-        // Successful LLM response
+        let finalResult = serverResult
+        let usedReadLoop = false
+
+        if (deps?.buildExecContext && hasReadProbes(serverResult.actions)) {
+          const followUp = await runReadProbeFollowUp({
+            context,
+            deps,
+            firstResult: serverResult,
+            llmContext,
+            clientRouting,
+            onToken,
+          })
+          usedReadLoop = true
+          if (followUp) {
+            finalResult = followUp
+            if (followUp.usage) {
+              reportServerUsage(followUp.usage.used)
+            }
+          } else {
+            // Probes were requested but follow-up failed — do not surface round-1 mutates.
+            finalResult = {
+              ...serverResult,
+              actions: [],
+              message: serverResult.message
+                || 'I checked the sheet but could not finish planning the change. Please try again.',
+            }
+          }
+        }
+
         const contextualSuggestions = getContextualSuggestions({
           insights: sheetContext.insights,
           profile: sheetContext.profile,
@@ -173,24 +195,29 @@ export function createLLMGatewayStage(): PipelineStage {
           sheetNames: target.workbook.sheets.map((s) => s.name),
         })
 
-        return {
-          success: true,
-          message: serverResult.message || 'I looked at your sheet but didn\'t find enough to go on. Try selecting a range or asking a more specific question.',
-          actions: serverResult.actions.map((a) => ({
+        const actions = finalResult.actions
+          .filter((a) => !isReadProbeTool(a.tool))
+          .map((a) => ({
             tool: a.tool,
             params: a.params,
             description: a.description,
-          })),
+          }))
+
+        return {
+          success: true,
+          message: finalResult.message || 'I looked at your sheet but didn\'t find enough to go on. Try selecting a range or asking a more specific question.',
+          actions,
           suggestions: contextualSuggestions.length > 0
             ? contextualSuggestions
-            : serverResult.suggestions,
+            : finalResult.suggestions,
           stageName: 'llm-gateway',
           metadata: {
             toolUsed: 'llm',
-            source: serverResult.source,
-            reasoning: serverResult.reasoning,
-            providerMeta: serverResult.meta,
+            source: finalResult.source,
+            reasoning: finalResult.reasoning,
+            providerMeta: finalResult.meta,
             routingSource: context.intent?.routingSource,
+            ...(usedReadLoop ? { readProbeFollowUp: true } : {}),
           },
         }
       }
@@ -203,7 +230,6 @@ export function createLLMGatewayStage(): PipelineStage {
         )
       }
 
-      // REQ-7.3: act/help failures return success:false so chatService runs processLocalFallback
       return {
         success: false,
         message: 'I couldn\'t reach the AI service just now. Please try again in a moment.',
@@ -218,17 +244,76 @@ export function createLLMGatewayStage(): PipelineStage {
   }
 }
 
-/**
- * Build the deterministic summary string passed to the LLM for context.
- * Combines insights, audit findings, local analysis, and prior-turn continuity hints.
- *
- * Prior-turn hint strategy:
- * - When `insightsBlock` or `localAnalysis` is present, those blocks already give
- *   the model full data context for this turn — the hint is redundant noise.
- * - When neither is present (e.g. a follow-up chat-mode message) the model has no
- *   data context in the summary at all. A lightweight hint signals continuation
- *   without reinjecting the full write-up.
- */
+function hasReadProbes(actions: ServerAgentAction[]): boolean {
+  return actions.some((a) => isReadProbeTool(a.tool))
+}
+
+async function runReadProbeFollowUp(args: {
+  context: PipelineContext
+  deps: LLMGatewayDeps
+  firstResult: ServerChatResponse
+  llmContext: AgentChatRequest['context']
+  clientRouting: AgentChatRequest['clientRouting']
+  onToken: (token: string) => void
+}): Promise<ServerChatResponse | null> {
+  const { context, deps, firstResult, llmContext, clientRouting, onToken } = args
+
+  const probes = firstResult.actions.filter((a) => isReadProbeTool(a.tool)).slice(0, MAX_READ_PROBES)
+  if (probes.length === 0) return null
+
+  const execCtx = deps.buildExecContext({ suppressHistory: true })
+  const resultLines: string[] = []
+  for (const probe of probes) {
+    if (context.signal?.aborted) return null
+    try {
+      const result = executeTool(
+        { tool: probe.tool, params: probe.params, description: probe.description },
+        execCtx,
+      )
+      resultLines.push(
+        `- ${probe.tool}: ${result.success ? result.message : `failed — ${result.message}`}`,
+      )
+    } catch (err) {
+      resultLines.push(
+        `- ${probe.tool}: failed — ${err instanceof Error ? err.message : 'unknown error'}`,
+      )
+    }
+  }
+
+  if (context.signal?.aborted) return null
+
+  const readBlock = [
+    '[Read results]',
+    ...resultLines,
+    '',
+    'Using these results, respond with final JSON only. Emit mutate/execute_script actions (or empty actions). Do not emit read probes.',
+  ].join('\n')
+
+  const history = [
+    ...(context.history ?? []),
+    { role: 'assistant' as const, content: firstResult.message || 'Checking the sheet…' },
+    { role: 'user' as const, content: readBlock },
+  ]
+
+  const followUp = await chatWithAgentServerStream({
+    message: context.message,
+    context: llmContext,
+    history,
+    clientRouting,
+    onToken,
+    signal: context.signal,
+  })
+
+  if (context.signal?.aborted) return null
+  if (isAgentServerError(followUp) || !followUp) return null
+  if (followUp.source === 'fallback') return null
+
+  return {
+    ...followUp,
+    actions: followUp.actions.filter((a) => !isReadProbeTool(a.tool)),
+  }
+}
+
 function buildSummary(
   insightsBlock: string,
   auditBlock: string,
@@ -237,8 +322,6 @@ function buildSummary(
 ): string {
   const parts: string[] = []
 
-  // Only emit the continuation hint when no richer context block is present.
-  // If we have insights or a local analysis the model can see the data directly.
   const hasRicherContext = Boolean(insightsBlock || localAnalysis)
   if (priorInsights && !hasRicherContext) {
     parts.push('This is a follow-up question in an ongoing conversation about the same sheet.')
@@ -256,7 +339,6 @@ function buildSummary(
   return mergeToolResultContent(parts.filter(Boolean))
 }
 
-/** Show the local analysis on its own when the model can't answer, with the reason underneath. */
 function localAnalysisResult(analysis: LocalAnalysis, notice: string, suggestions?: string[]): StageResult {
   return {
     success: true,
@@ -270,7 +352,6 @@ function localAnalysisResult(analysis: LocalAnalysis, notice: string, suggestion
   }
 }
 
-/** Follow-up chips tailored to why the server refused the request. */
 function suggestionsForServerError(
   status: 'rate_limited' | 'auth' | 'quota' | 'error',
 ): string[] {

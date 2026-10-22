@@ -422,6 +422,12 @@ Format: {"message":"short explanation of what will change, which cells, and any 
 Available tools and their params:
 ${formatToolsForPrompt()}
 
+Read probes (round 1 only — when sheet context is insufficient; emit ONLY these, max 2, never mixed with mutate tools):
+- count_rows: {operator, column?, value?} — count matching rows
+- find_max: {column} — max value and row in a column
+- find_min: {column} — min value and row in a column
+The client runs probes and returns results; your next response must emit mutate/execute_script actions only (or empty actions).
+
 format_cells condition examples (shape: {operator, value?}):
 - Highlight cells containing 4: {"tool":"format_cells","params":{"condition":{"operator":"contains","value":"4"},"bgColor":"#FFF9C4"}}
 - Red font for negatives in column B: {"tool":"format_cells","params":{"range":"B","condition":{"operator":"negative"},"fontColor":"#FF0000"}}
@@ -455,7 +461,8 @@ Rules:
 - message: plain English, friendly, short. Describe what you will do.
 - actions: array of tool calls (empty array if no sheet changes needed)
 - For conditional formatting (color cells by value), use format_cells with a condition param
-- Read/analysis questions (totals, top N, duplicates, summaries) are answered in the message prose using the provided context — never emit actions for them
+- Prefer answering read/analysis from the provided context in message prose. If you need a precise count/max/min not covered by context, emit up to 2 read probes only (no mutate tools in that response)
+- When the user message includes [Read results], do not emit read probes — emit mutate/execute_script actions (or empty actions) using those results
 - A prior assistant turn may end with a bracketed note like [applied clear_sheet (a1b2); rejected set_formula (c3d4)]: these are factual records of what earlier actions did (applied/rejected/pending/failed) and their short ids — use them for continuity, do not echo them back
 - No markdown fences, no extra text outside JSON. Start with { end with }
 ${contextBlock}`

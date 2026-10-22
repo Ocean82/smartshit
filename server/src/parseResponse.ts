@@ -1,5 +1,5 @@
 import { resolveIntent, isWeakResponse } from './intent.js'
-import { ACTION_TOOL_NAMES } from '../../shared/toolRegistry.js'
+import { PARSE_ACTION_TOOL_NAMES } from '../../shared/toolRegistry.js'
 import { sanitizeActionParams } from '../../shared/actionParams.js'
 import { validateToolParams } from '../../shared/validateToolParams.js'
 import { stripThinkingTags } from './thinkingTagStripper.js'
@@ -13,9 +13,9 @@ interface ParsedAgentJson {
   }>
 }
 
-// Derived from the shared registry — the server only returns actions the
-// client executor (or template switch) can actually run.
-const ALLOWED_TOOLS = new Set(ACTION_TOOL_NAMES)
+// Mutate/template Apply tools plus bounded read probes (client runs probes,
+// then follow-up for mutates). Unknown tools are dropped.
+const ALLOWED_TOOLS = new Set(PARSE_ACTION_TOOL_NAMES)
 
 function extractJsonObject(text: string): string | null {
   // Strip <think>...</think> blocks that reasoning models inject before/around JSON

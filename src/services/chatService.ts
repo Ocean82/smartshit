@@ -188,7 +188,7 @@ function buildStages(deps: ChatServiceDeps, isNonCommand: boolean): PipelineStag
   stages.push(createSemanticCapabilityRouterStage({ buildExecContext: deps.buildExecContext, pushHistory: deps.pushHistory }))
   stages.push(createMacroPlannerStage())
   stages.push(createDeterministicDispatcherStage())
-  stages.push(createLLMGatewayStage())
+  stages.push(createLLMGatewayStage({ buildExecContext: deps.buildExecContext }))
   return stages
 }
 

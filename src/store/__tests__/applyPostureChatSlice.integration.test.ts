@@ -81,6 +81,18 @@ function storedAction(actionId: string) {
 describe('apply-posture — Undo toast (§9)', () => {
   beforeEach(() => resetStore())
 
+  it('rejects Apply when tool params fail schema validation', () => {
+    seedData()
+    // set_cell requires both cell and value
+    const actionId = injectAction('set_cell', { cell: 'A1' })
+
+    useStore.getState().applyAction(actionId)
+
+    expect(storedAction(actionId)?.status).toBe('rejected')
+    expect(useStore.getState().getActiveSheet().cells.A1?.value).toBe('Item')
+    expect(useStore.getState().messages.at(-1)?.content).toMatch(/did not apply/i)
+  })
+
   it('fires a success toast with an undoAction when an action applies', () => {
     seedData()
     const showToast = vi.spyOn(useStore.getState(), 'showToast')
