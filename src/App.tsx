@@ -445,7 +445,7 @@ function TitleBar({ onOpenTemplates, onOpenCloudPicker, onOpenShare, onOpenComma
   })()
 
   return (
-    <div className="h-10 flex items-center px-2 md:px-4 gap-2 md:gap-3 shrink-0" style={{ background: 'var(--surface-chrome)' }}>
+    <div className="relative z-50 h-10 flex items-center px-2 md:px-4 gap-2 md:gap-3 shrink-0" style={{ background: 'var(--surface-chrome)' }}>
       {/* Mobile hamburger menu */}
       <MobileMenu
         onOpenTemplates={onOpenTemplates}

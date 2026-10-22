@@ -24,6 +24,7 @@ import {
   FileText,
 } from 'lucide-react'
 import type { WorkbookData } from '@/types'
+import { MOBILE_PANEL_BELOW_TITLEBAR } from '@/components/panels/dockPanelLayout'
 
 interface PreviewState {
   version: VersionEntry
@@ -72,7 +73,7 @@ export function VersionHistoryPanel() {
   // Version history is Pro-only — render gate after all hooks
   if (showVersionHistory && !isPro) {
     return (
-      <div className="w-[300px] border-l border-gray-200 bg-white h-full flex flex-col shrink-0 p-4 max-md:fixed max-md:inset-0 max-md:z-40 max-md:w-full">
+      <div className={`w-[300px] border-l border-gray-200 bg-white h-full flex flex-col shrink-0 p-4 max-md:w-full ${MOBILE_PANEL_BELOW_TITLEBAR}`}>
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-sm font-semibold" style={{ color: 'var(--ink-primary)' }}>Version History</h3>
           <button type="button" onClick={() => setShowVersionHistory(false)} className="p-1 rounded-lg transition-colors" style={{ color: 'var(--neutral-400)' }} aria-label="Close">
@@ -152,7 +153,7 @@ export function VersionHistoryPanel() {
 
   return (
     <>
-      <div className="w-[300px] border-l border-gray-200 bg-white h-full overflow-hidden flex flex-col shrink-0 max-md:fixed max-md:inset-0 max-md:z-40 max-md:w-full">
+      <div className={`w-[300px] border-l border-gray-200 bg-white h-full overflow-hidden flex flex-col shrink-0 max-md:w-full ${MOBILE_PANEL_BELOW_TITLEBAR}`}>
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
           <div className="flex items-center gap-2">

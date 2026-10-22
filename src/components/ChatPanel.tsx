@@ -256,7 +256,7 @@ export function ChatPanel({ isMobileOpen, onCloseMobile, embedded }: ChatPanelPr
     <div
       className={embedded
         ? 'flex flex-col h-full bg-white'
-        : `relative flex flex-col bg-white shrink-0 border-r border-gray-200 w-full ${isMobileOpen ? 'fixed inset-0 z-40' : showChat ? 'hidden md:flex' : 'hidden'}`}
+        : `relative flex flex-col bg-white shrink-0 border-r border-gray-200 w-full ${isMobileOpen ? 'fixed top-10 right-0 bottom-0 left-0 z-40' : showChat ? 'hidden md:flex' : 'hidden'}`}
       style={embedded ? undefined : (isMobileOpen || !showChat ? undefined : { width: chatWidth, minWidth: 280, maxWidth: 720 })}
     >
       {!embedded && (

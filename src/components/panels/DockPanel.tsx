@@ -6,7 +6,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useStore } from '@/store/useStore'
 import { getPanelDef, type PanelId } from './panelTypes'
-import { resolveDockPanelFrame } from './dockPanelLayout'
+import { MOBILE_PANEL_BELOW_TITLEBAR, resolveDockPanelFrame } from './dockPanelLayout'
 import { X } from 'lucide-react'
 
 /** Per-panel header accent: subtle tinted background for visual identity */
@@ -143,7 +143,7 @@ export function DockPanel({ panelId, children, title, headerActions }: DockPanel
 
   return (
     <div
-      className="dock-panel relative flex flex-col bg-white border-l border-gray-200 shrink-0 h-full max-md:fixed max-md:inset-0 max-md:z-40 max-md:border-l-0"
+      className={`dock-panel relative flex flex-col bg-white border-l border-gray-200 shrink-0 h-full max-md:border-l-0 ${MOBILE_PANEL_BELOW_TITLEBAR}`}
       style={{ width, minWidth, maxWidth: effectiveMaxWidth }}
     >
       {/* Resize handle (left edge) */}
@@ -167,7 +167,7 @@ export function DockPanel({ panelId, children, title, headerActions }: DockPanel
 
       {/* Header */}
       <div
-        className="px-3 py-2.5 border-b flex items-center justify-between shrink-0 max-md:pt-[max(0.625rem,env(safe-area-inset-top))]"
+        className="px-3 py-2.5 border-b flex items-center justify-between shrink-0"
         style={{
           borderColor: 'var(--neutral-200)',
           background: PANEL_HEADER_STYLES[panelId]?.bg ?? 'transparent',

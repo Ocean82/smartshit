@@ -5,6 +5,7 @@ import {
   File, Folder, FolderPlus, FilePlus, Trash2, Edit3,
   ChevronRight, ChevronDown, X,
 } from 'lucide-react';
+import { MOBILE_PANEL_BELOW_TITLEBAR } from '@/components/panels/dockPanelLayout';
 
 export function FileExplorer() {
   const {
@@ -102,7 +103,7 @@ export function FileExplorer() {
   };
 
   return (
-    <div className="w-56 border-r border-gray-200 flex flex-col bg-white shrink-0 max-md:fixed max-md:inset-0 max-md:z-40 max-md:w-full">
+    <div className={`w-56 border-r border-gray-200 flex flex-col bg-white shrink-0 max-md:w-full ${MOBILE_PANEL_BELOW_TITLEBAR}`}>
       {/* Header */}
       <div className="px-3 py-2.5 border-b border-gray-200 flex items-center justify-between" style={{ background: 'var(--accent-50)' }}>
         <h3 className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--accent-700)' }}>Files</h3>

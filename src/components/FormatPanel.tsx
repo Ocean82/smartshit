@@ -5,6 +5,7 @@ import { refToCell } from '@/engine/spreadsheet';
 import { NUMBER_FORMATS, NUMBER_FORMAT_GROUPS } from '@/lib/formatUtils';
 import { FULL_COLORS as COLORS } from '@/data/colors';
 import type { CellFormat } from '@/types';
+import { MOBILE_PANEL_BELOW_TITLEBAR } from '@/components/panels/dockPanelLayout';
 
 const BORDER_STYLES = [
   { value: '', label: 'None' },
@@ -104,7 +105,7 @@ export function FormatPanel() {
     : 'border-gray-100 text-gray-300 cursor-not-allowed';
 
   return (
-    <div className="w-[280px] border-l border-gray-200 bg-white h-full overflow-y-auto shrink-0 max-md:fixed max-md:inset-0 max-md:z-40 max-md:w-full">
+    <div className={`w-[280px] border-l border-gray-200 bg-white h-full overflow-y-auto shrink-0 max-md:w-full ${MOBILE_PANEL_BELOW_TITLEBAR}`}>
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
         <h3 className="text-sm font-semibold text-gray-900">Format</h3>
         <div className="flex items-center gap-1">

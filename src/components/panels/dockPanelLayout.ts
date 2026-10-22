@@ -2,6 +2,13 @@ export const MOBILE_VIEWPORT_MAX_PX = 768
 /** Matches MobileToolbar + FAB clearance (`pb-[52px]`, `bottom-16`). */
 export const MOBILE_BOTTOM_TOOLBAR_PX = 52
 
+/**
+ * Mobile full-screen panels leave TitleBar (`h-10`) visible so the hamburger
+ * menu stays reachable. Prefer this over `inset-0`.
+ */
+export const MOBILE_PANEL_BELOW_TITLEBAR =
+  'max-md:fixed max-md:top-10 max-md:right-0 max-md:bottom-0 max-md:left-0 max-md:z-40'
+
 export function spreadsheetChromeBottomPadding(viewportWidth: number): number {
   return viewportWidth < MOBILE_VIEWPORT_MAX_PX ? MOBILE_BOTTOM_TOOLBAR_PX : 0
 }
