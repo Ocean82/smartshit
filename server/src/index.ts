@@ -60,7 +60,16 @@ import { versionsRouter } from './routes/versions.js'
 import { sharesRouter, publicSharesRouter } from './routes/shares.js'
 import { templatesRouter } from './routes/templates.js'
 import { aiFunctionRouter } from './routes/aiFunction.js'
-import { requireAuth, getRequestUserId, getClerkClient, getClerkMiddlewareOptions } from './auth/clerk.js'
+import {
+  requireAuth,
+  getRequestUserId,
+  getClerkClient,
+  getClerkMiddlewareOptions,
+  clerkConfigHealth,
+  clerkLiveHealthCheck,
+} from './auth/clerk.js'
+import { getAuthMetrics } from './auth/authMetrics.js'
+import { shouldShowHealthDiagnostics } from './healthAccess.js'
 import { resolveIsPro, resolveSubscriptionStatus, invalidateProCache } from './plan.js'
 import { startBackgroundServices } from './startup.js'
 import { validateBody } from './middleware/validate.js'
@@ -668,19 +677,22 @@ app.get('/health', async (req, res) => {
   // rollback on a Groq/Stripe blip would revert a healthy deploy.
   if (req.query.strict !== undefined && req.query.strict !== '0') {
     const [db, s3] = await Promise.all([dbHealthCheck(), s3HealthCheck()])
-    const clerk = { ok: Boolean(config.clerkSecretKey), error: config.clerkSecretKey ? undefined : 'CLERK_SECRET_KEY not configured' }
+    // Config-only: a live Clerk API probe would make deploys flake on brief outages.
+    const clerk = clerkConfigHealth()
     const ready = db.ok && s3.ok && clerk.ok
 
     // The deploy gate only reads the HTTP status (curl -f → 503 rolls back), so
     // the per-subsystem `critical` object — which carries raw DB/S3 driver error
     // messages (dbHealthCheck/s3HealthCheck return err.message) — must not reach
     // an anonymous public caller. Expose it only to an authenticated operator or
-    // a direct-loopback request (the deploy curl hits 127.0.0.1). `trust proxy`
-    // makes req.ip spoofable via X-Forwarded-For, so gate on the real TCP peer
-    // (req.socket.remoteAddress), never req.ip.
-    const peer = req.socket.remoteAddress ?? ''
-    const isLoopback = peer === '127.0.0.1' || peer === '::1' || peer === '::ffff:127.0.0.1'
-    const showDiagnostics = isLoopback || Boolean(getRequestUserId(req))
+    // a *direct* loopback request (deploy curl to 127.0.0.1 with no
+    // X-Forwarded-For). Nginx proxies also peer as 127.0.0.1, so loopback alone
+    // would leak diagnostics to the internet.
+    const showDiagnostics = shouldShowHealthDiagnostics({
+      peer: req.socket.remoteAddress ?? '',
+      forwardedFor: req.headers['x-forwarded-for'],
+      authenticated: Boolean(getRequestUserId(req)),
+    })
 
     res.status(ready ? 200 : 503).json({
       ok: ready,
@@ -700,7 +712,7 @@ app.get('/health', async (req, res) => {
   }
 
   const order = providerOrder()
-  const [db, s3] = await Promise.all([dbHealthCheck(), s3HealthCheck()])
+  const [db, s3, clerk] = await Promise.all([dbHealthCheck(), s3HealthCheck(), clerkLiveHealthCheck()])
   const { getGroqUsageStats } = await import('./groq.js')
 
   res.json({
@@ -718,7 +730,9 @@ app.get('/health', async (req, res) => {
     cloud: {
       database: db,
       s3: s3,
+      clerk,
     },
+    auth: getAuthMetrics(),
     // Non-secret runtime snapshot: which .env/cwd/model ids are actually in
     // effect. Lets an operator confirm the live config matches the templates
     // without SSHing in to diff files (auth-gated, so not publicly exposed).
@@ -1077,8 +1091,9 @@ app.post('/api/checkout', requireAuth, checkoutRateLimiter, async (req, res) => 
   try {
     const user = await getClerkClient().users.getUser(userId)
     email = email || user.emailAddresses[0]?.emailAddress || ''
-  } catch {
-    // fall through with body email
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'unknown'
+    console.error(`[checkout] Clerk getUser failed (falling back to body email): ${message}`)
   }
 
   if (!email) {
@@ -1149,7 +1164,12 @@ app.listen(config.port, config.host, () => {
   console.log(`Groq: ${groqAvailable() ? `✓ (${config.groqModel})` : '✗ (no API key)'}`)
   console.log(`Ollama: ${config.ollamaBaseUrl} (model: ${config.modelName})`)
   console.log(`Stripe: ${config.stripeSecretKey ? '✓' : '✗ (no secret key)'}`)
-  console.log(`Clerk: ${config.clerkSecretKey ? '✓ (SmartSht secret configured)' : '✗'}`)
+  const clerkBoot = clerkConfigHealth()
+  console.log(
+    `Clerk: ${clerkBoot.ok ? '✓' : '✗'} secret=${clerkBoot.ok ? 'set' : 'missing'} ` +
+      `publishable=${clerkBoot.publishableKeyConfigured ? 'set' : 'missing'} ` +
+      `authorizedParties=${clerkBoot.authorizedPartyCount}`,
+  )
   console.log(`Database: ${config.databaseUrl ? '✓ (configured)' : '✗ (no DATABASE_URL)'}`)
   console.log(`S3: ${config.awsAccessKeyId ? `✓ (${config.s3Bucket})` : '✗ (no AWS credentials)'}`)
   const minilmPath = resolveOnnxModelPath(modelsRoot, 'minilm')

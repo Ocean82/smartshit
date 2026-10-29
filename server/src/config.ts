@@ -350,6 +350,14 @@ export function validateConfig(): void {
   // Critical — server cannot serve authenticated requests without Clerk
   if (!config.clerkSecretKey) {
     warnings.push({ level: 'error', message: 'CLERK_SECRET_KEY is not set — authentication will fail for all requests' })
+  } else if (!config.clerkPublishableKey) {
+    // Middleware still verifies JWTs with the secret, but missing publishable key
+    // usually means env drift between SPA build and API (wrong instance / azp).
+    warnings.push({
+      level: 'warn',
+      message:
+        'CLERK_PUBLISHABLE_KEY (or VITE_CLERK_PUBLISHABLE_KEY) is not set on the server — JWT azp checks may reject valid sessions',
+    })
   }
 
   // Required for payments — warn but don't crash (app works without payments)

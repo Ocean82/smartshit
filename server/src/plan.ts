@@ -56,8 +56,13 @@ export async function resolveSubscriptionStatus(userId: string | null | undefine
     }
     statusCache.set(userId, { status, expiresAt: Date.now() + PRO_CACHE_TTL_MS })
     return status
-  } catch {
-    // On error, fall back to the cached value if we have one (even if expired)
+  } catch (err) {
+    // On error, fall back to the cached value if we have one (even if expired).
+    // Log so a Clerk outage is visible — silent free fallback looks like demotion.
+    const message = err instanceof Error ? err.message : 'unknown'
+    console.error(
+      `[clerk] getUser failed for plan lookup (using ${cached ? 'stale cache' : 'free fallback'}): ${message}`,
+    )
     return cached?.status ?? emptyStatus()
   }
 }
