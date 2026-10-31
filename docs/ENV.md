@@ -9,7 +9,7 @@ See also `docs/NAMING.md` and `.env.example`.
 | `VITE_CLERK_PUBLISHABLE_KEY` | Yes (frontend build) | SmartSht `pk_live_*` for production builds |
 | `CLERK_SECRET_KEY`, `CLERK_PUBLISHABLE_KEY` | Yes (server) | SmartSht instance at `clerk.smartsht.com`. Server must set `CLERK_PUBLISHABLE_KEY` (or `VITE_CLERK_PUBLISHABLE_KEY` as fallback). |
 | `CLERK_AUTHORIZED_PARTIES` | Optional (server) | Comma-separated origins for JWT `azp`. Defaults to `APP_URL` + www + local Vite. |
-| `STRIPE_SECRET_KEY`, `STRIPE_PRICE_ID`, `STRIPE_PRICE_ID_ANNUAL`, `STRIPE_WEBHOOK_SECRET`, `APP_URL` | Yes | Use **live** keys in production. Annual price: `price_1U5HPKP38C54URjEl9wtgi5X` ($59/yr) |
+| `STRIPE_SECRET_KEY`, `STRIPE_PRICE_ID`, `STRIPE_PRICE_ID_ANNUAL`, `STRIPE_WEBHOOK_SECRET`, `APP_URL` | Yes | **SmartSht** Stripe account (`acct_1UAAnwCpwOYArhO2`), not BurntBeats. Live keys only. Monthly: `price_1UABDhCpwOYArhO28jkA2CLX` ($7/mo). Annual: `price_1UWNq8CpwOYArhO2aIxHfshv` ($59/yr). Webhook: `https://smartsht.com/api/stripe/webhook`. |
 | `SMARTSHIT_MODEL`, `OLLAMA_BASE_URL`, `NUM_CTX`, `NUM_PREDICT` | Yes | Local Ollama; model id spelling is intentional. Prod uses Spreadsheet-RL-4B (8192 ctx, 1024 predict) — GGUF already on prod; verify Modelfile only |
 | `SMARTSHT_MINILM_SRC` | Optional | Override source dir/file for `npm run model:copy-deploy` (MiniLM ONNX Path B). Runtime loads from `server/models/minilm/` only — never `temp/` |
 | `LLM_PROVIDER_ORDER`, `GROQ_*`, `OPENROUTER_*`, `HUGGINGFACE_*` | Yes | Optional cloud LLM failover |
@@ -41,7 +41,7 @@ See also `docs/NAMING.md` and `.env.example`.
 1. Rebuild frontend with `VITE_CLERK_PUBLISHABLE_KEY=pk_live_...` (SmartSht — must decode to `clerk.smartsht.com`, not `amused-mollusk`).
 2. Confirm built `dist/index.html` / app bundle contains **only** `pk_live_`, zero `pk_test_`.
 3. On EC2 `/home/ubuntu/smartsht/server/.env` set live Clerk + Stripe + `STRIPE_WEBHOOK_SECRET`.
-4. Stripe Dashboard webhook: `https://smartsht.com/api/stripe/webhook` for `checkout.session.completed` and `customer.subscription.deleted`.
+4. Stripe (SmartSht account): set `STRIPE_SECRET_KEY` from that account’s API keys; prices `price_1UABDhCpwOYArhO28jkA2CLX` / `price_1UWNq8CpwOYArhO2aIxHfshv`; webhook `https://smartsht.com/api/stripe/webhook` (events: `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `customer.subscription.created|updated|deleted`). Do **not** use BurntBeats `P38C54…` price IDs.
 5. `pm2 restart smartsht-api` after deploying server; check boot log for `Clerk: ✓` and `Stripe: ✓`.
 6. Sign in on https://smartsht.com/app/ — Network tab should hit `clerk.smartsht.com`. After OAuth, the browser must land on `/app`, not `/`.
 7. Reload nginx after deploying `landing/smartsht.nginx.conf` (Clerk CAPTCHA CSP).

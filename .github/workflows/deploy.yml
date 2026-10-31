@@ -119,6 +119,16 @@ jobs:
             echo "::error::ENV secret still contains retired burntbeats naming. Update the production ENV secret from the live server file."
             exit 1
           fi
+          # BurntBeats Stripe account fingerprint in price IDs (P38C54…). SmartSht
+          # prices use CpwOYArhO2 (acct_1UAAnwCpwOYArhO2).
+          if grep -qE '^STRIPE_PRICE_ID(_ANNUAL)?=price_[A-Za-z0-9]*P38C54' /tmp/smartsht.env; then
+            echo "::error::ENV secret still has BurntBeats Stripe price IDs (P38C54…). Use SmartSht prices from acct_1UAAnwCpwOYArhO2."
+            exit 1
+          fi
+          if ! grep -qE '^STRIPE_SECRET_KEY=sk_live_51UAAnw' /tmp/smartsht.env; then
+            echo "::error::ENV secret STRIPE_SECRET_KEY is not the SmartSht live key (expected sk_live_51UAAnw…)."
+            exit 1
+          fi
           key_count=$(grep -cE '^[A-Z0-9_]+=' /tmp/smartsht.env || true)
           echo "Prepared env file ($key_count keys); uploading…"
           "${SCP[@]}" /tmp/smartsht.env "${SSH_HOST}:/tmp/smartsht.env.incoming"

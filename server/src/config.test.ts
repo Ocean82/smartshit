@@ -132,8 +132,8 @@ describe('stripePriceId', () => {
   })
 
   it('honours an explicit live price id', async () => {
-    process.env.STRIPE_PRICE_ID = 'price_1Tshf9P38C54URjEpxmSrir2'
-    expect((await loadConfig()).stripePriceId).toBe('price_1Tshf9P38C54URjEpxmSrir2')
+    process.env.STRIPE_PRICE_ID = 'price_1UABDhCpwOYArhO28jkA2CLX'
+    expect((await loadConfig()).stripePriceId).toBe('price_1UABDhCpwOYArhO28jkA2CLX')
   })
 })
 

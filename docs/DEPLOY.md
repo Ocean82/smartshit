@@ -6,7 +6,7 @@
 - AWS RDS (PostgreSQL) with `smartsht` schema created
 - AWS S3 bucket with `smartsht/` prefix
 - Clerk account with SmartSht app (live keys)
-- Stripe account with Pro product — monthly $7/mo price and annual $59/yr price (`STRIPE_PRICE_ID` + `STRIPE_PRICE_ID_ANNUAL`)
+- SmartSht Stripe account (`acct_1UAAnwCpwOYArhO2`) — monthly `price_1UABDhCpwOYArhO28jkA2CLX` ($7) and annual `price_1UWNq8CpwOYArhO2aIxHfshv` ($59). Do not use BurntBeats prices (`P38C54…`).
 - Groq API key (free tier is sufficient for launch)
 - Domain: smartsht.com pointing to server IP
 - Let's Encrypt SSL certificate (certbot)
@@ -286,12 +286,13 @@ curl -s https://smartsht.com/api/stripe/webhook -X POST
 
 ## 7. Stripe Webhook Setup
 
-In the Stripe dashboard:
+In the **SmartSht** Stripe dashboard (not BurntBeats):
 1. Go to Developers → Webhooks
-2. Add endpoint: `https://smartsht.com/api/stripe/webhook`
-3. Select events: `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`
-4. Copy the signing secret → put in `STRIPE_WEBHOOK_SECRET` in server/.env
-5. Restart PM2: `pm2 restart smartsht-api`
+2. Endpoint: `https://smartsht.com/api/stripe/webhook` (already created as `we_1UWNpbCpwOYArhO2dGme77VR` if intact)
+3. Events: `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`
+4. Copy the signing secret → `STRIPE_WEBHOOK_SECRET` in `/opt/smartsht/.env` (must match this account’s endpoint)
+5. Set `STRIPE_SECRET_KEY` to the SmartSht live secret key and price IDs above
+6. Restart PM2: `pm2 restart smartsht-api`
 
 ---
 
