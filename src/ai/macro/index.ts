@@ -1,6 +1,6 @@
-export { executeMacro, defaultStepExecutor } from './macroExecutor'
+export { executeMacro } from './macroExecutor'
 export type { StepExecutor } from './macroExecutor'
 export { createMacroPlanManager } from './macroPlanManager'
 export type { MacroPlanManager, MacroPlanManagerCallbacks } from './macroPlanManager'
-export { createStoreUndoManager, createSharedSnapshotUndoManager } from './storeUndoManager'
+export { createSharedSnapshotUndoManager } from './storeUndoManager'
 export { createToolStepExecutor, normalizeStepParams } from './toolStepExecutor'

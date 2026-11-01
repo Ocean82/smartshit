@@ -4,7 +4,7 @@
  */
 import type { FilterConfig, DataValidation } from '@/types'
 import { refToCell, letterToCol } from '@/engine/spreadsheet'
-import { escapeRegex } from '@/lib'
+import { escapeRegex } from '@/lib/formulaParse'
 import { expandRange } from '@/lib/formatCellsTool'
 import { getCellNotesService } from '@/lib/cellNotes'
 import type { ToolHandler, BulkUpdates } from './types'

@@ -4,7 +4,7 @@ import type { SheetData, WorkbookData } from '@/types'
 import { refToCell } from '@/engine/spreadsheet'
 import { findHeaderRow, findLastDataRow } from '@/lib/sheetSort'
 import { findSummaryRowIndexes } from '@/lib/sheetRows'
-import { escapeRegex } from '@/lib'
+import { escapeRegex } from '@/lib/formulaParse'
 import { parseNumeric } from '@/ai/utils'
 
 export type SheetValueGetter = (sheetId: string, row: number, col: number) => string

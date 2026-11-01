@@ -7,7 +7,7 @@ import { findHeaderRow } from '@/lib/sheetSort'
 import { findSummaryRowIndexes } from '@/lib/sheetRows'
 import { buildSheetProfile } from '@/ai/sheetProfile'
 import { parseNumeric } from '@/ai/utils'
-import { letterToCol } from '@/lib'
+import { letterToCol } from '@/lib/cellRef'
 
 function resolveColumnIndex(sheet: SheetData, column: string): number {
   let maxCol = 0

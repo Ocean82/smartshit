@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { executeMacro, defaultStepExecutor } from '../macroExecutor'
+import { executeMacro } from '../macroExecutor'
 import type { StepExecutor } from '../macroExecutor'
 import type {
   ActionStep,
@@ -15,6 +15,12 @@ import type {
   UndoManager,
   ToolResult,
 } from '../../nlp/types'
+
+/** Inline stub — production uses createToolStepExecutor */
+const stubStepExecutor: StepExecutor = async (step) => ({
+  success: true,
+  data: { tool: step.tool, params: step.params },
+})
 
 // ─── Test Helpers ───────────────────────────────────────────────────────────
 
@@ -85,17 +91,6 @@ function createPlan(steps: ActionStep[], originalText?: string): MacroPlan {
   }
 }
 
-// ─── Default Step Executor ──────────────────────────────────────────────────
-
-describe('defaultStepExecutor', () => {
-  it('returns success with tool and params echoed', async () => {
-    const step = createStep('filter')
-    const result = await defaultStepExecutor(step, [])
-    expect(result.success).toBe(true)
-    expect(result.data).toEqual({ tool: 'filter', params: { action: 'filter' } })
-  })
-})
-
 // ─── executeMacro ───────────────────────────────────────────────────────────
 
 describe('executeMacro', () => {
@@ -110,7 +105,7 @@ describe('executeMacro', () => {
   describe('successful execution', () => {
     it('executes a single-step plan successfully', async () => {
       const plan = createPlan([createStep('filter')])
-      const result = await executeMacro(plan, callbacks, undoManager, defaultStepExecutor)
+      const result = await executeMacro(plan, callbacks, undoManager, stubStepExecutor)
 
       expect(result.success).toBe(true)
       expect(result.completedSteps).toHaveLength(1)
@@ -125,7 +120,7 @@ describe('executeMacro', () => {
         createStep('sort'),
         createStep('export'),
       ])
-      const result = await executeMacro(plan, callbacks, undoManager, defaultStepExecutor)
+      const result = await executeMacro(plan, callbacks, undoManager, stubStepExecutor)
 
       expect(result.success).toBe(true)
       expect(result.completedSteps).toHaveLength(3)
@@ -136,7 +131,7 @@ describe('executeMacro', () => {
 
     it('commits the undo group on success', async () => {
       const plan = createPlan([createStep('filter')])
-      await executeMacro(plan, callbacks, undoManager, defaultStepExecutor)
+      await executeMacro(plan, callbacks, undoManager, stubStepExecutor)
 
       expect(undoManager.commitGroupCalls).toHaveLength(1)
       expect(undoManager.rollbackGroupCalls).toHaveLength(0)
@@ -144,7 +139,7 @@ describe('executeMacro', () => {
 
     it('returns a valid undoGroupId', async () => {
       const plan = createPlan([createStep('filter')])
-      const result = await executeMacro(plan, callbacks, undoManager, defaultStepExecutor)
+      const result = await executeMacro(plan, callbacks, undoManager, stubStepExecutor)
 
       expect(result.undoGroupId).toBeDefined()
       expect(typeof result.undoGroupId).toBe('string')
@@ -183,7 +178,7 @@ describe('executeMacro', () => {
     it('begins undo group with truncated label from originalText', async () => {
       const longText = 'a'.repeat(100)
       const plan = createPlan([createStep('filter')], longText)
-      await executeMacro(plan, callbacks, undoManager, defaultStepExecutor)
+      await executeMacro(plan, callbacks, undoManager, stubStepExecutor)
 
       expect(undoManager.beginGroupCalls).toHaveLength(1)
       expect(undoManager.beginGroupCalls[0]).toBe('Macro: ' + longText.slice(0, 50))
@@ -195,7 +190,7 @@ describe('executeMacro', () => {
         createStep('sort'),
         createStep('export'),
       ])
-      await executeMacro(plan, callbacks, undoManager, defaultStepExecutor)
+      await executeMacro(plan, callbacks, undoManager, stubStepExecutor)
 
       expect(undoManager.beginGroupCalls).toHaveLength(1)
       expect(undoManager.commitGroupCalls).toHaveLength(1)
@@ -209,7 +204,7 @@ describe('executeMacro', () => {
         createStep('sort'),
         createStep('export'),
       ])
-      await executeMacro(plan, callbacks, undoManager, defaultStepExecutor)
+      await executeMacro(plan, callbacks, undoManager, stubStepExecutor)
 
       expect(callbacks.progressCalls).toHaveLength(3)
       expect(callbacks.progressCalls[0]).toEqual({ current: 1, total: 3 })
@@ -222,7 +217,7 @@ describe('executeMacro', () => {
         createStep('filter'),
         createStep('sort'),
       ])
-      await executeMacro(plan, callbacks, undoManager, defaultStepExecutor)
+      await executeMacro(plan, callbacks, undoManager, stubStepExecutor)
 
       expect(callbacks.stepCompleteCalls).toHaveLength(2)
       expect(callbacks.stepCompleteCalls[0].index).toBe(0)
@@ -364,7 +359,7 @@ describe('executeMacro', () => {
       cancelCallbacks.shouldCancel = () => true
 
       const plan = createPlan([createStep('filter'), createStep('sort')])
-      const result = await executeMacro(plan, cancelCallbacks, undoManager, defaultStepExecutor)
+      const result = await executeMacro(plan, cancelCallbacks, undoManager, stubStepExecutor)
 
       expect(result.success).toBe(false)
       expect(result.completedSteps).toHaveLength(0)
@@ -382,7 +377,7 @@ describe('executeMacro', () => {
         createStep('export'),
         createStep('summarize'),
       ])
-      const result = await executeMacro(plan, cancelCallbacks, undoManager, defaultStepExecutor)
+      const result = await executeMacro(plan, cancelCallbacks, undoManager, stubStepExecutor)
 
       expect(result.success).toBe(false)
       expect(result.completedSteps).toHaveLength(2)
@@ -396,7 +391,7 @@ describe('executeMacro', () => {
   describe('empty plan', () => {
     it('succeeds immediately for plan with no steps', async () => {
       const plan = createPlan([])
-      const result = await executeMacro(plan, callbacks, undoManager, defaultStepExecutor)
+      const result = await executeMacro(plan, callbacks, undoManager, stubStepExecutor)
 
       expect(result.success).toBe(true)
       expect(result.completedSteps).toHaveLength(0)
@@ -407,7 +402,7 @@ describe('executeMacro', () => {
   describe('injectable step executor', () => {
     it('uses default executor when none provided', async () => {
       const plan = createPlan([createStep('filter')])
-      const result = await executeMacro(plan, callbacks, undoManager, defaultStepExecutor)
+      const result = await executeMacro(plan, callbacks, undoManager, stubStepExecutor)
 
       expect(result.success).toBe(true)
       expect(result.completedSteps[0].result.data).toEqual({
