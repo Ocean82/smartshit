@@ -7,10 +7,6 @@ export const AI_ANALYSIS_CONFIG = {
   maxImportCols: 200,
   maxFileSizeMb: 50,
   outlierStdThreshold: OUTLIER_STD_THRESHOLD,
-  trendMinPoints: 3,
-  correlationThreshold: 0.7,
-  currencySymbol: '$',
-  decimalPlaces: 2,
   /** Max conversation history messages sent to cloud LLM providers */
   maxHistoryCloud: MAX_HISTORY_CLOUD,
   /** Max conversation history messages sent to local Ollama */

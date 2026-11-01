@@ -58,7 +58,6 @@
     "@clerk/react": "^6.16.1",
     "@ocean8219/formualizer": "^0.9.3",
     "@sentry/react": "^10.67.0",
-    "clsx": "2.1.1",
     "immer": "^11.1.8",
     "lucide-react": "^1.21.0",
     "onnxruntime-web": "^1.27.0",
@@ -67,7 +66,6 @@
     "react-dom": "19.2.6",
     "react-markdown": "^9.1.0",
     "remark-gfm": "^4.0.1",
-    "tailwind-merge": "3.4.0",
     "uuid": "^14.0.1",
     "xlsx": "file:vendor/xlsx-0.20.3.tgz",
     "zustand": "^5.0.14"

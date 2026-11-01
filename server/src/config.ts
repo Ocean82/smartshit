@@ -1,17 +1,12 @@
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { loadEnv, type EnvLoadResult } from './loadEnv.js'
 import {
   MAX_HISTORY_CLOUD,
   MAX_HISTORY_LOCAL,
-  OUTLIER_STD_THRESHOLD,
   FREE_CLOUD_WORKBOOK_LIMIT,
 } from '../../shared/config.js'
 
 const envLoad: EnvLoadResult = loadEnv()
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const projectRoot = path.resolve(__dirname, '../..')
 
 // ─── Validation constants ────────────────────────────────────────────────────
 
@@ -181,7 +176,6 @@ export const config = {
   // On prod: ollama create smartshit -f server/Modelfile.spreadsheet-rl
   ollamaBaseUrl: process.env.OLLAMA_BASE_URL ?? 'http://127.0.0.1:11434',
   modelName: process.env.SMARTSHIT_MODEL ?? 'smartshit',
-  modelfilePath: path.join(projectRoot, 'server', 'Modelfile.spreadsheet-rl'),
 
   /** Context window — 8192 provides adequate room for system prompt + history + multi-sheet context */
   numCtx: Number(process.env.NUM_CTX ?? 8192),
@@ -233,12 +227,6 @@ export const config = {
 
   /** Max cloud workbooks for free-tier users (Pro is unlimited). */
   freeCloudWorkbookLimit: Math.max(1, Number(process.env.FREE_CLOUD_WORKBOOK_LIMIT ?? FREE_CLOUD_WORKBOOK_LIMIT)),
-
-  analysis: {
-    maxRowsPreview: 120,
-    maxRowsAnalysis: 10_000,
-    outlierStdThreshold: OUTLIER_STD_THRESHOLD,
-  },
 
   /** Max conversation history sent to cloud providers (Groq, OpenRouter, HuggingFace) */
   maxHistoryCloud: Number(process.env.MAX_HISTORY_CLOUD ?? MAX_HISTORY_CLOUD),

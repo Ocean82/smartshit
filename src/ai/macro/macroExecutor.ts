@@ -28,19 +28,6 @@ export type StepExecutor = (
   context: ToolResult[]
 ) => Promise<ToolResult>
 
-// ─── Default Stub Step Executor ─────────────────────────────────────────────
-
-/**
- * Stub step executor for unit tests only.
- * Production callers must pass createToolStepExecutor (or equivalent).
- */
-export const defaultStepExecutor: StepExecutor = async (step: ActionStep) => {
-  return {
-    success: true,
-    data: { tool: step.tool, params: step.params },
-  }
-}
-
 // ─── Constants ──────────────────────────────────────────────────────────────
 
 /** Per-step execution timeout in milliseconds */
@@ -86,7 +73,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
  * @param plan - The macro plan to execute
  * @param callbacks - Progress and cancellation callbacks
  * @param undoManager - Manager for transactional undo groups
- * @param stepExecutor - Required step executor (use defaultStepExecutor only in tests)
+ * @param stepExecutor - Step executor (prod: createToolStepExecutor)
  */
 export async function executeMacro(
   plan: MacroPlan,
