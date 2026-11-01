@@ -135,6 +135,8 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
         publicMetadata: {
           plan: result.plan,
           stripeSubscriptionId: result.stripeSubscriptionId ?? null,
+          // Match reconciler writeClerkPlan so demotion notices have a reason.
+          revocationReason: result.revocationReason,
         },
       })
       // Invalidate pro cache so the user sees the change immediately

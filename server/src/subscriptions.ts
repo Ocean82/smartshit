@@ -230,6 +230,23 @@ export function isMissingResource(err: unknown): boolean {
 }
 
 /**
+ * BurntBeats Stripe object IDs embed account fingerprint `P38C54`. After the
+ * SmartSht cutover (`CpwOYArhO2`), those ids never exist on the live key — a
+ * retrieve only pollutes Stripe Dashboard error logs (seen as
+ * `No such subscription: 'sub_…P38C54…'`). Treat them as already-missing so the
+ * reconciler falls through to email lookup without calling Stripe.
+ */
+export function isForeignAccountStripeId(id: string | null | undefined): boolean {
+  if (!id) return false
+  return id.includes('P38C54')
+}
+
+/** Synthetic 404 used when skipping a foreign-account retrieve. */
+export function missingStripeResourceError(kind: string, id: string): Error {
+  return Object.assign(new Error(`No such ${kind}: '${id}'`), { statusCode: 404 })
+}
+
+/**
  * Determine a user's real subscription state.
  *
  * Never throws for a well-formed user. A Stripe failure returns `reason: 'unknown'`
@@ -516,6 +533,9 @@ export function createProductionDeps(): ReconcileDeps {
     verify: (user) =>
       verifySubscriptionForUser(user, {
         retrieveSubscription: async (id) => {
+          if (isForeignAccountStripeId(id)) {
+            throw missingStripeResourceError('subscription', id)
+          }
           const sub = await stripe.subscriptions.retrieve(id)
           return {
             id: sub.id,

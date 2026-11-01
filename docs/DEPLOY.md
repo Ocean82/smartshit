@@ -6,7 +6,7 @@
 - AWS RDS (PostgreSQL) with `smartsht` schema created
 - AWS S3 bucket with `smartsht/` prefix
 - Clerk account with SmartSht app (live keys)
-- SmartSht Stripe account (`acct_1UAAnwCpwOYArhO2`) — monthly `price_1UABDhCpwOYArhO28jkA2CLX` ($7) and annual `price_1UWNq8CpwOYArhO2aIxHfshv` ($59). Do not use BurntBeats prices (`P38C54…`).
+- SmartSht Stripe account (`acct_1UAAnwCpwOYArhO2`) — monthly `price_1UABDhCpwOYArhO28jkA2CLX` ($7) and annual `price_1UWNq8CpwOYArhO2aIxHfshv` ($59). Canonical IDs in `scripts/smartsht-stripe-prices.env` (deploy/smoke guards). Do not use BurntBeats prices (`P38C54…`).
 - Groq API key (free tier is sufficient for launch)
 - Domain: smartsht.com pointing to server IP
 - Let's Encrypt SSL certificate (certbot)
@@ -50,7 +50,7 @@ Required keys for Clerk + Stripe to work (SmartSht accounts only):
 - `APP_URL=https://smartsht.com`
 - `TRUST_PROXY=loopback`
 
-Production secrets live in `/opt/smartsht/.env`. Prefer updating the GitHub Environment secret `ENV` (`production`) — auto-deploy overwrites the server file from that secret.
+Production secrets live in `/opt/smartsht/.env`. Prefer updating the GitHub Environment secret `ENV` (`production`) — auto-deploy overwrites the server file from that secret. When rotating prices, update `scripts/smartsht-stripe-prices.env`, the ENV secret, and `/opt/smartsht/.env` together.
 
 ---
 

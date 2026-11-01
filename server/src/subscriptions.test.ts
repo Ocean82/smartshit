@@ -12,6 +12,8 @@ import {
   revocationReasonFor,
   verifySubscriptionForUser,
   isMissingResource,
+  isForeignAccountStripeId,
+  missingStripeResourceError,
   writeClerkPlan,
   reconcileAllUsers,
   listStripeSubscriptionsByEmail,
@@ -663,6 +665,20 @@ describe('verifySubscriptionForUser', () => {
     }
     const result = await verifySubscriptionForUser(user, deps)
     expect(result).toEqual({ isPro: false, reason: 'lapsed', status: null, subscriptionId: 'sub_nostatus' })
+  })
+})
+
+describe('isForeignAccountStripeId', () => {
+  it('flags BurntBeats fingerprint IDs and ignores SmartSht / empty', () => {
+    expect(isForeignAccountStripeId('sub_1UKh8rP38C54URjEsxA1Lszc')).toBe(true)
+    expect(isForeignAccountStripeId('price_1Tshf9P38C54URjEpxmSrir2')).toBe(true)
+    expect(isForeignAccountStripeId('sub_1UABDhCpwOYArhO28jkA2CLX')).toBe(false)
+    expect(isForeignAccountStripeId(null)).toBe(false)
+    expect(isForeignAccountStripeId('')).toBe(false)
+  })
+
+  it('missingStripeResourceError is treated as a definite 404', () => {
+    expect(isMissingResource(missingStripeResourceError('subscription', 'sub_x'))).toBe(true)
   })
 })
 

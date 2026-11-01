@@ -11,12 +11,11 @@
 import { useState } from 'react'
 import { useAuth } from '@clerk/react'
 import { X, Sparkles, Lock } from 'lucide-react'
-import { getAuthHeaders } from '@/lib/cloudSync'
+import { startCheckout, type CheckoutInterval } from '@/auth/startCheckout'
 import type { GatedFeature } from '@/lib/featureGates'
 import { FEATURE_GATE_COPY } from '@/lib/featureGates'
 
 const CLERK_PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ?? ''
-const API_BASE = import.meta.env.VITE_AI_API_URL ?? ''
 
 interface UpgradeGateProps {
   feature: GatedFeature
@@ -217,28 +216,15 @@ function UpgradeButton({
   loading: boolean
   setLoading: (v: boolean) => void
   fullWidth?: boolean
-  interval?: 'monthly' | 'annual'
+  interval?: CheckoutInterval
 }) {
   const { isSignedIn } = useAuth()
 
   const handleUpgrade = async () => {
     if (!isSignedIn || loading) return
     setLoading(true)
-
     try {
-      const headers = await getAuthHeaders()
-      const res = await fetch(`${API_BASE}/api/checkout`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ email: '', interval }),
-      })
-
-      if (res.ok) {
-        const { url } = await res.json()
-        if (url) window.location.href = url
-      }
-    } catch {
-      // Silent fail — user can retry
+      await startCheckout(interval)
     } finally {
       setLoading(false)
     }

@@ -136,6 +136,7 @@ describe('handleStripeWebhook', () => {
         userId: 'user_abc123',
         plan: 'pro',
         stripeSubscriptionId: 'sub_xyz789',
+        revocationReason: null,
       })
     })
 
@@ -153,6 +154,7 @@ describe('handleStripeWebhook', () => {
         userId: 'user_from_meta',
         plan: 'pro',
         stripeSubscriptionId: 'sub_456',
+        revocationReason: null,
       })
     })
 
@@ -179,6 +181,41 @@ describe('handleStripeWebhook', () => {
       // resolveUserIdFromPayload trims and treats it as absent.
       expect(result).toBeNull()
     })
+
+    it('skips fulfillment when checkout.session.completed is still unpaid', async () => {
+      const result = await handleStripeWebhook({
+        type: 'checkout.session.completed',
+        data: {
+          object: {
+            client_reference_id: 'user_async',
+            subscription: 'sub_async',
+            payment_status: 'unpaid',
+            metadata: {},
+          },
+        },
+      })
+      expect(result).toBeNull()
+    })
+
+    it('fulfills checkout.session.async_payment_succeeded after delayed payment', async () => {
+      const result = await handleStripeWebhook({
+        type: 'checkout.session.async_payment_succeeded',
+        data: {
+          object: {
+            client_reference_id: 'user_async',
+            subscription: 'sub_async',
+            payment_status: 'paid',
+            metadata: {},
+          },
+        },
+      })
+      expect(result).toEqual({
+        userId: 'user_async',
+        plan: 'pro',
+        stripeSubscriptionId: 'sub_async',
+        revocationReason: null,
+      })
+    })
   })
 
   describe('customer.subscription.deleted', () => {
@@ -195,6 +232,7 @@ describe('handleStripeWebhook', () => {
         userId: 'user_del',
         plan: 'free',
         stripeSubscriptionId: null,
+        revocationReason: 'canceled',
       })
     })
 
@@ -227,6 +265,7 @@ describe('handleStripeWebhook', () => {
         userId: 'user_pd',
         plan: 'pro',
         stripeSubscriptionId: 'sub_pd',
+        revocationReason: null,
       })
     })
 
@@ -244,6 +283,7 @@ describe('handleStripeWebhook', () => {
         userId: 'user_c',
         plan: 'free',
         stripeSubscriptionId: null,
+        revocationReason: 'canceled',
       })
     })
 
@@ -261,6 +301,7 @@ describe('handleStripeWebhook', () => {
         userId: 'user_u',
         plan: 'free',
         stripeSubscriptionId: null,
+        revocationReason: 'lapsed',
       })
     })
 
@@ -279,6 +320,7 @@ describe('handleStripeWebhook', () => {
         userId: 'user_re',
         plan: 'pro',
         stripeSubscriptionId: 'sub_reactivated',
+        revocationReason: null,
       })
     })
 
@@ -299,6 +341,7 @@ describe('handleStripeWebhook', () => {
         userId: 'user_t',
         plan: 'pro',
         stripeSubscriptionId: 'sub_trial',
+        revocationReason: null,
       })
     })
 
@@ -342,7 +385,12 @@ describe('handleStripeWebhook', () => {
         type: 'customer.subscription.created',
         data: { object: { id: 'sub_1', status: 'active', metadata: { userId: 'user_1' } } },
       })
-      expect(result).toEqual({ userId: 'user_1', plan: 'pro', stripeSubscriptionId: 'sub_1' })
+      expect(result).toEqual({
+        userId: 'user_1',
+        plan: 'pro',
+        stripeSubscriptionId: 'sub_1',
+        revocationReason: null,
+      })
     })
 
     it('prefers a client_reference_id over the email fallback', async () => {
@@ -363,7 +411,12 @@ describe('handleStripeWebhook', () => {
         fallback,
       )
       expect(fallback).not.toHaveBeenCalled()
-      expect(result).toEqual({ userId: 'user_ref', plan: 'pro', stripeSubscriptionId: 'sub_1' })
+      expect(result).toEqual({
+        userId: 'user_ref',
+        plan: 'pro',
+        stripeSubscriptionId: 'sub_1',
+        revocationReason: null,
+      })
     })
 
     it('returns null with no userId when there is no fallback', async () => {
@@ -398,7 +451,12 @@ describe('handleStripeWebhook', () => {
         fallback,
       )
       expect(fallback).toHaveBeenCalledWith('owner@example.com')
-      expect(result).toEqual({ userId: 'user_email', plan: 'pro', stripeSubscriptionId: 'sub_1' })
+      expect(result).toEqual({
+        userId: 'user_email',
+        plan: 'pro',
+        stripeSubscriptionId: 'sub_1',
+        revocationReason: null,
+      })
     })
 
     it('grants pro on created even when the subscription status is not yet active', async () => {
@@ -410,7 +468,12 @@ describe('handleStripeWebhook', () => {
           object: { id: 'sub_1', status: 'incomplete', metadata: { userId: 'user_created' } },
         },
       })
-      expect(result).toEqual({ userId: 'user_created', plan: 'pro', stripeSubscriptionId: 'sub_1' })
+      expect(result).toEqual({
+        userId: 'user_created',
+        plan: 'pro',
+        stripeSubscriptionId: 'sub_1',
+        revocationReason: null,
+      })
     })
 
     it('propagates a lookup failure instead of swallowing it', async () => {

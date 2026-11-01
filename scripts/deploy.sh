@@ -160,21 +160,32 @@ fi
 
 # Guard against stale BurntBeats Stripe cutover leftovers. Prefer failing the
 # deploy before PM2 restart over serving checkout against the wrong account.
+# Canonical IDs live in scripts/smartsht-stripe-prices.env (rotate there + ENV).
 assert_smartsht_stripe_env() {
   local env_file="$1"
+  local prices_file="$APP_DIR/scripts/smartsht-stripe-prices.env"
   [ -f "$env_file" ] || die "Env file missing for Stripe checks: $env_file"
+  [ -f "$prices_file" ] || die "Missing $prices_file — cannot validate Stripe price IDs"
+  # shellcheck disable=SC1090
+  set -a
+  # shellcheck disable=SC1091
+  source "$prices_file"
+  set +a
+  [ -n "${SMARTSHT_STRIPE_PRICE_MONTHLY:-}" ] || die "SMARTSHT_STRIPE_PRICE_MONTHLY unset in $prices_file"
+  [ -n "${SMARTSHT_STRIPE_PRICE_ANNUAL:-}" ] || die "SMARTSHT_STRIPE_PRICE_ANNUAL unset in $prices_file"
+  [ -n "${SMARTSHT_STRIPE_SECRET_PREFIX:-}" ] || die "SMARTSHT_STRIPE_SECRET_PREFIX unset in $prices_file"
 
   if grep -qE '^STRIPE_PRICE_ID(_ANNUAL)?=price_[A-Za-z0-9]*P38C54' "$env_file"; then
     die "BurntBeats Stripe price IDs (P38C54…) found in $env_file — use SmartSht prices (CpwOYArhO2)"
   fi
-  if ! grep -qE '^STRIPE_SECRET_KEY=sk_live_51UAAnw' "$env_file"; then
-    die "STRIPE_SECRET_KEY in $env_file is not the SmartSht live key (expected sk_live_51UAAnw…)"
+  if ! grep -qE "^STRIPE_SECRET_KEY=${SMARTSHT_STRIPE_SECRET_PREFIX}" "$env_file"; then
+    die "STRIPE_SECRET_KEY in $env_file is not the SmartSht live key (expected ${SMARTSHT_STRIPE_SECRET_PREFIX}…)"
   fi
-  if ! grep -qE '^STRIPE_PRICE_ID=price_1UABDhCpwOYArhO28jkA2CLX$' "$env_file"; then
-    die "STRIPE_PRICE_ID must be SmartSht monthly price_1UABDhCpwOYArhO28jkA2CLX"
+  if ! grep -qE "^STRIPE_PRICE_ID=${SMARTSHT_STRIPE_PRICE_MONTHLY}$" "$env_file"; then
+    die "STRIPE_PRICE_ID must be SmartSht monthly ${SMARTSHT_STRIPE_PRICE_MONTHLY}"
   fi
-  if ! grep -qE '^STRIPE_PRICE_ID_ANNUAL=price_1UWNq8CpwOYArhO2aIxHfshv$' "$env_file"; then
-    die "STRIPE_PRICE_ID_ANNUAL must be SmartSht annual price_1UWNq8CpwOYArhO2aIxHfshv"
+  if ! grep -qE "^STRIPE_PRICE_ID_ANNUAL=${SMARTSHT_STRIPE_PRICE_ANNUAL}$" "$env_file"; then
+    die "STRIPE_PRICE_ID_ANNUAL must be SmartSht annual ${SMARTSHT_STRIPE_PRICE_ANNUAL}"
   fi
   if ! grep -qE '^STRIPE_WEBHOOK_SECRET=whsec_' "$env_file"; then
     die "STRIPE_WEBHOOK_SECRET missing/invalid in $env_file"

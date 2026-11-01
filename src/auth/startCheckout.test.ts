@@ -46,9 +46,22 @@ describe('startCheckout', () => {
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
     expect(url.endsWith('/api/checkout')).toBe(true)
     expect(init.method).toBe('POST')
-    expect(init.headers).toEqual({ Authorization: 'Bearer test' })
-    expect(init.body).toBe(JSON.stringify({ email: '' }))
+    expect(init.headers).toEqual({
+      Authorization: 'Bearer test',
+      'Content-Type': 'application/json',
+    })
+    expect(init.body).toBe(JSON.stringify({ email: '', interval: 'monthly' }))
     expect(fakeWindow.location.href).toBe('https://checkout.stripe.com/c/pay/cs_test_123')
+  })
+
+  it('forwards annual interval to /api/checkout', async () => {
+    const fetchMock = vi.fn(() => ok({ url: 'https://checkout.stripe.com/c/pay/cs_annual' }))
+    stubClerkAndFetch({ fetchImpl: fetchMock })
+
+    await expect(startCheckout('annual')).resolves.toBe('redirected')
+
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
+    expect(init.body).toBe(JSON.stringify({ email: '', interval: 'annual' }))
   })
 
   it('reports no-url, without navigating, when checkout responds without a url', async () => {

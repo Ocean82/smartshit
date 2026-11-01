@@ -32,10 +32,17 @@ check "GET /health?strict=1" "200" "$(curl -s -o /dev/null -w '%{http_code}' "$A
 echo ""
 echo "Stripe env fingerprints:"
 ENV_FILE="/opt/smartsht/.env"
-if [ -f "$ENV_FILE" ]; then
-  if grep -qE '^STRIPE_SECRET_KEY=sk_live_51UAAnw' "$ENV_FILE" \
-    && grep -qE '^STRIPE_PRICE_ID=price_1UABDhCpwOYArhO28jkA2CLX$' "$ENV_FILE" \
-    && grep -qE '^STRIPE_PRICE_ID_ANNUAL=price_1UWNq8CpwOYArhO2aIxHfshv$' "$ENV_FILE" \
+PRICES_FILE="/opt/smartsht/current/scripts/smartsht-stripe-prices.env"
+if [ -f "$ENV_FILE" ] && [ -f "$PRICES_FILE" ]; then
+  # shellcheck disable=SC1090
+  set -a
+  # shellcheck disable=SC1091
+  # shellcheck source=smartsht-stripe-prices.env
+  source "$PRICES_FILE"
+  set +a
+  if grep -qE "^STRIPE_SECRET_KEY=${SMARTSHT_STRIPE_SECRET_PREFIX}" "$ENV_FILE" \
+    && grep -qE "^STRIPE_PRICE_ID=${SMARTSHT_STRIPE_PRICE_MONTHLY}$" "$ENV_FILE" \
+    && grep -qE "^STRIPE_PRICE_ID_ANNUAL=${SMARTSHT_STRIPE_PRICE_ANNUAL}$" "$ENV_FILE" \
     && ! grep -qE '^STRIPE_PRICE_ID(_ANNUAL)?=price_[A-Za-z0-9]*P38C54' "$ENV_FILE"; then
     echo "  PASS: SmartSht Stripe secret + price IDs"
     ((PASS++))
@@ -44,7 +51,7 @@ if [ -f "$ENV_FILE" ]; then
     ((FAIL++))
   fi
 else
-  echo "  FAIL: missing $ENV_FILE"
+  echo "  FAIL: missing $ENV_FILE or $PRICES_FILE"
   ((FAIL++))
 fi
 

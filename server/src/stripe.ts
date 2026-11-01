@@ -151,22 +151,48 @@ export function resetWebhookEventDedupe(): void {
  * address before asking the injected fallback lookup (Clerk's search is a plain
  * case-sensitive equality match).
  */
+export type StripeWebhookPlanUpdate = {
+  userId: string
+  plan: 'pro' | 'free'
+  stripeSubscriptionId?: string | null
+  /** Cleared on grant; set on demotion so UI notices match the reconciler. */
+  revocationReason: string | null
+}
+
 export async function handleStripeWebhook(
   event: {
     type: string
     data: { object: Record<string, unknown> }
   },
   fallback?: (email: string) => Promise<string | null>,
-): Promise<{ userId: string; plan: 'pro' | 'free'; stripeSubscriptionId?: string | null } | null> {
+): Promise<StripeWebhookPlanUpdate | null> {
   const obj = event.data.object
 
   if (event.type === 'checkout.session.completed' || event.type === 'checkout.session.async_payment_succeeded') {
+    // Fulfill only paid sessions. `checkout.session.completed` can fire while
+    // payment_status is still unpaid for async methods; those complete via
+    // `checkout.session.async_payment_succeeded` instead.
+    if (event.type === 'checkout.session.completed') {
+      const paymentStatus = obj.payment_status
+      if (
+        paymentStatus !== undefined &&
+        paymentStatus !== 'paid' &&
+        paymentStatus !== 'no_payment_required'
+      ) {
+        return null
+      }
+    }
     const metadata = obj.metadata as Record<string, string> | undefined
     const userId = resolveUserIdFromPayload(obj)
     const stripeSubscriptionId =
       typeof obj.subscription === 'string' ? obj.subscription : metadata?.stripeSubscriptionId
     if (userId) {
-      return { userId, plan: 'pro', stripeSubscriptionId: stripeSubscriptionId ?? null }
+      return {
+        userId,
+        plan: 'pro',
+        stripeSubscriptionId: stripeSubscriptionId ?? null,
+        revocationReason: null,
+      }
     }
   }
 
@@ -179,7 +205,7 @@ export async function handleStripeWebhook(
         fallback ?? (async () => null),
       ))
     if (userId) {
-      return { userId, plan: 'pro', stripeSubscriptionId: subId }
+      return { userId, plan: 'pro', stripeSubscriptionId: subId, revocationReason: null }
     }
   }
 
@@ -187,7 +213,12 @@ export async function handleStripeWebhook(
     const metadata = obj.metadata as Record<string, string> | undefined
     const userId = metadata?.userId
     if (userId) {
-      return { userId, plan: 'free', stripeSubscriptionId: null }
+      return {
+        userId,
+        plan: 'free',
+        stripeSubscriptionId: null,
+        revocationReason: 'canceled',
+      }
     }
   }
 
@@ -204,7 +235,12 @@ export async function handleStripeWebhook(
     if (userId) {
       const plan = mapStatusToPlan(status)
       const subId = plan === 'pro' && typeof obj.id === 'string' ? obj.id : null
-      return { userId, plan, stripeSubscriptionId: subId }
+      return {
+        userId,
+        plan,
+        stripeSubscriptionId: subId,
+        revocationReason: plan === 'pro' ? null : status === 'canceled' ? 'canceled' : 'lapsed',
+      }
     }
   }
 
