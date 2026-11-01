@@ -158,6 +158,34 @@ if [ "$SHARED_ENV" -nt "$APP_DIR/server/.env" ]; then
   chmod 600 "$APP_DIR/server/.env"
 fi
 
+# Guard against stale BurntBeats Stripe cutover leftovers. Prefer failing the
+# deploy before PM2 restart over serving checkout against the wrong account.
+assert_smartsht_stripe_env() {
+  local env_file="$1"
+  [ -f "$env_file" ] || die "Env file missing for Stripe checks: $env_file"
+
+  if grep -qE '^STRIPE_PRICE_ID(_ANNUAL)?=price_[A-Za-z0-9]*P38C54' "$env_file"; then
+    die "BurntBeats Stripe price IDs (P38C54…) found in $env_file — use SmartSht prices (CpwOYArhO2)"
+  fi
+  if ! grep -qE '^STRIPE_SECRET_KEY=sk_live_51UAAnw' "$env_file"; then
+    die "STRIPE_SECRET_KEY in $env_file is not the SmartSht live key (expected sk_live_51UAAnw…)"
+  fi
+  if ! grep -qE '^STRIPE_PRICE_ID=price_1UABDhCpwOYArhO28jkA2CLX$' "$env_file"; then
+    die "STRIPE_PRICE_ID must be SmartSht monthly price_1UABDhCpwOYArhO28jkA2CLX"
+  fi
+  if ! grep -qE '^STRIPE_PRICE_ID_ANNUAL=price_1UWNq8CpwOYArhO2aIxHfshv$' "$env_file"; then
+    die "STRIPE_PRICE_ID_ANNUAL must be SmartSht annual price_1UWNq8CpwOYArhO2aIxHfshv"
+  fi
+  if ! grep -qE '^STRIPE_WEBHOOK_SECRET=whsec_' "$env_file"; then
+    die "STRIPE_WEBHOOK_SECRET missing/invalid in $env_file"
+  fi
+  log "Stripe env: SmartSht account fingerprints OK"
+}
+
+if [ "$DEPLOY_SERVER" = true ]; then
+  assert_smartsht_stripe_env "$SHARED_ENV"
+fi
+
 # ─── ONNX Model Self-Heal (non-fatal) ────────────────────────────────────────
 # MiniLM ONNX assets are gitignored, so a fresh checkout (or wiped server)
 # would lack them. Ensure they exist before the frontend build embeds

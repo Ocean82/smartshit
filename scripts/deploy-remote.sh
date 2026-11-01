@@ -66,6 +66,11 @@ info "SmartSht remote deploy starting..."
 # Check SSH key exists
 [ -f "$SSH_KEY" ] || error "SSH key not found: $SSH_KEY"
 
+# Manual SSH deploy does NOT sync the GitHub Environment secret ENV.
+# Auto-deploys from Actions overwrite /opt/smartsht/.env from that secret.
+warn "Note: this path does not update GitHub secret ENV."
+warn "If you changed /opt/smartsht/.env on the box, paste it into GitHub → Environments → production → ENV or the next Actions deploy will revert it."
+
 # Check git status
 if [ -n "$(git status --porcelain)" ]; then
   warn "Working tree has uncommitted changes:"

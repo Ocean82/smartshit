@@ -37,6 +37,11 @@ if (-not (Test-Path $SshKey)) {
     exit 1
 }
 
+# Manual SSH deploy does NOT sync the GitHub Environment secret ENV.
+# Auto-deploys from Actions overwrite /opt/smartsht/.env from that secret.
+Write-Host "[deploy] Note: this path does not update GitHub secret ENV." -ForegroundColor Yellow
+Write-Host "[deploy] If you changed /opt/smartsht/.env on the box, update GitHub → Environments → production → ENV or the next Actions deploy will revert it." -ForegroundColor Yellow
+
 # Check for uncommitted changes
 $status = git status --porcelain
 if ($status) {

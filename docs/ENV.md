@@ -23,12 +23,13 @@ See also `docs/NAMING.md` and `.env.example`.
 | `MAX_HISTORY_CLOUD` | Yes | Optional; default 12. Max conversation history messages sent to cloud LLM providers |
 | `MAX_HISTORY_LOCAL` | Yes | Optional; default 4. Max conversation history messages sent to local Ollama |
 | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER` | No | Docs only — server reads `DATABASE_URL` |
-| `S3_ENABLED`, `S3_PREFIX=stems`, `S3_DELETE_LOCAL_AFTER_UPLOAD` | No | BurntBeats leftovers |
+| `S3_ENABLED`, `S3_PREFIX=stems`, `S3_DELETE_LOCAL_AFTER_UPLOAD` | No | Retired leftovers — do not set |
 
-## Shared infrastructure (OK)
+## Production infrastructure (live)
 
-- RDS host `burntbeats-db` and bucket `burntbeatz2-storage` are shared accounts.
-- Isolation is via Postgres schema `smartsht` and S3 prefix `smartsht/`.
+- RDS: `smartsht-db…rds.amazonaws.com`, database/role `smartsht` (not `burntbeats-db`).
+- S3: `smartsht-storage-<accountId>` with prefix `smartsht/` (not `burntbeatz2-storage`).
+- Secrets file on the box: **`/opt/smartsht/.env`**. GitHub Environment secret `ENV` (`production`) is the deploy source of truth and overwrites that file on every auto-deploy.
 
 ## ONNX Path B (server models)
 
@@ -38,14 +39,14 @@ See also `docs/NAMING.md` and `.env.example`.
 
 ## Production cutover checklist
 
-1. Rebuild frontend with `VITE_CLERK_PUBLISHABLE_KEY=pk_live_...` (SmartSht — must decode to `clerk.smartsht.com`, not `amused-mollusk`).
-2. Confirm built `dist/index.html` / app bundle contains **only** `pk_live_`, zero `pk_test_`.
-3. On EC2 `/home/ubuntu/smartsht/server/.env` set live Clerk + Stripe + `STRIPE_WEBHOOK_SECRET`.
-4. Stripe (SmartSht account): set `STRIPE_SECRET_KEY` from that account’s API keys; prices `price_1UABDhCpwOYArhO28jkA2CLX` / `price_1UWNq8CpwOYArhO2aIxHfshv`; webhook `https://smartsht.com/api/stripe/webhook` (events: `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `customer.subscription.created|updated|deleted`). Do **not** use BurntBeats `P38C54…` price IDs.
-5. `pm2 restart smartsht-api` after deploying server; check boot log for `Clerk: ✓` and `Stripe: ✓`.
-6. Sign in on https://smartsht.com/app/ — Network tab should hit `clerk.smartsht.com`. After OAuth, the browser must land on `/app`, not `/`.
-7. Reload nginx after deploying `landing/smartsht.nginx.conf` (Clerk CAPTCHA CSP).
+1. Rebuild frontend with `VITE_CLERK_PUBLISHABLE_KEY=pk_live_...` (SmartSht — must decode to `clerk.smartsht.com`, not `amused-mollusk`). Deploy injects `VITE_*` from `/opt/smartsht/.env`.
+2. Confirm built `/var/www/smartsht/app` bundle contains **only** `pk_live_`, zero `pk_test_`.
+3. Keep `/opt/smartsht/.env` and the GitHub `production` secret `ENV` in sync (prefer editing the secret, then deploy).
+4. Stripe (SmartSht `acct_1UAAnwCpwOYArhO2`): `STRIPE_SECRET_KEY=sk_live_51UAAnw…`, prices `price_1UABDhCpwOYArhO28jkA2CLX` / `price_1UWNq8CpwOYArhO2aIxHfshv`, webhook `https://smartsht.com/api/stripe/webhook`. Do **not** use BurntBeats `P38C54…` price IDs.
+5. After deploy: boot log `Clerk: ✓` / `Stripe: ✓`; `curl -sf http://127.0.0.1:8787/health?strict=1`.
+6. Sign in on https://smartsht.com/app/ — Network tab should hit `clerk.smartsht.com`. After OAuth, land on `/app`, not `/`.
+7. Nginx CSP includes `challenges.cloudflare.com` and `*.protect.clerk.com` (`landing/smartsht.nginx.conf`).
 8. Cloud save sends `Authorization: Bearer …` (not `x-user-id`).
 9. Spoofed `x-user-id` alone → 401.
-10. **Ollama:** confirm `ollama show smartshit` points at Spreadsheet-RL-4B (already on server — do not re-upload GGUF by default).
+10. **Ollama:** `ollama show smartshit` → Spreadsheet-RL-4B (already on server — do not re-upload GGUF by default).
 11. **Ops:** if credentials were ever exposed in chat/logs, rotate Groq/AWS/Clerk/Stripe/DB secrets before shipping.

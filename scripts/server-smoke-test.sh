@@ -25,6 +25,28 @@ echo ""
 # ─── Public endpoints ─────────────────────────────────────────────────────────
 echo "Public endpoints:"
 check "GET /health" "200" "$(curl -s -o /dev/null -w '%{http_code}' $API/health)"
+# Deploy gate uses strict readiness (DB + S3 + Clerk configured).
+check "GET /health?strict=1" "200" "$(curl -s -o /dev/null -w '%{http_code}' "$API/health?strict=1")"
+
+# ─── Stripe env fingerprints (SmartSht account, not BurntBeats) ────────────────
+echo ""
+echo "Stripe env fingerprints:"
+ENV_FILE="/opt/smartsht/.env"
+if [ -f "$ENV_FILE" ]; then
+  if grep -qE '^STRIPE_SECRET_KEY=sk_live_51UAAnw' "$ENV_FILE" \
+    && grep -qE '^STRIPE_PRICE_ID=price_1UABDhCpwOYArhO28jkA2CLX$' "$ENV_FILE" \
+    && grep -qE '^STRIPE_PRICE_ID_ANNUAL=price_1UWNq8CpwOYArhO2aIxHfshv$' "$ENV_FILE" \
+    && ! grep -qE '^STRIPE_PRICE_ID(_ANNUAL)?=price_[A-Za-z0-9]*P38C54' "$ENV_FILE"; then
+    echo "  PASS: SmartSht Stripe secret + price IDs"
+    ((PASS++))
+  else
+    echo "  FAIL: Stripe env is not SmartSht (secret/prices)"
+    ((FAIL++))
+  fi
+else
+  echo "  FAIL: missing $ENV_FILE"
+  ((FAIL++))
+fi
 
 # ─── Auth-required endpoints (should return 401) ──────────────────────────────
 echo ""

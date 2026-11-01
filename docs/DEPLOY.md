@@ -41,14 +41,16 @@ cp server/.env.production server/.env
 nano server/.env
 ```
 
-Required keys for Clerk + Stripe to work:
-- `CLERK_SECRET_KEY` — live secret key from Clerk dashboard
-- `CLERK_PUBLISHABLE_KEY` — live publishable key
-- `STRIPE_SECRET_KEY` — live secret key from Stripe dashboard
-- `STRIPE_PRICE_ID` — the $7/mo Pro price ID
-- `STRIPE_WEBHOOK_SECRET` — from the webhook endpoint in Stripe dashboard
+Required keys for Clerk + Stripe to work (SmartSht accounts only):
+- `CLERK_SECRET_KEY` / `CLERK_PUBLISHABLE_KEY` / `VITE_CLERK_PUBLISHABLE_KEY` — SmartSht Clerk (`clerk.smartsht.com`)
+- `STRIPE_SECRET_KEY` — SmartSht live secret (`sk_live_51UAAnw…`, account `acct_1UAAnwCpwOYArhO2`)
+- `STRIPE_PRICE_ID` — monthly `price_1UABDhCpwOYArhO28jkA2CLX` ($7)
+- `STRIPE_PRICE_ID_ANNUAL` — annual `price_1UWNq8CpwOYArhO2aIxHfshv` ($59)
+- `STRIPE_WEBHOOK_SECRET` — signing secret for `https://smartsht.com/api/stripe/webhook`
 - `APP_URL=https://smartsht.com`
 - `TRUST_PROXY=loopback`
+
+Production secrets live in `/opt/smartsht/.env`. Prefer updating the GitHub Environment secret `ENV` (`production`) — auto-deploy overwrites the server file from that secret.
 
 ---
 
