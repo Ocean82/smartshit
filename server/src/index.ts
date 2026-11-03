@@ -1,3 +1,4 @@
+import { newRelicEnabled } from './instrument.js'
 import { randomUUID } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -1172,6 +1173,7 @@ app.listen(config.port, config.host, () => {
       `publishable=${clerkBoot.publishableKeyConfigured ? 'set' : 'missing'} ` +
       `authorizedParties=${clerkBoot.authorizedPartyCount}`,
   )
+  console.log(`New Relic: ${newRelicEnabled ? `✓ (${process.env.NEW_RELIC_APP_NAME ?? 'smartsht-api'})` : '✗ (no license key)'}`)
   console.log(`Database: ${config.databaseUrl ? '✓ (configured)' : '✗ (no DATABASE_URL)'}`)
   console.log(`S3: ${config.awsAccessKeyId ? `✓ (${config.s3Bucket})` : '✗ (no AWS credentials)'}`)
   const minilmPath = resolveOnnxModelPath(modelsRoot, 'minilm')

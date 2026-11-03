@@ -22,6 +22,7 @@ See also `docs/NAMING.md` and `.env.example`.
 | `INTENT_CONFIDENCE_THRESHOLD` | Yes | Optional; default 0.6. Controls when low-confidence intents trigger clarification prompts |
 | `MAX_HISTORY_CLOUD` | Yes | Optional; default 12. Max conversation history messages sent to cloud LLM providers |
 | `MAX_HISTORY_LOCAL` | Yes | Optional; default 4. Max conversation history messages sent to local Ollama |
+| `NEW_RELIC_LICENSE_KEY`, `NEW_RELIC_APP_NAME` | Optional (server) | Node APM. Ingest license key only (not an `NRAK-` user key). Unset disables the agent. App name defaults to `smartsht-api`. SQL is obfuscated and auth/cookie headers are excluded. Production value belongs in `/opt/smartsht/.env` and the GitHub `ENV` secret together. |
 | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER` | No | Docs only — server reads `DATABASE_URL` |
 | `S3_ENABLED`, `S3_PREFIX=stems`, `S3_DELETE_LOCAL_AFTER_UPLOAD` | No | Retired leftovers — do not set |
 

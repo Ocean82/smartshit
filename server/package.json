@@ -24,6 +24,7 @@
     "dotenv": "^17.4.2",
     "express": "^5.1.0",
     "express-rate-limit": "^8.6.0",
+    "newrelic": "^14.10.0",
     "onnxruntime-node": "^1.27.0",
     "pg": "^8.22.0",
     "stripe": "^17.7.0",
@@ -32,6 +33,7 @@
   "devDependencies": {
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
+    "@types/newrelic": "^9.14.8",
     "@types/node": "^22.19.17",
     "@types/pg": "^8.20.0",
     "@types/supertest": "^7.2.1",
