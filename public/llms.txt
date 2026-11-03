@@ -10,7 +10,7 @@
 
 ## Product summary
 
-smartsht is a browser-based spreadsheet with a natural-language assistant. Users describe what they want ("build a monthly budget", "check my formulas") and the app creates or edits real spreadsheet data with preview-before-apply safety.
+smartsht is a browser-based spreadsheet with a natural-language assistant. Users describe what they want ("build a monthly budget", "check my formulas") and the app creates or edits real spreadsheet data. Preview is the default before an edit is applied. Auto applies low-risk edits immediately, with undo. Imported .xlsx formulas keep Excel's saved values until the cell is edited.
 
 Key capabilities:
 - Full spreadsheet engine (formulas, charts, pivot tables, conditional formatting, filtering, sorting)

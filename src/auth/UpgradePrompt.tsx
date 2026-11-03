@@ -44,7 +44,7 @@ function UpgradeCard() {
         You've used all your free questions today
       </p>
       <p className="text-xs text-gray-600 mb-3">
-        Upgrade to Pro for unlimited AI, all templates, and more.
+        Upgrade to Pro for unlimited AI, auto-fix, and cloud workbooks.
       </p>
       <button
         onClick={handleUpgrade}

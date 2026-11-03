@@ -32,7 +32,7 @@ Import any spreadsheet. The app immediately tells you what it's tracking, flags 
 | **Formula Auditor** | Catches broken references, skipped cells in SUMs, inconsistent formulas, and outliers |
 | **Natural Language Q&A** | "Where am I overspending?" "What does this formula do?" "Is this number correct?" |
 | **Instant Actions** | "Bold the headers" "Sort by amount" "Add a row" — no formulas needed |
-| **Templates** | 50+ built-in templates for budgets, invoices, trackers, and more |
+| **Templates** | 119 built-in templates for budgets, invoices, trackers, and more |
 
 ---
 
@@ -102,6 +102,8 @@ Open **http://localhost:5173**
 2. Read the auto-insights summary
 3. Check the auditor findings
 4. Ask: "Explain this spreadsheet" or "What's my biggest expense?"
+
+Imported formulas keep Excel's saved values until you edit the cell.
 
 ---
 
@@ -207,7 +209,7 @@ See **[CONTRIBUTING.md](CONTRIBUTING.md)** for setup and PR guidelines.
 - Auditor rules (new error patterns to detect)
 - Intent parser patterns (more instant-response phrases)
 - Accessibility improvements
-- Import format support (Google Sheets export, Numbers)
+- Import format support (Numbers)
 - Documentation and tutorials
 
 ---

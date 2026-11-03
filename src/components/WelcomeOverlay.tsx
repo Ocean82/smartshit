@@ -48,7 +48,7 @@ export function WelcomeOverlay({ onOpenTemplates }: WelcomeOverlayProps) {
       icon: <Zap size={40} className="text-amber-500" />,
       title: 'Preview before changes',
       description:
-        'Every AI edit shows a preview first. You approve it, or reject it. Your data stays under your control.',
+        'Preview is the default: approve or reject the diff. Auto applies low-risk edits immediately, with undo.',
     },
   ]
 
