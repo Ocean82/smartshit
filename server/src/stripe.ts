@@ -7,6 +7,19 @@ interface CheckoutSession {
 }
 
 /**
+ * Stripe API version for SDK calls and the raw Checkout HTTP request.
+ *
+ * Signature verification (`constructEvent`) does not depend on this value —
+ * it only needs the webhook signing secret and the `Stripe-Signature` header.
+ * The version matters for request/response shapes on API calls and for how the
+ * SDK types event objects after the payload has already been verified.
+ *
+ * Keep the Checkout `Stripe-Version` header in sync with this constant so the
+ * redirect session is created under the same contract as the SDK client.
+ */
+export const STRIPE_API_VERSION = '2025-02-24.acacia' as const
+
+/**
  * Shared Stripe client. Exported so the reconciler can read subscriptions without
  * constructing a second client with a different API version.
  */
@@ -15,7 +28,7 @@ export function getStripeClient(): Stripe {
     throw new Error('STRIPE_SECRET_KEY not configured')
   }
   return new Stripe(config.stripeSecretKey, {
-    apiVersion: '2025-02-24.acacia',
+    apiVersion: STRIPE_API_VERSION,
   })
 }
 
@@ -65,6 +78,7 @@ export async function createCheckoutSession(
     headers: {
       'Authorization': `Bearer ${config.stripeSecretKey}`,
       'Content-Type': 'application/x-www-form-urlencoded',
+      'Stripe-Version': STRIPE_API_VERSION,
     },
     body: params.toString(),
   })
@@ -85,8 +99,16 @@ export type StripeWebhookEvent = {
 }
 
 /**
- * Verify Stripe webhook signature via the official SDK (handles multi-v1
- * rotation, clock skew, and payload parsing). Throws on failure.
+ * Verify Stripe webhook signature via the official SDK.
+ *
+ * Verification itself is API-version-independent: Stripe signs the raw body,
+ * and `constructEvent` checks that signature against `STRIPE_WEBHOOK_SECRET`
+ * (including multi-v1 rotation and clock skew). The client's `apiVersion`
+ * only affects how the already-verified JSON is typed/normalized afterward.
+ * The event schema of the body is controlled by the webhook endpoint's
+ * configured API version in the Stripe Dashboard.
+ *
+ * Throws on failure.
  */
 export function verifyWebhookSignature(
   payload: Buffer | string,

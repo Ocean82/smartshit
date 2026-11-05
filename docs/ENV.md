@@ -46,8 +46,8 @@ See also `docs/NAMING.md` and `.env.example`.
 4. Stripe (SmartSht `acct_1UAAnwCpwOYArhO2`): `STRIPE_SECRET_KEY=sk_live_51UAAnw…`, prices `price_1UABDhCpwOYArhO28jkA2CLX` / `price_1UWNq8CpwOYArhO2aIxHfshv`, webhook `https://smartsht.com/api/stripe/webhook`. Do **not** use BurntBeats `P38C54…` price IDs.
 5. After deploy: boot log `Clerk: ✓` / `Stripe: ✓`; `curl -sf http://127.0.0.1:8787/health?strict=1`.
 6. Sign in on https://smartsht.com/app/ — Network tab should hit `clerk.smartsht.com`. After OAuth, land on `/app`, not `/`.
-7. Nginx CSP includes `challenges.cloudflare.com` and `*.protect.clerk.com` (`landing/smartsht.nginx.conf`).
-8. Cloud save sends `Authorization: Bearer …` (not `x-user-id`).
+7. Nginx CSP includes concrete Clerk hosts (`clerk.smartsht.com`, `*.clerk.accounts.dev`, `api.clerk.com`, `img.clerk.com`, `*.protect.clerk.com`) and `challenges.cloudflare.com` (`landing/smartsht.nginx.conf`). Stripe.js hosts are omitted — Checkout is redirect-only.
+8. Cloud save sends `Authorization: Bearer …` (not `x-user-id`). Nginx `/api/` explicitly forwards `Authorization` and `Stripe-Signature`.
 9. Spoofed `x-user-id` alone → 401.
 10. **Ollama:** `ollama show smartshit` → Spreadsheet-RL-4B (already on server — do not re-upload GGUF by default).
 11. **Ops:** if credentials were ever exposed in chat/logs, rotate Groq/AWS/Clerk/Stripe/DB secrets before shipping.

@@ -1,7 +1,9 @@
 /**
  * Unit tests for Stripe integration — webhook signature verification and event handling.
  *
- * Signature verification uses the official Stripe SDK (constructEvent).
+ * Signature verification uses the official Stripe SDK (`constructEvent`). That
+ * check is independent of the client's `apiVersion`; the secret + Stripe-Signature
+ * header are what matter for accepting or rejecting a delivery.
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest'

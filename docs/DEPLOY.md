@@ -211,12 +211,13 @@ sudo nginx -t && sudo systemctl reload nginx
 The nginx config handles:
 - HTTPS with Let's Encrypt
 - HTTP → HTTPS redirect
-- `/api/` proxy to Express on port 8787
+- `/api/` proxy to Express on port 8787, with `Authorization` and `Stripe-Signature` forwarded explicitly
 - `/app/` serves the SPA with fallback to `index.html`
 - `/terms` and `/privacy` serve legal pages
 - `/shared/` routes to the SPA for shared workbook views
 - Exact-match `/llms.txt`, `/robots.txt`, and `/sitemap.xml` (plain text / XML — do not fall through to SPA)
 - Security headers (HSTS, CSP, X-Frame-Options, etc.)
+  - CSP allows concrete Clerk hosts (`clerk.smartsht.com`, `*.clerk.accounts.dev`, `api.clerk.com`, `img.clerk.com`, `*.protect.clerk.com`) and Cloudflare challenges — not Stripe.js (Checkout is a redirect; no Elements in the SPA)
 - Gzip compression
 - Static asset caching (30 days)
 
