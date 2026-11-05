@@ -39,13 +39,12 @@
     "build:server": "npm run build --prefix server",
     "preview": "vite preview",
     "test": "vitest run",
+    "markdown:pages": "node scripts/markdownForAgents.mjs",
     "test:watch": "vitest",
     "test:realengine": "vitest run --config vitest.integration.config.ts",
     "build:e2e": "node scripts/build-e2e.mjs",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-
-
     "deploy": "node scripts/deploy-dispatch.mjs",
     "deploy:server": "node scripts/deploy-dispatch.mjs --server",
     "deploy:frontend": "node scripts/deploy-dispatch.mjs --frontend",
@@ -82,6 +81,7 @@
     "eslint": "^10.8.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "fast-check": "^4.9.0",
+    "node-html-parser": "^9.0.6",
     "tailwindcss": "4.1.17",
     "typescript": "5.9.3",
     "typescript-eslint": "^8.65.0",

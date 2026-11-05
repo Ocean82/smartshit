@@ -3,7 +3,7 @@
         xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
   <url>
     <loc>https://smartsht.com/</loc>
-    <lastmod>2026-10-17</lastmod>
+    <lastmod>2026-11-05</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
     <image:image>
@@ -18,6 +18,18 @@
     </image:image>
   </url>
   <url>
+    <loc>https://smartsht.com/excel-alternative</loc>
+    <lastmod>2026-11-05</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://smartsht.com/formula-auditor</loc>
+    <lastmod>2026-11-05</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://smartsht.com/terms</loc>
     <lastmod>2026-07-23</lastmod>
     <changefreq>yearly</changefreq>
@@ -25,7 +37,7 @@
   </url>
   <url>
     <loc>https://smartsht.com/privacy</loc>
-    <lastmod>2026-07-23</lastmod>
+    <lastmod>2026-10-06</lastmod>
     <changefreq>yearly</changefreq>
     <priority>0.3</priority>
   </url>

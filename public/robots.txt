@@ -24,7 +24,13 @@ Disallow: /app
 Disallow: /api/
 Disallow: /cdn-cgi/
 
-User-agent: anthropic-ai
+User-agent: ClaudeBot
+Allow: /
+Disallow: /app
+Disallow: /api/
+Disallow: /cdn-cgi/
+
+User-agent: Claude-SearchBot
 Allow: /
 Disallow: /app
 Disallow: /api/

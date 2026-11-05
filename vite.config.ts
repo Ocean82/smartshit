@@ -77,7 +77,7 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
-    include: ['src/**/*.test.ts', 'shared/**/*.test.ts'],
+    include: ['src/**/*.test.ts', 'shared/**/*.test.ts', 'scripts/**/*.test.ts'],
     // Real-engine tests run in the separate integration tier (they need the
     // actual WASM via vitest.integration.config.ts). Exclude them here so the
     // stubbed unit tier doesn't try to run them against the stub.

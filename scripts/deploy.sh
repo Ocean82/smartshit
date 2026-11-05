@@ -322,13 +322,46 @@ sync_brand_assets() {
 }
 
 if [ -d "$APP_DIR/landing" ]; then
+  # Keep Accept: text/markdown siblings + nginx token headers in sync with HTML.
+  # Skipping this leaves agents on stale .md / wrong x-markdown-tokens.
+  log "Generating landing markdown (Accept: text/markdown)..."
+  (cd "$APP_DIR" && npm run markdown:pages) \
+    || die "landing markdown generation failed"
+
+  # Fail closed if generation wrote .md but left nginx token markers stale
+  # (partial write / hand-edited conf). Same check as the unit test.
+  log "Verifying markdown ↔ nginx token sync..."
+  (cd "$APP_DIR" && node --input-type=module -e "
+    import { readFileSync } from 'node:fs'
+    import { applyTokenMarkers, renderLandingMarkdown } from './scripts/markdownForAgents.mjs'
+    const pages = renderLandingMarkdown()
+    const conf = readFileSync('./landing/smartsht.nginx.conf', 'utf8')
+    if (applyTokenMarkers(conf, pages) !== conf) {
+      console.error('nginx x-markdown-tokens markers are out of sync with generated .md')
+      process.exit(1)
+    }
+    for (const page of pages) {
+      const committed = readFileSync('./landing/' + page.markdownFile, 'utf8')
+      if (committed !== page.markdown) {
+        console.error(page.markdownFile + ' is out of sync with HTML')
+        process.exit(1)
+      }
+    }
+    console.log('markdown sync ok (' + pages.length + ' pages)')
+  ") || die "landing markdown sync check failed"
+
+  for f in index.md terms.md privacy.md excel-alternative.md formula-auditor.md; do
+    [ -f "$APP_DIR/landing/$f" ] || die "Missing generated landing/$f after markdown:pages"
+  done
+
   log "Syncing landing statics to /var/www/smartsht..."
   if command -v rsync >/dev/null 2>&1; then
     sudo rsync -a \
       --exclude 'smartsht.nginx.conf' \
+      --exclude 'security-headers.inc' \
       "$APP_DIR/landing/" /var/www/smartsht/
   else
-    for f in index.html terms.html privacy.html 404.html screenshot.png smart-logo.png; do
+    for f in index.html index.md terms.html terms.md privacy.html privacy.md excel-alternative.html excel-alternative.md formula-auditor.html formula-auditor.md 404.html screenshot.png smart-logo.png; do
       if [ -f "$APP_DIR/landing/$f" ]; then
         sudo cp "$APP_DIR/landing/$f" "/var/www/smartsht/$f"
       fi
@@ -340,11 +373,30 @@ if [ -d "$APP_DIR/landing" ]; then
   log "Landing statics synced ✓"
 fi
 
-# ─── Nginx (CSP, sw.js cache) ────────────────────────────────────────────────
+# ─── Nginx (CSP, sw.js cache, markdown negotiation) ──────────────────────────
 # Always apply the repo site config. Skipping this leaves browsers on a stale
-# CSP (WASM / Cloudflare Insights / Clerk CAPTCHA blocked).
+# CSP (WASM / Cloudflare Insights / Clerk CAPTCHA blocked) and breaks
+# Accept: text/markdown (snippet include + $wants_markdown map).
+#
+# Order matters: install security-headers.inc BEFORE the site conf. Markdown
+# and cache locations `include` that snippet; nginx -t fails if it is missing,
+# and a missing include would also strip CSP from negotiated responses.
 if [ -f "$APP_DIR/landing/smartsht.nginx.conf" ]; then
   log "Installing nginx site config..."
+  [ -f "$APP_DIR/landing/security-headers.inc" ] || die "Missing landing/security-headers.inc"
+  grep -q 'Content-Security-Policy' "$APP_DIR/landing/security-headers.inc" \
+    || die "landing/security-headers.inc is missing Content-Security-Policy"
+  grep -q 'include /etc/nginx/snippets/smartsht-security-headers.conf' \
+    "$APP_DIR/landing/smartsht.nginx.conf" \
+    || die "smartsht.nginx.conf must include smartsht-security-headers.conf"
+
+  sudo mkdir -p /etc/nginx/snippets
+  sudo cp "$APP_DIR/landing/security-headers.inc" /etc/nginx/snippets/smartsht-security-headers.conf
+  [ -f /etc/nginx/snippets/smartsht-security-headers.conf ] \
+    || die "Failed to install /etc/nginx/snippets/smartsht-security-headers.conf"
+  grep -q 'Content-Security-Policy' /etc/nginx/snippets/smartsht-security-headers.conf \
+    || die "Installed security-headers snippet lost Content-Security-Policy"
+
   sudo cp "$APP_DIR/landing/smartsht.nginx.conf" /var/www/smartsht/smartsht.nginx.conf
   sudo cp "$APP_DIR/landing/smartsht.nginx.conf" /etc/nginx/sites-available/smartsht.com
   sudo ln -sfn /etc/nginx/sites-available/smartsht.com /etc/nginx/sites-enabled/smartsht.com
@@ -352,7 +404,7 @@ if [ -f "$APP_DIR/landing/smartsht.nginx.conf" ]; then
     sudo systemctl reload nginx
     log "nginx reloaded ✓"
   else
-    die "nginx -t failed — site config not reloaded"
+    die "nginx -t failed — site config not reloaded (check security-headers snippet + site conf)"
   fi
 fi
 

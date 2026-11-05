@@ -34,11 +34,20 @@ Collaborative edit-sharing is not available yet. Share links are view-only.
 ## Important pages
 
 - Home / product: https://smartsht.com/
+- Home (markdown): https://smartsht.com/index.md
+- Excel alternative: https://smartsht.com/excel-alternative
+- Excel alternative (markdown): https://smartsht.com/excel-alternative.md
+- Formula auditor: https://smartsht.com/formula-auditor
+- Formula auditor (markdown): https://smartsht.com/formula-auditor.md
 - Pricing: https://smartsht.com/#pricing
 - FAQ: https://smartsht.com/#faq
 - Terms: https://smartsht.com/terms
+- Terms (markdown): https://smartsht.com/terms.md
 - Privacy: https://smartsht.com/privacy
+- Privacy (markdown): https://smartsht.com/privacy.md
 - Launch app: https://smartsht.com/app
+
+Markdown negotiation: send `Accept: text/markdown` to `/`, `/excel-alternative`, `/formula-auditor`, `/terms`, or `/privacy` to receive `Content-Type: text/markdown` instead of HTML.
 
 ## For AI assistants
 

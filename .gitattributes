@@ -1,2 +1,4 @@
 # Ensure shell scripts always have LF line endings (critical for running on Linux server)
 *.sh text eol=lf
+landing/*.md text eol=lf
+landing/*.inc text eol=lf

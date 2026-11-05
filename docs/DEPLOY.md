@@ -216,12 +216,25 @@ The nginx config handles:
 - `/terms` and `/privacy` serve legal pages
 - `/shared/` routes to the SPA for shared workbook views
 - Exact-match `/llms.txt`, `/robots.txt`, and `/sitemap.xml` (plain text / XML — do not fall through to SPA)
+- Markdown for Agents: `Accept: text/markdown` on `/`, `/excel-alternative`, `/formula-auditor`, `/terms`, and `/privacy` serves the matching pre-generated `.md` file with `Content-Type: text/markdown`, `Vary: Accept`, and `x-markdown-tokens`. HTML remains the default.
+  - **After editing any `landing/*.html`, run `npm run markdown:pages`** so `.md` siblings and nginx `x-markdown-tokens` markers stay in sync. `deploy.sh` runs this automatically and fails the deploy if sync drifts.
+  - Unit tests in `scripts/markdownForAgents.test.ts` also enforce sync — keep them green before merging landing HTML changes.
 - Security headers (HSTS, CSP, X-Frame-Options, etc.)
   - CSP allows concrete Clerk hosts (`clerk.smartsht.com`, `*.clerk.accounts.dev`, `api.clerk.com`, `img.clerk.com`, `*.protect.clerk.com`) and Cloudflare challenges — not Stripe.js (Checkout is a redirect; no Elements in the SPA)
-- Gzip compression
+  - `landing/security-headers.inc` **must** be installed to `/etc/nginx/snippets/smartsht-security-headers.conf` before the site conf is reloaded. Markdown/cache locations `include` that snippet; without it, `nginx -t` fails and negotiated responses would lose CSP/HSTS. `deploy.sh` installs the snippet first and verifies CSP is present.
+- Gzip compression (includes `text/markdown`)
 - Static asset caching (30 days)
 
 After copying `landing/*`, confirm `https://smartsht.com/llms.txt` returns `text/plain` (not the HTML homepage).
+
+```bash
+curl -sI -H "Accept: text/markdown" https://smartsht.com/ | grep -iE 'content-type|vary|x-markdown'
+# expect: content-type: text/markdown; charset=utf-8, vary: Accept, x-markdown-tokens: <n>
+curl -sI https://smartsht.com/ | grep -i content-type
+# expect: text/html
+# Snippet must exist on the host (deploy installs it):
+test -f /etc/nginx/snippets/smartsht-security-headers.conf && grep -q Content-Security-Policy /etc/nginx/snippets/smartsht-security-headers.conf
+```
 
 ---
 
