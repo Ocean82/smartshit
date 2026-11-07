@@ -953,7 +953,15 @@
       gap: 16px;
     }
     footer p { font-size: 0.8rem; color: var(--ink-muted); }
-    footer .footer-links { display: flex; gap: 20px; }
+    footer .footer-badge {
+      display: inline-flex;
+      line-height: 0;
+      opacity: 0.9;
+      transition: opacity 0.15s ease;
+    }
+    footer .footer-badge:hover { opacity: 1; }
+    footer .footer-badge img { display: block; height: 40px; width: auto; }
+    footer .footer-links { display: flex; gap: 20px; flex-wrap: wrap; }
     footer .footer-links a { font-size: 0.8rem; color: var(--ink-muted); text-decoration: none; }
     footer .footer-links a:hover { color: var(--ink-secondary); }
 
@@ -1485,6 +1493,9 @@
   <footer>
     <div class="container">
       <p>&copy; 2026 smartsh!t</p>
+      <a class="footer-badge" href="https://launchbison.com" target="_blank" rel="noopener">
+        <img src="https://launchbison.com/badge-dark.svg" alt="Featured on Launchbison" width="198" height="62" />
+      </a>
       <div class="footer-links">
         <a href="/app">Launch App</a>
         <a href="/excel-alternative">Excel alternative</a>
