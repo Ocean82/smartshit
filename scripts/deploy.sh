@@ -309,7 +309,7 @@ fi
 # mirrors the same set to the domain root so the two copies cannot drift.
 # Rsync WITHOUT --delete: /var/www/smartsht also holds app/ and the nginx conf
 # copy, and must never be pruned from the landing folder.
-BRAND_FILES="apple-touch-icon.png favicon-16x16.png favicon-32x32.png favicon-48x48.png favicon.svg llms.txt logo.png og-image.png robots.txt sitemap.xml smart-favicon.png"
+BRAND_FILES="apple-touch-icon.png favicon-16x16.png favicon-32x32.png favicon-48x48.png favicon.ico favicon.svg llms.txt logo.png og-image.png robots.txt sitemap.xml smart-favicon.png"
 
 sync_brand_assets() {
   for f in $BRAND_FILES; do
