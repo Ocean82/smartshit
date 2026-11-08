@@ -373,11 +373,17 @@
       --ink: oklch(0.15 0.02 250);
       --ink-secondary: oklch(0.35 0.015 250);
       --ink-muted: oklch(0.50 0.01 250);
-      --accent: oklch(0.55 0.18 250);
-      --accent-hover: oklch(0.50 0.20 250);
+      /* Accent darkened vs 0.55 so white button label clears WCAG AA (~4.5:1). */
+      --accent: oklch(0.48 0.19 250);
+      --accent-hover: oklch(0.42 0.20 250);
       --accent-soft: oklch(0.96 0.03 250);
-      --warm: oklch(0.60 0.15 45);
+      /* Warm text on warm-soft chip must clear AA (0.60/0.97 failed ~3.7:1). */
+      --warm: oklch(0.45 0.16 45);
       --warm-soft: oklch(0.97 0.04 45);
+      /* Light accents for dark comparison band (global --accent is for light UI). */
+      --accent-on-dark: oklch(0.78 0.12 250);
+      --ink-on-dark: oklch(0.82 0.01 250);
+      --ink-on-dark-muted: oklch(0.72 0.01 250);
       --border: oklch(0.92 0.005 250);
       --border-strong: oklch(0.88 0.01 250);
       --radius: 14px;
@@ -1177,7 +1183,7 @@
       color: white;
     }
     .compare-section .demo-header h2 { color: white; }
-    .compare-section .demo-header p { color: oklch(0.7 0.01 250); }
+    .compare-section .demo-header p { color: var(--ink-on-dark); }
     .compare-section .demo-header a { color: inherit; text-decoration: underline; }
     .compare-wrap {
       overflow-x: auto;
@@ -1205,11 +1211,11 @@
     .compare-table th[scope="col"]:not(:first-child) {
       text-align: center;
       font-weight: 600;
-      color: oklch(0.7 0.01 250);
+      color: var(--ink-on-dark);
     }
     .compare-table th[scope="col"]:nth-child(2) {
       font-weight: 700;
-      color: var(--accent);
+      color: var(--accent-on-dark);
     }
     .compare-table tbody tr { border-bottom: 1px solid oklch(1 0 0 / 0.1); }
     .compare-table tbody tr:last-child { border-bottom: none; }
@@ -1220,11 +1226,11 @@
     }
     .compare-table td {
       text-align: center;
-      color: oklch(0.7 0.01 250);
+      color: var(--ink-on-dark);
     }
-    .compare-table .co-us { color: var(--accent); font-weight: 600; }
+    .compare-table .co-us { color: var(--accent-on-dark); font-weight: 600; }
     .compare-table .co-yes { color: white; }
-    .compare-table .co-no { color: oklch(0.5 0.01 250); }
+    .compare-table .co-no { color: var(--ink-on-dark-muted); }
     .cta-actions {
       display: flex;
       gap: 16px;
@@ -1260,7 +1266,7 @@
   <nav class="nav" aria-label="Main navigation">
     <div class="container">
       <a href="/" class="nav-brand">
-        <img src="/smart-logo.webp" alt="smartsh!t" width="28" height="28" decoding="async" />
+        <img src="/smart-logo.webp" alt="" width="28" height="28" decoding="async" aria-hidden="true" />
         smartsh!t
       </a>
       <div class="nav-links">
