@@ -22,7 +22,7 @@
   <meta property="og:image:alt" content="smartsht AI spreadsheet interface showing natural language budget creation with chat panel" />
   <meta property="og:site_name" content="smartsht" />
   <meta property="og:locale" content="en_US" />
-  <link rel="preload" as="image" href="/screenshot.png" fetchpriority="high" />
+  <link rel="preload" as="image" href="/screenshot.webp" type="image/webp" fetchpriority="high" imagesrcset="/screenshot.webp 900w, /screenshot-1350.webp 1350w" imagesizes="(max-width: 900px) 100vw, 900px" />
   <link rel="icon" href="/favicon.ico" sizes="any" />
   <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
@@ -110,7 +110,7 @@
         "url": "https://smartsht.com/screenshot.png",
         "contentUrl": "https://smartsht.com/screenshot.png",
         "width": 900,
-        "height": 506,
+        "height": 479,
         "caption": "smartsht spreadsheet with AI chat panel open, showing a monthly budget with formulas and conditional formatting"
       },
       {
@@ -356,7 +356,11 @@
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&display=swap" rel="stylesheet" />
+  <!-- Non-blocking font CSS: LCP is brand/heading text; a render-blocking Google Fonts
+       request delayed first paint ~750ms on mobile lab tests. Fallback is system-ui. -->
+  <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&amp;display=swap" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&amp;display=swap" media="print" onload="this.media='all'" />
+  <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&amp;display=swap" /></noscript>
 
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -369,11 +373,17 @@
       --ink: oklch(0.15 0.02 250);
       --ink-secondary: oklch(0.35 0.015 250);
       --ink-muted: oklch(0.50 0.01 250);
-      --accent: oklch(0.55 0.18 250);
-      --accent-hover: oklch(0.50 0.20 250);
+      /* Accent darkened vs 0.55 so white button label clears WCAG AA (~4.5:1). */
+      --accent: oklch(0.48 0.19 250);
+      --accent-hover: oklch(0.42 0.20 250);
       --accent-soft: oklch(0.96 0.03 250);
-      --warm: oklch(0.60 0.15 45);
+      /* Warm text on warm-soft chip must clear AA (0.60/0.97 failed ~3.7:1). */
+      --warm: oklch(0.45 0.16 45);
       --warm-soft: oklch(0.97 0.04 45);
+      /* Light accents for dark comparison band (global --accent is for light UI). */
+      --accent-on-dark: oklch(0.78 0.12 250);
+      --ink-on-dark: oklch(0.82 0.01 250);
+      --ink-on-dark-muted: oklch(0.72 0.01 250);
       --border: oklch(0.92 0.005 250);
       --border-strong: oklch(0.88 0.01 250);
       --radius: 14px;
@@ -1173,7 +1183,7 @@
       color: white;
     }
     .compare-section .demo-header h2 { color: white; }
-    .compare-section .demo-header p { color: oklch(0.7 0.01 250); }
+    .compare-section .demo-header p { color: var(--ink-on-dark); }
     .compare-section .demo-header a { color: inherit; text-decoration: underline; }
     .compare-wrap {
       overflow-x: auto;
@@ -1201,11 +1211,11 @@
     .compare-table th[scope="col"]:not(:first-child) {
       text-align: center;
       font-weight: 600;
-      color: oklch(0.7 0.01 250);
+      color: var(--ink-on-dark);
     }
     .compare-table th[scope="col"]:nth-child(2) {
       font-weight: 700;
-      color: var(--accent);
+      color: var(--accent-on-dark);
     }
     .compare-table tbody tr { border-bottom: 1px solid oklch(1 0 0 / 0.1); }
     .compare-table tbody tr:last-child { border-bottom: none; }
@@ -1216,11 +1226,11 @@
     }
     .compare-table td {
       text-align: center;
-      color: oklch(0.7 0.01 250);
+      color: var(--ink-on-dark);
     }
-    .compare-table .co-us { color: var(--accent); font-weight: 600; }
+    .compare-table .co-us { color: var(--accent-on-dark); font-weight: 600; }
     .compare-table .co-yes { color: white; }
-    .compare-table .co-no { color: oklch(0.5 0.01 250); }
+    .compare-table .co-no { color: var(--ink-on-dark-muted); }
     .cta-actions {
       display: flex;
       gap: 16px;
@@ -1256,7 +1266,10 @@
   <nav class="nav" aria-label="Main navigation">
     <div class="container">
       <a href="/" class="nav-brand">
-        <img src="/smart-logo.png" alt="smartsh!t" width="28" height="28" />
+        <picture>
+          <source type="image/webp" srcset="/smart-logo.webp" />
+          <img src="/smart-logo.png" alt="" width="28" height="28" decoding="async" aria-hidden="true" />
+        </picture>
         smartsh!t
       </a>
       <div class="nav-links">
@@ -1306,7 +1319,10 @@
       <!-- Product screenshot -->
       <div class="product-shot animate-fade-up delay-400">
         <div class="product-shot-frame">
-          <img src="/screenshot.png" alt="smartsht AI spreadsheet with chat panel open, showing a monthly budget planner with formulas" loading="eager" fetchpriority="high" decoding="async" width="900" height="506" />
+          <picture>
+            <source type="image/webp" srcset="/screenshot.webp 900w, /screenshot-1350.webp 1350w" sizes="(max-width: 900px) 100vw, 900px" />
+            <img src="/screenshot.png" alt="smartsht AI spreadsheet with chat panel open, showing a monthly budget planner with formulas" loading="eager" fetchpriority="high" decoding="async" width="900" height="479" />
+          </picture>
         </div>
       </div>
     </div>
@@ -1667,7 +1683,7 @@
     <div class="container">
       <p>&copy; 2026 smartsh!t</p>
       <a class="footer-badge" href="https://launchbison.com" target="_blank" rel="noopener">
-        <img src="https://launchbison.com/badge-dark.svg" alt="Featured on Launchbison" width="198" height="62" />
+        <img src="https://launchbison.com/badge-dark.svg" alt="Featured on Launchbison" width="198" height="62" loading="lazy" decoding="async" />
       </a>
       <div class="footer-links">
         <a href="/app">Launch App</a>

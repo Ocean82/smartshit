@@ -361,7 +361,7 @@ if [ -d "$APP_DIR/landing" ]; then
       --exclude 'security-headers.inc' \
       "$APP_DIR/landing/" /var/www/smartsht/
   else
-    for f in index.html index.md terms.html terms.md privacy.html privacy.md excel-alternative.html excel-alternative.md formula-auditor.html formula-auditor.md 404.html screenshot.png smart-logo.png; do
+    for f in index.html index.md terms.html terms.md privacy.html privacy.md excel-alternative.html excel-alternative.md formula-auditor.html formula-auditor.md 404.html screenshot.png screenshot.webp screenshot-1350.webp smart-logo.png smart-logo.webp; do
       if [ -f "$APP_DIR/landing/$f" ]; then
         sudo cp "$APP_DIR/landing/$f" "/var/www/smartsht/$f"
       fi
