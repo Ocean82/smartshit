@@ -8,8 +8,9 @@
  */
 
 import { v4 as uuid } from 'uuid'
-import type { AgentAction, CellChange, SheetData } from '@/types'
-import type { FixWrite } from '@/auditor/types'
+import type { AgentAction, CellChange, ChatMessage, SheetData } from '@/types'
+import { getFixAbortReason } from '@/auditor'
+import type { AuditFinding, AuditResult, FixWrite } from '@/auditor/types'
 import { captureActionScope, type ScopeSource } from '@/lib/actionScope'
 import { scriptPatchSignature, type ScriptPatch } from '@/lib/scriptPatch'
 
@@ -57,7 +58,58 @@ export function buildAuditFixAction(
     description: `Auditor fix: ${title}`,
     status: 'pending',
     preview: { changes },
-    scope: captureActionScope(scopeSource),
+    // Bound to the target cells' content, not the selection or the whole-sheet
+    // revision: unrelated edits, selection moves, and sibling fixes on other
+    // cells leave it applicable; any change to its own cells makes it stale.
+    scope: captureActionScope(scopeSource, { guardCells: Object.keys(cellUpdates) }),
+    gate: 'autofix',
     prepared: { kind: 'script', patch, signature: scriptPatchSignature(patch) },
   }
+}
+
+/** Store slice `stageAuditFix` needs (the live store satisfies it). */
+export interface AuditFixState extends ScopeSource {
+  lastAuditResult: AuditResult | null
+  lastAuditRevision: number | null
+  addMessage: (message: ChatMessage) => void
+}
+
+export type StageResult = { ok: true } | { ok: false; message: string }
+
+/**
+ * The panel's APPLY FIX handler: check the finding still belongs to the latest
+ * audit of the open sheet, then stage a pending preview action. Never writes
+ * cells; the free auto-fix allowance is taken later, on Apply.
+ */
+export function stageAuditFix(finding: AuditFinding, state: AuditFixState): StageResult {
+  const fixActions = finding.fixActions
+  if (!fixActions?.length) return { ok: false, message: 'This finding has no automatic fix.' }
+
+  // The fix was computed for the audited content. If the open sheet or the
+  // workbook moved on since that audit, its writes could clobber newer work.
+  const audit = state.lastAuditResult
+  const fresh =
+    audit?.sheetId === state.activeSheetId &&
+    state.lastAuditRevision === state.workbookRevision &&
+    audit.findings.some((f) => f.id === finding.id)
+  if (!fresh) {
+    return { ok: false, message: 'The sheet changed since this scan. Re-scan, then apply the fix again.' }
+  }
+
+  const sheet = state.workbook.sheets.find((s) => s.id === state.activeSheetId) as SheetData | undefined
+  if (!sheet) return { ok: false, message: 'The sheet is no longer open.' }
+  // Value writes must land in empty cells so a fix never silently overwrites data.
+  const abort = getFixAbortReason(sheet, fixActions)
+  if (abort) return { ok: false, message: abort }
+
+  const action = buildAuditFixAction(finding.title, fixActions, sheet, state)
+  if (!action) return { ok: false, message: 'This fix has nothing to change.' }
+  state.addMessage({
+    id: uuid(),
+    role: 'assistant',
+    content: `Auditor fix ready to review: ${finding.title}. Check the highlighted cells, then Apply or Reject.`,
+    timestamp: Date.now(),
+    actions: [action],
+  })
+  return { ok: true }
 }

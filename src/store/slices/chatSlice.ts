@@ -20,6 +20,7 @@ import { AI_ANALYSIS_CONFIG } from '@/ai/config'
 import type { ExecutionResult } from '@/agent'
 import { buildScriptPreview } from '@/lib/scriptPreview'
 import { scriptPatchSignature } from '@/lib/scriptPatch'
+import { reserveAutoFixForApply } from '@/lib/autoFixReserver'
 import { captureActionScope, validateActionScope } from '@/lib/actionScope'
 import { shouldAutoApply } from '@/lib/applyPosture'
 import { validateToolParams } from '@shared/validateToolParams'
@@ -59,6 +60,8 @@ export interface ChatState {
  * from executing a script (or any async action) twice.
  */
 const inFlightActions = new Set<string>()
+/** Gated actions whose free auto-fix slot was just taken; consumed by the re-entrant Apply. */
+const autoFixReserved = new Set<string>()
 
 /**
  * Identity of the newest chat turn. Incremented by `sendMessage` and by
@@ -446,7 +449,7 @@ export function createChatActions(
         // A proposal is a promise about one workbook/sheet/selection/revision.
         // If any of those moved since it was prepared, applying it would write
         // the right patch into the wrong place — so reject it instead.
-        const scopeCheck = validateActionScope(action, captureActionScope(get() as never))
+        const scopeCheck = validateActionScope(action, captureActionScope(get() as never, { withCells: true }))
         if (!scopeCheck.ok) {
           markActionStatus(actionId, 'stale')
           recordTelemetry('previewDeniedActions', `${action.tool}:stale`)
@@ -465,6 +468,27 @@ export function createChatActions(
             `⚠️ I did not apply **${action.tool}** because ${paramCheck.reason ?? 'its parameters were invalid'}. ` +
             'Nothing was changed — ask me again with clearer details.',
           )
+          return
+        }
+
+        // ─── Free auto-fix allowance ────────────────────────────────────────
+        // Taken only here, on Apply, so previewing/rejecting a fix is free. The
+        // status flips to `applying` synchronously (duplicate-Apply guard), and
+        // the re-entrant call below re-validates scope after the async reservation.
+        if (action.gate === 'autofix' && !autoFixReserved.delete(actionId)) {
+          markActionStatus(actionId, 'applying')
+          inFlightActions.add(actionId)
+          void reserveAutoFixForApply().then((decision) => {
+            inFlightActions.delete(actionId)
+            if (storedStatus(actionId) !== 'applying') return // rejected while reserving
+            markActionStatus(actionId, 'pending')
+            if (!decision.allowed) {
+              pushAssistant('⚠️ You have used all your free auto-fixes. Upgrade to Pro to apply this fix. Nothing was changed.')
+              return
+            }
+            autoFixReserved.add(actionId)
+            get().applyAction(actionId)
+          })
           return
         }
 

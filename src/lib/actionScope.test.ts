@@ -154,3 +154,33 @@ describe('isActionStale / collectStaleActionIds', () => {
     expect([...ids]).toEqual(['stale'])
   })
 })
+
+describe('fixed-cell guard (auditor fixes)', () => {
+  const guarded = captureActionScope(makeSource({ selection: selectionA }), { guardCells: ['A1', 'C3'] })
+  const current = (overrides: Partial<ScopeSource> = {}) =>
+    captureActionScope(makeSource(overrides), { withCells: true })
+
+  it('ignores selection, revision and unrelated cell changes', () => {
+    const moved = current({
+      selection: { startRow: 9, startCol: 9, endRow: 9, endCol: 9 },
+      workbookRevision: 10,
+      workbook: { id: 'wb-1', sheets: [{ id: 'sheet-a', cells: { A1: { value: 1 }, Z9: { value: 5 } } }] },
+    })
+    expect(validateActionScope(makeAction(guarded), moved).ok).toBe(true)
+  })
+
+  it('rejects once a guarded cell changed', () => {
+    const edited = current({ workbook: { id: 'wb-1', sheets: [{ id: 'sheet-a', cells: { A1: { value: 2 } } }] } })
+    const check = validateActionScope(makeAction(guarded), edited)
+    expect(check.ok === false && check.reason).toMatch(/A1 changed/)
+  })
+
+  it('still rejects a different sheet or workbook', () => {
+    expect(validateActionScope(makeAction(guarded), current({ activeSheetId: 'sheet-b' })).ok).toBe(false)
+    expect(validateActionScope(makeAction(guarded), { ...current(), workbookId: 'wb-2' }).ok).toBe(false)
+  })
+
+  it('fails closed when the current scope carries no cells', () => {
+    expect(validateActionScope(makeAction(guarded), captureActionScope(makeSource())).ok).toBe(false)
+  })
+})
