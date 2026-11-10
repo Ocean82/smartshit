@@ -6,7 +6,9 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useStore } from '@/store/useStore'
 import { useShallow } from 'zustand/react/shallow'
+import { v4 as uuid } from 'uuid'
 import { getFixAbortReason } from '@/auditor'
+import { buildAuditFixAction } from '@/lib/auditFixAction'
 import type { AuditFinding, Severity } from '@/auditor/types'
 import { AuditFindingCard } from '@/components/AuditFindingCard'
 import { CustomRulesSection } from './CustomRulesSection'
@@ -16,12 +18,16 @@ import { useWorkbookFileImport } from '@/hooks/useWorkbookFileImport'
 import { FREE_AUTOFIX_LIFETIME_LIMIT } from '@/lib/featureGates'
 import { ShieldCheck, Loader2, RefreshCw, X } from 'lucide-react'
 
+const AUTO_RESCAN_DEBOUNCE_MS = 1200
+const AUTO_RESCAN_MAX_CELLS = 20000
+
 const SEVERITY_FILTERS = ['all', 'critical', 'high', 'medium', 'low', 'info'] as const
 type FilterValue = (typeof SEVERITY_FILTERS)[number]
 
 export function AuditPanelContent() {
-  const { workbook, activeSheetId, lastAuditResult, runActiveSheetAudit, isStale } = useStore(
+  const { workbook, activeSheetId, lastAuditResult, runActiveSheetAudit, isStale, workbookRevision } = useStore(
     useShallow((s) => ({
+      workbookRevision: s.workbookRevision,
       workbook: s.workbook,
       activeSheetId: s.activeSheetId,
       lastAuditResult: s.lastAuditResult,
@@ -68,6 +74,22 @@ export function AuditPanelContent() {
     }
   }, [handleRunAudit, activeSheetId])
 
+  // Keep the result fresh: once the workbook changes, re-audit after a quiet
+  // period. Silent (no spinner) and skipped on very large sheets, where the
+  // stale banner's manual Re-scan stays the cheap option.
+  useEffect(() => {
+    if (!isStale || !result) return
+    if (Object.keys(activeSheet?.cells ?? {}).length > AUTO_RESCAN_MAX_CELLS) return
+    const timer = setTimeout(() => {
+      try {
+        runActiveSheetAudit()
+      } catch (err) {
+        console.error('Audit failed:', err)
+      }
+    }, AUTO_RESCAN_DEBOUNCE_MS)
+    return () => clearTimeout(timer)
+  }, [isStale, result, workbookRevision, activeSheet, runActiveSheetAudit])
+
   const handleCellNavigate = useCallback((row: number, col: number) => {
     useStore.getState().setSelection({ startRow: row, startCol: col, endRow: row, endCol: col })
   }, [])
@@ -103,19 +125,25 @@ export function AuditPanelContent() {
     }
     setFixMessage(null)
 
+    // Stage the fix as a pending action: the grid previews the cells and the
+    // Apply/Reject bar commits (one undo entry) or discards it. Nothing is
+    // written to the sheet here.
     const state = useStore.getState()
-    state.pushHistory('Audit auto-fix')
-    for (const action of fixActions) {
-      const { cellId, formula, value } = action
-      if (formula) {
-        const formulaStr = formula.startsWith('=') ? formula : `=${formula}`
-        state.setCellValue(cellId, null, formulaStr)
-      } else if (value !== undefined) {
-        state.setCellValue(cellId, value)
-      }
+    const sheet = state.workbook.sheets.find((s) => s.id === state.activeSheetId)
+    const action = sheet && buildAuditFixAction(finding.title, fixActions, sheet, state)
+    if (!action) {
+      setFixMessage('This fix has nothing to change.')
+      return
     }
-    setTimeout(() => handleRunAudit(), 200)
-  }, [handleRunAudit, isPro, reserveAutoFix])
+    state.addMessage({
+      id: uuid(),
+      role: 'assistant',
+      content: `Auditor fix ready to review: ${finding.title}. Check the highlighted cells, then Apply or Reject.`,
+      timestamp: Date.now(),
+      actions: [action],
+    })
+    setFixMessage('Fix staged. Review the highlighted cells on the grid, then Apply or Reject.')
+  }, [isPro, reserveAutoFix])
 
   const handleFix = useCallback((finding: AuditFinding) => {
     // One reservation at a time, so a double-click can't spend two free fixes.
