@@ -62,7 +62,7 @@ export const FEATURE_GATE_COPY: Record<GatedFeature, FeatureGateConfig> = {
   'version-history': {
     feature: 'version-history',
     headline: 'Version history is a Pro feature',
-    description: 'Roll back to any previous version of your workbook. Never lose work again — every save creates a restore point.',
+    description: 'Roll back to any of your last 50 saved versions of a cloud workbook.',
     ctaLabel: 'Upgrade for version history',
   },
   'share-edit': {
