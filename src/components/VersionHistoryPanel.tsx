@@ -33,6 +33,11 @@ interface PreviewState {
   sheetId: string | null
 }
 
+/** Only a confirmed paid plan may fetch history; BYOK-only users never hit the server. */
+export function shouldFetchVersions(open: boolean, hasPlanPro: boolean | null, proRequired: boolean): boolean {
+  return open && hasPlanPro === true && !proRequired
+}
+
 export function VersionHistoryPanel() {
   const { showVersionHistory, setShowVersionHistory, loadWorkbookData, showConfirm, showToast } = useStore(
     useShallow((s) => ({
@@ -73,7 +78,7 @@ export function VersionHistoryPanel() {
   }, [cloudId])
 
   useEffect(() => {
-    if (showVersionHistory && hasPlanPro === true && !proRequired) {
+    if (shouldFetchVersions(showVersionHistory, hasPlanPro, proRequired)) {
       void fetchVersions()
     }
   }, [showVersionHistory, fetchVersions, hasPlanPro, proRequired])
