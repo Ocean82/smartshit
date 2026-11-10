@@ -338,3 +338,27 @@ describe('workbook routes — input validation', () => {
     expect(res.body.error).toContain('required')
   })
 })
+
+describe('workbook routes - automatic version snapshots are Pro-only', () => {
+  const app = createApp()
+  const versionInserts = () =>
+    mockQuery.mock.calls.filter((c) => String(c[0]).includes('INSERT INTO smartsht.workbook_versions'))
+  beforeEach(() => {
+    mockUserId = 'user_owner'
+    mockQueryResults.clear()
+    mockQuery.mockClear()
+    mockQueryResults.set('select_workbook_with_key', { rows: [{ owner_id: 'user_owner', s3_key: 'k' }] })
+  })
+  it('free create/save write no version rows', async () => {
+    mockIsPro = false
+    expect((await request(app).post('/api/workbooks').send({ name: 'A', data: '{}' })).status).toBe(201)
+    expect((await request(app).put('/api/workbooks/wb_1').send({ data: '{}' })).status).toBe(200)
+    expect(versionInserts()).toHaveLength(0)
+  })
+  it('Pro create/save write version rows', async () => {
+    mockIsPro = true
+    await request(app).post('/api/workbooks').send({ name: 'A', data: '{}' })
+    await request(app).put('/api/workbooks/wb_1').send({ data: '{}' })
+    expect(versionInserts()).toHaveLength(2)
+  })
+})

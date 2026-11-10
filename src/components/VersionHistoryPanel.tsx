@@ -5,6 +5,7 @@ import {
   listVersions,
   loadVersion,
   isCloudConfigured,
+  VersionsProRequiredError,
   type VersionEntry,
 } from '@/lib/cloudSync'
 import { useUsage } from '@/auth'
@@ -42,7 +43,10 @@ export function VersionHistoryPanel() {
       showToast: s.showToast,
     })),
   )
-  const { isPro } = useUsage()
+  const { hasPlanPro } = useUsage()
+  // Server gates on the paid plan (BYOK does not count); a 403 also flips this on.
+  const [proRequired, setProRequired] = useState(false)
+  const gated = hasPlanPro === false || proRequired
   const [versions, setVersions] = useState<VersionEntry[]>([])
   const [loading, setLoading] = useState(false)
   const [actionId, setActionId] = useState<string | null>(null)
@@ -59,19 +63,23 @@ export function VersionHistoryPanel() {
   const fetchVersions = useCallback(async () => {
     if (!cloudId || !isCloudConfigured()) return
     setLoading(true)
-    const result = await listVersions(cloudId)
-    setVersions(result)
-    setLoading(false)
+    try {
+      setVersions(await listVersions(cloudId))
+    } catch (err) {
+      if (err instanceof VersionsProRequiredError) setProRequired(true)
+    } finally {
+      setLoading(false)
+    }
   }, [cloudId])
 
   useEffect(() => {
-    if (showVersionHistory && isPro) {
+    if (showVersionHistory && hasPlanPro === true && !proRequired) {
       void fetchVersions()
     }
-  }, [showVersionHistory, fetchVersions, isPro])
+  }, [showVersionHistory, fetchVersions, hasPlanPro, proRequired])
 
   // Version history is Pro-only — render gate after all hooks
-  if (showVersionHistory && !isPro) {
+  if (showVersionHistory && gated) {
     return (
       <div className={`w-[300px] border-l border-gray-200 bg-white h-full flex flex-col shrink-0 p-4 max-md:w-full ${MOBILE_PANEL_BELOW_TITLEBAR}`}>
         <div className="flex items-center justify-between mb-4">
@@ -90,7 +98,12 @@ export function VersionHistoryPanel() {
   const handlePreview = async (version: VersionEntry) => {
     if (!cloudId) return
     setActionId(version.id)
-    const data = await loadVersion(cloudId, version.id)
+    let data: WorkbookData | null = null
+    try {
+      data = await loadVersion(cloudId, version.id)
+    } catch (err) {
+      if (err instanceof VersionsProRequiredError) setProRequired(true)
+    }
     setActionId(null)
     if (!data) {
       showToast({ type: 'error', message: 'Failed to load version preview' })
@@ -114,7 +127,12 @@ export function VersionHistoryPanel() {
       variant: 'warning',
       onConfirm: async () => {
         setActionId(versionId)
-        const data = await loadVersion(cloudId, versionId)
+        let data: WorkbookData | null = null
+        try {
+          data = await loadVersion(cloudId, versionId)
+        } catch (err) {
+          if (err instanceof VersionsProRequiredError) setProRequired(true)
+        }
         setActionId(null)
         if (data) {
           loadWorkbookData(data, { pushUndo: true })
@@ -184,7 +202,7 @@ export function VersionHistoryPanel() {
               <p className="text-sm text-gray-500 mb-1">No cloud workbook</p>
               <p className="text-xs text-gray-400">Save this workbook to the cloud first to track versions.</p>
             </div>
-          ) : loading ? (
+          ) : loading || hasPlanPro === null ? (
             <div className="flex items-center justify-center py-12 gap-2 text-gray-400">
               <Loader2 size={16} className="animate-spin" />
               <span className="text-sm">Loading versions...</span>
