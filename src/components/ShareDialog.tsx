@@ -13,6 +13,9 @@ import {
 import { isCloudConfigured, getAuthHeaders } from '@/lib/cloudSync'
 import { useStore } from '@/store/useStore'
 import { useFocusTrap } from '@/hooks/useFocusTrap'
+import { canCallServer, useAuthStatus } from '@/lib/serverAccess'
+import { openSignIn } from '@/auth'
+import { ANON_SHARE_MESSAGE, SIGN_IN_BUTTON } from '@/auth/anonCopy'
 
 const API_BASE = import.meta.env.VITE_AI_API_URL ?? ''
 
@@ -38,12 +41,15 @@ export function ShareDialog({ open, onClose }: ShareDialogProps) {
   const permission = 'view' as const
   const [expiresIn, setExpiresIn] = useState<'24h' | '7d' | '30d' | 'never'>('never')
   const containerRef = useFocusTrap<HTMLDivElement>(open, onClose)
+  // Re-render and re-fetch when auth settles (isCloudConfigured is not reactive).
+  const authStatus = useAuthStatus()
 
   // Share the active file's cloud workbook.
   const cloudId = useStore((s) => s.files.find((f) => f.id === s.activeFileId)?.cloudWorkbookId)
   const canShare = isCloudConfigured() && Boolean(cloudId)
 
   const fetchShares = useCallback(async () => {
+    if (!canCallServer()) return
     if (!cloudId || !isCloudConfigured()) return
     setLoading(true)
     try {
@@ -65,11 +71,12 @@ export function ShareDialog({ open, onClose }: ShareDialogProps) {
 
   useEffect(() => {
     if (open) void fetchShares()
-  }, [open, fetchShares])
+  }, [open, fetchShares, authStatus])
 
   if (!open) return null
 
   const handleCreate = async () => {
+    if (!canCallServer()) return
     if (!cloudId || !canShare) return
     setCreating(true)
     try {
@@ -99,6 +106,7 @@ export function ShareDialog({ open, onClose }: ShareDialogProps) {
       confirmLabel: 'Revoke',
       variant: 'danger',
       onConfirm: async () => {
+        if (!canCallServer()) return
         try {
           const headers = await getAuthHeaders()
           if (!headers.Authorization) return
@@ -158,9 +166,18 @@ export function ShareDialog({ open, onClose }: ShareDialogProps) {
             <Globe size={32} className="mx-auto mb-3 text-gray-300" />
             <p className="text-sm text-gray-500">
               {!isCloudConfigured()
-                ? 'Sign in to share workbooks'
+                ? ANON_SHARE_MESSAGE
                 : 'Save this workbook to the cloud first before sharing.'}
             </p>
+            {!isCloudConfigured() && authStatus !== 'dev' && (
+              <button
+                type="button"
+                onClick={() => void openSignIn('share')}
+                className="mt-3 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
+              >
+                {SIGN_IN_BUTTON}
+              </button>
+            )}
           </div>
         ) : (
           <>

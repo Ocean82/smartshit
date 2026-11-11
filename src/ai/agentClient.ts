@@ -5,6 +5,8 @@ import type { ClientRouting } from '@shared/clientRouting'
 import { getAuthHeaders } from '@/lib/cloudSync'
 import { getByokPayload } from '@/lib/userApiKey'
 import { readAgentSseStream } from '@/ai/agentSse'
+import { canCallServer, getAuthStatus, whenAuthSettled } from '@/lib/serverAccess'
+import { ANON_CHAT_MESSAGE } from '@/auth/anonCopy'
 
 export {
   parseCompleteSseEvent,
@@ -54,6 +56,8 @@ export interface AgentServerError {
   message: string
   /** Raw HTTP status, for logging/telemetry. */
   httpStatus: number
+  /** Set when no request was made because the visitor is anonymous (signed out). */
+  code?: 'anon-gated'
 }
 
 export function isAgentServerError(
@@ -100,6 +104,26 @@ async function toAgentServerError(res: Response): Promise<AgentServerError> {
   }
 }
 
+/**
+ * Returned (without any request) when the visitor is anonymous, so the pipeline
+ * can show a sign-in message instead of a misleading local fallback.
+ */
+function anonGatedError(): AgentServerError {
+  return {
+    kind: 'server-error',
+    status: 'auth',
+    httpStatus: 0,
+    code: 'anon-gated',
+    message: ANON_CHAT_MESSAGE,
+  }
+}
+
+/** While Clerk is still loading, wait (bounded) so a signed-in user isn't refused. */
+async function mayCallChatServer(): Promise<boolean> {
+  if (getAuthStatus() === 'pending') await whenAuthSettled(3000)
+  return canCallServer()
+}
+
 export type AgentChatTurn = { role: 'user' | 'assistant'; content: string }
 
 /** Shared payload for non-streaming and streaming chat. */
@@ -129,6 +153,7 @@ export interface ServerHealth {
 }
 
 export async function fetchServerHealth(): Promise<ServerHealth | null> {
+  if (!canCallServer()) return null
   try {
     const res = await fetch(`${API_BASE}/health`, { signal: AbortSignal.timeout(4000) })
     if (!res.ok) return null
@@ -165,6 +190,7 @@ async function postAgentChat(
 export async function chatWithAgentServer(
   request: AgentChatRequest,
 ): Promise<ServerChatResponse | AgentServerError | null> {
+  if (!(await mayCallChatServer())) return anonGatedError()
   try {
     const res = await postAgentChat('/api/chat', request, AbortSignal.timeout(CHAT_TIMEOUT_MS))
     // A 4xx here carries an actionable message (auth/rate-limit/quota) — surface
@@ -196,6 +222,7 @@ function withChatTimeout(signal?: AbortSignal): AbortSignal {
 export async function chatWithAgentServerStream(
   request: AgentStreamChatRequest,
 ): Promise<ServerChatResponse | AgentServerError | null> {
+  if (!(await mayCallChatServer())) return anonGatedError()
   try {
     const res = await postAgentChat('/api/chat/stream', request, withChatTimeout(request.signal))
     // Non-200 before the SSE stream opens (e.g. 401 expired token, 429 rate

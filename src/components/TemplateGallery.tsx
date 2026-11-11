@@ -6,6 +6,9 @@ import { templates, templateCategories, getPopularTemplates, searchTemplates, ty
 import { hasTemplateSpec } from '@/templates'
 import { loadCommunityTemplates, importTemplateFromFile, installTemplate, type CommunityTemplate, type TemplatePackage } from '@/lib/communityTemplates'
 import { getAuthHeaders, isCloudConfigured } from '@/lib/cloudSync'
+import { canCallServer, useAuthStatus } from '@/lib/serverAccess'
+import { openSignIn } from '@/auth'
+import { ANON_MARKETPLACE_MESSAGE, SIGN_IN_BUTTON } from '@/auth/anonCopy'
 
 const API_BASE = import.meta.env.VITE_AI_API_URL ?? ''
 
@@ -48,12 +51,15 @@ export function TemplateGallery({ open, onClose }: TemplateGalleryProps) {
   const [cloudSort, setCloudSort] = useState<'popular' | 'recent' | 'rating'>('popular')
   const [installingId, setInstallingId] = useState<string | null>(null)
   const [showPublish, setShowPublish] = useState(false)
+  // Anonymous visitors make zero backend calls: the Marketplace tab asks them to sign in.
+  const authStatus = useAuthStatus()
+  const marketplaceAllowed = authStatus === 'signed-in' || authStatus === 'dev'
 
   useEffect(() => {
     if (activeCategory === 'Marketplace' && open) {
       void fetchCloudTemplates()
     }
-  }, [activeCategory, cloudSort, open]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activeCategory, cloudSort, open, authStatus]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!open) return
@@ -69,6 +75,7 @@ export function TemplateGallery({ open, onClose }: TemplateGalleryProps) {
   }, [open, onClose, showPublish])
 
   async function fetchCloudTemplates() {
+    if (!canCallServer()) return
     setCloudLoading(true)
     setCloudError(null)
     try {
@@ -122,6 +129,7 @@ export function TemplateGallery({ open, onClose }: TemplateGalleryProps) {
   }
 
   async function handleInstallCloud(template: CloudTemplate) {
+    if (!canCallServer()) return
     setInstallingId(template.id)
     try {
       const res = await fetch(`${API_BASE}/api/community-templates/${template.id}/install`, {
@@ -218,7 +226,18 @@ export function TemplateGallery({ open, onClose }: TemplateGalleryProps) {
 
         {/* Templates grid */}
         <div className="flex-1 overflow-y-auto min-h-0 px-4 md:px-6 py-4">
-          {activeCategory === 'Marketplace' ? (
+          {activeCategory === 'Marketplace' && !marketplaceAllowed ? (
+            <div className="text-center py-12 text-gray-500">
+              <p className="text-sm">{ANON_MARKETPLACE_MESSAGE}</p>
+              <button
+                type="button"
+                onClick={() => void openSignIn('header')}
+                className="mt-3 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
+              >
+                {SIGN_IN_BUTTON}
+              </button>
+            </div>
+          ) : activeCategory === 'Marketplace' ? (
             <MarketplaceGrid
               templates={cloudTemplates}
               loading={cloudLoading}
@@ -424,6 +443,7 @@ function PublishDialog({ templates, onClose, onPublished }: {
   }, [selectedTemplate])
 
   async function handlePublish() {
+    if (!canCallServer()) return
     if (!userId || !name) return
     setPublishing(true)
     try {

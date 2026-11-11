@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Key, Check, X, ChevronDown, ChevronUp } from 'lucide-react'
+import { ANON_BYOK_NOTE } from '@/auth/anonCopy'
 import {
   loadUserApiKey,
   saveUserApiKey,
@@ -79,6 +80,7 @@ export function ApiKeySettings() {
             Use your own API key for faster, unlimited AI responses. Usage is billed to your account — free for the app.
           </p>
 
+          <p className="text-[10px] text-gray-500 leading-tight">{ANON_BYOK_NOTE}</p>
           {/* Provider select */}
           <select
             value={provider}

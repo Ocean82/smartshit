@@ -520,3 +520,37 @@ describe('LLMGateway stage', () => {
     expect(result!.metadata?.readProbeFollowUp).toBe(true)
   })
 })
+
+// ─── Anonymous gate (no request was made) ────────────────────────────────────
+describe('LLMGateway stage: anonymous gate', () => {
+  const gated = {
+    kind: 'server-error' as const,
+    status: 'auth' as const,
+    httpStatus: 0,
+    code: 'anon-gated' as const,
+    message: 'That question needs the AI assistant, which needs a free account.',
+  }
+  beforeEach(() => {
+    vi.restoreAllMocks()
+    setupDefaultMocks()
+    vi.mocked(chatWithAgentServerStream).mockResolvedValue(gated)
+  })
+
+  it('without local analysis: returns the sign-in message with signInAction and no "Sign in again" chip', async () => {
+    const result = await createLLMGatewayStage().process(makeContext())
+    expect(result!.success).toBe(false)
+    expect(result!.message).toBe(gated.message)
+    expect(result!.metadata).toMatchObject({ toolUsed: 'anon-gated', source: 'ai-server-refused', signInAction: 'chat' })
+    expect(result!.suggestions ?? []).toEqual([])
+  })
+
+  it('with local analysis: keeps the local answer and adds the sign-in line', async () => {
+    const localAnalysis = { message: 'Groceries is $50 over budget', suggestions: ['Show groceries'], toolUsed: 'budget' }
+    const result = await createLLMGatewayStage().process(makeContext({ mode: 'advise', localAnalysis }))
+    expect(result!.success).toBe(true)
+    expect(result!.message).toContain('Groceries is $50 over budget')
+    expect(result!.message).toContain(gated.message)
+    expect(result!.metadata).toMatchObject({ signInAction: 'chat' })
+    expect(vi.mocked(chatWithAgentServerStream)).toHaveBeenCalledTimes(1)
+  })
+})

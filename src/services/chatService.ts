@@ -404,6 +404,7 @@ function stageResultToChatMessage(
       actions,
     }
 
+    const signIn = result.metadata?.signInAction === 'chat' ? { signInAction: 'chat' as const } : {}
     // An explicit server refusal (sign-in / rate limit / quota) is the answer.
     // Falling back to local insights here would hide the CTA the server worded
     // for the user and pretend the request succeeded.
@@ -415,6 +416,8 @@ function stageResultToChatMessage(
         timestamp: Date.now(),
         suggestions: result.suggestions,
         providerMeta: toolResult.providerMeta,
+        toolUsed: toolResult.toolUsed,
+        ...signIn,
       }
     }
 
@@ -423,11 +426,14 @@ function stageResultToChatMessage(
       return { ...ctx.processLocalFallback(ctx.input), id: msgId }
     }
 
-    return toolResultToChatMessage(toolResult, {
-      id: msgId,
-      insightsSnapshot: ctx.insightsSnapshot,
-      previewContext: { sheet: ctx.sheet, getComputedValue: ctx.getComputedValue, scope: ctx.scope },
-    })
+    return {
+      ...toolResultToChatMessage(toolResult, {
+        id: msgId,
+        insightsSnapshot: ctx.insightsSnapshot,
+        previewContext: { sheet: ctx.sheet, getComputedValue: ctx.getComputedValue, scope: ctx.scope },
+      }),
+      ...signIn,
+    }
   }
 
   // Agent parser / macro / Tier-2 capability router / template overwrite with actions → Apply UI

@@ -1,6 +1,8 @@
 import { useAuth } from '@clerk/react'
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { loadUserApiKey } from '@/lib/userApiKey'
+import { useAuthStatus } from '@/lib/serverAccess'
+import { anonymousUsageState, computeIsPro, shouldFetchPlan } from './usageLogic'
 import { FREE_DAILY_LIMIT } from '../../shared/config'
 
 const CLERK_PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ?? ''
@@ -125,6 +127,7 @@ function useUnlimitedUsage() {
     dailyLimit: FREE_DAILY_LIMIT,
     usedToday: 0,
     recordUsage: () => {},
+    isAnonymous: false as const,
   }
 }
 
@@ -137,7 +140,10 @@ function useTrackedUsage() {
   const [usage, setUsage] = useState<UsageData>(() => getStoredUsage(accountId))
   const [serverIsPro, setServerIsPro] = useState<boolean | null>(null)
   const [serverLimit, setServerLimit] = useState<number | null>(null)
-  const fetchedRef = useRef(false)
+  const status = useAuthStatus()
+  const inFlightRef = useRef(false)
+  const doneRef = useRef(false)
+  const accountIdRef = useRef(accountId)
 
   // BYOK users bypass limits — they're paying for their own tokens
   const hasByok = Boolean(loadUserApiKey()?.apiKey)
@@ -146,6 +152,10 @@ function useTrackedUsage() {
   // count never shows under another, and reconcile when the server reports the
   // authoritative post-request count.
   useEffect(() => {
+    // A different account fetches its own plan.
+    accountIdRef.current = accountId
+    inFlightRef.current = false
+    doneRef.current = false
     setUsage(getStoredUsage(accountId))
     return subscribeUsage((used) => {
       const next: UsageData = { count: used, date: getToday() }
@@ -168,12 +178,18 @@ function useTrackedUsage() {
 
   // Fetch server-side usage/pro status once per session as authoritative source
   useEffect(() => {
-    if (fetchedRef.current || claimsPro || hasByok) return
-    fetchedRef.current = true
-
+    // Anonymous/pending sessions never call getToken() (it waits on Clerk and never
+    // settles when Clerk is blocked) and never fetch. inFlightRef is set synchronously
+    // so a dependency-driven re-run while the first call is pending starts nothing.
+    if (!shouldFetchPlan({ status, claimsPro, hasByok, inFlight: inFlightRef.current, done: doneRef.current })) return
+    inFlightRef.current = true
     const API_BASE = import.meta.env.VITE_AI_API_URL ?? ''
+    const requestedFor = accountId
     getToken().then((token) => {
-      if (!token) return
+      inFlightRef.current = false
+      // Token not ready, or the account changed while waiting: a later re-run retries.
+      if (!token || requestedFor !== accountIdRef.current) return
+      doneRef.current = true
       fetch(`${API_BASE}/api/usage`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -193,10 +209,12 @@ function useTrackedUsage() {
           }
         })
         .catch(() => setServerIsPro(false))
+    }).catch(() => {
+      inFlightRef.current = false
     })
-  }, [getToken, claimsPro, hasByok, accountId])
+  }, [status, getToken, claimsPro, hasByok, accountId])
 
-  const isPro = claimsPro || serverIsPro === true || hasByok
+  const isPro = computeIsPro({ status, claimsPro, serverIsPro, hasByok })
   const dailyLimit = serverLimit ?? FREE_DAILY_LIMIT
 
   // While server check is in-flight (serverIsPro === null), don't gate the user.
@@ -208,6 +226,10 @@ function useTrackedUsage() {
     [isPro, hasByok, accountId, setUsage],
   )
 
+  // After ALL hooks (rules of hooks): anonymous visitors have no server count.
+  const anonymous = anonymousUsageState(status, dailyLimit)
+  if (anonymous) return anonymous
+
   return {
     isPro,
     canAsk,
@@ -215,6 +237,7 @@ function useTrackedUsage() {
     dailyLimit,
     usedToday: usage.count,
     recordUsage,
+    isAnonymous: false as const,
   }
 }
 

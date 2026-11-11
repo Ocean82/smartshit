@@ -26,6 +26,7 @@ import { ImportInsightsOverlay } from '@/components/ImportInsightsOverlay'
 import { ApplyPostureToggle } from '@/components/ApplyPostureToggle'
 import { Sparkles, Zap, Cloud, CloudOff, Loader2, Share2, MessageSquare, SquarePen, Search } from 'lucide-react'
 import { UserNav, SubscriptionNoticeSlot } from '@/auth'
+import { useAuthStatus } from '@/lib/serverAccess'
 import {
   getSyncStatus,
   onSyncStatusChange,
@@ -97,6 +98,8 @@ const {
     showSheetTabs: s.showSheetTabs,
   })))
   const [isLoaded, setIsLoaded] = useState(false)
+  // isCloudConfigured() is not reactive: re-run the cloud autosave when auth settles.
+  const authStatus = useAuthStatus()
   const [showTemplates, setShowTemplates] = useState(false)
   const [showCommandPalette, setShowCommandPalette] = useState(false)
   const [showWorkbookPicker, setShowWorkbookPicker] = useState(false)
@@ -128,7 +131,7 @@ const {
     if (isLoaded && isCloudConfigured()) {
       scheduleSave(activeCloudId, workbook)
     }
-  }, [workbook.updatedAt, activeCloudId, isLoaded]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [workbook.updatedAt, activeCloudId, isLoaded, authStatus]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Listen for share dialog open event from MenuBar
   useEffect(() => {
@@ -370,6 +373,8 @@ function TitleBar({ onOpenTemplates, onOpenCloudPicker, onOpenShare, onOpenComma
     workbookName: s.workbook.name,
     workbookUpdatedAt: s.workbook.updatedAt,
   })))
+  // Re-render the sync badge when auth settles (isCloudConfigured() is not reactive).
+  useAuthStatus()
   const [syncStatus, setSyncStatus] = useState<SyncStatus>(getSyncStatus())
 
   useEffect(() => {

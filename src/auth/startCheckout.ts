@@ -1,3 +1,5 @@
+import { getAuthStatus, whenAuthSettled } from '@/lib/serverAccess'
+import { openSignIn } from './SignInDialog'
 export type CheckoutInterval = 'monthly' | 'annual'
 
 /**
@@ -10,6 +12,14 @@ export type CheckoutInterval = 'monthly' | 'annual'
 export async function startCheckout(
   interval: CheckoutInterval = 'monthly',
 ): Promise<'redirected' | 'no-url' | 'failed'> {
+  // Anonymous visitors are sent to sign-in; no request is made.
+  // A returning signed-in user may click before Clerk settles: wait (bounded) first.
+  let status = getAuthStatus()
+  if (status === 'pending') status = await whenAuthSettled(3000)
+  if (status !== 'signed-in' && status !== 'dev') {
+    void openSignIn('upgrade')
+    return 'failed'
+  }
   try {
     // Imported lazily so a caller that never starts checkout never pays for the
     // auth-header module (and its Clerk dependency) in a non-browser build.

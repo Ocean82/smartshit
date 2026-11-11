@@ -25,6 +25,7 @@ import {
   type ServerAgentAction,
   type ServerChatResponse,
 } from '@/ai/agentClient'
+import { isAnonGated, anonGatedMetadata } from '@/ai/anonGate'
 import { reportServerUsage } from '@/auth/useUsage'
 import { buildAdaptiveContext, getClientContextBudget } from '@/ai/adaptiveContext'
 import { formatInsights, mergeToolResultContent } from '@/ai/responseBuilder'
@@ -131,6 +132,20 @@ export function createLLMGatewayStage(deps?: LLMGatewayDeps): PipelineStage {
         }
       }
 
+      if (isAnonGated(serverResult)) {
+        // Anonymous visitor: no request was made. Keep any local answer and add the sign-in line.
+        if (localAnalysis) {
+          const kept = localAnalysisResult(localAnalysis, serverResult.message, [])
+          return { ...kept, metadata: { ...kept.metadata, signInAction: anonGatedMetadata().signInAction } }
+        }
+        return {
+          success: false,
+          message: serverResult.message,
+          stageName: 'llm-gateway',
+          suggestions: [],
+          metadata: { ...anonGatedMetadata() },
+        }
+      }
       if (isAgentServerError(serverResult)) {
         if (localAnalysis) {
           return localAnalysisResult(localAnalysis, serverResult.message, suggestionsForServerError(serverResult.status))

@@ -19,13 +19,27 @@ export default defineConfig({
     trace: 'on-first-retry',
     permissions: ['clipboard-read', 'clipboard-write'],
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  projects: [
+    {
+      name: 'chromium',
+      testIgnore: /anon\.spec\.ts/,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      // Anonymous mode: built with a Clerk key whose host never resolves.
+      name: 'anon',
+      testMatch: /anon\.spec\.ts/,
+      use: { ...devices['Desktop Chrome'], baseURL: 'http://127.0.0.1:4174/app/' },
+    },
+  ],
+  globalSetup: './e2e/anon.globalSetup.ts',
   webServer: {
-    // Rebuild without Clerk so AuthGate does not hang on the placeholder
-    // VITE_CLERK_PUBLISHABLE_KEY in .env.production.
-    command: 'npm run build:e2e && npm run preview -- --host 127.0.0.1 --port 4173',
+    // One entry builds dist (no Clerk) then dist-anon (unreachable Clerk) in
+    // sequence and serves them on 4173 / 4174. Never reuse a stray preview
+    // server: it would skip the anon build.
+    command: 'node scripts/e2e-servers.mjs',
     url: 'http://127.0.0.1:4173/app/',
-    reuseExistingServer: !process.env.CI,
-    timeout: 180_000,
+    reuseExistingServer: false,
+    timeout: 300_000,
   },
 })

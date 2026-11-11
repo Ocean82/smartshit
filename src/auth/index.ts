@@ -1,4 +1,5 @@
-export { AuthProvider, AuthGate, UserNav } from './AuthProvider'
+export { AuthProvider, UserNav } from './AuthProvider'
+export { SignInDialog, openSignIn, closeSignIn } from './SignInDialog'
 export { ClerkUserSync } from './ClerkUserSync'
 export { useUsage } from './useUsage'
 export { useAutoFixGate } from './useAutoFixGate'

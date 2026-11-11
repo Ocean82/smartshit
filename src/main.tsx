@@ -4,7 +4,10 @@ import './index.css'
 import App from './App'
 import { SharedView } from '@/components/SharedView'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
-import { AuthProvider, AuthGate, ClerkUserSync } from '@/auth'
+import { AuthProvider, ClerkUserSync, SignInDialog } from '@/auth'
+import { initServerAccess } from '@/lib/serverAccess'
+import { setAnonAIFunctionNotifier } from '@/engine/aiFunctionDefinitions'
+import { ANON_AI_FUNCTION_TOAST } from '@/auth/anonCopy'
 import { useStore } from '@/store/useStore'
 import { savePersistedState, savePersistedStateAsync } from '@/lib/persistence'
 import { hydrateFromIdbIfNewer } from '@/store/hydrateFromIdb'
@@ -13,6 +16,9 @@ import { flushSave, isCloudConfigured } from '@/lib/cloudSync'
 import { migrateLegacyStorageKeys } from '@/lib/storageKeys'
 import { initErrorReporting } from '@/lib/errorReporting'
 
+// Arms the bounded 8 s `pending` auth timer (no-op in dev builds without a Clerk key).
+initServerAccess()
+setAnonAIFunctionNotifier(() => useStore.getState().showToast({ type: 'info', message: ANON_AI_FUNCTION_TOAST }))
 // Initialize error reporting (no-op if VITE_SENTRY_DSN is not set)
 initErrorReporting()
 
@@ -139,10 +145,9 @@ createRoot(document.getElementById('root')!).render(
         <SharedView token={sharedMatch[1]} />
       ) : (
         <AuthProvider>
-          <AuthGate>
-            <ClerkUserSync />
-            <App />
-          </AuthGate>
+          <ClerkUserSync />
+          <App />
+          <SignInDialog />
         </AuthProvider>
       )}
     </ErrorBoundary>

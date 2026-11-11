@@ -8,6 +8,9 @@ import {
   type VersionEntry,
 } from '@/lib/cloudSync'
 import { useUsage } from '@/auth'
+import { useAuthStatus } from '@/lib/serverAccess'
+import { openSignIn } from '@/auth'
+import { ANON_VERSION_MESSAGE, SIGN_IN_BUTTON } from '@/auth/anonCopy'
 import { UpgradeGate } from '@/components/UpgradeGate'
 import { ReadOnlyGrid } from '@/components/ReadOnlyGrid'
 import { useFocusTrap } from '@/hooks/useFocusTrap'
@@ -43,6 +46,8 @@ export function VersionHistoryPanel() {
     })),
   )
   const { isPro } = useUsage()
+  // Re-render and re-fetch when auth settles (isCloudConfigured is not reactive).
+  const authStatus = useAuthStatus()
   const [versions, setVersions] = useState<VersionEntry[]>([])
   const [loading, setLoading] = useState(false)
   const [actionId, setActionId] = useState<string | null>(null)
@@ -68,7 +73,29 @@ export function VersionHistoryPanel() {
     if (showVersionHistory && isPro) {
       void fetchVersions()
     }
-  }, [showVersionHistory, fetchVersions, isPro])
+  }, [showVersionHistory, fetchVersions, isPro, authStatus])
+
+  // Anonymous visitors: version history lives with cloud workbooks, so ask them to sign in.
+  if (showVersionHistory && authStatus !== 'signed-in' && authStatus !== 'dev') {
+    return (
+      <div className={`w-[300px] border-l border-gray-200 bg-white h-full flex flex-col shrink-0 p-4 max-md:w-full ${MOBILE_PANEL_BELOW_TITLEBAR}`}>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-semibold" style={{ color: 'var(--ink-primary)' }}>Version History</h3>
+          <button type="button" onClick={() => setShowVersionHistory(false)} className="p-1 rounded-lg transition-colors" style={{ color: 'var(--neutral-400)' }} aria-label="Close">
+            <X size={16} />
+          </button>
+        </div>
+        <p className="text-sm text-gray-500 mb-3">{ANON_VERSION_MESSAGE}</p>
+        <button
+          type="button"
+          onClick={() => void openSignIn('version-history')}
+          className="self-start rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
+        >
+          {SIGN_IN_BUTTON}
+        </button>
+      </div>
+    )
+  }
 
   // Version history is Pro-only — render gate after all hooks
   if (showVersionHistory && !isPro) {

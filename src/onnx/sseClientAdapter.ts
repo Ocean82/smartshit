@@ -11,6 +11,16 @@
 
 import type { TensorData, InferenceResult } from './types';
 import { runServerInference as sseRunServerInference } from './sseClient';
+import { canCallServer } from '@/lib/serverAccess';
+import { ANON_ONNX_MESSAGE } from '@/auth/anonCopy';
+
+/** Thrown (without any request) when server ONNX inference is attempted anonymously. */
+export class AnonymousServerError extends Error {
+  constructor() {
+    super(ANON_ONNX_MESSAGE);
+    this.name = 'AnonymousServerError';
+  }
+}
 
 /**
  * Runs server-side inference via the SSE client.
@@ -24,6 +34,7 @@ export async function runServerInference(
   modelName: string,
   tensor: TensorData,
 ): Promise<InferenceResult> {
+  if (!canCallServer()) throw new AnonymousServerError();
   const { promise } = sseRunServerInference({
     modelName,
     inputTensor: tensor,

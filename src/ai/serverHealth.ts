@@ -1,4 +1,5 @@
 import { fetchServerHealth, type ServerHealth } from '@/ai/agentClient'
+import { canCallServer, subscribeAuthStatus } from '@/lib/serverAccess'
 
 export type ServerHealthListener = (health: ServerHealth | null) => void
 
@@ -58,6 +59,8 @@ async function poll(): Promise<void> {
 }
 
 function startOrResume(): void {
+  // Anonymous visitors never poll /health: no backend traffic for core use.
+  if (!canCallServer()) return
   if (!started) {
     started = true
     intervalMs = HEALTHY_INTERVAL_MS
@@ -69,6 +72,23 @@ function startOrResume(): void {
   else scheduleNext()
 }
 
+let authUnsubscribe: (() => void) | null = null
+
+/** Start/stop polling when auth status flips (anonymous -> signed-in and back). */
+function ensureAuthWatcher(): void {
+  if (authUnsubscribe) return
+  authUnsubscribe = subscribeAuthStatus(() => {
+    if (listeners.size === 0) return
+    if (canCallServer()) {
+      startOrResume()
+    } else {
+      clearScheduled()
+      started = false
+      notify(null)
+    }
+  })
+}
+
 export function getServerHealthSnapshot(): ServerHealth | null {
   return current
 }
@@ -78,6 +98,7 @@ export function getServerHealthSnapshot(): ServerHealth | null {
  * and one timer. Polling stops shortly after the last subscriber unsubscribes.
  */
 export function subscribeServerHealth(listener: ServerHealthListener): () => void {
+  ensureAuthWatcher()
   listeners.add(listener)
   listener(current)
   clearStopGrace()
@@ -106,4 +127,6 @@ export function resetServerHealthForTests(): void {
   started = false
   clearScheduled()
   clearStopGrace()
+  authUnsubscribe?.()
+  authUnsubscribe = null
 }
