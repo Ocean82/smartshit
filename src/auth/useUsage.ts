@@ -120,6 +120,7 @@ function createRecordUsage(
 function useUnlimitedUsage() {
   return {
     isPro: true as const,
+    hasPlanPro: true as boolean | null,
     canAsk: true as const,
     remaining: Infinity,
     dailyLimit: FREE_DAILY_LIMIT,
@@ -168,7 +169,7 @@ function useTrackedUsage() {
 
   // Fetch server-side usage/pro status once per session as authoritative source
   useEffect(() => {
-    if (fetchedRef.current || claimsPro || hasByok) return
+    if (fetchedRef.current || claimsPro) return
     fetchedRef.current = true
 
     const API_BASE = import.meta.env.VITE_AI_API_URL ?? ''
@@ -194,9 +195,11 @@ function useTrackedUsage() {
         })
         .catch(() => setServerIsPro(false))
     })
-  }, [getToken, claimsPro, hasByok, accountId])
+  }, [getToken, claimsPro, accountId])
 
   const isPro = claimsPro || serverIsPro === true || hasByok
+  // Paid plan only (BYOK excluded): what server entitlement gates such as version history check.
+  const hasPlanPro: boolean | null = claimsPro || serverIsPro === true ? true : serverIsPro === false ? false : null
   const dailyLimit = serverLimit ?? FREE_DAILY_LIMIT
 
   // While server check is in-flight (serverIsPro === null), don't gate the user.
@@ -210,6 +213,7 @@ function useTrackedUsage() {
 
   return {
     isPro,
+    hasPlanPro,
     canAsk,
     remaining,
     dailyLimit,

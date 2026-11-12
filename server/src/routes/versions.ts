@@ -1,10 +1,21 @@
-import { Router, type Request } from 'express'
+import { Router, type Request, type Response } from 'express'
 import { query, getPool } from '../db.js'
 import { uploadWorkbook, downloadObject } from '../s3.js'
 import { getRequestUserId } from '../auth/clerk.js'
 import { sendServerError } from '../httpError.js'
+import { resolveIsPro } from '../plan.js'
 
 export const versionsRouter = Router()
+/** Version history is a Pro feature; enforce it server-side (the client gate is UI only). */
+async function requirePro(userId: string, res: Response): Promise<boolean> {
+  if (await resolveIsPro(userId)) return true
+  res.status(403).json({
+    error: 'Version history is a Pro feature. Upgrade to Pro to use it.',
+    code: 'PRO_REQUIRED',
+  })
+  return false
+}
+
 
 function getUserId(req: Request): string | null {
   return getRequestUserId(req)
@@ -18,6 +29,7 @@ versionsRouter.get('/:id/versions', async (req, res) => {
     res.status(401).json({ error: 'Authentication required' })
     return
   }
+  if (!(await requirePro(userId, res))) return
 
   const { id } = req.params
 
@@ -61,6 +73,7 @@ versionsRouter.get('/:id/versions/:versionId', async (req, res) => {
     res.status(401).json({ error: 'Authentication required' })
     return
   }
+  if (!(await requirePro(userId, res))) return
 
   const { id, versionId } = req.params
 
@@ -108,6 +121,7 @@ versionsRouter.post('/:id/versions', async (req, res) => {
     res.status(401).json({ error: 'Authentication required' })
     return
   }
+  if (!(await requirePro(userId, res))) return
 
   const { id } = req.params
   const { description } = req.body as { description?: string }

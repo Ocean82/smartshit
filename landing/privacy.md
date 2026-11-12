@@ -34,7 +34,7 @@ The workbook stays in your browser unless you turn on cloud backup. The formula 
 
 ## How AI Queries Work
 
-When you send a message to the AI assistant, your message and a summary of relevant cells are sent to our server to generate a response. This data is processed in memory and discarded after the response. We do not log, store, or train on your queries or spreadsheet content. If you bring your own API key, that same message and cell summary go to the provider you chose, and that provider bills the tokens. We do not meter those calls.
+When you send a message to the AI assistant, your message and a summary of relevant cells are sent to our server to generate a response. This data is processed in memory and discarded after the response. We do not log, store, or train on your queries or spreadsheet content. If you bring your own API key, that same message and cell summary go to the provider you chose, and that provider bills the tokens. We do not meter those calls. Your key is saved in this browser's local storage (not encrypted) and is forwarded through our server with each request to reach the provider; we do not store it.
 
 ## Cookies and Tracking
 

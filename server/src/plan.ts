@@ -11,6 +11,8 @@ import { config } from './config.js'
 import { getClerkClient, planFromPublicMetadata } from './auth/clerk.js'
 
 const PRO_CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
+/** If Clerk is unreachable, a stale Pro status is honored only this long past expiry. */
+const STALE_PRO_GRACE_MS = 60 * 1000
 
 export type SubscriptionStatus = {
   isPro: boolean
@@ -19,6 +21,9 @@ export type SubscriptionStatus = {
 }
 
 const statusCache = new Map<string, { status: SubscriptionStatus; expiresAt: number }>()
+
+/** Bumped on invalidation so lookups started earlier cannot repopulate the cache. */
+const cacheGeneration = new Map<string, number>()
 
 function emptyStatus(): SubscriptionStatus {
   return { isPro: false, revocationReason: null }
@@ -47,6 +52,7 @@ export async function resolveSubscriptionStatus(userId: string | null | undefine
     return cached.status
   }
 
+  const generation = cacheGeneration.get(userId) ?? 0
   try {
     const user = await getClerkClient().users.getUser(userId)
     const metadata = (user.publicMetadata ?? {}) as Record<string, unknown>
@@ -54,16 +60,22 @@ export async function resolveSubscriptionStatus(userId: string | null | undefine
       isPro: planFromPublicMetadata(metadata) === 'pro',
       revocationReason: storedRevocationReason(metadata),
     }
-    statusCache.set(userId, { status, expiresAt: Date.now() + PRO_CACHE_TTL_MS })
+    if ((cacheGeneration.get(userId) ?? 0) === generation) {
+      statusCache.set(userId, { status, expiresAt: Date.now() + PRO_CACHE_TTL_MS })
+    }
     return status
   } catch (err) {
-    // On error, fall back to the cached value if we have one (even if expired).
+    // On error, fall back to the cached value if we have one. A stale Pro value is only
+    // trusted within a short grace window so a revoked user cannot keep access in an outage.
     // Log so a Clerk outage is visible — silent free fallback looks like demotion.
     const message = err instanceof Error ? err.message : 'unknown'
     console.error(
       `[clerk] getUser failed for plan lookup (using ${cached ? 'stale cache' : 'free fallback'}): ${message}`,
     )
-    return cached?.status ?? emptyStatus()
+    if (cached && (!cached.status.isPro || Date.now() < cached.expiresAt + STALE_PRO_GRACE_MS)) {
+      return cached.status
+    }
+    return emptyStatus()
   }
 }
 
@@ -77,10 +89,12 @@ export async function resolveIsPro(userId: string | null | undefined): Promise<b
 
 /** Drop a user's cached plan so a change takes effect immediately. */
 export function invalidateProCache(userId: string): void {
+  cacheGeneration.set(userId, (cacheGeneration.get(userId) ?? 0) + 1)
   statusCache.delete(userId)
 }
 
 /** Clear the entire cache (test helper). */
 export function clearProCache(): void {
   statusCache.clear()
+  cacheGeneration.clear()
 }

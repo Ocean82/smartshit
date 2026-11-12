@@ -320,6 +320,7 @@ function buildWorkbookUpdateQuery(
 async function persistNewWorkbook(
   userId: string,
   payload: CreateWorkbookPayload,
+  snapshot: boolean,
 ): Promise<CreatedWorkbook> {
   await upsertUserLastSeen(userId)
 
@@ -331,7 +332,10 @@ async function persistNewWorkbook(
     [key, sizeBytes, workbookId],
   )
 
-  const version = await writeWorkbookVersion(userId, workbookId, payload.data, sizeBytes, 'Initial save')
+  // Version history is Pro-only: free users get no automatic snapshots (version 0).
+  const version = snapshot
+    ? await writeWorkbookVersion(userId, workbookId, payload.data, sizeBytes, 'Initial save')
+    : 0
 
   return {
     id: workbookId,
@@ -345,10 +349,13 @@ async function persistWorkbookUpdate(
   userId: string,
   workbookId: string,
   payload: SaveWorkbookPayload,
+  snapshot: boolean,
 ): Promise<SavedWorkbook> {
   const { key, sizeBytes } = await uploadLatestWorkbook(userId, workbookId, payload.data)
-  const nextVersion = await writeWorkbookVersion(userId, workbookId, payload.data, sizeBytes, 'Auto-save')
-  void pruneOldVersions(workbookId)
+  const nextVersion = snapshot
+    ? await writeWorkbookVersion(userId, workbookId, payload.data, sizeBytes, 'Auto-save')
+    : 0
+  if (snapshot) void pruneOldVersions(workbookId)
 
   const update = buildWorkbookUpdateQuery(key, sizeBytes, workbookId, {
     name: payload.name,
@@ -438,7 +445,7 @@ async function handleCreateWorkbook(req: Request, res: Response, userId: string)
   if (!payload) return
   if (await exceedsFreeTierWorkbookLimit(userId, res)) return
 
-  const created = await persistNewWorkbook(userId, payload)
+  const created = await persistNewWorkbook(userId, payload, await resolveIsPro(userId))
   res.status(201).json(created)
   syncCellsAsync(created.id, payload.data, 'create')
 }
@@ -460,7 +467,7 @@ async function handleSaveWorkbook(req: Request, res: Response, userId: string): 
   )
   if (!existing) return
 
-  const saved = await persistWorkbookUpdate(userId, id, payload)
+  const saved = await persistWorkbookUpdate(userId, id, payload, await resolveIsPro(userId))
   res.json(saved)
   syncCellsAsync(id, payload.data, 'save')
 }

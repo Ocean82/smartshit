@@ -93,6 +93,36 @@ describe('resolveSubscriptionStatus', () => {
     })
   })
 
+  it('H1: rejects stale Pro beyond the grace window when Clerk is unreachable', async () => {
+    vi.useFakeTimers()
+    try {
+      getUserMock
+        .mockResolvedValueOnce({ publicMetadata: { plan: 'pro' } })
+        .mockRejectedValue(new Error('clerk down'))
+      const { resolveIsPro } = await import('./plan.js')
+      await expect(resolveIsPro('user-1')).resolves.toBe(true)
+      vi.advanceTimersByTime(5 * 60 * 1000 + 10_000)
+      await expect(resolveIsPro('user-1')).resolves.toBe(true) // within grace
+      vi.advanceTimersByTime(60 * 1000)
+      await expect(resolveIsPro('user-1')).resolves.toBe(false) // past grace
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('H2: an in-flight lookup started before invalidation does not repopulate the cache', async () => {
+    let release!: (v: unknown) => void
+    getUserMock.mockImplementationOnce(() => new Promise((r) => { release = r }))
+    const { resolveIsPro, invalidateProCache } = await import('./plan.js')
+    const inflight = resolveIsPro('user-1')
+    invalidateProCache('user-1') // webhook demotion
+    release({ publicMetadata: { plan: 'pro' } }) // stale lookup completes
+    await inflight
+    getUserMock.mockResolvedValueOnce({ publicMetadata: { plan: 'free' } })
+    await expect(resolveIsPro('user-1')).resolves.toBe(false)
+    expect(getUserMock).toHaveBeenCalledTimes(2)
+  })
+
   it('resolveIsPro still returns a plain boolean', async () => {
     getUserMock.mockResolvedValue({ publicMetadata: { plan: 'pro', revocationReason: null } })
     const { resolveIsPro } = await import('./plan.js')
