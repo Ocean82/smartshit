@@ -552,10 +552,64 @@ export async function importWorkbookFromFile(file: File): Promise<WorkbookData> 
   return result.workbook
 }
 
+/** Internal number-format key -> Excel format code (inverse of mapExcelNumFmt). */
+const EXCEL_NUM_FMT: Record<string, string> = {
+  number: '#,##0.00',
+  'number-int': '#,##0',
+  'number-neg-red': '#,##0.00;[Red]-#,##0.00',
+  currency: '$#,##0.00',
+  'currency-int': '$#,##0',
+  'currency-gbp': '£#,##0.00',
+  'currency-eur': '€#,##0.00',
+  'currency-jpy': '¥#,##0',
+  accounting: '$#,##0.00',
+  'accounting-neg': '$#,##0.00_);($#,##0.00)',
+  date: 'm/d/yyyy',
+  'date-iso': 'yyyy-mm-dd',
+  'date-long': 'mmmm d, yyyy',
+  'date-short-eu': 'dd/mm/yyyy',
+  'date-mmm-yy': 'mmm-yy',
+  'date-d-mmm': 'd-mmm',
+  time: 'h:mm AM/PM',
+  'time-24': 'hh:mm',
+  'time-seconds': 'h:mm:ss AM/PM',
+  datetime: 'm/d/yyyy h:mm AM/PM',
+  percent: '0.0%',
+  'percent-int': '0%',
+  fraction: '# ?/?',
+  scientific: '0.00E+00',
+  text: '@',
+}
+
+/**
+ * Overlay real formulas and number formats onto a sheet built by aoa_to_sheet,
+ * which would otherwise store "=A1+B1" as a text string.
+ */
+function applyFormulasAndFormats(ws: XLSX.WorkSheet, sheet: SheetData): void {
+  for (const [cellId, cell] of Object.entries(sheet.cells)) {
+    const addr = XLSX.utils.encode_cell((({ row, col }) => ({ r: row, c: col }))(cellToRef(cellId)))
+    const z = cell.format?.numberFormat ? EXCEL_NUM_FMT[cell.format.numberFormat] : undefined
+    const formula = typeof cell.formula === 'string' && cell.formula.startsWith('=') ? cell.formula.slice(1) : null
+    if (formula === null && !z) continue
+
+    let out: XLSX.CellObject = ws[addr] ?? { t: 'z' }
+    if (formula !== null) {
+      const v = cell.value
+      out = typeof v === 'number' ? { t: 'n', v, f: formula }
+        : typeof v === 'boolean' ? { t: 'b', v, f: formula }
+        : typeof v === 'string' ? { t: 's', v, f: formula }
+        : { t: 'n', f: formula }
+    }
+    if (z) out.z = z
+    ws[addr] = out
+  }
+}
+
 export function buildXlsxWorkbook(workbook: WorkbookData): XLSX.WorkBook {
   const book = XLSX.utils.book_new()
   for (const sheet of workbook.sheets) {
     const ws = XLSX.utils.aoa_to_sheet(sheetToMatrix(sheet))
+    applyFormulasAndFormats(ws, sheet)
     if (sheet.mergedCells && sheet.mergedCells.length > 0) {
       const merges: Array<{ s: { r: number; c: number }; e: { r: number; c: number } }> = []
       for (const ref of sheet.mergedCells) {

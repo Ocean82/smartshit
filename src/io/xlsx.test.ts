@@ -138,6 +138,36 @@ describe('workbook import', () => {
     expect(imported.mergedCells).toEqual(['A1:C1', 'E5:F6'])
   })
 
+  it('export writes real formulas and number formats that survive import -> export -> re-import', async () => {
+    const first = await importWorkbookFromFileWithMeta(
+      fakeFile('f.xlsx', (() => {
+        const book = XLSX.utils.book_new()
+        const ws = XLSX.utils.aoa_to_sheet([[1, 2], [3, 4]])
+        ws['C1'] = { t: 'n', v: 3, f: 'A1+B1', z: '0.0%' }
+        ws['C2'] = { t: 'n', v: 7, f: 'SUM(A2:B2)' }
+        ws['!ref'] = 'A1:C2'
+        XLSX.utils.book_append_sheet(book, ws, 'Sheet1')
+        return XLSX.write(book, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer
+      })()),
+    )
+    first.workbook.sheets[0].cells.D1 = { value: 1234.5, format: { numberFormat: 'currency' } }
+
+    const book = buildXlsxWorkbook(first.workbook)
+    const ws = book.Sheets['Sheet1']
+    expect(ws['C1'].f).toBe('A1+B1')
+    expect(ws['C1'].t).not.toBe('s')
+    expect(ws['D1'].z).toBe('$#,##0.00')
+
+    const buffer = XLSX.write(book, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer
+    const { workbook } = await importWorkbookFromFileWithMeta(fakeFile('f2.xlsx', buffer))
+    const cells = workbook.sheets[0].cells
+    expect(cells.C1?.formula).toBe('=A1+B1')
+    expect(cells.C1?.format?.numberFormat).toBe('percent')
+    expect(cells.C2?.formula).toBe('=SUM(A2:B2)')
+    expect(cells.C2?.value).toBe(7)
+    expect(cells.D1?.format?.numberFormat).toBe('currency')
+  })
+
   it('imports hidden rows and columns from !rows / !cols', async () => {
     const book = XLSX.utils.book_new()
     const ws = XLSX.utils.aoa_to_sheet([['A', 'B', 'C'], [1, 2, 3], [4, 5, 6]])
