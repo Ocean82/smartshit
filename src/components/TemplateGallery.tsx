@@ -132,9 +132,12 @@ export function TemplateGallery({ open, onClose }: TemplateGalleryProps) {
     if (!canCallServer()) return
     setInstallingId(template.id)
     try {
+      // The server requires a signed-in user for install.
+      const headers = await getAuthHeaders()
+      if (!headers.Authorization || !canCallServer()) return
       const res = await fetch(`${API_BASE}/api/community-templates/${template.id}/install`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         signal: AbortSignal.timeout(10_000),
       })
       if (res.ok) {
@@ -147,8 +150,11 @@ export function TemplateGallery({ open, onClose }: TemplateGalleryProps) {
         installTemplate(pkg)
         setCommunityTemplates(loadCommunityTemplates())
       }
-    } catch { /* ignore */ }
-    setInstallingId(null)
+    } catch {
+      /* ignore */
+    } finally {
+      setInstallingId(null)
+    }
   }
 
   async function handleImportTemplate(e: React.ChangeEvent<HTMLInputElement>) {

@@ -167,6 +167,13 @@ templatesRouter.post('/', async (req, res) => {
 // ─── POST /api/community-templates/:id/install — Install (download) ──────────
 
 templatesRouter.post('/:id/install', async (req, res) => {
+  // Install increments the public download count, so anonymous callers could
+  // inflate it at will. Require a signed-in user before any DB write.
+  const userId = getUserId(req)
+  if (!userId) {
+    res.status(401).json({ error: 'Authentication required' })
+    return
+  }
   const { id } = req.params
 
   try {

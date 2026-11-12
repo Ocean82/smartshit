@@ -76,8 +76,8 @@ function appRegistrations(index: string): string[] {
 }
 
 // Public community-template routes (allowlisted because they exist today).
-const TEMPLATE_PUBLIC = ['get /', 'get /categories', 'post /:id/install']
-const TEMPLATE_HANDLER_AUTH = ['post /', 'post /:id/rate', 'delete /:id']
+const TEMPLATE_PUBLIC = ['get /', 'get /categories']
+const TEMPLATE_HANDLER_AUTH = ['post /', 'post /:id/install', 'post /:id/rate', 'delete /:id']
 
 describe('server route auth inventory', () => {
   const index = read('index.ts')
