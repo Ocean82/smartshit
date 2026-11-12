@@ -1,6 +1,6 @@
 ---
 title: "Formula Auditor for Excel Files | smartsht"
-description: "Check an Excel file for skipped SUM cells, inconsistent formulas, outliers, and hardcoded numbers. The auditor runs in your browser. Free."
+description: "Check an Excel file for skipped SUM cells, inconsistent formulas, outliers, and hardcoded numbers. The auditor runs in your browser. Free, no account."
 image: "https://smartsht.com/og-image.png"
 ---
 
@@ -8,7 +8,7 @@ image: "https://smartsht.com/og-image.png"
 
 # Formula auditor for Excel files
 
-Runs in the browser.
+Runs in the browser. No account required to scan.
 
 The smartsht auditor reads a spreadsheet and flags formula mistakes that still look correct. A SUM that skips a row, a column where one formula does not match the others, a number that is far from the rest, a circular reference, or a hardcoded constant sitting where a formula should be. The check runs on your machine. The file is not uploaded for the scan.
 
@@ -33,7 +33,7 @@ An AI question is separate from the scan. The auditor stays local. A question se
 ## How to run it
 
 1. Open smartsht and import an .xlsx or CSV, or start from a sheet you already have.
-2. Start an audit.
+2. Start an audit. No account is required for the scan.
 3. Read each finding. Apply a fix only after you agree with it.
 
 [Audit an Excel file](https://smartsht.com/app?audit=1)
@@ -43,5 +43,5 @@ An AI question is separate from the scan. The auditor stays local. A question se
 See how smartsht compares with Excel and Google Sheets on the [Excel alternative](https://smartsht.com/excel-alternative) page, or go back to the [homepage](https://smartsht.com/).
 
 ```json
-{"@context":"https://schema.org","@graph":[{"@type":"WebPage","@id":"https://smartsht.com/formula-auditor#webpage","url":"https://smartsht.com/formula-auditor","name":"Formula Auditor for Excel Files | smartsht","description":"Check an Excel file for skipped SUM cells, inconsistent formulas, outliers, and hardcoded numbers. The auditor runs in your browser. Free.","isPartOf":{"@id":"https://smartsht.com/#website"},"about":{"@id":"https://smartsht.com/#app"},"dateModified":"2026-11-05","inLanguage":"en-US","breadcrumb":{"@id":"https://smartsht.com/formula-auditor#breadcrumb"}},{"@type":"BreadcrumbList","@id":"https://smartsht.com/formula-auditor#breadcrumb","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://smartsht.com/"},{"@type":"ListItem","position":2,"name":"Formula auditor","item":"https://smartsht.com/formula-auditor"}]}]}
+{"@context":"https://schema.org","@graph":[{"@type":"WebPage","@id":"https://smartsht.com/formula-auditor#webpage","url":"https://smartsht.com/formula-auditor","name":"Formula Auditor for Excel Files | smartsht","description":"Check an Excel file for skipped SUM cells, inconsistent formulas, outliers, and hardcoded numbers. The auditor runs in your browser. Free, no account.","isPartOf":{"@id":"https://smartsht.com/#website"},"about":{"@id":"https://smartsht.com/#app"},"dateModified":"2026-11-05","inLanguage":"en-US","breadcrumb":{"@id":"https://smartsht.com/formula-auditor#breadcrumb"}},{"@type":"BreadcrumbList","@id":"https://smartsht.com/formula-auditor#breadcrumb","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://smartsht.com/"},{"@type":"ListItem","position":2,"name":"Formula auditor","item":"https://smartsht.com/formula-auditor"}]}]}
 ```
