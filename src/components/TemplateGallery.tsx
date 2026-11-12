@@ -26,17 +26,21 @@ interface CloudTemplate {
   createdAt: string
 }
 
+const INSTALL_TOKEN_TIMEOUT_MS = 10_000
+const INSTALL_NEEDS_SIGN_IN = 'Sign in to install marketplace templates.'
+
 interface TemplateGalleryProps {
   open: boolean
   onClose: () => void
 }
 
 export function TemplateGallery({ open, onClose }: TemplateGalleryProps) {
-  const { setChatInput, sendMessage, runTemplateTool } = useStore(
+  const { setChatInput, sendMessage, runTemplateTool, showToast } = useStore(
     useShallow((s) => ({
       setChatInput: s.setChatInput,
       sendMessage: s.sendMessage,
       runTemplateTool: s.runTemplateTool,
+      showToast: s.showToast,
     })),
   )
   const [searchQuery, setSearchQuery] = useState('')
@@ -49,7 +53,8 @@ export function TemplateGallery({ open, onClose }: TemplateGalleryProps) {
   const [cloudLoading, setCloudLoading] = useState(false)
   const [cloudError, setCloudError] = useState<string | null>(null)
   const [cloudSort, setCloudSort] = useState<'popular' | 'recent' | 'rating'>('popular')
-  const [installingId, setInstallingId] = useState<string | null>(null)
+  // Per template, so one install finishing never re-enables another's button.
+  const [installingIds, setInstallingIds] = useState<ReadonlySet<string>>(() => new Set())
   const [showPublish, setShowPublish] = useState(false)
   // Anonymous visitors make zero backend calls: the Marketplace tab asks them to sign in.
   const authStatus = useAuthStatus()
@@ -129,12 +134,20 @@ export function TemplateGallery({ open, onClose }: TemplateGalleryProps) {
   }
 
   async function handleInstallCloud(template: CloudTemplate) {
-    if (!canCallServer()) return
-    setInstallingId(template.id)
+    if (!canCallServer() || installingIds.has(template.id)) return
+    setInstallingIds((s) => new Set(s).add(template.id))
     try {
-      // The server requires a signed-in user for install.
-      const headers = await getAuthHeaders()
-      if (!headers.Authorization || !canCallServer()) return
+      // The server requires a signed-in user for install. Bound the token wait so
+      // a stalled token request cannot leave the spinner running forever.
+      const headers = await Promise.race([
+        getAuthHeaders(),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), INSTALL_TOKEN_TIMEOUT_MS)),
+      ])
+      if (!canCallServer()) return
+      if (!headers?.Authorization) {
+        showToast({ type: 'info', message: INSTALL_NEEDS_SIGN_IN })
+        return
+      }
       const res = await fetch(`${API_BASE}/api/community-templates/${template.id}/install`, {
         method: 'POST',
         headers,
@@ -153,7 +166,11 @@ export function TemplateGallery({ open, onClose }: TemplateGalleryProps) {
     } catch {
       /* ignore */
     } finally {
-      setInstallingId(null)
+      setInstallingIds((s) => {
+        const next = new Set(s)
+        next.delete(template.id)
+        return next
+      })
     }
   }
 
@@ -250,7 +267,7 @@ export function TemplateGallery({ open, onClose }: TemplateGalleryProps) {
               error={cloudError}
               sort={cloudSort}
               onSortChange={setCloudSort}
-              installingId={installingId}
+              installingIds={installingIds}
               onInstall={handleInstallCloud}
               onUse={runTemplate}
               fallbackTemplates={allTemplates}
@@ -326,10 +343,10 @@ function TabButton({ active, onClick, variant, children }: {
 
 // ─── Marketplace Grid ────────────────────────────────────────────────────────
 
-function MarketplaceGrid({ templates, loading, error, sort, onSortChange, installingId, onInstall, onUse, fallbackTemplates }: {
+function MarketplaceGrid({ templates, loading, error, sort, onSortChange, installingIds, onInstall, onUse, fallbackTemplates }: {
   templates: CloudTemplate[]; loading: boolean; error: string | null; sort: 'popular' | 'recent' | 'rating'
   onSortChange: (s: 'popular' | 'recent' | 'rating') => void
-  installingId: string | null; onInstall: (t: CloudTemplate) => void; onUse: (prompt: string) => void
+  installingIds: ReadonlySet<string>; onInstall: (t: CloudTemplate) => void; onUse: (prompt: string) => void
   fallbackTemplates: Array<{ id: string; name: string; description: string; icon: string; category: string; prompt: string }>
 }) {
   if (loading) {
@@ -411,9 +428,9 @@ function MarketplaceGrid({ templates, loading, error, sort, onSortChange, instal
                     className="px-2 py-1 text-[10px] font-medium text-blue-600 bg-blue-50 rounded-md hover:bg-blue-100 transition-colors">
                     Use
                   </button>
-                  <button type="button" onClick={() => onInstall(template)} disabled={installingId === template.id}
+                  <button type="button" onClick={() => onInstall(template)} disabled={installingIds.has(template.id)}
                     className="px-2 py-1 text-[10px] font-medium text-emerald-600 bg-emerald-50 rounded-md hover:bg-emerald-100 transition-colors disabled:opacity-50 flex items-center gap-1">
-                    {installingId === template.id ? <Loader2 size={10} className="animate-spin" /> : <Download size={10} />}
+                    {installingIds.has(template.id) ? <Loader2 size={10} className="animate-spin" /> : <Download size={10} />}
                     Install
                   </button>
                 </div>

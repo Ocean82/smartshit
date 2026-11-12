@@ -112,10 +112,16 @@ describe('server route auth inventory', () => {
     expect(routes.sort()).toEqual([...TEMPLATE_PUBLIC, ...TEMPLATE_HANDLER_AUTH].sort())
     for (const r of TEMPLATE_HANDLER_AUTH) {
       const [method, path] = r.split(' ')
+      // The handler body runs to the next route registration; the auth check and
+      // its 401 must both come before the first DB call.
       const start = src.indexOf(`templatesRouter.${method}('${path}'`)
-      const body = src.slice(start, start + 400)
-      expect(body).toMatch(/getUserId\(req\)/)
-      expect(body).toMatch(/status\(401\)/)
+      const next = src.indexOf('templatesRouter.', start + 1)
+      const body = src.slice(start, next === -1 ? undefined : next)
+      const firstQuery = body.search(/\bquery\s*[<(]/) // a DB call, not req.query
+      const userIdAt = body.search(/getUserId\(req\)/)
+      const deniedAt = body.search(/status\(401\)/)
+      expect({ r, ok: firstQuery > -1 && userIdAt > -1 && deniedAt > -1 }).toEqual({ r, ok: true })
+      expect({ r, authBeforeDb: userIdAt < firstQuery && deniedAt < firstQuery }).toEqual({ r, authBeforeDb: true })
     }
   })
 

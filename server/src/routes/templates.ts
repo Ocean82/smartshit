@@ -2,6 +2,7 @@ import { Router, type Request } from 'express'
 import { query } from '../db.js'
 import { uploadTemplate, downloadObject } from '../s3.js'
 import { getRequestUserId } from '../auth/clerk.js'
+import { recordAuthDenial } from '../auth/authMetrics.js'
 import { sendServerError } from '../httpError.js'
 
 export const templatesRouter = Router()
@@ -171,6 +172,8 @@ templatesRouter.post('/:id/install', async (req, res) => {
   // inflate it at will. Require a signed-in user before any DB write.
   const userId = getUserId(req)
   if (!userId) {
+    // Same ops counter as requireAuth, so rejected installs stay visible.
+    recordAuthDenial(req.originalUrl || req.path, /^Bearer\s+\S+/i.test(req.headers.authorization ?? '') ? 'no_session' : 'no_bearer')
     res.status(401).json({ error: 'Authentication required' })
     return
   }

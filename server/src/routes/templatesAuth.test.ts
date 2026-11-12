@@ -17,6 +17,7 @@ vi.mock('../s3.js', () => ({
 
 import { templatesRouter } from './templates.js'
 import { uploadTemplate } from '../s3.js'
+import { getAuthMetrics, resetAuthMetrics } from '../auth/authMetrics.js'
 
 const app = express()
 app.use(express.json())
@@ -42,10 +43,15 @@ describe('community-templates auth (anonymous requests)', () => {
     expect(res.status).toBe(401)
     expect(queryMock).not.toHaveBeenCalled()
   })
-  it('POST /:id/install returns 401 with no DB call (download count cannot be inflated)', async () => {
+  it('POST /:id/install returns 401 with no DB call and records the denial', async () => {
+    resetAuthMetrics()
     const res = await request(app).post('/api/community-templates/abc/install')
     expect(res.status).toBe(401)
     expect(queryMock).not.toHaveBeenCalled()
+    const m = getAuthMetrics()
+    expect(m.denials).toBe(1)
+    expect(m.byReason.no_bearer).toBe(1)
+    expect(m.lastDenialPath).toContain('/install')
   })
   it('DELETE /:id returns 401 with no DB call', async () => {
     const res = await request(app).delete('/api/community-templates/abc')
@@ -64,5 +70,10 @@ describe('community-templates install (signed in)', () => {
     expect(res.status).toBe(200)
     expect(res.body.template.name).toBe('Budget')
     expect(queryMock).toHaveBeenCalledTimes(1)
+    // The one query must be the download increment for this published template.
+    const [sql, params] = queryMock.mock.calls[0] as unknown as [string, unknown[]]
+    expect(sql).toMatch(/UPDATE\s+smartsht\.community_templates\s+SET\s+downloads\s*=\s*downloads\s*\+\s*1/i)
+    expect(sql).toMatch(/is_published\s*=\s*TRUE/i)
+    expect(params).toEqual(['abc'])
   })
 })
