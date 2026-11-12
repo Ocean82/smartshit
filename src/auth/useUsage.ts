@@ -122,6 +122,7 @@ function createRecordUsage(
 function useUnlimitedUsage() {
   return {
     isPro: true as const,
+    hasPlanPro: true as boolean | null,
     canAsk: true as const,
     remaining: Infinity,
     dailyLimit: FREE_DAILY_LIMIT,
@@ -215,6 +216,8 @@ function useTrackedUsage() {
   }, [status, getToken, claimsPro, hasByok, accountId])
 
   const isPro = computeIsPro({ status, claimsPro, serverIsPro, hasByok })
+  // Paid plan only (BYOK excluded): what server entitlement gates such as version history check.
+  const hasPlanPro: boolean | null = claimsPro || serverIsPro === true ? true : serverIsPro === false ? false : null
   const dailyLimit = serverLimit ?? FREE_DAILY_LIMIT
 
   // While server check is in-flight (serverIsPro === null), don't gate the user.
@@ -232,6 +235,7 @@ function useTrackedUsage() {
 
   return {
     isPro,
+    hasPlanPro,
     canAsk,
     remaining,
     dailyLimit,

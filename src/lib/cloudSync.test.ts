@@ -15,6 +15,9 @@ import {
   saveToCloud,
   setUserId,
   setAuthTokenProvider,
+  listVersions,
+  loadVersion,
+  VersionsProRequiredError,
 } from './cloudSync'
 import type { WorkbookData } from '@/types'
 
@@ -159,5 +162,23 @@ describe('saveToCloud targeting', () => {
     const result = await saveToCloud('', makeWorkbook('x'))
     expect(result).toBeNull()
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('version endpoints surface the Pro gate (H4)', () => {
+  const proRequired = () => new Response(JSON.stringify({ code: 'PRO_REQUIRED' }), { status: 403 })
+  it('listVersions throws VersionsProRequiredError on PRO_REQUIRED 403', async () => {
+    fetchMock.mockResolvedValueOnce(proRequired())
+    await expect(listVersions('wb')).rejects.toBeInstanceOf(VersionsProRequiredError)
+  })
+  it('loadVersion throws VersionsProRequiredError on PRO_REQUIRED 403', async () => {
+    fetchMock.mockResolvedValueOnce(proRequired())
+    await expect(loadVersion('wb', 'v')).rejects.toBeInstanceOf(VersionsProRequiredError)
+  })
+  it('other failures still degrade to empty/null', async () => {
+    fetchMock.mockResolvedValueOnce(new Response('{}', { status: 403 }))
+    await expect(listVersions('wb')).resolves.toEqual([])
+    fetchMock.mockResolvedValueOnce(new Response('{}', { status: 500 }))
+    await expect(loadVersion('wb', 'v')).resolves.toBeNull()
   })
 })

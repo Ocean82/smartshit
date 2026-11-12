@@ -9,6 +9,7 @@ export function anonymousUsageState(status: AuthStatus, dailyLimit: number) {
   if (status === 'signed-in' || status === 'dev') return null
   return {
     isPro: false as const,
+    hasPlanPro: false as boolean | null,
     canAsk: true as const,
     remaining: Infinity,
     dailyLimit,

@@ -4,7 +4,7 @@ import './index.css'
 import App from './App'
 import { SharedView } from '@/components/SharedView'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
-import { AuthProvider, ClerkUserSync, SignInDialog } from '@/auth'
+import { AuthProvider, ClerkUserSync, AutoFixGateSync, SignInDialog } from '@/auth'
 import { initServerAccess } from '@/lib/serverAccess'
 import { setAnonAIFunctionNotifier } from '@/engine/aiFunctionDefinitions'
 import { ANON_AI_FUNCTION_TOAST } from '@/auth/anonCopy'
@@ -24,7 +24,7 @@ initErrorReporting()
 
 migrateLegacyStorageKeys()
 
-// Warn once per failure episode — the snapshot save runs on every store change
+// Warn once per failure episode â€” the snapshot save runs on every store change
 // (debounced 400ms), so we must not toast on every keystroke while blocked.
 let localSaveBlocked = false
 
@@ -48,8 +48,8 @@ function warnSaveFailedOnce(reason: 'quota' | 'error') {
   useStore.getState().showToast({
     type: 'warning',
     message: reason === 'quota'
-      ? `Local autosave paused — browser storage is full. ${cloud ? 'Your work is still cloud-saved. ' : ''}Export a workbook or remove old ones to free space.`
-      : 'Local autosave failed — export your work to avoid losing it.',
+      ? `Local autosave paused â€” browser storage is full. ${cloud ? 'Your work is still cloud-saved. ' : ''}Export a workbook or remove old ones to free space.`
+      : 'Local autosave failed â€” export your work to avoid losing it.',
   })
 }
 
@@ -98,12 +98,12 @@ useStore.subscribe(() => {
 
 // Reconcile the sync localStorage seed with the durable IndexedDB primary: if
 // IDB holds a newer snapshot (e.g. last session's localStorage mirror was
-// quota-truncated on a large workbook), swap it in — but only if the user
+// quota-truncated on a large workbook), swap it in â€” but only if the user
 // hasn't touched anything yet. Self-guarded; safe to fire-and-forget.
 void hydrateFromIdbIfNewer()
 
 // Flush on teardown. `pagehide` is the reliable modern unload signal (fires for
-// bfcache navigations where `beforeunload` may not), and `visibilitychange` →
+// bfcache navigations where `beforeunload` may not), and `visibilitychange` â†’
 // hidden covers mobile tab-switch/app-background where the page can be killed
 // without ever firing pagehide. Both funnel through the synchronous save.
 function handleTeardown() {
@@ -146,6 +146,7 @@ createRoot(document.getElementById('root')!).render(
       ) : (
         <AuthProvider>
           <ClerkUserSync />
+          <AutoFixGateSync />
           <App />
           <SignInDialog />
         </AuthProvider>

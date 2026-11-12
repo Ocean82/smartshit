@@ -290,8 +290,22 @@ export async function deleteFromCloud(workbookId: string): Promise<boolean> {
   }
 }
 
+/** Thrown when the server rejects a version request because the plan is not Pro. */
+export class VersionsProRequiredError extends Error {
+  constructor() {
+    super('Version history requires a Pro plan')
+    this.name = 'VersionsProRequiredError'
+  }
+}
+
+async function isProRequired(res: Response): Promise<boolean> {
+  if (res.status !== 403) return false
+  const body = (await res.json().catch(() => null)) as { code?: string } | null
+  return body?.code === 'PRO_REQUIRED'
+}
+
 /**
- * Fetch version history for a workbook.
+ * Fetch version history for a workbook. Throws VersionsProRequiredError on a Pro-gate 403.
  */
 export async function listVersions(workbookId: string): Promise<VersionEntry[]> {
   if (!isCloudConfigured()) return []
@@ -305,10 +319,12 @@ export async function listVersions(workbookId: string): Promise<VersionEntry[]> 
       signal: AbortSignal.timeout(10_000),
     })
 
+    if (await isProRequired(res)) throw new VersionsProRequiredError()
     if (!res.ok) return []
     const json = (await res.json()) as { versions: VersionEntry[] }
     return json.versions
-  } catch {
+  } catch (err) {
+    if (err instanceof VersionsProRequiredError) throw err
     return []
   }
 }
@@ -334,9 +350,11 @@ export async function loadVersion(
       },
     )
 
+    if (await isProRequired(res)) throw new VersionsProRequiredError()
     if (!res.ok) return null
     return (await res.json()) as WorkbookData
-  } catch {
+  } catch (err) {
+    if (err instanceof VersionsProRequiredError) throw err
     return null
   }
 }

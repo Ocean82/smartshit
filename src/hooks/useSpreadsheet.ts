@@ -293,7 +293,7 @@ export function useActionScope() {
         activeSheetId,
         selection,
         workbookRevision: revision,
-      }),
+      }, { withCells: true }),
     [workbook, activeSheetId, revision, selection],
   );
 }

@@ -70,6 +70,8 @@ export interface AgentAction {
    * action is rejected rather than applied somewhere else.
    */
   scope?: ActionScope;
+  /** Trusted-code only: Apply must first take a free auto-fix slot (see autoFixReserver). */
+  gate?: 'autofix';
   /**
    * Locally prepared, review-bound patch. Apply commits exactly this, so the
    * applied changes always match the reviewed preview. Generated in trusted
@@ -106,6 +108,8 @@ export interface ActionScope {
   epoch: string;
   /** Cheap content fingerprint of the target sheet. */
   sheetSignature: string;
+  /** Fixed-cell patches: per-target-cell fingerprint (see lib/actionScope). */
+  cellGuard?: Record<string, string>;
 }
 
 /** Cell-value / format / row operations produced by a local dry-run. */

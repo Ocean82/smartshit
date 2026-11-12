@@ -77,7 +77,7 @@ export function ApiKeySettings() {
       {isOpen && (
         <div className="px-3 pb-3 space-y-2">
           <p className="text-[10px] text-gray-400 leading-tight">
-            Use your own API key for faster, unlimited AI responses. Usage is billed to your account — free for the app.
+            Use your own API key for faster, unlimited AI responses. Usage is billed to your account — free for the app. The key is kept unencrypted in this browser and forwarded through our server with each request; it is not stored there.
           </p>
 
           <p className="text-[10px] text-gray-500 leading-tight">{ANON_BYOK_NOTE}</p>
