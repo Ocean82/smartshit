@@ -170,8 +170,8 @@ app.use('/api/workbooks', requireAuth, sharesRouter)
 // Intentionally public: view-only share links are opened by recipients who may
 // have no Clerk account. Access is gated by an unguessable share token + expiry.
 app.use('/api/shared', sharedAccessRateLimiter, publicSharesRouter)
-// Browse/install of published marketplace templates are public; publish/rate
-// still require a Clerk session (checked inside templatesRouter handlers).
+// Browsing published marketplace templates is public; install, publish, rate
+// and delete require a Clerk session (checked inside templatesRouter handlers).
 app.use('/api/community-templates', templatesRouter)
 
 // ─── AI Function endpoint (formula-level AI calls) ───────────────────────────
