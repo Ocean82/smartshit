@@ -19,6 +19,8 @@ export interface AuthTransitionDeps {
   setAuthStatus: (status: AuthStatus) => void
   toast: (toast: Omit<Toast, 'id'>) => void
   getLastCloudUser: () => string | null
+  /** The signed-in user id currently stored for cloud sync (smartsht-user-id). */
+  getStoredUserId: () => string | null
   setLastCloudUser: (id: string) => void
   getSignoutToastShown: () => boolean
   setSignoutToastShown: () => void
@@ -49,6 +51,10 @@ export interface AuthTransitionInput {
 export function applyAuthTransition(deps: AuthTransitionDeps, input: AuthTransitionInput): void {
   const { isSignedIn, userId, getToken, previousStatus, previousUserId } = input
 
+  // Who owned this browser's cloud links, read BEFORE setUserId overwrites the
+  // stored id. Browsers that predate LAST_CLOUD_USER_KEY still have the stored id.
+  const priorOwner = deps.getLastCloudUser() ?? deps.getStoredUserId()
+
   if (isSignedIn && userId) {
     deps.setAuthTokenProvider(async () => (await getToken()) ?? null)
     deps.setUserId(userId)
@@ -56,7 +62,7 @@ export function applyAuthTransition(deps: AuthTransitionDeps, input: AuthTransit
     // getToken-identity re-run (that would discard valid cached AI.* results).
     const isNewSignIn = previousStatus !== 'signed-in' || previousUserId !== userId
     if (isNewSignIn) {
-      if (decideCloudUnbind(deps.getLastCloudUser(), userId) === 'unbind') {
+      if (decideCloudUnbind(priorOwner, userId) === 'unbind') {
         deps.clearCloudBindings()
         deps.toast({ type: 'info', message: CLOUD_LINKS_REMOVED_TOAST })
       }
@@ -76,7 +82,7 @@ export function applyAuthTransition(deps: AuthTransitionDeps, input: AuthTransit
   // notice once per session on its first anonymous settle (covers reload after
   // sign-out, session expiry and other-tab sign-out). In-page sign-out always.
   const shouldToast =
-    Boolean(deps.getLastCloudUser()) && (wasSignedIn || !deps.getSignoutToastShown())
+    Boolean(priorOwner) && (wasSignedIn || !deps.getSignoutToastShown())
   if (shouldToast) {
     deps.setSignoutToastShown()
     deps.toast({
@@ -86,8 +92,12 @@ export function applyAuthTransition(deps: AuthTransitionDeps, input: AuthTransit
       action: {
         label: CLEAR_DEVICE_LABEL,
         onClick: () => {
+          // Inert once a sign-in has happened (checked again after the confirm,
+          // in case confirm is not a blocking dialog).
           if (deps.getAuthStatus() === 'signed-in') return
-          if (deps.confirm(CLEAR_DEVICE_CONFIRM)) deps.clearDeviceData()
+          if (!deps.confirm(CLEAR_DEVICE_CONFIRM)) return
+          if (deps.getAuthStatus() === 'signed-in') return
+          deps.clearDeviceData()
         },
       },
     })

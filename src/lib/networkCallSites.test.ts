@@ -146,7 +146,8 @@ describe('network call sites (T8)', () => {
   it('getToken( is called in exactly the audited files', () => {
     const callers = files.filter((f) => /\bgetToken\(/.test(f.code)).map((f) => f.path).sort()
     expect(callers).toEqual(
-      ['src/auth/useAutoFixGate.ts', 'src/auth/useSubscriptionStatus.ts', 'src/auth/useUsage.ts', 'src/auth/applyAuthTransition.ts'].sort(),
+      // usageLogic.ts: runPlanRequest, only started by useUsage after shouldFetchPlan.
+      ['src/auth/useAutoFixGate.ts', 'src/auth/useSubscriptionStatus.ts', 'src/auth/usageLogic.ts', 'src/auth/applyAuthTransition.ts'].sort(),
     )
   })
 

@@ -2,7 +2,7 @@ import { useAuth } from '@clerk/react'
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { loadUserApiKey } from '@/lib/userApiKey'
 import { useAuthStatus } from '@/lib/serverAccess'
-import { anonymousUsageState, computeIsPro, shouldFetchPlan } from './usageLogic'
+import { anonymousUsageState, computeIsPro, runPlanRequest, shouldFetchPlan } from './usageLogic'
 import { FREE_DAILY_LIMIT } from '../../shared/config'
 
 const CLERK_PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ?? ''
@@ -209,39 +209,28 @@ function useTrackedUsage() {
       attemptsRef.current += 1
       retryTimer = setTimeout(() => setRetryTick((n) => n + 1), PLAN_TOKEN_RETRY_MS)
     }
-    getToken().then((token) => {
+    const fetchUsage = (token: string) =>
+      fetch(`${API_BASE}/api/usage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      }).then((r) => (r.ok ? r.json() : null))
+    void runPlanRequest(getToken, fetchUsage, isCurrent).then((outcome) => {
+      // Superseded by an account change: apply nothing, and leave the current
+      // request's in-flight flag alone.
+      if (outcome === 'stale') return
       inFlightRef.current = false
-      if (!isCurrent()) return
-      if (!token) {
+      if (outcome === 'retry') {
         scheduleRetry()
         return
       }
       doneRef.current = true
-      fetch(`${API_BASE}/api/usage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      })
-        .then((r) => r.ok ? r.json() : null)
-        .then((data) => {
-          if (!isCurrent()) return
-          if (data?.isPro === true || data?.limit === null || data?.remaining === null) {
-            setServerIsPro(true)
-          } else {
-            setServerIsPro(false)
-            if (typeof data?.limit === 'number') setServerLimit(data.limit)
-            // Seed the local counter from the server's authoritative count so the
-            // UI starts from truth rather than whatever this browser last guessed.
-            // reportServerUsage (not syncServerUsage) so the live hook updates its
-            // rendered count too, not just storage.
-            if (typeof data?.used === 'number') reportServerUsage(data.used)
-          }
-        })
-        .catch(() => {
-          if (isCurrent()) setServerIsPro(false)
-        })
-    }).catch(() => {
-      inFlightRef.current = false
-      scheduleRetry()
+      setServerIsPro(outcome.isPro)
+      if (outcome.isPro) return
+      if (outcome.limit !== undefined) setServerLimit(outcome.limit)
+      // Seed the local counter from the server's authoritative count so the UI
+      // starts from truth. reportServerUsage (not syncServerUsage) so the live
+      // hook updates its rendered count too, not just storage.
+      if (outcome.used !== undefined) reportServerUsage(outcome.used)
     })
     return () => {
       if (retryTimer) clearTimeout(retryTimer)

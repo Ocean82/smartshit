@@ -1,5 +1,73 @@
 import { describe, expect, it } from 'vitest'
-import { anonymousUsageState, computeIsPro, shouldFetchPlan } from './usageLogic'
+import { anonymousUsageState, computeIsPro, runPlanRequest, shouldFetchPlan } from './usageLogic'
+
+function deferred<T>() {
+  let resolve!: (v: T) => void
+  let reject!: (e: unknown) => void
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res
+    reject = rej
+  })
+  return { promise, resolve, reject }
+}
+
+describe('runPlanRequest request-generation guard', () => {
+  it('A -> B -> A: the first A response is stale even though the account id matches again', async () => {
+    let generation = 1
+    const mine = generation
+    const response = deferred<unknown>()
+    const p = runPlanRequest(async () => 'tok-A', () => response.promise, () => mine === generation)
+    await Promise.resolve()
+    generation = 2 // switched to B
+    generation = 3 // and back to A: same account id, new generation
+    response.resolve({ isPro: true })
+    expect(await p).toBe('stale')
+  })
+  it('a stale fetch error is also discarded (not applied as free tier)', async () => {
+    let generation = 1
+    const response = deferred<unknown>()
+    const p = runPlanRequest(async () => 'tok', () => response.promise, () => generation === 1)
+    await Promise.resolve()
+    generation = 2
+    response.reject(new Error('network'))
+    expect(await p).toBe('stale')
+  })
+  it('a token resolved after the switch never fetches', async () => {
+    let generation = 1
+    const token = deferred<string | null>()
+    let fetched = false
+    const p = runPlanRequest(
+      () => token.promise,
+      async () => {
+        fetched = true
+        return {}
+      },
+      () => generation === 1,
+    )
+    generation = 2
+    token.resolve('tok')
+    expect(await p).toBe('stale')
+    expect(fetched).toBe(false)
+  })
+  it('current request: pro, free with limit/used, retry on null or rejected token', async () => {
+    const live = () => true
+    expect(await runPlanRequest(async () => 't', async () => ({ isPro: true }), live)).toEqual({ isPro: true })
+    expect(await runPlanRequest(async () => 't', async () => ({ limit: 7, used: 2 }), live)).toEqual({
+      isPro: false,
+      limit: 7,
+      used: 2,
+    })
+    expect(await runPlanRequest(async () => 't', async () => null, live)).toEqual({ isPro: false })
+    expect(await runPlanRequest(async () => null, async () => ({}), live)).toBe('retry')
+    expect(
+      await runPlanRequest(
+        () => Promise.reject(new Error('x')),
+        async () => ({}),
+        live,
+      ),
+    ).toBe('retry')
+  })
+})
 
 describe('anonymousUsageState (T10)', () => {
   it('is free-tier, can ask, zero used for anonymous and pending', () => {

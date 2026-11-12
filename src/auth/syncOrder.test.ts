@@ -3,7 +3,10 @@ import { applyAuthTransition, type AuthTransitionDeps } from './applyAuthTransit
 import { decideCloudUnbind } from './accountSwitch'
 import { CLEAR_DEVICE_LABEL } from './anonCopy'
 
-function makeDeps(opts: { lastUser?: string | null; flag?: boolean; confirm?: boolean } = {}) {
+function makeDeps(
+  opts: { lastUser?: string | null; storedUser?: string | null; flag?: boolean; confirm?: boolean } = {},
+) {
+  let storedUser = opts.storedUser ?? null
   const calls: string[] = []
   let flag = opts.flag ?? false
   const toast = vi.fn()
@@ -12,7 +15,11 @@ function makeDeps(opts: { lastUser?: string | null; flag?: boolean; confirm?: bo
   let status: 'pending' | 'anonymous' | 'signed-in' = 'anonymous'
   const deps: AuthTransitionDeps = {
     setAuthTokenProvider: (p) => calls.push(p ? 'provider' : 'provider:null'),
-    setUserId: (id) => calls.push(`userId:${id}`),
+    setUserId: (id) => {
+      storedUser = id
+      calls.push(`userId:${id}`)
+    },
+    getStoredUserId: () => storedUser,
     cancelPendingSaves: () => calls.push('cancelSaves'),
     clearCloudBindings: () => calls.push('unbind'),
     clearCache: () => calls.push('clearCache'),
@@ -85,6 +92,25 @@ describe('getToken-identity re-run (T1b2)', () => {
   })
 })
 
+describe('account switch without LAST_CLOUD_USER_KEY (pre-existing browsers)', () => {
+  it('a different stored user id is compared before it is overwritten: unbind', () => {
+    const { deps, calls } = makeDeps({ lastUser: null, storedUser: 'old-user' })
+    applyAuthTransition(deps, signedIn('pending'))
+    expect(calls).toContain('unbind')
+    expect(calls.indexOf('userId:u1')).toBeLessThan(calls.indexOf('unbind'))
+  })
+  it('the same stored user id keeps bindings', () => {
+    const { deps, calls } = makeDeps({ lastUser: null, storedUser: 'u1' })
+    applyAuthTransition(deps, signedIn('pending'))
+    expect(calls).not.toContain('unbind')
+  })
+  it('no record of any previous user keeps bindings', () => {
+    const { deps, calls } = makeDeps({ lastUser: null, storedUser: null })
+    applyAuthTransition(deps, signedIn('pending'))
+    expect(calls).not.toContain('unbind')
+  })
+})
+
 describe('sign-out notice (T1c)', () => {
   it('(a) first anonymous settle with a remembered user: exactly one toast, flag set', () => {
     const { deps, toast, isFlagSet } = makeDeps({ lastUser: 'u1' })
@@ -120,7 +146,21 @@ describe('sign-out notice (T1c)', () => {
     applyAuthTransition(deps, signedIn('anonymous'))
     expect(dismissSignedOutToast).toHaveBeenCalledTimes(1)
     setStatus('signed-in')
+    const confirm = vi.fn(() => true)
+    deps.confirm = confirm
     stale()
+    // Inert: a signed-in user is not even asked to confirm a wipe.
+    expect(confirm).not.toHaveBeenCalled()
+    expect(clearDeviceData).not.toHaveBeenCalled()
+  })
+  it('a sign-in that lands while the confirm is open still blocks the clear', () => {
+    const { deps, toast, clearDeviceData, setStatus } = makeDeps({ lastUser: 'u1' })
+    deps.confirm = () => {
+      setStatus('signed-in')
+      return true
+    }
+    applyAuthTransition(deps, signedOut('pending'))
+    toast.mock.calls[0][0].action.onClick()
     expect(clearDeviceData).not.toHaveBeenCalled()
   })
   it('declined confirmation does not clear', () => {

@@ -36,9 +36,6 @@ function ClerkUserSyncInner() {
     if (!isLoaded) return
     const store = useStore.getState()
     const previousStatus = getAuthStatus()
-    // Read before setUserId overwrites it: browsers that predate LAST_CLOUD_USER_KEY still
-    // remember who was signed in, so an account switch is detected for them too.
-    const priorStoredUser = getUserId()
     applyAuthTransition(
       {
         setAuthTokenProvider,
@@ -48,7 +45,8 @@ function ClerkUserSyncInner() {
         clearCache: () => store.engine.aiRegistry.clearCache(),
         setAuthStatus,
         toast: (t) => store.showToast(t),
-        getLastCloudUser: () => readLocal(LAST_CLOUD_USER_KEY) ?? priorStoredUser,
+        getLastCloudUser: () => readLocal(LAST_CLOUD_USER_KEY),
+        getStoredUserId: getUserId,
         setLastCloudUser: (id) => {
           try {
             localStorage.setItem(LAST_CLOUD_USER_KEY, id)

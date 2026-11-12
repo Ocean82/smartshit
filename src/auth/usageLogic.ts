@@ -42,3 +42,40 @@ export function shouldFetchPlan(input: {
   if (input.claimsPro || input.hasByok) return false
   return !input.inFlight && !input.done
 }
+
+/** Outcome of one plan request: discarded, retry the token, or the plan to apply. */
+export type PlanOutcome = 'stale' | 'retry' | { isPro: boolean; limit?: number; used?: number }
+
+/**
+ * One /api/usage plan request. `isCurrent` is the caller's request-generation
+ * check: once the account changes (A -> B -> A included) every await of the old
+ * request resolves to 'stale', so its data and errors are never applied.
+ * A null or rejected token yields 'retry'; a failed or non-ok fetch is free tier.
+ */
+export async function runPlanRequest(
+  getToken: () => Promise<string | null>,
+  fetchUsage: (token: string) => Promise<unknown>,
+  isCurrent: () => boolean,
+): Promise<PlanOutcome> {
+  let token: string | null
+  try {
+    token = await getToken()
+  } catch {
+    return isCurrent() ? 'retry' : 'stale'
+  }
+  if (!isCurrent()) return 'stale'
+  if (!token) return 'retry'
+  let data: Record<string, unknown> | null
+  try {
+    data = (await fetchUsage(token)) as Record<string, unknown> | null
+  } catch {
+    data = null
+  }
+  if (!isCurrent()) return 'stale'
+  if (data?.isPro === true || data?.limit === null || data?.remaining === null) return { isPro: true }
+  return {
+    isPro: false,
+    limit: typeof data?.limit === 'number' ? data.limit : undefined,
+    used: typeof data?.used === 'number' ? data.used : undefined,
+  }
+}
