@@ -90,6 +90,33 @@ describe('network call sites (T8)', () => {
     expect(byPath('src/onnx/sseClientAdapter.ts').code).toMatch(/canCallServer\(/)
   })
 
+  it('each gated fetch call has a gate in its own enclosing function', () => {
+    // Per call site, not per file: the code from the nearest preceding `function`
+    // keyword to the fetch must contain a gate. A new unguarded function fails here.
+    const PER_SITE_GATE = /\b(canCallServer|isCloudConfigured|getAuthStatus|mayCallChatServer|shouldFetchPlan)\(/
+    const missing: string[] = []
+    for (const path of Object.keys(EXPECTED_FETCH_SITES)) {
+      if (EXEMPT.has(path) || TOKEN_GATED.has(path)) continue
+      const code = byPath(path).code
+      for (const m of code.matchAll(/\bfetch\(/g)) {
+        const before = code.slice(0, m.index)
+        // `function` keyword followed by a name or `(` (not `functionName`, not a `function:` key).
+        const starts = [...before.matchAll(/\bfunction\b\s*[\w$*(]/g)]
+        const start = starts.length ? starts[starts.length - 1].index : 0
+        if (!PER_SITE_GATE.test(before.slice(start))) {
+          missing.push(`${path}@${code.slice(0, m.index).split('\n').length}`)
+        }
+      }
+    }
+    expect(missing).toEqual([])
+  })
+  it('stripSource keeps template interpolations as code', () => {
+    const code = stripCommentsAndStrings('const u = `a ${fetch(`/x/${id}`)} b`; f({ a: `${ {k: 1}.k }` })')
+    expect(code).toContain('fetch(')
+    expect(code).toContain('id')
+    expect(code).not.toContain('/x/')
+    expect(code).toContain('f({ a:')
+  })
   it('token-gated hooks consult auth status before getToken', () => {
     for (const path of TOKEN_GATED) {
       const code = byPath(path).code

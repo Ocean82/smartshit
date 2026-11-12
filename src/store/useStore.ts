@@ -191,6 +191,8 @@ export const useStore = create<AppState>()(
           st.activeFileId = fresh.activeFileId
           st.activeSheetId = fresh.workbook.activeSheetId
           st.messages = [createWelcomeMessage()]
+          st.chatInput = ''
+          st.attachedFilePreview = null
           st.undoStack = []
           st.redoStack = []
         })

@@ -132,6 +132,9 @@ function useUnlimitedUsage() {
   }
 }
 
+const PLAN_TOKEN_RETRIES = 3
+const PLAN_TOKEN_RETRY_MS = 2000
+
 /** Production hook — checks Clerk session metadata for Pro plan */
 function useTrackedUsage() {
   const { sessionClaims, getToken } = useAuth()
@@ -145,6 +148,12 @@ function useTrackedUsage() {
   const inFlightRef = useRef(false)
   const doneRef = useRef(false)
   const accountIdRef = useRef(accountId)
+  // Bumped on every account change; a response is applied only if its generation is
+  // still current, so an A -> B -> A switch cannot surface A's stale first response.
+  const generationRef = useRef(0)
+  // Bounded retry when getToken() yields no token or rejects (Clerk session warming up).
+  const attemptsRef = useRef(0)
+  const [retryTick, setRetryTick] = useState(0)
 
   // BYOK users bypass limits — they're paying for their own tokens
   const hasByok = Boolean(loadUserApiKey()?.apiKey)
@@ -155,8 +164,13 @@ function useTrackedUsage() {
   useEffect(() => {
     // A different account fetches its own plan.
     accountIdRef.current = accountId
+    generationRef.current += 1
     inFlightRef.current = false
     doneRef.current = false
+    attemptsRef.current = 0
+    // The new account must not inherit the previous account's server plan.
+    setServerIsPro(null)
+    setServerLimit(null)
     setUsage(getStoredUsage(accountId))
     return subscribeUsage((used) => {
       const next: UsageData = { count: used, date: getToday() }
@@ -182,14 +196,26 @@ function useTrackedUsage() {
     // Anonymous/pending sessions never call getToken() (it waits on Clerk and never
     // settles when Clerk is blocked) and never fetch. inFlightRef is set synchronously
     // so a dependency-driven re-run while the first call is pending starts nothing.
+    // A null or rejected token schedules a bounded retry (PLAN_TOKEN_RETRIES attempts,
+    // PLAN_TOKEN_RETRY_MS apart) via retryTick; the timer is cleared on cleanup.
     if (!shouldFetchPlan({ status, claimsPro, hasByok, inFlight: inFlightRef.current, done: doneRef.current })) return
     inFlightRef.current = true
     const API_BASE = import.meta.env.VITE_AI_API_URL ?? ''
-    const requestedFor = accountId
+    const generation = generationRef.current
+    const isCurrent = () => generation === generationRef.current
+    let retryTimer: ReturnType<typeof setTimeout> | undefined
+    const scheduleRetry = () => {
+      if (!isCurrent() || attemptsRef.current >= PLAN_TOKEN_RETRIES) return
+      attemptsRef.current += 1
+      retryTimer = setTimeout(() => setRetryTick((n) => n + 1), PLAN_TOKEN_RETRY_MS)
+    }
     getToken().then((token) => {
       inFlightRef.current = false
-      // Token not ready, or the account changed while waiting: a later re-run retries.
-      if (!token || requestedFor !== accountIdRef.current) return
+      if (!isCurrent()) return
+      if (!token) {
+        scheduleRetry()
+        return
+      }
       doneRef.current = true
       fetch(`${API_BASE}/api/usage`, {
         method: 'POST',
@@ -197,6 +223,7 @@ function useTrackedUsage() {
       })
         .then((r) => r.ok ? r.json() : null)
         .then((data) => {
+          if (!isCurrent()) return
           if (data?.isPro === true || data?.limit === null || data?.remaining === null) {
             setServerIsPro(true)
           } else {
@@ -209,11 +236,17 @@ function useTrackedUsage() {
             if (typeof data?.used === 'number') reportServerUsage(data.used)
           }
         })
-        .catch(() => setServerIsPro(false))
+        .catch(() => {
+          if (isCurrent()) setServerIsPro(false)
+        })
     }).catch(() => {
       inFlightRef.current = false
+      scheduleRetry()
     })
-  }, [status, getToken, claimsPro, hasByok, accountId])
+    return () => {
+      if (retryTimer) clearTimeout(retryTimer)
+    }
+  }, [status, getToken, claimsPro, hasByok, accountId, retryTick])
 
   const isPro = computeIsPro({ status, claimsPro, serverIsPro, hasByok })
   // Paid plan only (BYOK excluded): what server entitlement gates such as version history check.

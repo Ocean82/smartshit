@@ -167,8 +167,10 @@ async function postAgentChat(
   path: string,
   request: AgentChatRequest,
   signal: AbortSignal,
-): Promise<Response> {
+): Promise<Response | AgentServerError> {
   const headers = await getAuthHeaders()
+  // Signed out while the token resolved: send nothing, report the same gated outcome.
+  if (!canCallServer()) return anonGatedError()
   const byok = getByokPayload()
   const payload: Record<string, unknown> = {
     message: request.message,
@@ -193,6 +195,7 @@ export async function chatWithAgentServer(
   if (!(await mayCallChatServer())) return anonGatedError()
   try {
     const res = await postAgentChat('/api/chat', request, AbortSignal.timeout(CHAT_TIMEOUT_MS))
+    if ('kind' in res) return res
     // A 4xx here carries an actionable message (auth/rate-limit/quota) — surface
     // it instead of returning null, which the pipeline treats as "unreachable".
     if (!res.ok) return await toAgentServerError(res)
@@ -225,6 +228,7 @@ export async function chatWithAgentServerStream(
   if (!(await mayCallChatServer())) return anonGatedError()
   try {
     const res = await postAgentChat('/api/chat/stream', request, withChatTimeout(request.signal))
+    if ('kind' in res) return res
     // Non-200 before the SSE stream opens (e.g. 401 expired token, 429 rate
     // limit from middleware) has a JSON body with an actionable message. Surface
     // it rather than dropping to null and rendering a misleading local fallback.

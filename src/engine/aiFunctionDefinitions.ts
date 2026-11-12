@@ -90,6 +90,11 @@ async function flushBatchQueue(): Promise<void> {
   // Batch mode
   try {
     const headers = await getAuthHeaders()
+    // Signed out while the token resolved: local fallbacks, and no BYOK read.
+    if (!canCallServer()) {
+      for (const item of pending) item.resolve(localFallback(item.functionName, item.args))
+      return
+    }
     const byok = getByokPayload()
 
     const inputs = pending.map((item) => ({
@@ -147,8 +152,9 @@ async function callAIFunctionDirect(
   args: Record<string, unknown>,
 ): Promise<string | number | null> {
   if (!canCallServer()) return localFallback(functionName, args)
-  const byok = getByokPayload()
   const headers = await getAuthHeaders()
+  if (!canCallServer()) return localFallback(functionName, args)
+  const byok = getByokPayload()
   const res = await fetch(`${API_BASE}/api/ai-function`, {
     method: 'POST',
     headers,

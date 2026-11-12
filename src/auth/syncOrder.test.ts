@@ -8,6 +8,8 @@ function makeDeps(opts: { lastUser?: string | null; flag?: boolean; confirm?: bo
   let flag = opts.flag ?? false
   const toast = vi.fn()
   const clearDeviceData = vi.fn()
+  const dismissSignedOutToast = vi.fn()
+  let status: 'pending' | 'anonymous' | 'signed-in' = 'anonymous'
   const deps: AuthTransitionDeps = {
     setAuthTokenProvider: (p) => calls.push(p ? 'provider' : 'provider:null'),
     setUserId: (id) => calls.push(`userId:${id}`),
@@ -24,8 +26,20 @@ function makeDeps(opts: { lastUser?: string | null; flag?: boolean; confirm?: bo
     },
     clearDeviceData,
     confirm: () => opts.confirm ?? true,
+    getAuthStatus: () => status,
+    dismissSignedOutToast,
   }
-  return { deps, calls, toast, clearDeviceData, isFlagSet: () => flag }
+  return {
+    deps,
+    calls,
+    toast,
+    clearDeviceData,
+    dismissSignedOutToast,
+    setStatus: (s: typeof status) => {
+      status = s
+    },
+    isFlagSet: () => flag,
+  }
 }
 
 const signedIn = (previousStatus: 'pending' | 'anonymous' | 'signed-in', previousUserId: string | null = null) => ({
@@ -98,6 +112,16 @@ describe('sign-out notice (T1c)', () => {
     expect(clearDeviceData).not.toHaveBeenCalled()
     toast.mock.calls[0][0].action.onClick()
     expect(clearDeviceData).toHaveBeenCalledTimes(1)
+  })
+  it('a sign-in dismisses the notice and makes a stale clear button inert', () => {
+    const { deps, toast, clearDeviceData, dismissSignedOutToast, setStatus } = makeDeps({ lastUser: 'u1' })
+    applyAuthTransition(deps, signedOut('pending'))
+    const stale = toast.mock.calls[0][0].action.onClick
+    applyAuthTransition(deps, signedIn('anonymous'))
+    expect(dismissSignedOutToast).toHaveBeenCalledTimes(1)
+    setStatus('signed-in')
+    stale()
+    expect(clearDeviceData).not.toHaveBeenCalled()
   })
   it('declined confirmation does not clear', () => {
     const { deps, toast, clearDeviceData } = makeDeps({ lastUser: 'u1', confirm: false })

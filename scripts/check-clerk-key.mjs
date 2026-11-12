@@ -32,4 +32,19 @@ if (placeholder || [...matches].some((m) => /YOUR_/i.test(m))) {
   console.error('check-clerk-key: FAIL rule 2: bundle contains a placeholder Clerk key (YOUR_...)')
   process.exit(1)
 }
+
+// A publishable key is pk_(live|test)_ + base64("<frontend-api-host>$").
+function isValidPublishableKey(key) {
+  const body = key.replace(/^pk_(?:live|test)_/, '')
+  // Buffer.from never throws on bad base64; garbage simply fails the checks below.
+  const decoded = Buffer.from(body, 'base64').toString('utf8')
+  if (!decoded.endsWith('$')) return false
+  const host = decoded.slice(0, -1)
+  return /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/i.test(host)
+}
+const invalid = [...matches].filter((m) => !isValidPublishableKey(m))
+if (invalid.length > 0) {
+  console.error(`check-clerk-key: FAIL rule 3: ${invalid.length} key string(s) do not decode to "<frontend-api-host>$"`)
+  process.exit(1)
+}
 console.log(`check-clerk-key: OK (${matches.size} key string(s) found)`)

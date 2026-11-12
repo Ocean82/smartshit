@@ -17,8 +17,8 @@ export async function startCheckout(
   let status = getAuthStatus()
   if (status === 'pending') status = await whenAuthSettled(3000)
   if (status !== 'signed-in' && status !== 'dev') {
-    void openSignIn('upgrade')
-    return 'failed'
+    // openSignIn re-checks status; 'continue' means the user is signed in after all.
+    if ((await openSignIn('upgrade')) !== 'continue') return 'failed'
   }
   try {
     // Imported lazily so a caller that never starts checkout never pays for the

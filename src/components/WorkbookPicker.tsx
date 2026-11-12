@@ -37,11 +37,19 @@ export function WorkbookPicker({ open, onClose }: WorkbookPickerProps) {
   const authStatus = useAuthStatus()
 
   useEffect(() => {
-    if (open && isCloudConfigured()) {
-      setLoading(true)
-      listCloudWorkbooks()
-        .then(setWorkbooks)
-        .finally(() => setLoading(false))
+    if (!open || !isCloudConfigured()) return
+    let current = true
+    setLoading(true)
+    listCloudWorkbooks()
+      .then((list) => {
+        if (current) setWorkbooks(list)
+      })
+      .finally(() => {
+        if (current) setLoading(false)
+      })
+    return () => {
+      // Closed or auth changed: a late response must not land in this render.
+      current = false
     }
   }, [open, authStatus])
 

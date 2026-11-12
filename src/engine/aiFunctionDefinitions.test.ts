@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AIFunctionRegistry } from './aiFunctions'
 import { registerBuiltinAIFunctions, setAnonAIFunctionNotifier } from './aiFunctionDefinitions'
 import { _resetServerAccessForTests, setAuthStatus } from '@/lib/serverAccess'
+import { setAuthTokenProvider } from '@/lib/cloudSync'
+import * as userApiKey from '@/lib/userApiKey'
 
 function setup() {
   const registry = new AIFunctionRegistry()
@@ -80,6 +82,27 @@ describe('AI.* transport gate (T3)', () => {
     expect(fetchSpy).not.toHaveBeenCalled()
     expect(results).toContain('Food & Dining')
   })
+
+  for (const [label, count] of [['single', 1], ['batch', 5]] as const) {
+    it(`sign-out while auth headers resolve (${label}): local fallback, no fetch, no BYOK read`, async () => {
+      setAuthStatus('signed-in')
+      let release!: (t: string) => void
+      const token = new Promise<string>((r) => { release = r })
+      setAuthTokenProvider(() => token)
+      const byokRead = vi.spyOn(userApiKey, 'getByokPayload')
+      const { registry, results } = setup()
+      for (let i = 0; i < count; i++) registry.execute('AI.CATEGORIZE', `A${i}`, ['Starbucks coffee'], 's1')
+      await flush()
+      setAuthStatus('anonymous')
+      release('tok')
+      await flush()
+      expect(fetchSpy).not.toHaveBeenCalled()
+      expect(byokRead).not.toHaveBeenCalled()
+      expect(results.filter((r) => r === 'Food & Dining')).toHaveLength(count)
+      setAuthTokenProvider(null)
+      byokRead.mockRestore()
+    })
+  }
 
   it('signed-in: server is called', async () => {
     setAuthStatus('signed-in')

@@ -102,7 +102,8 @@ function DialogBody({ reason }: { reason: SignInReason }) {
     }
     const first = focusable[0]
     const last = focusable[focusable.length - 1]
-    if (e.shiftKey && document.activeElement === first) {
+    // The panel itself holds focus on open, so Shift+Tab from it must wrap too.
+    if (e.shiftKey && (document.activeElement === first || document.activeElement === panelRef.current)) {
       e.preventDefault()
       last.focus()
     } else if (!e.shiftKey && document.activeElement === last) {

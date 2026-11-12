@@ -92,4 +92,17 @@ describe('cancelPendingSaves (T4c)', () => {
     flushSave('c1', wb)
     expect(fetchSpy).not.toHaveBeenCalled()
   })
+
+  it('a save awaiting its token when sign-out happens is not sent', async () => {
+    setAuthStatus('signed-in')
+    let release!: (t: string) => void
+    const token = new Promise<string>((r) => { release = r })
+    setAuthTokenProvider(() => token)
+    const save = saveToCloud('c1', wb)
+    cancelPendingSaves()
+    setAuthStatus('anonymous')
+    release('tok')
+    expect(await save).toBeNull()
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
 })

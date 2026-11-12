@@ -1,10 +1,11 @@
 import { useAuth } from '@clerk/react'
 import { useEffect, useRef, type ReactNode } from 'react'
-import { cancelPendingSaves, setAuthTokenProvider, setUserId } from '@/lib/cloudSync'
+import { cancelPendingSaves, getUserId, setAuthTokenProvider, setUserId } from '@/lib/cloudSync'
 import { getAuthStatus, setAuthStatus } from '@/lib/serverAccess'
 import { LAST_CLOUD_USER_KEY, SIGNOUT_TOAST_FLAG } from '@/lib/authKeys'
 import { useStore } from '@/store/useStore'
 import { applyAuthTransition } from './applyAuthTransition'
+import { SIGNED_OUT_TOAST } from './anonCopy'
 import { useSubscriptionStatus } from './useSubscriptionStatus'
 
 const CLERK_PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ?? ''
@@ -35,6 +36,9 @@ function ClerkUserSyncInner() {
     if (!isLoaded) return
     const store = useStore.getState()
     const previousStatus = getAuthStatus()
+    // Read before setUserId overwrites it: browsers that predate LAST_CLOUD_USER_KEY still
+    // remember who was signed in, so an account switch is detected for them too.
+    const priorStoredUser = getUserId()
     applyAuthTransition(
       {
         setAuthTokenProvider,
@@ -44,7 +48,7 @@ function ClerkUserSyncInner() {
         clearCache: () => store.engine.aiRegistry.clearCache(),
         setAuthStatus,
         toast: (t) => store.showToast(t),
-        getLastCloudUser: () => readLocal(LAST_CLOUD_USER_KEY),
+        getLastCloudUser: () => readLocal(LAST_CLOUD_USER_KEY) ?? priorStoredUser,
         setLastCloudUser: (id) => {
           try {
             localStorage.setItem(LAST_CLOUD_USER_KEY, id)
@@ -70,6 +74,11 @@ function ClerkUserSyncInner() {
           void useStore.getState().clearLocalWorkbooks()
         },
         confirm: (m) => window.confirm(m),
+        getAuthStatus,
+        dismissSignedOutToast: () => {
+          const s = useStore.getState()
+          for (const t of s.toasts) if (t.message === SIGNED_OUT_TOAST) s.dismissToast(t.id)
+        },
       },
       {
         isSignedIn: Boolean(isSignedIn),

@@ -78,14 +78,16 @@ let authUnsubscribe: (() => void) | null = null
 function ensureAuthWatcher(): void {
   if (authUnsubscribe) return
   authUnsubscribe = subscribeAuthStatus(() => {
-    if (listeners.size === 0) return
-    if (canCallServer()) {
-      startOrResume()
-    } else {
+    if (!canCallServer()) {
+      // Clear even with no listeners, so a later anonymous subscriber is not
+      // handed a stale healthy snapshot.
       clearScheduled()
       started = false
       notify(null)
+      return
     }
+    if (listeners.size === 0) return
+    startOrResume()
   })
 }
 

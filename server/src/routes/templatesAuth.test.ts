@@ -15,18 +15,25 @@ vi.mock('../s3.js', () => ({
 }))
 
 import { templatesRouter } from './templates.js'
+import { uploadTemplate } from '../s3.js'
 
 const app = express()
 app.use(express.json())
 app.use('/api/community-templates', templatesRouter)
 
-beforeEach(() => queryMock.mockClear())
+beforeEach(() => {
+  queryMock.mockClear()
+  vi.mocked(uploadTemplate).mockClear()
+})
 
 describe('community-templates auth (anonymous requests)', () => {
   it('POST / (publish) returns 401 with no DB call', async () => {
-    const res = await request(app).post('/api/community-templates').send({ name: 'x', category: 'c', prompt: 'p' })
+    const res = await request(app)
+      .post('/api/community-templates')
+      .send({ name: 'x', category: 'c', prompt: 'p', templateData: { sheets: [] } })
     expect(res.status).toBe(401)
     expect(queryMock).not.toHaveBeenCalled()
+    expect(uploadTemplate).not.toHaveBeenCalled()
   })
   it('POST /:id/rate returns 401 with no DB call', async () => {
     const res = await request(app).post('/api/community-templates/abc/rate').send({ rating: 5 })

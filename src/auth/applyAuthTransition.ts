@@ -25,6 +25,10 @@ export interface AuthTransitionDeps {
   /** The destructive action; only ever invoked from the toast button after confirm. */
   clearDeviceData: () => void
   confirm: (message: string) => boolean
+  /** Current published status; the clear action is inert once a sign-in has begun. */
+  getAuthStatus: () => AuthStatus
+  /** Remove any outstanding sign-out notice (and its clear button). */
+  dismissSignedOutToast: () => void
 }
 
 export interface AuthTransitionInput {
@@ -59,6 +63,7 @@ export function applyAuthTransition(deps: AuthTransitionDeps, input: AuthTransit
       deps.setLastCloudUser(userId)
       deps.clearCache()
     }
+    deps.dismissSignedOutToast()
     deps.setAuthStatus('signed-in')
     return
   }
@@ -81,6 +86,7 @@ export function applyAuthTransition(deps: AuthTransitionDeps, input: AuthTransit
       action: {
         label: CLEAR_DEVICE_LABEL,
         onClick: () => {
+          if (deps.getAuthStatus() === 'signed-in') return
           if (deps.confirm(CLEAR_DEVICE_CONFIRM)) deps.clearDeviceData()
         },
       },
