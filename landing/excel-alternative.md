@@ -35,7 +35,7 @@ It is not a clone of Excel's desktop app, and it does not include Copilot or Gem
 
 ## What stays free
 
-The Free plan includes the full spreadsheet, templates, Excel and CSV import and export, the in-browser auditor, 7 AI questions per day, 3 auto-fixes, 1 cloud workbook, and view-only share links. Bring your own key if you want AI questions billed by your provider instead of the daily limit.
+The Free plan includes the full spreadsheet, templates, Excel and CSV import and export, the in-browser auditor, 7 AI questions per day, 3 lifetime auto-fixes, 1 cloud workbook, and view-only share links. Bring your own key if you want AI questions billed by your provider instead of the daily limit.
 
 Pro ($7/month at the early adopter rate, or $59/year) adds unlimited AI questions, unlimited auto-fix, unlimited cloud backup, and version history.
 
