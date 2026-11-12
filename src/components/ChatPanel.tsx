@@ -12,7 +12,9 @@ import { suggestionChipLabel } from '@/ai/capabilities/clarifyChips'
 import { exportChatAsReport } from '@/lib/exportChat'
 import { persistenceCaveat } from '@/lib/styleRecipes'
 import { collectStaleActionIds } from '@/lib/actionScope'
-import { useUsage, UpgradePrompt } from '@/auth'
+import { useUsage, UpgradePrompt, openSignIn } from '@/auth'
+import { useAuthStatus } from '@/lib/serverAccess'
+import { ANON_CHAT_FOOTER, SIGN_IN_BUTTON } from '@/auth/anonCopy'
 import { ApiKeySettings } from './ApiKeySettings'
 import { ApplyPostureToggle } from './ApplyPostureToggle'
 import { ChatMarkdown } from './ChatMarkdown'
@@ -481,6 +483,15 @@ function ChatBubble({ msg, isStreaming, feedback, onFeedback, onPin, onSuggestio
           <MessageContent content={msg.content} role={msg.role} isStreaming={isStreaming} />
         </div>
 
+        {isAssistant && msg.signInAction === 'chat' && (
+          <button
+            type="button"
+            onClick={() => void openSignIn('chat')}
+            className="mt-2 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+          >
+            {SIGN_IN_BUTTON}
+          </button>
+        )}
         {isAssistant && msg.suggestions && msg.suggestions.length > 0 && (
           <SuggestionChips suggestions={msg.suggestions} onClick={onSuggestionClick} />
         )}
@@ -722,6 +733,8 @@ function ChatInputArea({
   isPro, remaining, dailyLimit, fileInputRef, inputRef,
   attachedFilePreview, onAttachFile, onImportFile, onClearFile, health,
 }: ChatInputAreaProps) {
+  const authStatus = useAuthStatus()
+  const isAnonymous = authStatus !== 'signed-in' && authStatus !== 'dev'
   return (
     <div className="px-3 py-3 border-t border-gray-200 bg-slate-50/80">
       {!isPro && <UpgradePrompt remaining={remaining} dailyLimit={dailyLimit} />}
@@ -793,7 +806,7 @@ function ChatInputArea({
         )}
       </div>
       <p className="text-[10px] text-slate-400 mt-2 text-center">
-        {healthFooterMessage(health)}
+        {isAnonymous ? ANON_CHAT_FOOTER : healthFooterMessage(health)}
       </p>
       <ApiKeySettings />
     </div>

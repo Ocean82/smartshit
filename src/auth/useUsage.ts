@@ -1,6 +1,8 @@
 import { useAuth } from '@clerk/react'
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { loadUserApiKey } from '@/lib/userApiKey'
+import { useAuthStatus } from '@/lib/serverAccess'
+import { anonymousUsageState, computeIsPro, runPlanRequest, shouldFetchPlan } from './usageLogic'
 import { FREE_DAILY_LIMIT } from '../../shared/config'
 
 const CLERK_PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ?? ''
@@ -126,8 +128,12 @@ function useUnlimitedUsage() {
     dailyLimit: FREE_DAILY_LIMIT,
     usedToday: 0,
     recordUsage: () => {},
+    isAnonymous: false as const,
   }
 }
+
+const PLAN_TOKEN_RETRIES = 3
+const PLAN_TOKEN_RETRY_MS = 2000
 
 /** Production hook — checks Clerk session metadata for Pro plan */
 function useTrackedUsage() {
@@ -138,7 +144,16 @@ function useTrackedUsage() {
   const [usage, setUsage] = useState<UsageData>(() => getStoredUsage(accountId))
   const [serverIsPro, setServerIsPro] = useState<boolean | null>(null)
   const [serverLimit, setServerLimit] = useState<number | null>(null)
-  const fetchedRef = useRef(false)
+  const status = useAuthStatus()
+  const inFlightRef = useRef(false)
+  const doneRef = useRef(false)
+  const accountIdRef = useRef(accountId)
+  // Bumped on every account change; a response is applied only if its generation is
+  // still current, so an A -> B -> A switch cannot surface A's stale first response.
+  const generationRef = useRef(0)
+  // Bounded retry when getToken() yields no token or rejects (Clerk session warming up).
+  const attemptsRef = useRef(0)
+  const [retryTick, setRetryTick] = useState(0)
 
   // BYOK users bypass limits — they're paying for their own tokens
   const hasByok = Boolean(loadUserApiKey()?.apiKey)
@@ -147,6 +162,15 @@ function useTrackedUsage() {
   // count never shows under another, and reconcile when the server reports the
   // authoritative post-request count.
   useEffect(() => {
+    // A different account fetches its own plan.
+    accountIdRef.current = accountId
+    generationRef.current += 1
+    inFlightRef.current = false
+    doneRef.current = false
+    attemptsRef.current = 0
+    // The new account must not inherit the previous account's server plan.
+    setServerIsPro(null)
+    setServerLimit(null)
     setUsage(getStoredUsage(accountId))
     return subscribeUsage((used) => {
       const next: UsageData = { count: used, date: getToday() }
@@ -169,35 +193,51 @@ function useTrackedUsage() {
 
   // Fetch server-side usage/pro status once per session as authoritative source
   useEffect(() => {
-    if (fetchedRef.current || claimsPro) return
-    fetchedRef.current = true
-
+    // Anonymous/pending sessions never call getToken() (it waits on Clerk and never
+    // settles when Clerk is blocked) and never fetch. inFlightRef is set synchronously
+    // so a dependency-driven re-run while the first call is pending starts nothing.
+    // A null or rejected token schedules a bounded retry (PLAN_TOKEN_RETRIES attempts,
+    // PLAN_TOKEN_RETRY_MS apart) via retryTick; the timer is cleared on cleanup.
+    if (!shouldFetchPlan({ status, claimsPro, hasByok, inFlight: inFlightRef.current, done: doneRef.current })) return
+    inFlightRef.current = true
     const API_BASE = import.meta.env.VITE_AI_API_URL ?? ''
-    getToken().then((token) => {
-      if (!token) return
+    const generation = generationRef.current
+    const isCurrent = () => generation === generationRef.current
+    let retryTimer: ReturnType<typeof setTimeout> | undefined
+    const scheduleRetry = () => {
+      if (!isCurrent() || attemptsRef.current >= PLAN_TOKEN_RETRIES) return
+      attemptsRef.current += 1
+      retryTimer = setTimeout(() => setRetryTick((n) => n + 1), PLAN_TOKEN_RETRY_MS)
+    }
+    const fetchUsage = (token: string) =>
       fetch(`${API_BASE}/api/usage`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      })
-        .then((r) => r.ok ? r.json() : null)
-        .then((data) => {
-          if (data?.isPro === true || data?.limit === null || data?.remaining === null) {
-            setServerIsPro(true)
-          } else {
-            setServerIsPro(false)
-            if (typeof data?.limit === 'number') setServerLimit(data.limit)
-            // Seed the local counter from the server's authoritative count so the
-            // UI starts from truth rather than whatever this browser last guessed.
-            // reportServerUsage (not syncServerUsage) so the live hook updates its
-            // rendered count too, not just storage.
-            if (typeof data?.used === 'number') reportServerUsage(data.used)
-          }
-        })
-        .catch(() => setServerIsPro(false))
+      }).then((r) => (r.ok ? r.json() : null))
+    void runPlanRequest(getToken, fetchUsage, isCurrent).then((outcome) => {
+      // Superseded by an account change: apply nothing, and leave the current
+      // request's in-flight flag alone.
+      if (outcome === 'stale') return
+      inFlightRef.current = false
+      if (outcome === 'retry') {
+        scheduleRetry()
+        return
+      }
+      doneRef.current = true
+      setServerIsPro(outcome.isPro)
+      if (outcome.isPro) return
+      if (outcome.limit !== undefined) setServerLimit(outcome.limit)
+      // Seed the local counter from the server's authoritative count so the UI
+      // starts from truth. reportServerUsage (not syncServerUsage) so the live
+      // hook updates its rendered count too, not just storage.
+      if (outcome.used !== undefined) reportServerUsage(outcome.used)
     })
-  }, [getToken, claimsPro, accountId])
+    return () => {
+      if (retryTimer) clearTimeout(retryTimer)
+    }
+  }, [status, getToken, claimsPro, hasByok, accountId, retryTick])
 
-  const isPro = claimsPro || serverIsPro === true || hasByok
+  const isPro = computeIsPro({ status, claimsPro, serverIsPro, hasByok })
   // Paid plan only (BYOK excluded): what server entitlement gates such as version history check.
   const hasPlanPro: boolean | null = claimsPro || serverIsPro === true ? true : serverIsPro === false ? false : null
   const dailyLimit = serverLimit ?? FREE_DAILY_LIMIT
@@ -211,6 +251,10 @@ function useTrackedUsage() {
     [isPro, hasByok, accountId, setUsage],
   )
 
+  // After ALL hooks (rules of hooks): anonymous visitors have no server count.
+  const anonymous = anonymousUsageState(status, dailyLimit)
+  if (anonymous) return anonymous
+
   return {
     isPro,
     hasPlanPro,
@@ -219,6 +263,7 @@ function useTrackedUsage() {
     dailyLimit,
     usedToday: usage.count,
     recordUsage,
+    isAnonymous: false as const,
   }
 }
 

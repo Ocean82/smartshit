@@ -31,6 +31,7 @@ import {
   loadPersistedState,
   loadPersistedStateAsync,
   savePersistedStateAsync,
+  clearPersistedState,
   type PersistedState,
 } from './persistence'
 
@@ -85,6 +86,17 @@ describe('savePersistedStateAsync', () => {
     // IDB envelope present with a timestamp.
     expect(idbMap.has('state-v1')).toBe(true)
     // localStorage mirror present (used for the next sync boot seed).
+    expect(store.has(STORAGE_KEY)).toBe(true)
+  })
+
+  it('a save in flight when the device is cleared leaves nothing behind', async () => {
+    const pending = savePersistedStateAsync(makeState())
+    await clearPersistedState()
+    await pending
+    expect(store.has(STORAGE_KEY)).toBe(false)
+    expect(idbMap.has('state-v1')).toBe(false)
+    // Later saves work normally.
+    await savePersistedStateAsync(makeState())
     expect(store.has(STORAGE_KEY)).toBe(true)
   })
 

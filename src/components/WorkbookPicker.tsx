@@ -12,6 +12,9 @@ import { useStore } from '@/store/useStore'
 import { useShallow } from 'zustand/react/shallow'
 import { useFocusTrap } from '@/hooks/useFocusTrap'
 import { workbookHasContent } from '@/lib/workbookGuard'
+import { useAuthStatus } from '@/lib/serverAccess'
+import { openSignIn } from '@/auth'
+import { ANON_CLOUD_MESSAGE, SIGN_IN_BUTTON } from '@/auth/anonCopy'
 
 interface WorkbookPickerProps {
   open: boolean
@@ -30,15 +33,25 @@ export function WorkbookPicker({ open, onClose }: WorkbookPickerProps) {
   const [loading, setLoading] = useState(false)
   const [actionId, setActionId] = useState<string | null>(null)
   const containerRef = useFocusTrap<HTMLDivElement>(open, onClose)
+  // Re-render and re-fetch when auth settles (isCloudConfigured is not reactive).
+  const authStatus = useAuthStatus()
 
   useEffect(() => {
-    if (open && isCloudConfigured()) {
-      setLoading(true)
-      listCloudWorkbooks()
-        .then(setWorkbooks)
-        .finally(() => setLoading(false))
+    if (!open || !isCloudConfigured()) return
+    let current = true
+    setLoading(true)
+    listCloudWorkbooks()
+      .then((list) => {
+        if (current) setWorkbooks(list)
+      })
+      .finally(() => {
+        if (current) setLoading(false)
+      })
+    return () => {
+      // Closed or auth changed: a late response must not land in this render.
+      current = false
     }
-  }, [open])
+  }, [open, authStatus])
 
   if (!open) return null
 
@@ -166,7 +179,16 @@ export function WorkbookPicker({ open, onClose }: WorkbookPickerProps) {
           {!isCloudConfigured() ? (
             <div className="text-center py-8 text-gray-500">
               <Cloud size={32} className="mx-auto mb-2 text-gray-300" />
-              <p className="text-sm">Sign in to access cloud workbooks</p>
+              <p className="text-sm">{ANON_CLOUD_MESSAGE}</p>
+              {authStatus !== 'dev' && (
+                <button
+                  type="button"
+                  onClick={() => void openSignIn('cloud')}
+                  className="mt-3 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
+                >
+                  {SIGN_IN_BUTTON}
+                </button>
+              )}
             </div>
           ) : loading ? (
             <div className="flex items-center justify-center py-8 gap-2 text-gray-400">

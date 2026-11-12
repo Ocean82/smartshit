@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useAuth, useSession } from '@clerk/react'
+import { getAuthStatus, whenAuthSettled } from '@/lib/serverAccess'
 
 /** Poll budget after returning from checkout. */
 export const UPGRADE_POLL_ATTEMPTS = 10
@@ -46,6 +47,11 @@ export async function requestPlanStatus(
   fetchImpl: PlanFetch = fetch,
   apiBase: string = import.meta.env.VITE_AI_API_URL ?? '',
 ): Promise<PlanCheckResult> {
+  // Clerk's getToken() waits for Clerk to load (it does not return null when Clerk
+  // is blocked), so decide from the shared auth status BEFORE touching it.
+  let status = getAuthStatus()
+  if (status === 'pending') status = await whenAuthSettled(3000)
+  if (status !== 'signed-in' && status !== 'dev') return { ok: false }
   const token = await getToken()
   if (!token) return { ok: false }
   try {
@@ -142,8 +148,12 @@ export function startSessionCheck(
   activePoller?.stop()
   activePoller = null
 
+  // A failed request (as opposed to a successful isPro:false answer) must not
+  // latch the session, or a check that ran just before auth settled is lost.
+  let lastCheckFailed = false
   const check = async (): Promise<boolean> => {
     const { ok, data } = await requestPlanStatus(getToken, fetchImpl)
+    lastCheckFailed = !ok || !data
     if (!ok || !data) return false
     setShared(planStatusFrom(data))
     return data.isPro === true
@@ -154,7 +164,9 @@ export function startSessionCheck(
     new URLSearchParams(window.location.search).get('upgraded') === 'true'
 
   if (!afterCheckout) {
-    void check()
+    void check().then(() => {
+      if (lastCheckFailed && checkedSessionId === sessionId) checkedSessionId = null
+    })
     return
   }
 

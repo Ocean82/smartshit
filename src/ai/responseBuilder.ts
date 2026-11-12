@@ -213,5 +213,7 @@ export function toolResultToChatMessage(
     toolUsed: result.toolUsed ?? meta?.toolUsed,
     insightsSnapshot: meta?.insightsSnapshot,
     providerMeta: result.providerMeta,
+    // Anonymous chat gate: the message carries a Sign in button.
+    ...(result.toolUsed === 'anon-gated' ? { signInAction: 'chat' as const } : {}),
   }
 }

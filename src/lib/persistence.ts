@@ -1,5 +1,5 @@
 import type { WorkbookData, FileItem, ChatMessage } from '@/types'
-import { idbGet, idbSet } from '@/lib/idbStorage'
+import { idbGet, idbSet, idbDel } from '@/lib/idbStorage'
 
 const STORAGE_KEY = 'smartsht-state-v1'
 /** Where a corrupt payload is copied before we discard it, for recovery. */
@@ -193,8 +193,17 @@ export function savePersistedState(state: PersistedState, savedAt = Date.now()):
  */
 export async function savePersistedStateAsync(state: PersistedState): Promise<LocalSaveResult> {
   const savedAt = Date.now()
+  const epoch = clearEpoch
 
   const idbOk = await idbSet<PersistedEnvelope>(IDB_STATE_KEY, { savedAt, state })
+
+  // A clear ran while this write was in flight: the pre-clear snapshot must not
+  // survive in either layer. Skip the mirror and undo an IDB write that may have
+  // landed after the clear's delete.
+  if (epoch !== clearEpoch) {
+    await idbDel(IDB_STATE_KEY)
+    return { ok: true }
+  }
 
   // Mirror to localStorage for the synchronous boot seed. Best-effort: on a
   // large workbook this may hit quota, which is fine once IDB has the truth.
@@ -203,4 +212,25 @@ export async function savePersistedStateAsync(state: PersistedState): Promise<Lo
   if (idbOk || localResult.ok) return { ok: true }
   // Neither layer accepted the write — propagate localStorage's reason.
   return localResult
+}
+
+/** Bumped by clearPersistedState; saves started under an older epoch are discarded. */
+let clearEpoch = 0
+
+/**
+ * Remove the persisted workspace from BOTH layers (localStorage mirror, its
+ * corrupt-backup copy, and the IndexedDB primary). Used only by the explicit
+ * "Clear this device's data" action. Never throws.
+ */
+export async function clearPersistedState(): Promise<void> {
+  clearEpoch += 1
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem(STORAGE_KEY)
+      localStorage.removeItem(CORRUPT_BACKUP_KEY)
+    }
+  } catch {
+    // storage unavailable
+  }
+  await idbDel(IDB_STATE_KEY)
 }

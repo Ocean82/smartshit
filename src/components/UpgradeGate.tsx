@@ -9,7 +9,6 @@
  */
 
 import { useState } from 'react'
-import { useAuth } from '@clerk/react'
 import { X, Sparkles, Lock } from 'lucide-react'
 import { startCheckout, type CheckoutInterval } from '@/auth/startCheckout'
 import type { GatedFeature } from '@/lib/featureGates'
@@ -218,10 +217,10 @@ function UpgradeButton({
   fullWidth?: boolean
   interval?: CheckoutInterval
 }) {
-  const { isSignedIn } = useAuth()
-
+  // startCheckout opens sign-in for anonymous visitors (and waits briefly for
+  // Clerk to settle), so the button stays enabled for them.
   const handleUpgrade = async () => {
-    if (!isSignedIn || loading) return
+    if (loading) return
     setLoading(true)
     try {
       await startCheckout(interval)
@@ -234,7 +233,7 @@ function UpgradeButton({
     <button
       type="button"
       onClick={handleUpgrade}
-      disabled={loading || !isSignedIn}
+      disabled={loading}
       className={`py-2.5 px-5 text-sm font-semibold text-white rounded-xl transition-colors disabled:opacity-50 ${fullWidth ? 'w-full' : ''}`}
       style={{ background: 'var(--accent-600)' }}
     >

@@ -19,6 +19,26 @@
 import type { AIFunctionInfo, AsyncAIFunctionExecutor, AIFunctionRegistry } from './aiFunctions'
 import { getAuthHeaders } from '@/lib/cloudSync'
 import { getByokPayload } from '@/lib/userApiKey'
+import { canCallServer, getAuthStatus, whenAuthSettled } from '@/lib/serverAccess'
+
+// Anonymous visitors never reach the server: AI.* cells use the local fallback and
+// the user is told once per session. The notifier is registered by main.tsx so this
+// engine module does not import the UI store.
+let anonNotifier: (() => void) | null = null
+let anonNotified = false
+export function setAnonAIFunctionNotifier(fn: (() => void) | null): void {
+  anonNotifier = fn
+  anonNotified = false
+}
+function notifyAnonymousOnce(): void {
+  if (anonNotified) return
+  anonNotified = true
+  try {
+    anonNotifier?.()
+  } catch {
+    // notification is best-effort
+  }
+}
 
 const API_BASE = import.meta.env.VITE_AI_API_URL ?? ''
 
@@ -62,9 +82,19 @@ async function flushBatchQueue(): Promise<void> {
     return
   }
 
+  // Status may have flipped (sign-out) since these were queued: never send anonymously.
+  if (!canCallServer()) {
+    for (const item of pending) item.resolve(localFallback(item.functionName, item.args))
+    return
+  }
   // Batch mode
   try {
     const headers = await getAuthHeaders()
+    // Signed out while the token resolved: local fallbacks, and no BYOK read.
+    if (!canCallServer()) {
+      for (const item of pending) item.resolve(localFallback(item.functionName, item.args))
+      return
+    }
     const byok = getByokPayload()
 
     const inputs = pending.map((item) => ({
@@ -121,8 +151,10 @@ async function callAIFunctionDirect(
   functionName: string,
   args: Record<string, unknown>,
 ): Promise<string | number | null> {
-  const byok = getByokPayload()
+  if (!canCallServer()) return localFallback(functionName, args)
   const headers = await getAuthHeaders()
+  if (!canCallServer()) return localFallback(functionName, args)
+  const byok = getByokPayload()
   const res = await fetch(`${API_BASE}/api/ai-function`, {
     method: 'POST',
     headers,
@@ -144,6 +176,14 @@ async function callAIFunction(
   functionName: string,
   args: Record<string, unknown>,
 ): Promise<string | number | null> {
+  // While Clerk is still loading, wait (bounded) so a returning signed-in user
+  // still reaches the server; anything but signed-in/dev uses the local fallback.
+  let status = getAuthStatus()
+  if (status === 'pending') status = await whenAuthSettled(3000)
+  if (status !== 'signed-in' && status !== 'dev') {
+    notifyAnonymousOnce()
+    return localFallback(functionName, args)
+  }
   return new Promise<string | number | null>((resolve, reject) => {
     batchQueue.push({
       id: `cell-${++batchIdCounter}`,

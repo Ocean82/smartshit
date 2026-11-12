@@ -103,6 +103,13 @@ export interface AppState extends UIState, UIActions, FileActions, ChatActions {
 
   // Workbook / sheet actions
   initWorkbook: (name?: string) => void
+  /** Unbind every file's cloudWorkbookId (account switch). Local data is untouched. */
+  clearCloudBindings: () => void
+  /**
+   * Explicit "Clear this device's data": reset to one empty workbook and a fresh
+   * chat, wipe persisted state, saved API key and cloud identity keys.
+   */
+  clearLocalWorkbooks: () => Promise<void>
   setActiveSheet: (sheetId: string) => void
   addSheet: (name?: string) => void
   deleteSheet: (sheetId: string) => void

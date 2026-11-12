@@ -18,6 +18,7 @@ export default tseslint.config(
   {
     ignores: [
       'dist/**',
+      'dist-anon/**',
       'server/dist/**',
       'node_modules/**',
       'server/node_modules/**',

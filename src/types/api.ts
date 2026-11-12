@@ -27,6 +27,8 @@ export interface ChatMessage {
   pinned?: boolean;
   /** Server-reported provider identity (dev / expandable details). */
   providerMeta?: ProviderMeta;
+  /** Renders a Sign in button on this message (anonymous visitors, AI-needing turns). */
+  signInAction?: 'chat';
 }
 
 /**

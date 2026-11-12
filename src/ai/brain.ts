@@ -22,6 +22,7 @@ import { runQueryFromIntent } from '@/ai/queryEngine'
 import { queryComparison } from '@/ai/comparison'
 import { formatInsights, explainOutliers, mergeToolResultContent, toolResultToMessage } from '@/ai/responseBuilder'
 import { chatWithAgentServerStream, isAgentServerError } from '@/ai/agentClient'
+import { isAnonGated, anonGatedMetadata } from '@/ai/anonGate'
 import { recordTelemetry } from '@/ai/telemetry'
 import { runAudit, formatAuditForContext } from '@/auditor'
 import { getContextualSuggestions } from '@/ai/contextualSuggestions'
@@ -928,6 +929,16 @@ export async function processMessage(input: ProcessMessageInput): Promise<ToolRe
 
   // 8. Server explicitly refused (auth / rate limit / quota): surface its worded
   // message instead of the local fallback, which would hide the real CTA.
+  if (isAnonGated(serverResult)) {
+    // Anonymous visitor: no request was made. Not a refusal; show the sign-in message.
+    recordTelemetry('anonGated', 'chat')
+    return {
+      success: false,
+      message: serverResult.message,
+      toolUsed: anonGatedMetadata().toolUsed,
+      suggestions: [],
+    }
+  }
   if (isAgentServerError(serverResult)) {
     recordTelemetry('fallbackResponses', `ai-server-refused:${serverResult.status}`)
     return {

@@ -1,4 +1,3 @@
-import { useAuth } from '@clerk/react'
 import { startCheckout } from './startCheckout'
 
 const CLERK_PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ?? ''
@@ -28,12 +27,9 @@ export function UpgradePrompt({ remaining, dailyLimit }: UpgradePromptProps) {
   return <UpgradeCard />
 }
 
-/** Separated so useAuth is only called when Clerk is definitely configured */
 function UpgradeCard() {
-  const { isSignedIn } = useAuth()
-
   const handleUpgrade = () => {
-    if (!isSignedIn) return
+    // startCheckout opens sign-in for anonymous visitors; no request is made then.
     // Same call the revocation banner's CTA makes; it never rejects.
     void startCheckout()
   }

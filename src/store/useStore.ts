@@ -4,7 +4,9 @@ import type { FileItem, SheetData, WorkbookData } from '@/types'
 import {
   SpreadsheetEngine,
 } from '@/engine/spreadsheet'
-import { loadPersistedState } from '@/lib/persistence'
+import { loadPersistedState, clearPersistedState } from '@/lib/persistence'
+import { clearUserApiKey } from '@/lib/userApiKey'
+import { USER_ID_KEY, LAST_CLOUD_USER_KEY, IMPORT_SHARED_KEY } from '@/lib/authKeys'
 import {
   resolveInitialState,
   switchFileState,
@@ -165,6 +167,44 @@ export const useStore = create<AppState>()(
             swapToFile(useStore.getState().files[0].id)
           }
         }
+      },
+
+      clearCloudBindings: () => {
+        set((st) => {
+          for (const f of st.files) delete f.cloudWorkbookId
+        })
+      },
+
+      // Keys WIPED: smartsht-state-v1 (+ .corrupt backup) and IndexedDB state-v1
+      // (workbooks, chat), smartsht-user-id, smartsht-last-cloud-user,
+      // smartsht-import-shared, smartsht-user-api-key (plaintext BYOK key).
+      // Keys KEPT on purpose: smartsht_autofix_used (advisory lifetime limit; wiping
+      // would let anyone reset it by signing out), UI preferences, custom audit
+      // rules, cell notes, locally installed templates, telemetry.
+      clearLocalWorkbooks: async () => {
+        const fresh = resolveInitialState(null)
+        useStore.getState().loadWorkbookData(fresh.workbook)
+        useStore.setState((st) => {
+          st.workbook = fresh.workbook
+          st.workbookSlots = fresh.workbookSlots
+          st.files = fresh.files
+          st.activeFileId = fresh.activeFileId
+          st.activeSheetId = fresh.workbook.activeSheetId
+          st.messages = [createWelcomeMessage()]
+          st.chatInput = ''
+          st.attachedFilePreview = null
+          st.undoStack = []
+          st.redoStack = []
+        })
+        clearUserApiKey()
+        try {
+          localStorage.removeItem(USER_ID_KEY)
+          localStorage.removeItem(LAST_CLOUD_USER_KEY)
+          localStorage.removeItem(IMPORT_SHARED_KEY)
+        } catch {
+          // storage unavailable
+        }
+        await clearPersistedState()
       },
 
       ...historyActions,

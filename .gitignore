@@ -67,3 +67,4 @@ playwright/.cache/
 # Git worktrees (superpowers isolation)
 .worktrees/
 
+dist-anon/

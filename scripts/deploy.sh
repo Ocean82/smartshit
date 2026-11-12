@@ -236,6 +236,9 @@ fi
 # Reusable function: build dist/ and mirror it to FRONTEND_DEST. Called by the
 # normal deploy path and again by the rollback path to restore the old frontend.
 mirror_frontend() {
+  # Optional arg "verify": also run the Clerk-key bundle check (forward deploys only;
+  # the rollback path must not depend on files added after the previous commit).
+  local verify_key="${1:-}"
   log "Building frontend (vite)..."
   # Vite `--mode production` loads repo `.env.production`, which only has
   # placeholders (git reset --hard restores them every deploy). Overlay real
@@ -276,6 +279,9 @@ mirror_frontend() {
     return 1
   fi
   log "Frontend WASM engines present: ${WASM_COUNT} file(s)"
+  if [ "$verify_key" = verify ]; then
+    node scripts/check-clerk-key.mjs || return 1
+  fi
 
   BUNDLE_SIZE=$(du -sh dist/index.html | cut -f1)
   log "Frontend bundle: $BUNDLE_SIZE"
@@ -297,7 +303,7 @@ mirror_frontend() {
 FRONTEND_MIRRORED=false
 
 if [ "$DEPLOY_FRONTEND" = true ]; then
-  mirror_frontend || die "Frontend build/mirror failed"
+  mirror_frontend verify || die "Frontend build/mirror failed"
   FRONTEND_MIRRORED=true
 fi
 

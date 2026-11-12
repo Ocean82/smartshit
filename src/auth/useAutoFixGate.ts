@@ -2,6 +2,7 @@ import { useCallback } from 'react'
 import { useAuth } from '@clerk/react'
 import { reserveAutoFixLocally, setAutoFixUsed, type AutoFixDecision } from '@/lib/featureGates'
 import type { PlanFetch } from './useSubscriptionStatus'
+import { getAuthStatus, whenAuthSettled } from '@/lib/serverAccess'
 
 const CLERK_PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ?? ''
 
@@ -23,6 +24,11 @@ export async function requestAutoFixReservation(
   fetchImpl: PlanFetch = fetch,
   apiBase: string = import.meta.env.VITE_AI_API_URL ?? '',
 ): Promise<AutoFixDecision> {
+  // getToken() waits for Clerk to load and never settles when Clerk is blocked, so
+  // decide from the shared status first. Anonymous visitors use the local counter.
+  let status = getAuthStatus()
+  if (status === 'pending') status = await whenAuthSettled(3000)
+  if (status !== 'signed-in' && status !== 'dev') return reserveAutoFixLocally(isPro)
   const token = await getToken()
   if (!token) return reserveAutoFixLocally(isPro)
   try {

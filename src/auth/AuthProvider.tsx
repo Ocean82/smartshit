@@ -1,17 +1,12 @@
-import { ClerkProvider, Show, SignIn, UserButton, useAuth } from '@clerk/react'
+import { ClerkProvider, UserButton } from '@clerk/react'
 import type { ReactNode } from 'react'
+import { useAuthStatus } from '@/lib/serverAccess'
+import { LAST_CLOUD_USER_KEY } from '@/lib/authKeys'
+import { SIGN_IN_BUTTON } from './anonCopy'
+import { APP_PATH } from './authAppearance'
+import { openSignIn } from './SignInDialog'
 
 const CLERK_PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ?? ''
-
-/** SPA lives at /app; landing at / has no ClerkProvider. */
-const APP_PATH = '/app'
-
-const clerkAppearance = {
-  variables: {
-    colorPrimary: '#2563eb',
-    borderRadius: '0.75rem',
-  },
-}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   if (!CLERK_PUBLISHABLE_KEY) {
@@ -22,7 +17,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   return (
     <ClerkProvider
       publishableKey={CLERK_PUBLISHABLE_KEY}
-      afterSignOutUrl="/"
+      // Sign-out lands in working anonymous mode, not the marketing page.
+      afterSignOutUrl={APP_PATH}
       signInFallbackRedirectUrl={APP_PATH}
       signUpFallbackRedirectUrl={APP_PATH}
     >
@@ -31,33 +27,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 }
 
-export function AuthGate({ children }: { children: ReactNode }) {
-  if (!CLERK_PUBLISHABLE_KEY) {
-    return <>{children}</>
+function hasReturningUser(): boolean {
+  try {
+    return Boolean(localStorage.getItem(LAST_CLOUD_USER_KEY))
+  } catch {
+    return false
   }
-
-  return <AuthGateInner>{children}</AuthGateInner>
 }
 
-function AuthGateInner({ children }: { children: ReactNode }) {
-  const { isLoaded } = useAuth()
-
-  if (!isLoaded) return <AuthLoading />
-
-  // Pending sessions (email OTP, MFA) are treated as signed-out so <SignIn>
-  // stays mounted and can finish verification. Do not use a dismissible modal.
-  return (
-    <Show when="signed-in" fallback={<SignInPrompt />}>
-      {children}
-    </Show>
-  )
-}
-
+/**
+ * Header account control. Keys off the shared auth status (never Clerk's own
+ * components) so it renders before Clerk loads and while Clerk is blocked.
+ */
 export function UserNav() {
-  if (!CLERK_PUBLISHABLE_KEY) return null
-
-  return (
-    <Show when="signed-in">
+  const status = useAuthStatus()
+  if (!CLERK_PUBLISHABLE_KEY || status === 'dev') return null
+  if (status === 'signed-in') {
+    return (
       <UserButton
         appearance={{
           elements: {
@@ -65,39 +51,20 @@ export function UserNav() {
           },
         }}
       />
-    </Show>
-  )
-}
-
-function AuthLoading() {
+    )
+  }
+  // A returning signed-in user sees a neutral placeholder during the Clerk load
+  // instead of a "Sign in" flash.
+  if (status === 'pending' && hasReturningUser()) {
+    return <div className="h-8 w-8 rounded-full bg-slate-200" aria-hidden="true" />
+  }
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-gradient-to-br from-slate-900 to-blue-900"
-      role="status"
-      aria-live="polite"
-      aria-label="Loading sign in"
+    <button
+      type="button"
+      onClick={() => void openSignIn('header')}
+      className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
     >
-      <p className="text-sm font-medium text-white/80">Loading…</p>
-    </div>
-  )
-}
-
-function SignInPrompt() {
-  return (
-    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-gradient-to-br from-slate-900 to-blue-900 px-4">
-      <h1 className="mb-2 text-2xl font-bold text-white">smartsh!t</h1>
-      <p className="mb-6 text-sm text-white/70">
-        Talk to your spreadsheet. No formulas required.
-      </p>
-      <SignIn
-        routing="hash"
-        fallbackRedirectUrl={APP_PATH}
-        signUpFallbackRedirectUrl={APP_PATH}
-        appearance={clerkAppearance}
-      />
-      <p className="mt-4 text-xs text-white/60">
-        Free tier includes 7 AI questions per day
-      </p>
-    </div>
+      {SIGN_IN_BUTTON}
+    </button>
   )
 }

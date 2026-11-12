@@ -4,6 +4,7 @@
  */
 
 import type { WorkbookData } from '@/types'
+import { canCallServer } from '@/lib/serverAccess'
 
 const API_BASE = import.meta.env.VITE_AI_API_URL ?? ''
 
@@ -98,7 +99,7 @@ export function describeSyncStatus(status: SyncStatus): string | null {
 type TokenProvider = () => Promise<string | null>
 let _tokenProvider: TokenProvider | null = null
 
-export function setAuthTokenProvider(provider: TokenProvider): void {
+export function setAuthTokenProvider(provider: TokenProvider | null): void {
   _tokenProvider = provider
 }
 
@@ -121,8 +122,20 @@ export function getUserId(): string | null {
 }
 
 export function isCloudConfigured(): boolean {
-  return Boolean(getUserId())
+  // A stored user id alone is not enough: until Clerk settles (or after sign-out)
+  // the client must not call the authenticated backend.
+  return Boolean(getUserId()) && canCallServer()
 }
+
+/** Drop every queued debounced save (sign-out): nothing is sent after the flip. */
+export function cancelPendingSaves(): void {
+  _authEpoch += 1
+  _debounceTimers.forEach((t) => clearTimeout(t))
+  _debounceTimers.clear()
+}
+
+/** Advanced on sign-out so a save already awaiting its token is not sent afterwards. */
+let _authEpoch = 0
 
 // ─── API Calls ───────────────────────────────────────────────────────────────
 
@@ -226,9 +239,12 @@ export async function saveToCloud(
   if (!cloudId || !isCloudConfigured()) return null
 
   setSyncStatus('syncing')
+  const epoch = _authEpoch
 
   try {
     const headers = await getAuthHeaders()
+    // Signed out while the token was being fetched: drop the save.
+    if (epoch !== _authEpoch) return null
     if (!headers.Authorization) {
       setSyncStatus('error')
       return null

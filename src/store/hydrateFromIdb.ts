@@ -19,6 +19,9 @@ export async function hydrateFromIdbIfNewer(): Promise<void> {
   // the reference changes before hydration resolves, the user edited (or a file
   // switch happened) — abort rather than overwrite their work.
   const seededWorkbook = useStore.getState().workbook
+  // Files too: an account-switch unbind (clearCloudBindings) only touches files,
+  // and hydrating over it would restore the previous account's cloud links.
+  const seededFiles = useStore.getState().files
   const seedSavedAt = readSeedSavedAt()
 
   const loaded = await loadPersistedStateAsync()
@@ -29,6 +32,7 @@ export async function hydrateFromIdbIfNewer(): Promise<void> {
 
   // Bail if anything changed since boot (edit, file switch, cloud load).
   if (useStore.getState().workbook !== seededWorkbook) return
+  if (useStore.getState().files !== seededFiles) return
 
   const seeded = resolveInitialState(loaded)
   const state = useStore.getState()
