@@ -35,6 +35,21 @@ export interface ActionScope {
   epoch: string
   /** Cheap content fingerprint of the target sheet. */
   sheetSignature: string
+  /**
+   * Fixed-cell guard (auditor fixes): fingerprint of each target cell at
+   * preparation time. When present, the patch is bound to those cells' content
+   * instead of the selection / whole-sheet revision, so unrelated edits, selection
+   * moves, or applying a sibling fix on disjoint cells do not invalidate it.
+   */
+  cellGuard?: Record<string, string>
+  /** In-memory only, on the *current* scope (never stored): live cells for guard checks. */
+  cells?: Record<string, unknown>
+}
+
+/** Fingerprint of one cell's content (formula + value). */
+export function fingerprintCell(cell: unknown): string {
+  const c = cell as { value?: unknown; formula?: unknown } | undefined | null
+  return `${c?.formula ?? ''}|${String(c?.value ?? '')}`
 }
 
 /** Minimal shape `captureActionScope` needs from the store. */
@@ -74,9 +89,17 @@ export function computeSheetSignature(
 }
 
 /** Capture the scope a proposal must be bound to. */
-export function captureActionScope(source: ScopeSource): ActionScope {
+export function captureActionScope(
+  source: ScopeSource,
+  opts: { guardCells?: string[]; withCells?: boolean } = {},
+): ActionScope {
   const sheet = source.workbook.sheets.find((s) => s.id === source.activeSheetId)
+  const cellGuard = opts.guardCells
+    ? Object.fromEntries(opts.guardCells.map((id) => [id, fingerprintCell(sheet?.cells[id])]))
+    : undefined
   return {
+    ...(cellGuard ? { cellGuard } : {}),
+    ...(opts.withCells && sheet ? { cells: sheet.cells } : {}),
     workbookId: source.workbook.id,
     sheetId: source.activeSheetId,
     revision: source.workbookRevision,
@@ -118,6 +141,16 @@ export function validateActionScope(action: AgentAction, current: ActionScope): 
   }
   if (scope.sheetId !== current.sheetId) {
     return { ok: false, reason: 'you switched to a different sheet after the preview was made' }
+  }
+  if (scope.cellGuard) {
+    // Fixed-cell patch: valid while its own target cells still hold the audited content.
+    if (!current.cells) return { ok: false, reason: 'the current sheet could not be checked' }
+    for (const [id, fp] of Object.entries(scope.cellGuard)) {
+      if (fingerprintCell(current.cells[id]) !== fp) {
+        return { ok: false, reason: `cell ${id} changed after the preview was made` }
+      }
+    }
+    return { ok: true }
   }
   if (!sameSelection(scope.selection, current.selection)) {
     return { ok: false, reason: 'your selection changed after the preview was made' }

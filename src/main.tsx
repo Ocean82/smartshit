@@ -4,7 +4,7 @@ import './index.css'
 import App from './App'
 import { SharedView } from '@/components/SharedView'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
-import { AuthProvider, AuthGate, ClerkUserSync } from '@/auth'
+import { AuthProvider, AuthGate, ClerkUserSync, AutoFixGateSync } from '@/auth'
 import { useStore } from '@/store/useStore'
 import { savePersistedState, savePersistedStateAsync } from '@/lib/persistence'
 import { hydrateFromIdbIfNewer } from '@/store/hydrateFromIdb'
@@ -141,6 +141,7 @@ createRoot(document.getElementById('root')!).render(
         <AuthProvider>
           <AuthGate>
             <ClerkUserSync />
+            <AutoFixGateSync />
             <App />
           </AuthGate>
         </AuthProvider>
