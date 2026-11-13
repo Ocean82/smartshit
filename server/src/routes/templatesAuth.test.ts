@@ -79,10 +79,13 @@ describe('community-templates install (signed in)', () => {
     expect(sql).toBe(INSTALL_SQL)
     expect(sql).toMatch(/INSERT INTO smartsht\.template_installs[\s\S]*ON CONFLICT \(user_id, template_id\) DO NOTHING/)
     expect(sql).toMatch(/SET downloads = c\.downloads \+ 1\s+FROM first_install/)
+    // Placeholders: $1 is the template id (t filter), $2 the user id (install row).
+    expect(sql).toMatch(/WHERE id = \$1 AND is_published = TRUE/)
+    expect(sql).toMatch(/INSERT INTO smartsht\.template_installs \(user_id, template_id\)\s+SELECT \$2, id FROM t/)
     expect(params).toEqual(['abc', 'user_1'])
   })
 
-  it('before migration 007 (relation missing) it falls back to the legacy count, not a 500', async () => {
+  it('before migration 007 (relation missing) it serves the template read-only, not a 500', async () => {
     currentUser = 'user_1'
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     queryMock
@@ -91,9 +94,11 @@ describe('community-templates install (signed in)', () => {
     const res = await request(app).post('/api/community-templates/abc/install')
     expect(res.status).toBe(200)
     expect(queryMock).toHaveBeenCalledTimes(2)
-    const [legacySql, legacyParams] = queryMock.mock.calls[1] as unknown as [string, unknown[]]
-    expect(legacySql).toMatch(/UPDATE smartsht\.community_templates\s+SET downloads = downloads \+ 1\s+WHERE id = \$1 AND is_published = TRUE/)
-    expect(legacyParams).toEqual(['abc'])
+    const [fallbackSql, fallbackParams] = queryMock.mock.calls[1] as unknown as [string, unknown[]]
+    // Read-only: no repeat-install inflation while the table is missing.
+    expect(fallbackSql).toMatch(/^SELECT name, description, category, icon, prompt, s3_key\s+FROM smartsht\.community_templates\s+WHERE id = \$1 AND is_published = TRUE$/)
+    expect(fallbackSql).not.toMatch(/UPDATE|INSERT|downloads/i)
+    expect(fallbackParams).toEqual(['abc'])
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('migration 007'))
     warn.mockRestore()
   })

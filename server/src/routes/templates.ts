@@ -188,11 +188,14 @@ counted AS (
 )
 SELECT name, description, category, icon, prompt, s3_key FROM t`
 
-/** Pre-007 behavior, used only while template_installs does not exist yet. */
-const LEGACY_INSTALL_SQL = `UPDATE smartsht.community_templates
-  SET downloads = downloads + 1
-  WHERE id = $1 AND is_published = TRUE
-  RETURNING name, description, category, icon, prompt, s3_key`
+/**
+ * Used only while template_installs does not exist yet. Read-only: without the
+ * table there is no way to tell a repeat install, so it serves the template but
+ * does not count it (undercount briefly rather than inflate the ranking).
+ */
+const PRE_MIGRATION_INSTALL_SQL = `SELECT name, description, category, icon, prompt, s3_key
+  FROM smartsht.community_templates
+  WHERE id = $1 AND is_published = TRUE`
 
 /** Postgres SQLSTATE for "relation does not exist". */
 const UNDEFINED_TABLE = '42P01'
@@ -223,10 +226,10 @@ templatesRouter.post('/:id/install', async (req, res) => {
       s3_key: string | null
     }>(INSTALL_SQL, [id, userId]).catch(async (err: unknown) => {
       // ponytail: deploy runs before the manual `npm run migrate`. Until 007 has
-      // created template_installs, fall back to counting every install instead of
-      // failing every install. Remove once 007 is applied in every environment.
+      // created template_installs, serve the template without counting it instead
+      // of failing every install. Remove once 007 is applied in every environment.
       if ((err as { code?: string } | null)?.code !== UNDEFINED_TABLE) throw err
-      console.warn('[templates] template_installs missing; run migration 007. Install counted without dedup.')
+      console.warn('[templates] template_installs missing; run migration 007. Install served but not counted.')
       return query<{
         name: string
         description: string
@@ -234,7 +237,7 @@ templatesRouter.post('/:id/install', async (req, res) => {
         icon: string
         prompt: string
         s3_key: string | null
-      }>(LEGACY_INSTALL_SQL, [id])
+      }>(PRE_MIGRATION_INSTALL_SQL, [id])
     })
 
     if (result.rows.length === 0) {

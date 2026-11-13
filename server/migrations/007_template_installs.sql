@@ -10,3 +10,7 @@ CREATE TABLE IF NOT EXISTS smartsht.template_installs (
   installed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   PRIMARY KEY (user_id, template_id)
 );
+-- The PK leads with user_id, so the ON DELETE CASCADE lookup by template_id
+-- needs its own index or a template delete scans every install row.
+CREATE INDEX IF NOT EXISTS idx_template_installs_template
+  ON smartsht.template_installs (template_id);
