@@ -12,7 +12,7 @@
  */
 import { config } from './config.js'
 import { chatWithOllama, chatWithOllamaStream } from './ollama.js'
-import { groqAvailable, chatWithGroqStream, recordGroqFallback, GROQ_DEFAULT_MAX_TOKENS } from './groq.js'
+import { groqAvailable, chatWithGroqStream, recordGroqFallback } from './groq.js'
 import { chatWithOpenAiCompatible, chatWithOpenAiCompatibleStream, openAiCompatibleAvailable, type AdapterCompletion } from './openaiCompatible.js'
 
 export type ProviderName = 'openrouter' | 'huggingface' | 'groq' | 'ollama'
@@ -171,19 +171,6 @@ export function providerIsConfigured(provider: ProviderName): boolean {
   }
   if (provider === 'groq') return groqAvailable()
   return true
-}
-
-/**
- * Whether a provider can take a request with this output budget at all.
- * Groq counts the declared max_tokens against the org's OTPM limit and rejects
- * anything above it before generating, so calling it just wastes a round trip,
- * logs a 429 and trips the breaker. Such requests skip Groq (not a failure).
- * Clamping instead would let Groq stream a cut-off answer that the failover
- * loops then duplicate or parse. `undefined` uses Groq's adapter default (2048).
- */
-export function providerAcceptsBudget(provider: ProviderName, maxTokens: number | undefined): boolean {
-  if (provider !== 'groq') return true
-  return (maxTokens ?? GROQ_DEFAULT_MAX_TOKENS) <= config.groqMaxTokens
 }
 
 export function openRouterMaxTokens(requested?: number): number | undefined {
@@ -452,10 +439,6 @@ export async function callProviderWithFailover(
       skipped.push(provider)
       continue
     }
-    if (!providerAcceptsBudget(provider, options.maxTokens)) {
-      skipped.push(provider)
-      continue
-    }
 
     // Timing out must cancel the upstream fetch too, or failover runs two providers at once.
     const attemptAbort = new AbortController()
@@ -484,7 +467,7 @@ export async function callProviderWithFailover(
   }
 
   // All providers exhausted — fail closed
-  const skippedNote = skipped.length > 0 ? ` Skipped (circuit open or over its token limit): ${skipped.join(', ')}.` : ''
+  const skippedNote = skipped.length > 0 ? ` Skipped (circuit open): ${skipped.join(', ')}.` : ''
   throw new Error(
     `All AI providers failed. Last error: ${lastError?.message ?? 'unknown'}. ` +
     `Tried: ${providers.filter((p) => !skipped.includes(p)).join(', ')}.${skippedNote}`
@@ -520,7 +503,7 @@ export async function callProviderStreamWithFailover(
   const skipped: ProviderName[] = []
 
   for (const provider of providers) {
-    if (isCircuitOpen(provider) || !providerAcceptsBudget(provider, options.maxTokens)) {
+    if (isCircuitOpen(provider)) {
       skipped.push(provider)
       continue
     }
@@ -542,7 +525,7 @@ export async function callProviderStreamWithFailover(
     }
   }
 
-  const skippedNote = skipped.length > 0 ? ` Skipped (circuit open or over its token limit): ${skipped.join(', ')}.` : ''
+  const skippedNote = skipped.length > 0 ? ` Skipped (circuit open): ${skipped.join(', ')}.` : ''
   throw new Error(
     `All AI providers failed (streaming). Last error: ${lastError?.message ?? 'unknown'}. ` +
     `Tried: ${providers.filter((p) => !skipped.includes(p)).join(', ')}.${skippedNote}`

@@ -3,7 +3,6 @@ import { describe, expect, it, vi } from 'vitest'
 let groqSignal: AbortSignal | undefined
 let groqChatSignal: AbortSignal | undefined
 vi.mock('./groq.js', () => ({
-  GROQ_DEFAULT_MAX_TOKENS: 2048,
   groqAvailable: () => true,
   recordGroqFallback: vi.fn(),
   chatWithGroqStream: (_m: unknown, _c: unknown, signal: AbortSignal) => {
@@ -37,8 +36,7 @@ describe('openRouterMaxTokens', () => {
 describe('callProviderWithFailover timeout', () => {
   it('aborts the timed-out provider before failing over', async () => {
     vi.useFakeTimers()
-    // Within Groq's per-request limit, so Groq is actually tried (and times out).
-    const call = callProviderWithFailover([], { maxTokens: 256 })
+    const call = callProviderWithFailover([])
     await vi.advanceTimersByTimeAsync(20_000)
     const response = await call
     expect(groqChatSignal?.aborted).toBe(true)

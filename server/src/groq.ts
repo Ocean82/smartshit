@@ -158,9 +158,6 @@ export function getGroqUsageStats() {
 
 // ─── Public API ─────────────────────────────────────────────────────────────
 
-/** max_tokens sent when a caller does not pass one. */
-export const GROQ_DEFAULT_MAX_TOKENS = 2048
-
 export function groqAvailable(): boolean {
   return !!config.groqApiKey
 }
@@ -182,7 +179,7 @@ export async function chatWithGroq(
     throw new Error('GROQ_API_KEY not set')
   }
 
-  const { jsonMode = false, maxTokens = GROQ_DEFAULT_MAX_TOKENS } = options
+  const { jsonMode = false, maxTokens = 2048 } = options
 
   const body: Record<string, unknown> = {
     model: config.groqModel,
@@ -243,7 +240,7 @@ export async function chatWithGroqStream(
     throw new Error('GROQ_API_KEY not set')
   }
 
-  const { jsonMode = false, maxTokens = GROQ_DEFAULT_MAX_TOKENS } = options
+  const { jsonMode = false, maxTokens = 2048 } = options
 
   const body: Record<string, unknown> = {
     model: config.groqModel,
