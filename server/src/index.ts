@@ -41,6 +41,7 @@ import {
   isUsableCompletion,
   isTerminalFinish,
   isCircuitOpen,
+  providerAcceptsBudget,
   recordSuccess,
   recordFailure,
 } from './providers.js'
@@ -404,6 +405,10 @@ async function callServerProviders(
   for (const provider of providers) {
     if (isCircuitOpen(provider)) {
       providerErrors.push(`${provider}: circuit open (skipped)`)
+      continue
+    }
+    if (!providerAcceptsBudget(provider, providerOpts.maxTokens)) {
+      providerErrors.push(`${provider}: skipped (max_tokens ${providerOpts.maxTokens} above its per-request limit)`)
       continue
     }
 

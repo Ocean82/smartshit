@@ -27,7 +27,7 @@ const PROVIDER_CONTEXT_WINDOWS: Record<ProviderName, number> = {
 /** Default max output tokens per provider. */
 const PROVIDER_MAX_OUTPUT: Record<ProviderName, number> = {
   ollama: config.numPredict,
-  groq: config.groqMaxTokens,
+  groq: 2048,
   openrouter: config.openRouterMaxTokens,
   huggingface: 2048,
 }

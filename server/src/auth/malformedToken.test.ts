@@ -6,7 +6,7 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import express from 'express'
 import request from 'supertest'
 import { clerkMiddleware } from '@clerk/express'
-import { withMalformedTokenAs401 } from './clerk.js'
+import { isUndecodableBearer, withMalformedTokenAs401 } from './clerk.js'
 import { getAuthMetrics, resetAuthMetrics } from './authMetrics.js'
 
 const publishableKey = 'pk_test_' + Buffer.from('clerk.example.com$').toString('base64').replace(/=+$/, '')
@@ -54,5 +54,30 @@ describe('malformed bearer token', () => {
     const failing: express.RequestHandler = (_req, _res, next) => next(new SyntaxError('bad'))
     const res = await request(makeApp(withMalformedTokenAs401(failing))).get('/x')
     expect(res.status).toBe(500)
+  })
+
+  it('wrapped: a SyntaxError with a decodable token is an internal fault, not a 401', async () => {
+    const b64 = (o: object) => Buffer.from(JSON.stringify(o)).toString('base64url')
+    const wellFormed = `${b64({ alg: 'RS256', typ: 'JWT' })}.${b64({ sub: 'user_1' })}.c2lnbmF0dXJl`
+    const failing: express.RequestHandler = (_req, _res, next) => next(new SyntaxError('internal parse'))
+    const res = await request(makeApp(withMalformedTokenAs401(failing))).get('/x').set('Authorization', `Bearer ${wellFormed}`)
+    expect(res.status).toBe(500)
+    expect(getAuthMetrics().denials).toBe(0)
+  })
+})
+
+describe('isUndecodableBearer', () => {
+  const req = (authorization?: string) => ({ headers: authorization ? { authorization } : {} }) as express.Request
+  const b64 = (o: object) => Buffer.from(JSON.stringify(o)).toString('base64url')
+  it('flags three-part tokens that do not decode', () => {
+    for (const t of ['a.b.c', 'eyJ!!!.eyJ.x', `${b64({ alg: 'RS256' })}.not-json.sig`, `${b64({ alg: 'RS256' })}.${b64({ sub: 'x' })}.`]) {
+      expect({ t, v: isUndecodableBearer(req(`Bearer ${t}`)) }).toEqual({ t, v: true })
+    }
+  })
+  it('does not flag decodable tokens, non-JWT shapes, or a missing header', () => {
+    expect(isUndecodableBearer(req(`Bearer ${b64({ alg: 'RS256' })}.${b64({ sub: 'x' })}.c2ln`))).toBe(false)
+    expect(isUndecodableBearer(req('Bearer abc'))).toBe(false) // Clerk treats this as signed out
+    expect(isUndecodableBearer(req('Basic a.b.c'))).toBe(false)
+    expect(isUndecodableBearer(req())).toBe(false)
   })
 })

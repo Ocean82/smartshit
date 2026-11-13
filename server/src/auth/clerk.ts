@@ -51,6 +51,36 @@ export function getClerkMiddlewareOptions() {
 
 type Middleware = (req: Request, res: Response, next: NextFunction) => void
 
+const BASE64URL = /^[A-Za-z0-9_-]*$/
+
+/** Decode a base64url JWT segment as JSON; null if it is not valid base64url JSON. */
+function decodeJwtJsonPart(part: string): unknown {
+  if (!part || !BASE64URL.test(part)) return null
+  try {
+    return JSON.parse(Buffer.from(part, 'base64url').toString('utf8'))
+  } catch {
+    return null
+  }
+}
+
+/**
+ * True when the request has a bearer token shaped like a JWT (three dot-separated
+ * parts, which is what Clerk tries to decode) whose header, payload or signature
+ * cannot be decoded. A token Clerk can decode is never "undecodable".
+ */
+export function isUndecodableBearer(req: Request): boolean {
+  const match = /^Bearer\s+(\S+)$/i.exec(req.headers.authorization ?? '')
+  if (!match) return false
+  const parts = match[1].split('.')
+  if (parts.length !== 3) return false
+  const [header, payload, signature] = parts
+  const decodes = (p: string) => {
+    const v = decodeJwtJsonPart(p)
+    return v !== null && typeof v === 'object'
+  }
+  return !(decodes(header) && decodes(payload) && signature.length > 0 && BASE64URL.test(signature))
+}
+
 /**
  * Wrap Clerk's middleware so a bearer token that cannot be decoded is a 401,
  * not a 500. @clerk/express passes a SyntaxError from base64/JWT decoding to
@@ -61,7 +91,9 @@ type Middleware = (req: Request, res: Response, next: NextFunction) => void
 export function withMalformedTokenAs401(clerk: Middleware): Middleware {
   return (req, res, next) => {
     clerk(req, res, (err?: unknown) => {
-      if (err instanceof SyntaxError && hasBearerAuthorization(req)) {
+      // A SyntaxError only means "bad token" when the token itself really cannot
+      // be decoded; any other SyntaxError is a Clerk/internal fault and is forwarded.
+      if (err instanceof SyntaxError && isUndecodableBearer(req)) {
         recordAuthDenial(req.path || req.url || 'unknown', 'no_session')
         res.status(401).json({ error: 'Authentication required' })
         return

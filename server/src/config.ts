@@ -74,6 +74,12 @@ if (groqModel && !KNOWN_GROQ_MODELS.has(groqModel)) {
  * Override with TRUST_PROXY: a number of hops, `true`/`false`, or a
  * comma-separated list of trusted addresses/subnets.
  */
+/** A positive integer from env, else the fallback (rejects 0, negatives, fractions, junk). */
+export function positiveIntOr(raw: string | undefined, fallback: number): number {
+  const n = Number(raw)
+  return Number.isInteger(n) && n > 0 ? n : fallback
+}
+
 function parseTrustProxy(raw: string | undefined): boolean | number | string {
   if (raw === undefined || raw.trim() === '') return 'loopback'
   const value = raw.trim()
@@ -158,7 +164,7 @@ export const config = {
   // Groq charges the DECLARED max_tokens against the org's output-tokens-per-minute
   // (OTPM) limit, so any request above it is rejected outright (429 "Request too
   // large"). The on-demand tier here has OTPM 1000; raise this if the tier changes.
-  groqMaxTokens: Number(process.env.GROQ_MAX_TOKENS) || 1000,
+  groqMaxTokens: positiveIntOr(process.env.GROQ_MAX_TOKENS, 1000),
 
   // OpenRouter (optional primary)
   openRouterApiKey: process.env.OPENROUTER_API_KEY ?? '',
