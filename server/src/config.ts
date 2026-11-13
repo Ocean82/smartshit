@@ -155,6 +155,10 @@ export const config = {
   // Groq (primary — fast cloud inference)
   groqApiKey: process.env.GROQ_API_KEY ?? '',
   groqModel,
+  // Groq charges the DECLARED max_tokens against the org's output-tokens-per-minute
+  // (OTPM) limit, so any request above it is rejected outright (429 "Request too
+  // large"). The on-demand tier here has OTPM 1000; raise this if the tier changes.
+  groqMaxTokens: Number(process.env.GROQ_MAX_TOKENS) || 1000,
 
   // OpenRouter (optional primary)
   openRouterApiKey: process.env.OPENROUTER_API_KEY ?? '',

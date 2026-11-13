@@ -49,6 +49,28 @@ export function getClerkMiddlewareOptions() {
   return options
 }
 
+type Middleware = (req: Request, res: Response, next: NextFunction) => void
+
+/**
+ * Wrap Clerk's middleware so a bearer token that cannot be decoded is a 401,
+ * not a 500. @clerk/express passes a SyntaxError from base64/JWT decoding to
+ * next(err) for tokens like `a.b.c`, which the global error handler logged as
+ * "Unhandled error" and answered 500. Only that case is mapped: any other error
+ * (JWKS fetch, network, misconfiguration) still goes to the error handler.
+ */
+export function withMalformedTokenAs401(clerk: Middleware): Middleware {
+  return (req, res, next) => {
+    clerk(req, res, (err?: unknown) => {
+      if (err instanceof SyntaxError && hasBearerAuthorization(req)) {
+        recordAuthDenial(req.path || req.url || 'unknown', 'no_session')
+        res.status(401).json({ error: 'Authentication required' })
+        return
+      }
+      next(err)
+    })
+  }
+}
+
 /** Config-only Clerk readiness — used by `/health?strict=1` so deploys do not flake on Clerk blips. */
 export function clerkConfigHealth(): ClerkHealth {
   const publishableKeyConfigured = Boolean(config.clerkPublishableKey)

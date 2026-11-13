@@ -66,3 +66,33 @@ describe('chatWithGroq finish_reason capture (F11d)', () => {
     expect(result).toEqual({ text: 'cut off', finishReason: 'length' })
   })
 })
+
+describe('Groq max_tokens is capped at the OTPM ceiling', () => {
+  const sentMaxTokens = (spy: { mock: { calls: unknown[][] } }) =>
+    JSON.parse((spy.mock.calls[0][1] as RequestInit).body as string).max_tokens
+
+  it('non-streaming: the default 2048 request is sent as config.groqMaxTokens', async () => {
+    const { config } = await import('./config.js')
+    const spy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }] }), { status: 200 }),
+    )
+    await groq.chatWithGroq(messages)
+    expect(sentMaxTokens(spy)).toBe(config.groqMaxTokens)
+    expect(config.groqMaxTokens).toBe(1000)
+  })
+
+  it('streaming: an explicit 2048 is capped too', async () => {
+    const { config } = await import('./config.js')
+    const spy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(sseWithFinish('stop'))
+    await groq.chatWithGroqStream(messages, () => {}, undefined, { maxTokens: 2048 })
+    expect(sentMaxTokens(spy)).toBe(config.groqMaxTokens)
+  })
+
+  it('smaller requests pass through unchanged', async () => {
+    const spy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }] }), { status: 200 }),
+    )
+    await groq.chatWithGroq(messages, { maxTokens: 256 })
+    expect(sentMaxTokens(spy)).toBe(256)
+  })
+})

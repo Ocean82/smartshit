@@ -162,10 +162,20 @@ export function groqAvailable(): boolean {
   return !!config.groqApiKey
 }
 
+/**
+ * Clamp a requested max_tokens to the Groq org's OTPM ceiling. Applied in both
+ * Groq adapters so every caller (chat, stream, batch, retries) is covered. A
+ * completion cut at the cap reports finish_reason 'length', which the failover
+ * loop already treats as truncated and hands to the next provider.
+ */
+export function groqMaxTokens(requested: number): number {
+  return Math.min(requested, config.groqMaxTokens)
+}
+
 export interface GroqCallOptions {
   /** Enable response_format: json_object for structured output. Default: false */
   jsonMode?: boolean
-  /** Override max_tokens (default: 2048) */
+  /** Override max_tokens (default: 2048, always capped at config.groqMaxTokens) */
   maxTokens?: number
   /** Cancels the request (combined with the built-in 30s timeout). */
   signal?: AbortSignal
@@ -185,7 +195,7 @@ export async function chatWithGroq(
     model: config.groqModel,
     messages,
     temperature: 0.2,
-    max_tokens: maxTokens,
+    max_tokens: groqMaxTokens(maxTokens),
     stream: false,
     reasoning_effort: 'none',
   }
@@ -246,7 +256,7 @@ export async function chatWithGroqStream(
     model: config.groqModel,
     messages,
     temperature: 0.2,
-    max_tokens: maxTokens,
+    max_tokens: groqMaxTokens(maxTokens),
     stream: true,
     reasoning_effort: 'none',
   }
