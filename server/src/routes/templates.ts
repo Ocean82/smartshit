@@ -167,6 +167,39 @@ templatesRouter.post('/', async (req, res) => {
 
 // ─── POST /api/community-templates/:id/install — Install (download) ──────────
 
+/** $1 = template id, $2 = user id. Returns the template row when published. */
+export const INSTALL_SQL = `WITH t AS (
+  SELECT id, name, description, category, icon, prompt, s3_key
+  FROM smartsht.community_templates
+  WHERE id = $1 AND is_published = TRUE
+),
+first_install AS (
+  INSERT INTO smartsht.template_installs (user_id, template_id)
+  SELECT $2, id FROM t
+  ON CONFLICT (user_id, template_id) DO NOTHING
+  RETURNING template_id
+),
+counted AS (
+  UPDATE smartsht.community_templates c
+  SET downloads = c.downloads + 1
+  FROM first_install f
+  WHERE c.id = f.template_id
+  RETURNING c.id
+)
+SELECT name, description, category, icon, prompt, s3_key FROM t`
+
+/**
+ * Used only while template_installs does not exist yet. Read-only: without the
+ * table there is no way to tell a repeat install, so it serves the template but
+ * does not count it (undercount briefly rather than inflate the ranking).
+ */
+const PRE_MIGRATION_INSTALL_SQL = `SELECT name, description, category, icon, prompt, s3_key
+  FROM smartsht.community_templates
+  WHERE id = $1 AND is_published = TRUE`
+
+/** Postgres SQLSTATE for "relation does not exist". */
+const UNDEFINED_TABLE = '42P01'
+
 templatesRouter.post('/:id/install', async (req, res) => {
   // Install increments the public download count, so anonymous callers could
   // inflate it at will. Require a signed-in user before any DB write.
@@ -180,7 +213,10 @@ templatesRouter.post('/:id/install', async (req, res) => {
   const { id } = req.params
 
   try {
-    // Increment download count
+    // One atomic statement: record (user, template) and bump downloads only when
+    // that row is new, so repeat installs by the same user are not counted.
+    // Data-modifying CTEs always run to completion, even when unreferenced.
+    // Concurrent duplicate installs serialize on the primary key.
     const result = await query<{
       name: string
       description: string
@@ -188,13 +224,21 @@ templatesRouter.post('/:id/install', async (req, res) => {
       icon: string
       prompt: string
       s3_key: string | null
-    }>(
-      `UPDATE smartsht.community_templates
-       SET downloads = downloads + 1
-       WHERE id = $1 AND is_published = TRUE
-       RETURNING name, description, category, icon, prompt, s3_key`,
-      [id],
-    )
+    }>(INSTALL_SQL, [id, userId]).catch(async (err: unknown) => {
+      // ponytail: deploy runs before the manual `npm run migrate`. Until 007 has
+      // created template_installs, serve the template without counting it instead
+      // of failing every install. Remove once 007 is applied in every environment.
+      if ((err as { code?: string } | null)?.code !== UNDEFINED_TABLE) throw err
+      console.warn('[templates] template_installs missing; run migration 007. Install served but not counted.')
+      return query<{
+        name: string
+        description: string
+        category: string
+        icon: string
+        prompt: string
+        s3_key: string | null
+      }>(PRE_MIGRATION_INSTALL_SQL, [id])
+    })
 
     if (result.rows.length === 0) {
       res.status(404).json({ error: 'Template not found' })
