@@ -384,7 +384,7 @@ CREATE INDEX IF NOT EXISTS idx_usage_date ON smartsht.ai_usage_daily(usage_date)
 | All tests pass | `npm test` + `npm test --prefix server` |
 | Release gates | `npm run release:check:v1` |
 | Provider order | Boot log shows `Provider order: groq -> openrouter` (Ollama disabled since 2026-11-14; see `docs/MAJOR_CHANGES.md`) |
-| DB migrations | `cd /opt/smartsht/current/server && DATABASE_URL="$(sed -n 's/^DATABASE_URL=//p' .env)" npm run migrate`. The runner skips applied files; latest is `007_template_installs.sql` (applied 2026-11-13). |
+| DB migrations | `cd /opt/smartsht/current/server && DATABASE_URL="$(sed -n 's/^DATABASE_URL=//p' /opt/smartsht/.env)" npm run migrate`. Read the URL from `/opt/smartsht/.env`, the file the running API loads through its symlink, not the `server/.env` copy. The runner skips applied files; latest is `007_template_installs.sql` (applied 2026-11-13). Note: DB TLS is currently not certificate-verified (see `docs/MAJOR_CHANGES.md` 2026-11-13). |
 | HTTPS works | `curl -I https://smartsht.com` → 200 |
 | Health endpoint | `curl https://smartsht.com/health` → ok; `curl -sf https://smartsht.com/health?strict=1` → 200 (DB+S3+Clerk up) |
 | Clerk auth | Sign in works, JWT verified |

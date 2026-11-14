@@ -21,7 +21,7 @@ Substantive architectural or behavioral changes that affect how the app works, d
 
 ### Migration 007 applied: `template_installs` (2026-11-13)
 - Added in #84 (`server/migrations/007_template_installs.sql`) and applied to production RDS with `npm run migrate`. The runner skipped 001 to 006.
-- Each user's marketplace install now counts once toward a template's public `downloads`. Before 007 existed, the route served installs without counting them, so deploying ahead of the migration was safe.
+- Each user's marketplace install now counts once toward a template's public `downloads`. Before 007 existed, the route served installs without counting them, so deploying ahead of the migration was safe. No installs went uncounted: production had **0 published marketplace templates** during the gap between deploy and migration (checked 2026-11-13), so nothing needs backfilling.
 - Verified: `smartsht.migrations` lists 007; the table has PK `(user_id, template_id)` and the index `idx_template_installs_template`.
 
 ### Malformed bearer token returns 401, not 500 (#85, 2026-11-14)
@@ -31,10 +31,11 @@ Substantive architectural or behavioral changes that affect how the app works, d
 
 ### Production `.env` backups cleaned up (2026-11-13)
 - Seven old, unrotated backups in `/opt/smartsht/` were removed after being copied off-box and checksum-verified: `.env.bak-2026090*`, `-dbuser-`, `-model-`, `-rds-`, `-rename-` and `-tidy-`. The ten rotating `.env.bak-gha-*` backups made by the deploy workflow remain.
-- **Follow-ups (owner):** rotate any credentials in those old files that may still be valid, then delete the archive. Move `/opt/smartsht/.rds-master.env` (RDS master credentials, not used by the app) off the box into a password manager or AWS Secrets Manager.
+- **Follow-ups (owner):** rotate any credentials in those old files that may still be valid, then delete the archive. Move the stray database-admin credentials file the app does not use off the host into a password manager or AWS Secrets Manager. The path is deliberately not listed here because this repo is public.
 
 ### Notes for the record
-- Production loads `server/dist/server/.env`, a **symlink** to `/opt/smartsht/.env`. That file is written from the GitHub `ENV` secret on each deploy, so all three paths are always the same file. The repo's `server/.env.production` is a placeholder template and is not used at runtime.
+- The running API loads `server/dist/server/.env`, a **symlink** to `/opt/smartsht/.env`, which is written from the GitHub `ENV` secret on each deploy. `server/.env` is a separate **copy** that `deploy.sh` refreshes only when the shared file is newer, so an edit to `server/.env` does not change the running config. Treat `/opt/smartsht/.env` (and the `ENV` secret) as the only source. The repo's `server/.env.production` is a placeholder template and is not used at runtime.
+- **Open security item:** production database TLS is **not verified**. `db.ts` sets `rejectUnauthorized: true`, but the URL's `sslmode=require` overrides it in `pg` 8.22. Both the API and `run-migration.mjs` accept any RDS certificate, and the host has no RDS CA bundle. Measured on prod 2026-11-14: the connection succeeds with `SELF_SIGNED_CERT_IN_CHAIN` unverified. The fix (pin the AWS RDS CA bundle and verify) changes the production DB connection and is tracked separately.
 - `/opt/smartsht/logs/error.log` and `out.log` date from September. Live logs are in `~/.pm2/logs/smartsht-api-*.log`. The `ERR_MODULE_NOT_FOUND …/home/ubuntu/smartsht/…` and `ollama.js … assistModelAvailable` errors there come from an old checkout that no longer exists.
 - Open, not addressed: one Stripe webhook signature failure on 2026-11-05 08:03 UTC. Check Stripe's delivery log for a dropped event.
 
