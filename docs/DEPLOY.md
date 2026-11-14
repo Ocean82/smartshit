@@ -149,8 +149,8 @@ Invoked by Actions or `deploy-remote.sh`:
 │   │   # NOTE: server/ecosystem.config.cjs is GITIGNORED — NOT present on the box. PM2 is driven by the saved dump (see §5).
 │   └── scripts/
 │       └── deploy.sh   # Server-side deploy logic
-├── logs/               # PM2 error.log + out.log + deploy.log
-└── models/             # Ollama GGUF (Spreadsheet-RL-4B, 2.7GB)
+├── logs/               # deploy.log (current). error.log/out.log here are stale (Sep 2026); live API logs are ~/.pm2/logs/smartsht-api-*.log
+└── models/             # Ollama GGUF (Spreadsheet-RL-4B, 2.7GB). Ollama stopped and out of the provider order since 2026-11-14.
 
 /var/www/smartsht/
 ├── index.html          # Landing page
@@ -383,7 +383,8 @@ CREATE INDEX IF NOT EXISTS idx_usage_date ON smartsht.ai_usage_daily(usage_date)
 | Server builds | `npm run build:server` succeeds |
 | All tests pass | `npm test` + `npm test --prefix server` |
 | Release gates | `npm run release:check:v1` |
-| Ollama model correct | `ollama create smartshit -f server/Modelfile.spreadsheet-rl` (Spreadsheet-RL-4B) |
+| Provider order | Boot log shows `Provider order: groq -> openrouter` (Ollama disabled since 2026-11-14; see `docs/MAJOR_CHANGES.md`) |
+| DB migrations | `cd /opt/smartsht/current/server && DATABASE_URL="$(sed -n 's/^DATABASE_URL=//p' .env)" npm run migrate`. The runner skips applied files; latest is `007_template_installs.sql` (applied 2026-11-13). |
 | HTTPS works | `curl -I https://smartsht.com` → 200 |
 | Health endpoint | `curl https://smartsht.com/health` → ok; `curl -sf https://smartsht.com/health?strict=1` → 200 (DB+S3+Clerk up) |
 | Clerk auth | Sign in works, JWT verified |

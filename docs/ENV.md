@@ -10,9 +10,9 @@ See also `docs/NAMING.md` and `.env.example`.
 | `CLERK_SECRET_KEY`, `CLERK_PUBLISHABLE_KEY` | Yes (server) | SmartSht instance at `clerk.smartsht.com`. Server must set `CLERK_PUBLISHABLE_KEY` (or `VITE_CLERK_PUBLISHABLE_KEY` as fallback). |
 | `CLERK_AUTHORIZED_PARTIES` | Optional (server) | Comma-separated origins for JWT `azp`. Defaults to `APP_URL` + www + local Vite. |
 | `STRIPE_SECRET_KEY`, `STRIPE_PRICE_ID`, `STRIPE_PRICE_ID_ANNUAL`, `STRIPE_WEBHOOK_SECRET`, `APP_URL` | Yes | **SmartSht** Stripe account (`acct_1UAAnwCpwOYArhO2`), not BurntBeats. Live keys only. Canonical IDs: `scripts/smartsht-stripe-prices.env` (deploy/smoke guards). Runtime uses ENV only. Monthly: `price_1UABDhCpwOYArhO28jkA2CLX` ($7/mo). Annual: `price_1UWNq8CpwOYArhO2aIxHfshv` ($59/yr). Webhook: `https://smartsht.com/api/stripe/webhook`. Rotate prices → update that file + `/opt/smartsht/.env` + GitHub production ENV together. |
-| `SMARTSHIT_MODEL`, `OLLAMA_BASE_URL`, `NUM_CTX`, `NUM_PREDICT` | Yes | Local Ollama; model id spelling is intentional. Prod uses Spreadsheet-RL-4B (8192 ctx, 1024 predict) — GGUF already on prod; verify Modelfile only |
+| `SMARTSHIT_MODEL`, `OLLAMA_BASE_URL`, `NUM_CTX`, `NUM_PREDICT` | Yes | Local Ollama; model id spelling is intentional. Spreadsheet-RL-4B GGUF stays on prod disk, but **Ollama is not in the production provider order and the service is stopped (2026-11-14)**. It is too slow on the `t3.large` (see `docs/MAJOR_CHANGES.md` 2026-11-13). |
 | `SMARTSHT_MINILM_SRC` | Optional | Override source dir/file for `npm run model:copy-deploy` (MiniLM ONNX Path B). Runtime loads from `server/models/minilm/` only — never `temp/` |
-| `LLM_PROVIDER_ORDER`, `GROQ_*`, `OPENROUTER_*`, `HUGGINGFACE_*` | Yes | Optional cloud LLM failover |
+| `LLM_PROVIDER_ORDER`, `GROQ_*`, `OPENROUTER_*`, `HUGGINGFACE_*` | Yes | Cloud LLM failover. Production is `groq,openrouter` (since 2026-11-14; was `groq,openrouter,ollama`). The code default still includes `ollama` for local dev. |
 | `PORT`, `HOST` | Yes | Server bind |
 | `TRUST_PROXY` | Yes | Express `trust proxy`. Default `loopback` (nginx on 127.0.0.1). Required for correct client IPs and rate limiting |
 | `CORS_ORIGIN` | Yes | Comma-separated allowlist. Defaults to `APP_URL` + www variant + localhost dev origins. `*` opts into a public API |
@@ -36,7 +36,7 @@ See also `docs/NAMING.md` and `.env.example`.
 
 - Authenticated `POST /api/onnx/infer` uses `onnxruntime-node` and `server/models/{name}/model.onnx` (flat `{name}.onnx` fallback).
 - Populate MiniLM with `npm run model:copy-deploy` (optional `SMARTSHT_MINILM_SRC`). Download fallback needs network.
-- Spreadsheet-RL-4B GGUF for Ollama chat is already on production — verify `server/Modelfile.spreadsheet-rl` only; do not re-upload.
+- Spreadsheet-RL-4B GGUF for Ollama chat is already on production disk; do not re-upload. As of 2026-11-14 Ollama is stopped and out of the provider order (see `docs/MAJOR_CHANGES.md`).
 
 ## Production cutover checklist
 
@@ -49,5 +49,5 @@ See also `docs/NAMING.md` and `.env.example`.
 7. Nginx CSP includes concrete Clerk hosts (`clerk.smartsht.com`, `*.clerk.accounts.dev`, `api.clerk.com`, `img.clerk.com`, `*.protect.clerk.com`) and `challenges.cloudflare.com` (`landing/smartsht.nginx.conf`). Stripe.js hosts are omitted — Checkout is redirect-only.
 8. Cloud save sends `Authorization: Bearer …` (not `x-user-id`). Nginx `/api/` explicitly forwards `Authorization` and `Stripe-Signature`.
 9. Spoofed `x-user-id` alone → 401.
-10. **Ollama:** `ollama show smartshit` → Spreadsheet-RL-4B (already on server — do not re-upload GGUF by default).
+10. **Ollama (disabled since 2026-11-14):** the service is stopped and not in `LLM_PROVIDER_ORDER`. Only when re-enabling: `ollama show smartshit` → Spreadsheet-RL-4B, and confirm it answers within 90 s first.
 11. **Ops:** if credentials were ever exposed in chat/logs, rotate Groq/AWS/Clerk/Stripe/DB secrets before shipping.
