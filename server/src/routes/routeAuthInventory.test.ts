@@ -19,7 +19,7 @@ const EXPECTED_APP_REGISTRATIONS = [
   'USE * cors public',
   'USE * inline public',
   'POST /api/stripe/webhook route public', // Stripe signature, no user
-  'USE * clerkMiddleware public',
+  'USE * withMalformedTokenAs401 public', // wraps clerkMiddleware
   'USE /api/workbooks express.json public',
   'USE * express.json public',
   'USE * globalRateLimiter public',

@@ -68,6 +68,7 @@ import {
   getClerkMiddlewareOptions,
   clerkConfigHealth,
   clerkLiveHealthCheck,
+  withMalformedTokenAs401,
 } from './auth/clerk.js'
 import { getAuthMetrics } from './auth/authMetrics.js'
 import { shouldShowHealthDiagnostics } from './healthAccess.js'
@@ -153,7 +154,7 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
   }
 })
 
-app.use(clerkMiddleware(getClerkMiddlewareOptions()))
+app.use(withMalformedTokenAs401(clerkMiddleware(getClerkMiddlewareOptions())))
 // Workbook payloads carry the whole sheet as JSON and routinely exceed the
 // default 1mb budget (imports allow 5,000 rows x 200 cols), so those routes get
 // a larger cap. Everything else stays tight.
