@@ -13,6 +13,7 @@ import { useStore } from '@/store/useStore'
 import { useShallow } from 'zustand/react/shallow'
 import { computeSheetInsights } from '@/ai/sheetInsights'
 import { buildSheetProfile } from '@/ai/sheetProfile'
+import { detectKnownEngineIssues } from '@/lib/engineKnownIssues'
 import {
   TrendingUp,
   TrendingDown,
@@ -132,6 +133,13 @@ export function ImportInsightsOverlay() {
     return buildSheetProfile(sheet, getComputedValue)
   }, [visible, sheet, getComputedValue, cellCount])
 
+  // Formulas whose results the engine is known to diverge on (see
+  // docs/formualizer-gaps.md). Surface them so users verify rather than trust.
+  const knownEngineIssues = useMemo(() => {
+    if (!visible || cellCount < 5) return []
+    return detectKnownEngineIssues(sheet)
+  }, [visible, sheet, cellCount])
+
   const handleDismiss = useCallback(() => {
     setVisible(false)
     setDismissed(true)
@@ -152,9 +160,16 @@ export function ImportInsightsOverlay() {
   const auditIssueCount = lastAuditResult?.findings?.length ?? 0
   const hasFinancialData = (insights.totalIncome ?? 0) > 0 || (insights.totalExpenses ?? 0) > 0
   const hasOutliers = (insights.outliers?.length ?? 0) > 0
+  const engineIssueCellCount = knownEngineIssues.reduce((n, issue) => n + issue.cells.length, 0)
 
   // Don't show if there's nothing interesting to report
-  if (!hasFinancialData && auditIssueCount === 0 && !hasOutliers && insights.columnStats.length < 2) {
+  if (
+    !hasFinancialData &&
+    auditIssueCount === 0 &&
+    !hasOutliers &&
+    insights.columnStats.length < 2 &&
+    knownEngineIssues.length === 0
+  ) {
     return null
   }
 
@@ -243,6 +258,26 @@ export function ImportInsightsOverlay() {
           </div>
         )}
 
+        {/* Top spending categories — computed by computeSheetInsights, shown here
+            so the import card answers "where did the money go?" immediately. */}
+        {(insights.categoryTotals?.length ?? 0) > 0 && (
+          <div className="px-4 py-2.5 border-b" style={{ borderColor: 'var(--neutral-100)' }}>
+            <div className="text-[10px] font-semibold uppercase tracking-wide mb-1.5" style={{ color: 'var(--ink-muted)' }}>
+              Top categories
+            </div>
+            <ul className="space-y-1">
+              {insights.categoryTotals!.slice(0, 3).map((c) => (
+                <li key={c.category} className="flex items-center justify-between gap-2 text-[11px]">
+                  <span className="truncate" style={{ color: 'var(--ink-secondary)' }}>{c.category}</span>
+                  <span className="font-medium tabular-nums shrink-0" style={{ color: 'var(--ink-primary)' }}>
+                    {formatCurrency(c.total)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         {/* Audit findings callout — surface critical titles without requiring chat */}
         {auditIssueCount > 0 && (
           <button
@@ -274,6 +309,41 @@ export function ImportInsightsOverlay() {
               </ul>
             )}
           </button>
+        )}
+
+        {/* Engine-divergence warning — imported formulas Excel evaluates
+            differently. Not an audit finding: the sheet may be fine today, but
+            editing these formulas can produce a wrong result. */}
+        {knownEngineIssues.length > 0 && (
+          <div
+            className="px-4 py-2.5 border-b"
+            style={{ borderColor: 'var(--neutral-100)', background: 'oklch(0.98 0.02 80)' }}
+          >
+            <div className="flex items-center gap-2 mb-1">
+              <AlertTriangle size={12} className="text-amber-600" />
+              <span className="text-xs font-medium" style={{ color: 'var(--ink-primary)' }}>
+                {engineIssueCellCount} formula
+                {engineIssueCellCount === 1 ? '' : 's'} may recalculate differently
+              </span>
+            </div>
+            <ul className="space-y-0.5">
+              {knownEngineIssues.map((issue) => (
+                <li key={issue.rule} className="text-[11px]" style={{ color: 'var(--ink-secondary)' }}>
+                  <a
+                    href={issue.upstreamIssue}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="underline decoration-dotted underline-offset-2"
+                    title={issue.message}
+                  >
+                    {issue.title}
+                  </a>
+                  {' '}in {issue.cells.slice(0, 3).join(', ')}
+                  {issue.cells.length > 3 ? ` +${issue.cells.length - 3} more` : ''}
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
 
         {/* Outliers callout */}
