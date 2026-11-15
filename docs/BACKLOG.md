@@ -171,16 +171,16 @@ M 1–2 days, L more.
 
 ## 5. Features worth building next (after 1–3)
 
-- [ ] Health badge on sheet tabs (S, after "one audit result").
+- [x] Health badge on sheet tabs (S, after "one audit result") — done 2026-11-15 (`61c94ce`; per-sheet `auditResultsBySheet`, greyed when stale).
 - [ ] Persistent critical-findings banner with score above the grid (S–M).
-- [ ] Audit findings shown in the inspector (S).
-- [ ] Top categories on the import card; data is already computed (S).
+- [x] Audit findings shown in the inspector (S) — done 2026-11-15 (`61c94ce`; fresh audit of the current sheet only).
+- [x] Top categories on the import card; data is already computed (S) — done 2026-11-15 (`869b205`).
 - [ ] Copyable / exportable audit report, pairs with `/app?audit=1` (M).
 - [ ] Formula explainer coverage: SUMIFS, COUNTIF(S), XLOOKUP, INDEX/MATCH, `$` refs (M).
 - [ ] Selection-aware chat: send formulas, cap size, rank above whole-sheet data (M).
 - [ ] Selection-based suggestions and an "Explain cell" context-menu entry (S–M).
-- [ ] Import warning for formulas the engine is known to get wrong (S).
-- [ ] Engine golden tests for upstream issues #312, #283, #295, #319, #285 (S).
+- [x] Import warning for formulas the engine is known to get wrong (S) — done 2026-11-15 (`869b205`, `86d5a5b`; warns for #312, #283, #295 only, the divergences that reproduce on 0.9.3).
+- [x] Engine golden tests for upstream issues #312, #283, #295, #319, #285 (S) — done 2026-11-15 (`448413c`; `src/engine/knownGaps.realengine.test.ts`, 19 tests; #319/#285 no longer reproduce and are kept as regression guards).
 - [x] Use `FREE_DAILY_LIMIT` in the AI upgrade copy instead of "7" (`featureGates.ts:43`) (S) — done 2026-10-08, along with the cloud-workbook count and the auto-fix "used" count.
 
 ## 6. Bugs, billing, and security (2026-10-09 sweep)
@@ -265,7 +265,7 @@ Grid and UI:
 - [ ] Pivot Table in the toolbar and cell context menu; reachable only from MenuBar, mobile
   menu, and command palette (S).
 - [ ] Guided formula builder and named formula recipes (`formula-improvements8.21.md`) (L).
-- [ ] Issue count in the status bar (`planning/phase-1-implementation.md`) (S).
+- [x] Issue count in the status bar (`planning/phase-1-implementation.md`) (S) — done 2026-11-15 (`61c94ce`; click opens the Auditor).
 - [ ] Dark mode (`review8.16.2026.md`) (M).
 - [ ] Deferred by their own plans: styled xlsx export, status-bar aggregates, AutoSum that
   expands upward, header-filter search box, row auto-fit on wrap, Ctrl+Shift+M merge,
@@ -277,7 +277,7 @@ Pricing plan leftovers (`PRICING_AND_MONETIZATION_PLAN.md`):
 
 Platform:
 - [ ] Native tool calling for the model (still prompt-only JSON) (L).
-- [ ] Server-side Sentry and an `unhandledRejection` handler (S).
+- [x] Server-side Sentry and an `unhandledRejection` handler (S) — done 2026-11-15 (`082c9b2`, `a54e9e4`, `1c94f56`). Code is live but inert: production has no `SENTRY_DSN` yet (add it to the deploy `ENV` secret, not the server file).
 - [ ] Server integration/validation tests and an xlsx round-trip test (`architecture-fix-plan.md`) (M).
 - [ ] LRU eviction of local workbooks (`persistence-hardening-followups.md` item 1) (M; low
   value now that IndexedDB is the main store).
@@ -291,7 +291,7 @@ Platform:
   (`src/ai/macro/macroExecutor.ts`). No production imports found 2026-10-11 — safe to delete.
 - [ ] `server/src/providers.ts` header comment still mentions the deleted `llmIntentParser.ts`.
 - [ ] `SpreadsheetGrid.tsx` is back to ~1,400 lines (846 after the architecture fix plan).
-- [ ] Ollama `Modelfile*` keep their own tool lists; they can drift from `shared/toolRegistry.ts`.
+- [x] Ollama `Modelfile*` keep their own tool lists; they can drift from `shared/toolRegistry.ts` — guarded 2026-11-15 (`5b7c90d`; `server/src/modelfiles.test.ts` fails CI on drift).
 - [ ] Landing title and `og:title` say "smartsht"; `NAMING.md` says always "smartsh!t"
   (or record the SEO exception in `NAMING.md`).
 
