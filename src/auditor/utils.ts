@@ -3,7 +3,7 @@
  */
 
 import { colToLetter, letterToCol, cellToRef, refToCell } from '@/engine/spreadsheet'
-import type { CellInfo } from './types'
+import type { AuditFinding, CellInfo } from './types'
 import { extractFormulaRefs, refIsOnSheet } from '@/lib/formulaRefs'
 
 export { colToLetter, letterToCol, cellToRef, refToCell }
@@ -11,6 +11,11 @@ export { colToLetter, letterToCol, cellToRef, refToCell }
 /** Generate a short random ID for findings. */
 export function findingId(): string {
   return Math.random().toString(36).slice(2, 10)
+}
+
+/** Findings that reference `cellId`, preserving the audit's severity order. */
+export function findingsForCell(findings: AuditFinding[], cellId: string): AuditFinding[] {
+  return findings.filter((finding) => finding.cells.some((cell) => cell.cellId === cellId))
 }
 
 const ERROR_VALUE_RE = /^(#(?:REF|VALUE|DIV\/0|NAME\?|NULL|N\/A|NUM|CIRC|SPILL|CALC)!?)$/i

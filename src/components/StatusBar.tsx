@@ -3,7 +3,7 @@ import { refToCell } from '@/engine/spreadsheet';
 import { useMemo, useEffect, useCallback } from 'react';
 import type { ChangeEvent } from 'react';
 import { useShallow } from 'zustand/react/shallow';
-import { Minus, Plus } from 'lucide-react';
+import { Minus, Plus, ShieldCheck } from 'lucide-react';
 import type { ChatMessage } from '@/types';
 import type { AppState } from '@/store/storeTypes';
 
@@ -38,7 +38,18 @@ export function StatusBar() {
   // the streaming message's content, leaving responseTime and the sheet
   // unchanged). Previously this used a no-selector useStore() and re-rendered
   // on every store mutation, including each token.
-  const { selection, sheet, getComputedValue, responseTime, gridZoom, setGridZoom } = useStore(
+  const {
+    selection,
+    sheet,
+    getComputedValue,
+    responseTime,
+    gridZoom,
+    setGridZoom,
+    lastAuditResult,
+    lastAuditRevision,
+    workbookRevision,
+    setActivePanel,
+  } = useStore(
     useShallow((s: AppState) => ({
       selection: s.selection,
       sheet: s.getActiveSheet(),
@@ -46,8 +57,19 @@ export function StatusBar() {
       responseTime: computeResponseTime(s.messages),
       gridZoom: s.gridZoom,
       setGridZoom: s.setGridZoom,
+      lastAuditResult: s.lastAuditResult,
+      lastAuditRevision: s.lastAuditRevision,
+      workbookRevision: s.workbookRevision,
+      setActivePanel: s.setActivePanel,
     })),
   );
+
+  // Only show a count for a fresh audit of the active sheet — a stale result
+  // describes cells that may have changed since the audit ran.
+  const auditIssueCount =
+    lastAuditResult?.sheetId === sheet.id && lastAuditRevision === workbookRevision
+      ? lastAuditResult.findings.length
+      : null;
 
   // Apply zoom as a CSS custom property on the grid container.
   // The grid reads --grid-zoom and scales its font/cell sizes accordingly.
@@ -137,6 +159,22 @@ export function StatusBar() {
               <span>Max: {stats.max?.toLocaleString()}</span>
             </>
           )}
+        </>
+      )}
+
+      {auditIssueCount !== null && (
+        <>
+          <span style={{ color: 'var(--neutral-300)' }}>·</span>
+          <button
+            type="button"
+            onClick={() => setActivePanel('auditor')}
+            className="inline-flex items-center gap-1 rounded px-1 transition-colors hover:bg-black/5"
+            style={{ color: auditIssueCount === 0 ? 'var(--success)' : 'var(--danger, #dc2626)' }}
+            title="Open the Auditor panel"
+          >
+            <ShieldCheck size={11} />
+            <span>{auditIssueCount === 0 ? 'No issues' : `${auditIssueCount} issue${auditIssueCount === 1 ? '' : 's'}`}</span>
+          </button>
         </>
       )}
 

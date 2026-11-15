@@ -4,6 +4,20 @@ import { useShallow } from 'zustand/react/shallow'
 import { Plus, X, Edit3, Check, ChevronDown } from 'lucide-react'
 import { AnchoredPanel } from '@/components/AnchoredPanel'
 import { BG_COLORS } from '@/data/colors'
+import type { AuditResult } from '@/auditor/types'
+
+/** Health badge colour for an audit score (green ≥90, amber ≥70, red below). */
+export function auditBadgeColor(score: number, stale: boolean): string {
+  if (stale) return 'var(--neutral-300)'
+  if (score >= 90) return 'var(--success, #16a34a)'
+  if (score >= 70) return 'var(--warning, #d97706)'
+  return 'var(--danger, #dc2626)'
+}
+
+export function auditBadgeTitle(result: AuditResult, stale: boolean): string {
+  const issues = result.findings.length
+  return `Audit score ${result.score}/100 · ${issues} issue${issues === 1 ? '' : 's'}${stale ? ' · stale' : ''}`
+}
 
 export function SheetTabs() {
   // Only re-render when the workbook (sheet list/order/color/visibility) or the
@@ -24,10 +38,14 @@ export function SheetTabs() {
     showConfirm,
     showToast,
     undo,
+    auditResultsBySheet,
+    workbookRevision,
   } = useStore(
     useShallow((s) => ({
       workbook: s.workbook,
       activeSheetId: s.activeSheetId,
+      auditResultsBySheet: s.auditResultsBySheet,
+      workbookRevision: s.workbookRevision,
       setActiveSheet: s.setActiveSheet,
       addSheet: s.addSheet,
       deleteSheet: s.deleteSheet,
@@ -187,6 +205,19 @@ export function SheetTabs() {
               </div>
             ) : (
               <>
+                {auditResultsBySheet[sheet.id] && (() => {
+                  const entry = auditResultsBySheet[sheet.id]
+                  const stale = entry.revision !== workbookRevision
+                  return (
+                    <span
+                      className="inline-block w-1.5 h-1.5 rounded-full shrink-0"
+                      style={{ background: auditBadgeColor(entry.result.score, stale) }}
+                      title={auditBadgeTitle(entry.result, stale)}
+                      aria-label={auditBadgeTitle(entry.result, stale)}
+                      role="img"
+                    />
+                  )
+                })()}
                 <span>{sheet.name}</span>
                 <button
                   type="button"

@@ -17,6 +17,7 @@ function makeAccess(
     activePanel: null,
     lastAuditResult: null,
     lastAuditRevision: null,
+    auditResultsBySheet: {},
     workbookRevision: 0,
     getActiveSheet: () => wb.sheets[0],
     getComputedValue: () => '',

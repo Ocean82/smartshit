@@ -14,12 +14,33 @@ import { useShallow } from 'zustand/react/shallow'
 import { cellToRef, refToCell, colToLetter } from '@/engine/spreadsheet'
 import { explainFormula, describeCellValue } from '@/lib/formulaExplainer'
 import { collectSheetFormulaRefs, findDependents, listPrecedents } from '@/lib/formulaRefs'
-import { ArrowDownRight, ArrowUpLeft, Hash, Type, Search } from 'lucide-react'
+import { findingsForCell } from '@/auditor/utils'
+import type { Severity } from '@/auditor/types'
+import { ArrowDownRight, ArrowUpLeft, Hash, Type, Search, ShieldAlert } from 'lucide-react'
 
 const MAX_LISTED_CELLS = 20
 
+const SEVERITY_PILL: Record<Severity, string> = {
+  critical: 'bg-red-50 text-red-700 border-red-200',
+  high: 'bg-orange-50 text-orange-700 border-orange-200',
+  medium: 'bg-amber-50 text-amber-700 border-amber-200',
+  low: 'bg-blue-50 text-blue-700 border-blue-200',
+  info: 'bg-gray-50 text-gray-600 border-gray-200',
+}
+
 export function InspectorPanelContent() {
-  const { selection, sheet, getComputedValue, setSelection, setChatInput, sendMessage, setActivePanel } = useStore(
+  const {
+    selection,
+    sheet,
+    getComputedValue,
+    setSelection,
+    setChatInput,
+    sendMessage,
+    setActivePanel,
+    lastAuditResult,
+    lastAuditRevision,
+    workbookRevision,
+  } = useStore(
     useShallow((s) => ({
       selection: s.selection,
       sheet: s.getActiveSheet(),
@@ -28,6 +49,9 @@ export function InspectorPanelContent() {
       setChatInput: s.setChatInput,
       sendMessage: s.sendMessage,
       setActivePanel: s.setActivePanel,
+      lastAuditResult: s.lastAuditResult,
+      lastAuditRevision: s.lastAuditRevision,
+      workbookRevision: s.workbookRevision,
     })),
   )
 
@@ -63,6 +87,15 @@ export function InspectorPanelContent() {
     const dependents = findDependents(sheetFormulaRefs, sheet.name, cellInfo.row, cellInfo.col)
     return { precedents, dependents: dependents.slice(0, MAX_LISTED_CELLS) }
   }, [cellInfo, sheet.name, sheetFormulaRefs])
+
+  // Only show findings from a fresh audit of THIS sheet; a stale result would
+  // point at cells that may have moved since the audit ran.
+  const auditFindings = useMemo(() => {
+    if (!cellInfo || !lastAuditResult) return []
+    if (lastAuditResult.sheetId !== sheet.id) return []
+    if (lastAuditRevision !== workbookRevision) return []
+    return findingsForCell(lastAuditResult.findings, cellInfo.cellId)
+  }, [cellInfo, lastAuditResult, lastAuditRevision, workbookRevision, sheet.id])
 
   const handleNavigate = (cellId: string) => {
     const ref = cellToRef(cellId)
@@ -138,6 +171,43 @@ export function InspectorPanelContent() {
           </button>
         )}
       </div>
+
+      {/* Auditor findings for this cell */}
+      {auditFindings.length > 0 && (
+        <div className="px-3 py-3 border-b border-gray-100">
+          <div className="flex items-center justify-between gap-1.5 mb-2">
+            <div className="flex items-center gap-1.5">
+              <ShieldAlert size={12} className="text-amber-600" />
+              <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">
+                Auditor Findings ({auditFindings.length})
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setActivePanel('auditor')}
+              className="text-[10px] font-medium text-blue-600 hover:text-blue-700"
+            >
+              Open Auditor
+            </button>
+          </div>
+          <ul className="space-y-2">
+            {auditFindings.map((finding) => (
+              <li key={finding.id} className="rounded-lg border border-gray-200 bg-gray-50 px-2 py-1.5">
+                <div className="flex items-center gap-1.5 mb-0.5">
+                  <span className={`text-[9px] font-semibold uppercase px-1 py-0.5 rounded border ${SEVERITY_PILL[finding.severity]}`}>
+                    {finding.severity}
+                  </span>
+                  <span className="text-[11px] font-medium text-gray-800">{finding.title}</span>
+                </div>
+                <p className="text-[11px] text-gray-600 leading-snug">{finding.message}</p>
+                {finding.suggestion && (
+                  <p className="text-[11px] text-emerald-700 leading-snug mt-1">{finding.suggestion}</p>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* Precedents (what feeds into this cell) */}
       {dependencies.precedents.length > 0 && (

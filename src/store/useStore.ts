@@ -113,12 +113,14 @@ export const useStore = create<AppState>()(
 
       lastAuditResult: null,
       lastAuditRevision: null,
+      auditResultsBySheet: {},
       runActiveSheetAudit: () => {
         const state = useStore.getState()
         const result = runAudit(state.getActiveSheet(), state.getComputedValue, loadCustomRules())
         useStore.setState((st) => {
           st.lastAuditResult = result
           st.lastAuditRevision = st.workbookRevision
+          st.auditResultsBySheet[result.sheetId] = { result, revision: st.workbookRevision }
         })
         return result
       },

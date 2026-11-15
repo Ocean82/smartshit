@@ -68,6 +68,12 @@ export interface AppState extends UIState, UIActions, FileActions, ChatActions {
   lastAuditResult: import('@/auditor/types').AuditResult | null
   /** `workbookRevision` when `lastAuditResult` was produced; differs once the workbook changes. */
   lastAuditRevision: number | null
+  /**
+   * Latest audit per sheet, keyed by sheet id. Lets the sheet-tab health badge
+   * show every audited sheet, not just the active one. `revision` is the
+   * `workbookRevision` at audit time; older entries are shown as stale.
+   */
+  auditResultsBySheet: Record<string, { result: import('@/auditor/types').AuditResult; revision: number }>
   /** Audit the active sheet with custom rules and store the result. */
   runActiveSheetAudit: () => import('@/auditor/types').AuditResult
 

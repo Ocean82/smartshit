@@ -16,6 +16,7 @@ export interface ImportEffectAccess {
   activePanel: 'chat' | 'insights' | 'auditor' | 'inspector' | null
   lastAuditResult: import('@/auditor/types').AuditResult | null
   lastAuditRevision: number | null
+  auditResultsBySheet: Record<string, { result: import('@/auditor/types').AuditResult; revision: number }>
   workbookRevision: number
   getActiveSheet: () => WorkbookData['sheets'][number]
   getComputedValue: (row: number, col: number) => string
@@ -116,6 +117,7 @@ export function applyWorkbookImportEffects(
           set((s) => {
             s.lastAuditResult = auditResult
             s.lastAuditRevision = s.workbookRevision
+            s.auditResultsBySheet[auditResult.sheetId] = { result: auditResult, revision: s.workbookRevision }
           })
 
           // Open the auditor for serious findings, and for the free audit entry (?audit=1).
