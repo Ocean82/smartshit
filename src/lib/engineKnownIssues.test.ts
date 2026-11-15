@@ -20,8 +20,16 @@ const rulesFor = (cells: Parameters<typeof sheet>[0]) =>
   detectKnownEngineIssues(sheet(cells)).map((issue) => issue.rule)
 
 describe('detectKnownEngineIssues — date arithmetic (#312)', () => {
-  it('flags direct DATE() arithmetic', () => {
+  it('flags direct DATE() and DATEVALUE() arithmetic', () => {
     expect(rulesFor({ B1: { formula: '=DATE(2023,1,15)+30' } })).toEqual(['date-arithmetic'])
+    expect(rulesFor({ B1: { formula: '=DATEVALUE("2023-01-15")+30' } })).toEqual([
+      'date-arithmetic',
+    ])
+  })
+
+  it('does not flag EDATE/EOMONTH, which already return serial numbers', () => {
+    expect(rulesFor({ B1: { formula: '=EDATE(A1,1)+5' } })).toEqual([])
+    expect(rulesFor({ B1: { formula: '=EOMONTH(A1,0)+1' } })).toEqual([])
   })
 
   it('flags arithmetic on a cell that produces a date', () => {

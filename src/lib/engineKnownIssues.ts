@@ -36,8 +36,12 @@ export interface KnownEngineIssue {
 
 const UPSTREAM = 'https://github.com/psu3d0/formualizer/issues'
 
-/** Excel functions that yield a date *type* in this engine (see #312). */
-const DATE_FUNCTIONS = new Set(['DATE', 'TODAY', 'NOW', 'EDATE', 'EOMONTH', 'DATEVALUE'])
+/**
+ * Excel functions that yield a date *type* in this engine (see #312).
+ * Verified 2026-11-15: `EDATE` and `EOMONTH` return serial numbers, not dates,
+ * so they are deliberately absent — flagging them would be a false alarm.
+ */
+const DATE_FUNCTIONS = new Set(['DATE', 'TODAY', 'NOW', 'DATEVALUE'])
 
 const CRITERIA_FUNCTIONS = new Set(['COUNTIF', 'SUMIF', 'COUNTIFS', 'SUMIFS', 'AVERAGEIF', 'AVERAGEIFS'])
 

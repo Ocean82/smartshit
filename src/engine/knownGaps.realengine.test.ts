@@ -78,10 +78,13 @@ describe('#312 — binary +/- on a date keeps a Date type (Excel keeps a serial)
     const wb = newSheet()
     wb.setFormula('Sheet1', 1, 1, '=VALUE(DATE(2023,1,15))+30')
     wb.setFormula('Sheet1', 1, 2, '=DATE(2023,1,15)*1+30')
+    wb.setFormula('Sheet1', 1, 3, '=EDATE(DATE(2023,1,15),1)')
     wb.evaluateAll()
 
     expect(value(wb, 1, 1)).toBe(44971)
     expect(value(wb, 1, 2)).toBe(44971)
+    // EDATE/EOMONTH never produced a Date type, so month math needs no coercion.
+    expect(value(wb, 1, 3)).toBe(44972)
   })
 })
 
