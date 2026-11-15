@@ -11,9 +11,9 @@
 
 ## Verification
 - `tsc --noEmit`: clean (root and `server/`).
-- `npm test`: 6 failing files / 32 failing tests, all pre-existing and **network/Clerk-dependent** (cloudSync, serverHealth, useSubscriptionStatus, sendMessage, startCheckout, useAutoFixGate). None caused by this pass; they need Clerk keys / a running server to pass. Investigate separately.
+- `npm test`: 199 files / 2486 tests pass in a clean checkout (as CI runs it). In a dev checkout with a real `.env.local`, 6 files (cloudSync, serverHealth, useSubscriptionStatus, sendMessage, startCheckout, useAutoFixGate) fail because Vite loads the real `VITE_CLERK_PUBLISHABLE_KEY` / `VITE_AI_API_URL` into the test env. Not a code regression.
 - `npm run test:realengine`: 2 files / 32 tests pass.
-- `npm test --prefix server`: 52 files / 688 tests pass.
+- `npm test --prefix server`: 52 files / 692 tests pass.
 
 ## Remaining backlog (docs/BACKLOG.md, 42 open) — triaged
 
@@ -24,7 +24,7 @@
 - #182 Import warning for formulas engine gets wrong — verified against 0.9.3; warns only for #312 date arithmetic, #283 approximate lookups, #295 `~`/`_`/`%` criteria.
 - #183 Engine golden tests for upstream issues — `src/engine/knownGaps.realengine.test.ts` (19 tests incl. verified workarounds).
 - #268 Issue count in status bar — fresh-audit only, click opens Auditor.
-- #280 Server-side Sentry + handlers — `SENTRY_DSN`-gated; captures the Express 5xx handler, every route 500 that goes through `sendServerError`, checkout failures, and uncaught exceptions. `unhandledRejection` is logged without killing the API.
+- #280 Server-side Sentry + handlers — `SENTRY_DSN`-gated; captures the Express 5xx handler, every route 500 that goes through `sendServerError`, checkout failures, AI-function provider/batch failures, and uncaught exceptions. `unhandledRejection` is logged without killing the API. Sentry's built-in crash handlers are disabled so each crash is reported once, and API keys / bearer tokens are redacted from event messages.
 - #294 Ollama Modelfile tool-list drift — `server/src/modelfiles.test.ts` validates all three Modelfiles against `shared/toolRegistry.ts`.
 
 ### Tier 2 — medium, contained
@@ -70,4 +70,4 @@
 
 ## Housekeeping still open
 - `.agents/tasks/` metadata is stale (PRs marked OPEN that are merged). Archive or refresh at your discretion; not touched this pass.
-- Investigate the 6 pre-existing network/Clerk test failures to get to a fully green suite.
+- Make the 6 env-sensitive client tests hermetic (stub `VITE_CLERK_PUBLISHABLE_KEY` / `VITE_AI_API_URL` in the test setup) so they pass with a real `.env.local`.
