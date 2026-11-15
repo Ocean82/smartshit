@@ -6,6 +6,7 @@ const state = { hasPlanPro: false as boolean | null }
 const listVersions = vi.fn()
 
 vi.mock('@/auth', () => ({ useUsage: () => ({ hasPlanPro: state.hasPlanPro }) }))
+vi.mock('@/lib/serverAccess', () => ({ useAuthStatus: () => 'signed-in' }))
 vi.mock('@/components/UpgradeGate', () => ({ UpgradeGate: () => createElement('div', null, 'UPGRADE_GATE') }))
 vi.mock('@/components/ReadOnlyGrid', () => ({ ReadOnlyGrid: () => null }))
 vi.mock('@/hooks/useFocusTrap', () => ({ useFocusTrap: () => ({ current: null }) }))
