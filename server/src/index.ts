@@ -1128,6 +1128,7 @@ app.post('/api/checkout', requireAuth, checkoutRateLimiter, async (req, res) => 
     // Stripe errors can embed account/price details — log, don't echo
     const errorId = randomUUID().slice(0, 8)
     console.error(`[checkout] (${errorId})`, err)
+    captureError(err, { errorId, context: 'checkout.createSession' })
     res.status(500).json({ error: 'Could not start checkout. Please try again.', errorId })
   }
 })

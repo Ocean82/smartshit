@@ -9,9 +9,14 @@
 
 import { randomUUID } from 'node:crypto'
 import type { Response } from 'express'
+import { captureError } from './errorReporting.js'
 
 /**
- * Log an error with a fresh correlation id and send a generic 500 response.
+ * Log an error with a fresh correlation id, report it, and send a generic 500.
+ *
+ * Most route-level 500s go through here rather than the global Express handler,
+ * so this is the point where they reach Sentry. The `errorId` in the event
+ * matches the one the user is shown.
  *
  * @param res     Express response
  * @param context Short label identifying the call site, e.g. 'workbooks.create'
@@ -21,6 +26,7 @@ export function sendServerError(res: Response, context: string, err: unknown): v
   const errorId = randomUUID().slice(0, 8)
   const detail = err instanceof Error ? err.stack ?? err.message : String(err)
   console.error(`[${context}] (${errorId})`, detail)
+  captureError(err, { errorId, context })
 
   if (res.headersSent) return
   res.status(500).json({
