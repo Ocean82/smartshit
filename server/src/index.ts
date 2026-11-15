@@ -6,6 +6,12 @@ import cors from 'cors'
 import express from 'express'
 import { clerkMiddleware } from '@clerk/express'
 import { config, getRuntimeDiagnostics } from './config.js'
+import {
+  initErrorReporting,
+  captureError,
+  flushErrorReporting,
+  isErrorReportingEnabled,
+} from './errorReporting.js'
 import { createOnnxRouter } from './api/onnx-infer.js'
 import { SessionPool } from './onnx/sessionPool.js'
 import { getOnnxModelSize, resolveOnnxModelPath } from './onnx/modelPaths.js'
@@ -94,6 +100,10 @@ import { chatRateLimiter, checkoutRateLimiter, globalRateLimiter, sharedAccessRa
 
 // ─── Validate critical configuration + start background services ───────────
 startBackgroundServices()
+
+// Error reporting must be initialised before routes serve traffic so early
+// failures (auth, DB) are captured. Inert without SENTRY_DSN.
+initErrorReporting()
 
 const app = express()
 
@@ -1127,7 +1137,7 @@ app.post('/api/checkout', requireAuth, checkoutRateLimiter, async (req, res) => 
 // handler, which renders a stack trace (absolute file paths and all) to the
 // client — most visibly on body-size 413s.
 
-app.use((err: unknown, _req: express.Request, res: express.Response, next: express.NextFunction) => {
+app.use((err: unknown, req: express.Request, res: express.Response, next: express.NextFunction) => {
   if (res.headersSent) {
     next(err)
     return
@@ -1151,6 +1161,10 @@ app.use((err: unknown, _req: express.Request, res: express.Response, next: expre
 
   const errorId = randomUUID().slice(0, 8)
   console.error(`[server] Unhandled error (${errorId})`, err)
+  // 4xx are caller mistakes; only 5xx are ours to wake up for.
+  if (status >= 500) {
+    captureError(err, { errorId, method: req.method, path: req.path, status })
+  }
   res.status(status >= 400 && status < 600 ? status : 500).json({
     error: 'Something went wrong on our end. Please try again.',
     errorId,
@@ -1179,6 +1193,7 @@ app.listen(config.port, config.host, () => {
       `authorizedParties=${clerkBoot.authorizedPartyCount}`,
   )
   console.log(`New Relic: ${newRelicEnabled ? `✓ (${process.env.NEW_RELIC_APP_NAME ?? 'smartsht-api'})` : '✗ (no license key)'}`)
+  console.log(`Sentry: ${isErrorReportingEnabled() ? '✓' : '✗ (no SENTRY_DSN)'}`)
   console.log(`Database: ${config.databaseUrl ? '✓ (configured)' : '✗ (no DATABASE_URL)'}`)
   console.log(`S3: ${config.awsAccessKeyId ? `✓ (${config.s3Bucket})` : '✗ (no AWS credentials)'}`)
   const minilmPath = resolveOnnxModelPath(modelsRoot, 'minilm')
@@ -1203,6 +1218,7 @@ process.on('SIGTERM', async () => {
   console.log('SIGTERM received — closing connections...')
   await onnxSessionPool.dispose()
   await closePool()
+  await flushErrorReporting()
   process.exit(0)
 })
 
@@ -1210,5 +1226,27 @@ process.on('SIGINT', async () => {
   console.log('SIGINT received — closing connections...')
   await onnxSessionPool.dispose()
   await closePool()
+  await flushErrorReporting()
   process.exit(0)
+})
+
+// ─── Last-resort error handlers ─────────────────────────────────────────────
+// Registered last so any rejection during startup (which happens before these
+// lines run) still hits Node's default crash, where the orchestrator restarts.
+
+process.on('unhandledRejection', (reason) => {
+  console.error('[server] Unhandled promise rejection', reason)
+  captureError(reason, { source: 'unhandledRejection' })
+  // Deliberately keep running: one abandoned promise (a timer, a stream that
+  // closed early) must not take the API down for every connected user. The
+  // event is in Sentry, so repeated noise is visible.
+})
+
+process.on('uncaughtException', async (err) => {
+  console.error('[server] Uncaught exception — shutting down', err)
+  captureError(err, { source: 'uncaughtException' })
+  // A synchronous exception can leave the process in an unknown state; flush
+  // the event, then let the supervisor restart a clean process.
+  await flushErrorReporting()
+  process.exit(1)
 })
