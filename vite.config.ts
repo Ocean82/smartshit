@@ -82,6 +82,15 @@ export default defineConfig({
     // actual WASM via vitest.integration.config.ts). Exclude them here so the
     // stubbed unit tier doesn't try to run them against the stub.
     exclude: ['**/node_modules/**', '**/dist/**', 'src/**/*.realengine.test.ts'],
+    // Vite loads .env.local into import.meta.env for tests too. A dev checkout
+    // with real Clerk / API values then fails tests that assume the CI default
+    // (relative /api URLs, Clerk off). Blank them so local runs match CI;
+    // tests that need a value set it with vi.stubEnv.
+    env: {
+      VITE_CLERK_PUBLISHABLE_KEY: '',
+      VITE_AI_API_URL: '',
+      VITE_SENTRY_DSN: '',
+    },
     // NOTE: the default `vitest run` tier aliases the WASM formula engine to a
     // lightweight STUB (arithmetic + SUM + single refs only). It has no
     // dependency graph, recalc, structural ref rewrites, cross-sheet refs, or

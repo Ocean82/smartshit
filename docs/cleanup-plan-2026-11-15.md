@@ -11,7 +11,7 @@
 
 ## Verification
 - `tsc --noEmit`: clean (root and `server/`).
-- `npm test`: 199 files / 2486 tests pass in a clean checkout (as CI runs it). In a dev checkout with a real `.env.local`, 6 files (cloudSync, serverHealth, useSubscriptionStatus, sendMessage, startCheckout, useAutoFixGate) fail because Vite loads the real `VITE_CLERK_PUBLISHABLE_KEY` / `VITE_AI_API_URL` into the test env. Not a code regression.
+- `npm test`: 199 files / 2486 tests pass, including in a dev checkout with a real `.env.local` (the test config blanks `VITE_CLERK_PUBLISHABLE_KEY` / `VITE_AI_API_URL` / `VITE_SENTRY_DSN` so local runs match CI).
 - `npm run test:realengine`: 2 files / 32 tests pass.
 - `npm test --prefix server`: 52 files / 692 tests pass.
 
@@ -69,5 +69,6 @@
 - #247 (above) credential rotation verification.
 
 ## Housekeeping still open
-- `.agents/tasks/` metadata is stale (PRs marked OPEN that are merged). Archive or refresh at your discretion; not touched this pass.
-- Make the 6 env-sensitive client tests hermetic (stub `VITE_CLERK_PUBLISHABLE_KEY` / `VITE_AI_API_URL` in the test setup) so they pass with a real `.env.local`.
+- ~~`.agents/tasks/` metadata stale~~ — refreshed 2026-11-15: all 11 `pr.json` files carry GitHub's `MERGED` state, `mergedAt` and merge commit (gitignored, local only).
+- ~~Env-sensitive client tests~~ — fixed 2026-11-15 via `test.env` in `vite.config.ts`.
+- Review ~30 merged remote feature branches on `origin` before any deletion.
