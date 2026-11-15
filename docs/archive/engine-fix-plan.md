@@ -1,4 +1,4 @@
-# Engine Fix Plan — Based on docs/engine-review.md
+# Engine Fix Plan — Based on docs/archive/engine-review.md
 
 > **⚠️ ARCHIVED** — This plan has been executed. See `MAJOR_CHANGES.md` for the implementation record and `ARCHIVE.md` for context.
 

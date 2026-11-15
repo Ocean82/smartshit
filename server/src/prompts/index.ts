@@ -1,7 +1,7 @@
 /**
  * Master prompt builder — assembles the full system prompt from modular components.
  *
- * Architecture (per docs/chat-prompt/chat.md):
+ * Architecture (per docs/archive/chat-prompt/chat.md):
  *   persona.ts           → Core identity & tone
  *   fewShot.ts           → Example conversations for style consistency
  *   clarification.ts     → When/how to ask clarifying questions

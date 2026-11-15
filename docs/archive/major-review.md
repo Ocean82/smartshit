@@ -14,7 +14,7 @@ Deeper investigations
 Findings (severity order)
 Sev	Area	Finding	Where	Fix direction
 Security	BYOK on /api/ai-function lacks SSRF hardening that chat already has — bare z.string().url(), schema unused, hand-rolled validation	server/src/schemas/aiFunction.ts, routes/aiFunction.ts	Reuse chat byokSchema refine + validateBody(aiFunctionBodySchema)
-AI failover	Ollama fallback models on prod reportedly same non-instruct base blob; Groq 429 → garbage chat/tools. Silent provider identity	docs/ai-model-audit.md, providers.ts, ollama.ts	Verify live Ollama blobs; ship one real instruct/RL model; log provider+model to client
+AI failover	Ollama fallback models on prod reportedly same non-instruct base blob; Groq 429 → garbage chat/tools. Silent provider identity	docs/archive/ai-model-audit.md, providers.ts, ollama.ts	Verify live Ollama blobs; ship one real instruct/RL model; log provider+model to client
 Wrong tool	AI.PREDICT / AI.SCORE use a general chat LLM + regex number scrape — nondeterministic, uncalibrated, expensive on fill-down	server/src/routes/aiFunction.ts FUNCTION_PROMPTS	Replace with local linear/seasonal stats or remove from v1
 Dead feature	Macro executor defaultStepExecutor fakes success; chatService never passes undoManager/macroPlanCallbacks so macros never run	macroExecutor.ts, chatService.ts ~271	Wire real executeTool or delete/hide the entire macro surface
 Dead feature	NLP WASM worker always returns unknown; parseUserIntentAsync unused in prod; hybrid router is façade	nlpWorker.ts, intentParser.ts, brain.ts	Ship MiniLM or strip NLP from startup to cut complexity
@@ -25,7 +25,7 @@ Architecture	3+ competing intent systems (agent regex, shared intentParser, NLP 
 Security	Sandbox relies on regex denylist around QuickJS — bypass-prone as a security boundary	src/sandbox/validate.ts	Treat as capability sandbox only; allowlist APIs, never denylist
 Cost	Each AI.* cell hit = full chat completion; fill-down can blow free tier and Groq limits	aiFunctionDefinitions.ts, aiFunction.ts	Batch, cache aggressively, gate PREDICT/SCORE, show cost preview
 ONNX	User-upload ONNX Path A built; Path B missing onnxruntime-node; product audience does not bring .onnx files	src/onnx/*, server/src/onnx/*	Bundle MiniLM for intent OR defer ONNX to power-user only
-Docs	Older reviews overclaim readiness; July P0s mostly fixed but stubs remain	docs/release-audit-2026-07-25.md, docs/*-review.md	Treat docs as historical; trust code
+Docs	Older reviews overclaim readiness; July P0s mostly fixed but stubs remain	docs/archive/release-audit-2026-07-25.md, docs/*-review.md	Treat docs as historical; trust code
 AI models — right job?
 Primary Groq 70B chat is appropriate. Failover and formula-cell prediction are not. Intent is mostly heuristics (fine); the NLP/ONNX theater is not earning its complexity.
 
@@ -91,7 +91,7 @@ I5	Stripe webhook + workbook ownership routes	No dedicated tests; billing/ACL re
 I6	execute_script blast radius	Sandboxed but model-generated JS can still mass-mutate sheets
 I7	Constant drift free-tier limits	Client/server/featureGates may disagree on daily caps
 
-Verified against server/src/providers.ts, routes/aiFunction.ts, schemas/*, chatService.ts, macroExecutor.ts, nlpWorker.ts, usage.ts; cross-checked docs/ai-model-audit.md (ops claims about prod blobs still need live confirmation — see I1/I2).
+Verified against server/src/providers.ts, routes/aiFunction.ts, schemas/*, chatService.ts, macroExecutor.ts, nlpWorker.ts, usage.ts; cross-checked docs/archive/ai-model-audit.md (ops claims about prod blobs still need live confirmation — see I1/I2).
 
 
 Summary:

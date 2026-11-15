@@ -2,7 +2,7 @@
 
 > System diagram and key design decisions.
 
-> Source: [`docs/images/notes`](../images/notes)
+> Source: [`docs/images/notes`](../../images/notes)
 
 ## Architecture Overview
 

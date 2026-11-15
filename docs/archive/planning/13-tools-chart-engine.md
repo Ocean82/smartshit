@@ -2,7 +2,7 @@
 
 > Chart configuration from sheet data.
 
-> Source: [`docs/images/notes`](../images/notes)
+> Source: [`docs/images/notes`](../../images/notes)
 
 ## tools/chart_engine.py
 

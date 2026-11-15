@@ -1,6 +1,6 @@
 /**
  * Regression tests for the AI function registry.
- * See docs/agent-engine-code-review.md (H1, M4).
+ * See docs/archive/agent-engine-code-review.md (H1, M4).
  */
 
 import { describe, it, expect } from 'vitest'

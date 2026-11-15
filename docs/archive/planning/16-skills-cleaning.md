@@ -2,7 +2,7 @@
 
 > Data cleaning and normalization workflows.
 
-> Source: [`docs/images/notes`](../images/notes)
+> Source: [`docs/images/notes`](../../images/notes)
 
 ## skills/cleaning.py
 

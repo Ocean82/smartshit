@@ -2,7 +2,7 @@
 
 > Formats tool results into user-facing responses.
 
-> Source: [`docs/images/notes`](../images/notes)
+> Source: [`docs/images/notes`](../../images/notes)
 
 ## chat/response_builder.py
 

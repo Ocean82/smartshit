@@ -250,7 +250,7 @@ describe('parseMessage — existing behavior stays intact', () => {
 
 /**
  * Regression cases from the 2026-07-24 review — see
- * docs/agent-engine-code-review.md (M1). The fast path must not hijack
+ * docs/archive/agent-engine-code-review.md (M1). The fast path must not hijack
  * messages it cannot handle correctly: returning `understood: false` lets the
  * request reach the LLM instead of silently mutating the wrong data.
  */

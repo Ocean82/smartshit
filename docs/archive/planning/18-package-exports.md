@@ -2,7 +2,7 @@
 
 > Module __init__ exports for tools, skills, memory, and chat.
 
-> Source: [`docs/images/notes`](../images/notes)
+> Source: [`docs/images/notes`](../../images/notes)
 
 ## tools/__init__.py
 

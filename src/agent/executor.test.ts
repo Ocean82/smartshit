@@ -1,6 +1,6 @@
 /**
  * Regression tests for the agent executor.
- * See docs/agent-engine-code-review.md (C2, C3, H2, H3, L1).
+ * See docs/archive/agent-engine-code-review.md (C2, C3, H2, H3, L1).
  */
 
 import { describe, it, expect } from 'vitest'

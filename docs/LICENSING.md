@@ -1,7 +1,7 @@
 # Licensing — resolved
 
 **Status:** resolved (2026-07).
-**Original issue:** `docs/repo-assessment-2026-07-24.md`, item P2-2.
+**Original issue:** `docs/archive/repo-assessment-2026-07-24.md`, item P2-2.
 
 ---
 

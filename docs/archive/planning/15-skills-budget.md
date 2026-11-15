@@ -2,7 +2,7 @@
 
 > Budget-specific analysis and recommendations.
 
-> Source: [`docs/images/notes`](../images/notes)
+> Source: [`docs/images/notes`](../../images/notes)
 
 ## skills/budget.py
 

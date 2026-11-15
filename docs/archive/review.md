@@ -47,7 +47,7 @@ I now have a complete, verified picture. Here's the full review.
 ### Hygiene
 
 - **Committed env files with real identifiers:** `server/.env.production` contains a real RDS hostname and S3 bucket; docs leak the EC2 IP (`52.0.207.242`); `.env.example` embeds a live Stripe price ID. Publishable keys and price IDs aren't secrets, but the DB host, bucket, and server IP are reconnaissance data in a public MIT repo.
-- **Doc drift everywhere:** DEPLOY.md documents a schema that doesn't match the actual migrations; `docs/planning/25-cloud-infrastructure-plan.md` says "planning" for shipped code; ENV.md says `FREE_DAILY_LIMIT` is unused (it is used); SEO doc says OG images/CSP are missing (they exist). Also a hardcoded **test-mode Stripe price fallback** in `config.ts:173` could break live checkout if the env var is missed.
+- **Doc drift everywhere:** DEPLOY.md documents a schema that doesn't match the actual migrations; `docs/archive/planning/25-cloud-infrastructure-plan.md` says "planning" for shipped code; ENV.md says `FREE_DAILY_LIMIT` is unused (it is used); SEO doc says OG images/CSP are missing (they exist). Also a hardcoded **test-mode Stripe price fallback** in `config.ts:173` could break live checkout if the env var is missed.
 - Dead code: `src/server/api/grid-data.ts` always 401s (no auth header); duplicate usage tracking lives in both localStorage and Postgres; minor: version drift `0.1.0` vs `1.0.0`, model-name drift, orphaned `qodana.yaml`.
 
 ---

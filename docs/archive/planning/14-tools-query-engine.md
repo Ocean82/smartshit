@@ -2,7 +2,7 @@
 
 > Natural-language queries over tabular data.
 
-> Source: [`docs/images/notes`](../images/notes)
+> Source: [`docs/images/notes`](../../images/notes)
 
 ## tools/query_engine.py
 

@@ -2,7 +2,7 @@
 
 > Natural-language to structured UserIntent routing.
 
-> Source: [`docs/images/notes`](../images/notes)
+> Source: [`docs/images/notes`](../../images/notes)
 
 ## chat/intent_parser.py
 

@@ -2,7 +2,7 @@
 
 > Write and mutate spreadsheet data.
 
-> Source: [`docs/images/notes`](../images/notes)
+> Source: [`docs/images/notes`](../../images/notes)
 
 ## tools/writer.py
 

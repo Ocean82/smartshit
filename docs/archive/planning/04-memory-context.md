@@ -2,7 +2,7 @@
 
 > Conversation history, spreadsheet state, and context summaries.
 
-> Source: [`docs/images/notes`](../images/notes)
+> Source: [`docs/images/notes`](../../images/notes)
 
 ## memory/context.py
 

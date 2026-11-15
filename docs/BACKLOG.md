@@ -24,7 +24,7 @@ M 1–2 days, L more.
     `src/App.tsx` still has a comment saying the NLP worker was a stub.
   - The ONNX model upload path is still in `src/onnx/modelUploadHandler.ts` and
     `server/src/api/onnx-infer.ts`; the product audience does not bring `.onnx` files
-    (`docs/major-review.md`).
+    (`docs/archive/major-review.md`).
   - Decide per surface: ship and claim it, or delete it. Then remove any copy that
     doesn't match.
 - [x] **"Priority AI (faster models)" was sold for Pro but not built** — resolved 2026-10-09
@@ -244,7 +244,7 @@ M 1–2 days, L more.
 - [ ] **Server re-classifies every request** — M–L (chat review F10, structural part)
   - `server/src/index.ts` runs its own intent parse instead of receiving the client's mode;
     only the "blank" false positive was patched (`shared/actTemplates.ts`).
-- [ ] **Credential rotation still open** in `docs/ai-model-audit.md` — manual check, not code.
+- [ ] **Credential rotation still open** in `docs/archive/ai-model-audit.md` — manual check, not code.
 
 ## 7. Planned but never built (2026-10-09 sweep)
 
@@ -266,7 +266,7 @@ Grid and UI:
   menu, and command palette (S).
 - [ ] Guided formula builder and named formula recipes (`formula-improvements8.21.md`) (L).
 - [x] Issue count in the status bar (`planning/phase-1-implementation.md`) (S) — done 2026-11-15 (`61c94ce`; click opens the Auditor).
-- [ ] Dark mode (`review8.16.2026.md`) (M).
+- [ ] Dark mode (`archive/review8.16.2026.md`) (M).
 - [ ] Deferred by their own plans: styled xlsx export, status-bar aggregates, AutoSum that
   expands upward, header-filter search box, row auto-fit on wrap, Ctrl+Shift+M merge,
   split panes, formula-ref rewrite on cut-paste, cross-sheet cut/drag, Stripe Customer Portal.
@@ -278,7 +278,7 @@ Pricing plan leftovers (`PRICING_AND_MONETIZATION_PLAN.md`):
 Platform:
 - [ ] Native tool calling for the model (still prompt-only JSON) (L).
 - [x] Server-side Sentry and an `unhandledRejection` handler (S) — done 2026-11-15 (`082c9b2`, `a54e9e4`, `1c94f56`). Code is live but inert: production has no `SENTRY_DSN` yet (add it to the deploy `ENV` secret, not the server file).
-- [ ] Server integration/validation tests and an xlsx round-trip test (`architecture-fix-plan.md`) (M).
+- [ ] Server integration/validation tests and an xlsx round-trip test (`archive/architecture-fix-plan.md`) (M).
 - [ ] LRU eviction of local workbooks (`persistence-hardening-followups.md` item 1) (M; low
   value now that IndexedDB is the main store).
 - [ ] Mobile cell editing: no hidden-input / `inputMode` handling; confirm on a device (S–M).

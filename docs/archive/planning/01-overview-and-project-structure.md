@@ -2,7 +2,7 @@
 
 > High-level package layout for the Spreadsheet Brain system.
 
-> Source: [`docs/images/notes`](../images/notes)
+> Source: [`docs/images/notes`](../../images/notes)
 
 # Spreadsheet Brain - Agent Tools & Skills System
 

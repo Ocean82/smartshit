@@ -1,7 +1,5 @@
 ﻿# Planning Documents
 
-These documents describe the technical architecture of smartsh!t's internal systems.
-
 > **Living forward plan:** [`docs/strategy/2026-09-24-usefulness-first-strategy.md`](../strategy/2026-09-24-usefulness-first-strategy.md)  
 > Useful first, unique second. P0 complete; formatting sandbox is P1.
 
@@ -24,40 +22,19 @@ inspectors, and proactive insights that surface automatically.
 
 ---
 
-## Document Index
+## What is here
 
-| # | Document | What It Covers |
-|---|----------|---------------|
-| 01 | Overview & Project Structure | File layout and module responsibilities |
-| 02 | Requirements & Config | Environment variables, dependencies |
-| 03 | Data Models | TypeScript types for cells, sheets, workbooks |
-| 04 | Memory Context | How the AI sees the spreadsheet state |
-| 05 | Memory Sheet State | Sheet snapshot construction |
-| 06 | Chat Intent Parser | NL → intent classification (now PipelineRouter) |
-| 07 | Chat Response Builder | Structured results → user-facing messages |
-| 08 | Tools: Reader | Read-only analysis tools |
-| 09 | Tools: Analyzer | Statistical analysis pipeline |
-| 10 | Tools: Writer | Cell mutation tools |
-| 11 | Tools: Formatter | Formatting/conditional formatting |
-| 12 | Tools: Formula Engine | Formualizer integration |
-| 13 | Tools: Chart Engine | Chart creation |
-| 14 | Tools: Query Engine | Data querying (top N, filter, compare) |
-| 15 | Skills: Budget | Budget-specific analysis |
-| 16 | Skills: Cleaning | Data cleaning operations |
-| 17 | Skills: Reporting | Report generation |
-| 18 | Package Exports | Module boundary design |
-| 19 | Brain Orchestrator | Message routing (deprecated — replaced by PipelineRouter) |
-| 20 | Integration Example | End-to-end flow walkthrough |
-| 21 | Architecture Overview | System architecture diagram |
-| 22 | Gap Analysis | What's missing vs. the vision |
-| 23 | Implementation Roadmap | Phased build plan (technical) |
-| 24 | Chat System Improvements | LLM intent parsing, clarification, feedback |
-| 25 | Cloud Infrastructure | Deployment, scaling, Postgres plans |
+| Document | Status |
+|----------|--------|
+| [Phase 1 implementation](phase-1-implementation.md) | Proactive intelligence and the panel rail. Largely shipped (audit on import, status-bar issue count). Checkboxes were not kept up to date. |
+| [SEO, paywall and polish](22-seo-paywall-polish.md) | Production-readiness assessment with action items. Partly open. |
 
----
+## Archived
+
+The rest of this folder (the numbered `01`–`25` specs, the gap analysis, the implementation roadmap, the chat-system and cloud plans) is historical and now lives in [`../archive/planning/`](../archive/planning/). The `01`–`21` documents are a Python "Spreadsheet Brain" spec that the TypeScript brain layer did not follow literally. See [`../ARCHIVE.md`](../ARCHIVE.md) for what each one was and why it was retired.
 
 ## Related Docs
 
 - [Product Roadmap](../project_outline/roadmap-v1.md) — what we're building and when
 - [Product Vision](../project_outline/outline.md) — why this exists and who it's for
-- [Auditor Plans](../auditor/auditor-plans.md) — the formula auditor architecture
+- [Auditor plans (archived)](../archive/auditor/auditor-plans.md) — the original formula auditor design; the auditor has shipped

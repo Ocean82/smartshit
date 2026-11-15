@@ -2,7 +2,7 @@
 
 > Pattern detection, statistics, and insights.
 
-> Source: [`docs/images/notes`](../images/notes)
+> Source: [`docs/images/notes`](../../images/notes)
 
 ## tools/analyzer.py
 

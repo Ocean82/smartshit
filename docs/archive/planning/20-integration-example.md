@@ -2,7 +2,7 @@
 
 > How an external agent calls brain.process().
 
-> Source: [`docs/images/notes`](../images/notes)
+> Source: [`docs/images/notes`](../../images/notes)
 
 ## Integration Example — How Your Agent Uses It
 

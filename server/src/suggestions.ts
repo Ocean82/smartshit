@@ -4,7 +4,7 @@ import type { IntentType } from '../../shared/intentTypes.js'
  * Suggestion engine — token-overlap scoring against a curated action bank,
  * enhanced with contextual awareness when spreadsheet context is available.
  * Optional future work: vector embeddings for semantic similarity
- * (see docs/planning/24-chat-system-improvements.md Phase 4).
+ * (see docs/archive/planning/24-chat-system-improvements.md Phase 4).
  */
 
 interface SuggestionEntry {

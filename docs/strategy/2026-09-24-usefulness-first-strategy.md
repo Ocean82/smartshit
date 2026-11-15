@@ -129,6 +129,6 @@ Same executor spine. No new agent runtime.
 
 - Open work outside this plan: [`docs/BACKLOG.md`](../BACKLOG.md)  
 - Planning priorities: [`docs/planning/README.md`](../planning/README.md)  
-- Formatter sketch: [`docs/planning/11-tools-formatter.md`](../planning/11-tools-formatter.md)  
+- Formatter sketch: [`docs/archive/planning/11-tools-formatter.md`](../archive/planning/11-tools-formatter.md)  
 - Engine gaps: [`docs/formualizer-gaps.md`](../formualizer-gaps.md)  
 - Archived reviews: [`docs/ARCHIVE.md`](../ARCHIVE.md)

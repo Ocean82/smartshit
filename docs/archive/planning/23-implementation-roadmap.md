@@ -2,9 +2,9 @@
 
 > **Status:** Implemented 2026-07-07. All phases 0–7 landed with tests passing.
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement phase-by-phase. Save artifact to [`docs/planning/23-implementation-roadmap.md`](docs/planning/23-implementation-roadmap.md) after approval.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement phase-by-phase. Save artifact to [`docs/archive/planning/23-implementation-roadmap.md`](docs/archive/planning/23-implementation-roadmap.md) after approval.
 
-**Goal:** Make smartsh!t genuinely useful for real users—import a budget, ask questions, get specific financial advice, query/filter data, and apply safe sheet changes—by closing gaps identified in [`docs/planning/22-gap-analysis-smartshit.md`](docs/planning/22-gap-analysis-smartshit.md).
+**Goal:** Make smartsh!t genuinely useful for real users—import a budget, ask questions, get specific financial advice, query/filter data, and apply safe sheet changes—by closing gaps identified in [`docs/archive/planning/22-gap-analysis-smartshit.md`](docs/archive/planning/22-gap-analysis-smartshit.md).
 
 **Architecture:** Keep Formualizer + Zustand client-side; add a TypeScript "brain" layer (`src/ai/`) with shared types, tools, and skills. Server continues LLM routing via [`server/src/index.ts`](server/src/index.ts); deterministic analysis runs on the client where computed values live. Port **interfaces and behavior** from planning docs, not pandas/openpyxl.
 
@@ -59,7 +59,7 @@ flowchart LR
 
 **Create:** [`src/ai/types.ts`](src/ai/types.ts)
 
-Port from [`docs/planning/03-data-models.md`](docs/planning/03-data-models.md):
+Port from [`docs/archive/planning/03-data-models.md`](docs/archive/planning/03-data-models.md):
 
 - `IntentType` enum (READ, ANALYZE, FILTER, SORT, BUDGET, REPORT, CLEAN, …)
 - `ColumnRole` enum (CATEGORY, AMOUNT, DATE, …)
@@ -73,7 +73,7 @@ Port from [`docs/planning/03-data-models.md`](docs/planning/03-data-models.md):
 
 **Modify:** [`server/src/config.ts`](server/src/config.ts) + new [`src/ai/config.ts`](src/ai/config.ts)
 
-Add limits from [`docs/planning/02-requirements-and-config.md`](docs/planning/02-requirements-and-config.md):
+Add limits from [`docs/archive/planning/02-requirements-and-config.md`](docs/archive/planning/02-requirements-and-config.md):
 
 - `maxRowsPreview: 25`, `maxRowsAnalysis: 10000`
 - `outlierStdThreshold: 2.5`
@@ -106,7 +106,7 @@ Map server `ChatResponseBody` → client `ChatMessage` with optional `suggestion
 
 **Outcome:** "Show top 5 expenses in column B" extracts intent + targets, not just mode.
 
-**Spec reference:** [`docs/planning/06-chat-intent-parser.md`](docs/planning/06-chat-intent-parser.md)
+**Spec reference:** [`docs/archive/planning/06-chat-intent-parser.md`](docs/archive/planning/06-chat-intent-parser.md)
 
 ### 1.1 Create intent parser
 
@@ -140,7 +140,7 @@ Map server `ChatResponseBody` → client `ChatMessage` with optional `suggestion
 
 **Outcome:** "Where am I losing money?" and "How much should I save?" return specific numbers without relying solely on LLM improvisation.
 
-**Spec reference:** [`docs/planning/15-skills-budget.md`](docs/planning/15-skills-budget.md), [`docs/planning/09-tools-analyzer.md`](docs/planning/09-tools-analyzer.md)
+**Spec reference:** [`docs/archive/planning/15-skills-budget.md`](docs/archive/planning/15-skills-budget.md), [`docs/archive/planning/09-tools-analyzer.md`](docs/archive/planning/09-tools-analyzer.md)
 
 ### 2.1 Sheet profiling
 
@@ -183,7 +183,7 @@ Port core behaviors from spec:
 
 **Outcome:** Arbitrary top-N, filter, and sort requests without new templates.
 
-**Spec reference:** [`docs/planning/14-tools-query-engine.md`](docs/planning/14-tools-query-engine.md)
+**Spec reference:** [`docs/archive/planning/14-tools-query-engine.md`](docs/archive/planning/14-tools-query-engine.md)
 
 ### 3.1 Query engine (client-side)
 
@@ -205,7 +205,7 @@ Return `ToolResult` with tabular `data` (rows as string[][]).
 - [`server/src/index.ts`](server/src/index.ts) — when `UserIntent` is FILTER/SORT/CALCULATE and mode is explain/chat, run query on client OR return structured query spec for client execution
 - [`src/store/useStore.ts`](src/store/useStore.ts) — pre-LLM hook: if intent is query-like, run `queryEngine` and attach results to context
 
-**Create:** [`src/ai/responseBuilder.ts`](src/ai/responseBuilder.ts) — format query results as markdown tables (port from [`docs/planning/07-chat-response-builder.md`](docs/planning/07-chat-response-builder.md))
+**Create:** [`src/ai/responseBuilder.ts`](src/ai/responseBuilder.ts) — format query results as markdown tables (port from [`docs/archive/planning/07-chat-response-builder.md`](docs/archive/planning/07-chat-response-builder.md))
 
 **Tests:** [`src/ai/queryEngine.test.ts`](src/ai/queryEngine.test.ts)
 
@@ -221,7 +221,7 @@ Return `ToolResult` with tabular `data` (rows as string[][]).
 
 **Outcome:** User can attach a file in chat and ask about it before overwriting the workbook.
 
-**Spec reference:** AI Brain Phase 2 + [`docs/planning/08-tools-reader.md`](docs/planning/08-tools-reader.md)
+**Spec reference:** AI Brain Phase 2 + [`docs/archive/planning/08-tools-reader.md`](docs/archive/planning/08-tools-reader.md)
 
 ### 4.1 Chat upload UI
 
@@ -251,7 +251,7 @@ Return `ToolResult` with tabular `data` (rows as string[][]).
 
 **Outcome:** Consistent, readable answers; better multi-turn context.
 
-**Spec reference:** [`docs/planning/04-memory-context.md`](docs/planning/04-memory-context.md), [`docs/planning/07-chat-response-builder.md`](docs/planning/07-chat-response-builder.md)
+**Spec reference:** [`docs/archive/planning/04-memory-context.md`](docs/archive/planning/04-memory-context.md), [`docs/archive/planning/07-chat-response-builder.md`](docs/archive/planning/07-chat-response-builder.md)
 
 ### 5.1 Response builder integration
 
@@ -272,7 +272,7 @@ Return `ToolResult` with tabular `data` (rows as string[][]).
 
 ## Phase 6 — Additional skills + skill cleanup (Week 5, ~4 days)
 
-**Spec reference:** [`docs/planning/16-skills-cleaning.md`](docs/planning/16-skills-cleaning.md), [`docs/planning/17-skills-reporting.md`](docs/planning/17-skills-reporting.md)
+**Spec reference:** [`docs/archive/planning/16-skills-cleaning.md`](docs/archive/planning/16-skills-cleaning.md), [`docs/archive/planning/17-skills-reporting.md`](docs/archive/planning/17-skills-reporting.md)
 
 ### 6.1 Cleaning skill
 
@@ -310,7 +310,7 @@ Either implement or remove:
 
 **Outcome:** Single entry point matching spec mental model; easier testing and future agent integration.
 
-**Spec reference:** [`docs/planning/19-brain-orchestrator.md`](docs/planning/19-brain-orchestrator.md), [`docs/planning/20-integration-example.md`](docs/planning/20-integration-example.md)
+**Spec reference:** [`docs/archive/planning/19-brain-orchestrator.md`](docs/archive/planning/19-brain-orchestrator.md), [`docs/archive/planning/20-integration-example.md`](docs/archive/planning/20-integration-example.md)
 
 ### 7.1 Client brain facade
 

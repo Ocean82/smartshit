@@ -1,5 +1,5 @@
 /**
- * Config resolution tests — see docs/repo-assessment-2026-07-24.md (P0-2, P1-3).
+ * Config resolution tests — see docs/archive/repo-assessment-2026-07-24.md (P0-2, P1-3).
  */
 
 import fs from 'node:fs'

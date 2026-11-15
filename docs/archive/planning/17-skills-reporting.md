@@ -2,7 +2,7 @@
 
 > Report generation from spreadsheet data.
 
-> Source: [`docs/images/notes`](../images/notes)
+> Source: [`docs/images/notes`](../../images/notes)
 
 ## skills/reporting.py
 

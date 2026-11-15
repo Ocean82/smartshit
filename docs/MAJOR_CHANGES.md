@@ -4,6 +4,24 @@ Substantive architectural or behavioral changes that affect how the app works, d
 
 ---
 
+## 2026-11-15 — Style requests no longer restyle the whole sheet; docs archived
+
+### "Highlight rent" used to recolour every cell (fixed)
+- **Symptom:** asking chat to highlight one thing could colour every populated cell and report success. Reproduced: an unscoped `format_cells` (no `range`, no `condition`) with nothing selected formatted 40 of 40 cells. With a cursor on A1 it coloured A1, the wrong cell.
+- **Cause:** the server's act templates (`shared/actTemplates.ts`) turned any "highlight …" they could not otherwise map into `format_cells {bgColor}` with no scope, and `applyFormatCells` widened an unscoped style to the whole sheet. The server returns that template without calling the LLM.
+- **Now:**
+  - An omitted `range` means **the selection only**. With no selection the tool asks "Which cells should I format?". Whole-sheet styling is explicit: `range: "all"` (tool registry and `FormatCellsParams` updated).
+  - The templates map an explicit cell, range, column, row, header, or "all", or a literal after *says / named / called*. A target they cannot map ("highlight rent", "highlight duplicates", "highlight the total") is deferred to the LLM, which sees the sheet. Font-colour requests are scoped the same way.
+  - A message that opens with highlight / colour / bold no longer matches the SUM / MAX / budget / `clear_sheet` rules ("highlight the total" wrote a SUM, "highlight empty cells" proposed `clear_sheet`).
+  - `clear_sheet` no longer matches part-of-sheet requests ("clear cell B2", "show empty cells"). "clear all cells" and "clear the whole sheet" still do.
+- **Behaviour change:** "make everything bold" and "change all text to red" now set `range: "all"` instead of relying on an empty selection. A bare "change the text to red" with nothing selected asks which cells.
+- **Not covered:** how well a real model handles the deferred prompts. That needs a live LLM (see `verification-backlog.md`).
+
+### Docs
+- 46 completed, superseded or historical docs moved to `docs/archive/` with `git mv` (history kept), links and code-comment pointers repaired, `ARCHIVE.md` rewritten. `docs/superpowers/` is gitignored and was left as is.
+
+---
+
 ## 2026-11-13 — Local Ollama fallback dropped; install dedup migration; prod cleanup
 
 **Context:** A production review over SSH of env files, logs, the database and the local model. Changes made 2026-11-13 and 2026-11-14 (UTC).
@@ -43,7 +61,7 @@ Substantive architectural or behavioral changes that affect how the app works, d
 
 ## 2026-08-09 — Major Review Remediation (7 Tasks)
 
-**Context:** Systematic pass through findings in `docs/major-review.md`. All 1482 tests pass (1270 client + 212 server).
+**Context:** Systematic pass through findings in `docs/archive/major-review.md`. All 1482 tests pass (1270 client + 212 server).
 
 ### Ollama Model Consolidation
 - Removed the deprecated `smartsht-assist` model entirely (code, config, env vars, Modelfile, setup script)

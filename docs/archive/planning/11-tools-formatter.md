@@ -2,7 +2,7 @@
 
 > Cell and sheet formatting operations.
 
-> Source: [`docs/images/notes`](../images/notes)
+> Source: [`docs/images/notes`](../../images/notes)
 
 ## tools/formatter.py
 

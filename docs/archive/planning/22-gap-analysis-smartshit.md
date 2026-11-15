@@ -2,7 +2,7 @@
 
 > **Superseded status (2026-07-11):** Core brain roadmap phases 0–7 landed 2026-07-07. Format Panel + toolbar Sort/Filter/Conditional Format landed 2026-07-11. Treat the tables below as historical snapshot; remaining gaps are primarily: inventory skill, optional vector embeddings, collaborative editing, and deep analyzer polish (outliers/trends).
 
-> Compares the reference architecture in [`docs/images/notes`](../images/notes) (extracted into `docs/planning/`) against the **current** smartsh!t TypeScript implementation as of the AI Brain Layer work.
+> Compares the reference architecture in [`docs/images/notes`](../../images/notes) (extracted into `docs/planning/`) against the **current** smartsh!t TypeScript implementation as of the AI Brain Layer work.
 
 ## Executive summary
 
@@ -26,23 +26,23 @@ smartsh!t has implemented a **thin brain layer** — mode routing, structured co
 
 | Planning concept | smartsh!t implementation | Notes |
 |------------------|---------------------------|-------|
-| Intent-based routing | [`server/src/mode.ts`](../../server/src/mode.ts), [`src/ai/mode.ts`](../../src/ai/mode.ts) | Modes: `explain`, `advise`, `act`, `help`, `chat` |
+| Intent-based routing | [`server/src/mode.ts`](../../../server/src/mode.ts), [`src/ai/mode.ts`](../../../src/ai/mode.ts) | Modes: `explain`, `advise`, `act`, `help`, `chat` |
 | Question beats action | `classifyMode()` priority rules | Fixes "explain my expenses" → creation bug |
-| Explain path (no tools) | [`buildExplainPrompt()`](../../server/src/prompt.ts) in [`server/src/index.ts`](../../server/src/index.ts) | LLM-only, `actions: []` |
-| Action path (tools JSON) | [`buildActionPrompt()`](../../server/src/prompt.ts) + [`resolveIntent()`](../../server/src/intent.ts) | Template fast-path for `act` mode |
-| Rich context | [`src/ai/buildContext.ts`](../../src/ai/buildContext.ts) | Headers, sample rows, dimensions, selection |
-| Sheet insights | [`src/ai/sheetInsights.ts`](../../src/ai/sheetInsights.ts) | Category totals, top expenses, variances, cashflow |
-| Post-import awareness | [`importWorkbook()`](../../src/store/useStore.ts), [`Toolbar.tsx`](../../src/components/Toolbar.tsx) | Assistant message after xlsx/csv import |
-| Tests | [`server/src/mode.test.ts`](../../server/src/mode.test.ts), [`server/src/intent.test.ts`](../../server/src/intent.test.ts) | 12 tests passing |
+| Explain path (no tools) | [`buildExplainPrompt()`](../../../server/src/prompt.ts) in [`server/src/index.ts`](../../../server/src/index.ts) | LLM-only, `actions: []` |
+| Action path (tools JSON) | [`buildActionPrompt()`](../../../server/src/prompt.ts) + [`resolveIntent()`](../../../server/src/intent.ts) | Template fast-path for `act` mode |
+| Rich context | [`src/ai/buildContext.ts`](../../../src/ai/buildContext.ts) | Headers, sample rows, dimensions, selection |
+| Sheet insights | [`src/ai/sheetInsights.ts`](../../../src/ai/sheetInsights.ts) | Category totals, top expenses, variances, cashflow |
+| Post-import awareness | [`importWorkbook()`](../../../src/store/useStore.ts), [`Toolbar.tsx`](../../../src/components/Toolbar.tsx) | Assistant message after xlsx/csv import |
+| Tests | [`server/src/mode.test.ts`](../../../server/src/mode.test.ts), [`server/src/intent.test.ts`](../../../server/src/intent.test.ts) | 12 tests passing |
 
 ### Existing product capabilities (pre-brain)
 
 | Capability | Location |
 |------------|----------|
-| Spreadsheet engine | [`src/engine/spreadsheet.ts`](../../src/engine/spreadsheet.ts) (Formualizer) |
-| xlsx/csv I/O | [`src/io/xlsx.ts`](../../src/io/xlsx.ts) |
-| Template creation actions | [`src/store/useStore.ts`](../../src/store/useStore.ts) `executeAction()` |
-| LLM providers (Groq, OpenRouter, HF, Ollama) | [`server/src/index.ts`](../../server/src/index.ts) |
+| Spreadsheet engine | [`src/engine/spreadsheet.ts`](../../../src/engine/spreadsheet.ts) (Formualizer) |
+| xlsx/csv I/O | [`src/io/xlsx.ts`](../../../src/io/xlsx.ts) |
+| Template creation actions | [`src/store/useStore.ts`](../../../src/store/useStore.ts) `executeAction()` |
+| LLM providers (Groq, OpenRouter, HF, Ollama) | [`server/src/index.ts`](../../../server/src/index.ts) |
 | Skill chips (UI prompts) | [`src/data/skills.ts`](../../src/data/skills.ts) |
 
 ---
@@ -54,7 +54,7 @@ smartsh!t has implemented a **thin brain layer** — mode routing, structured co
 | Spec section | Status | Gap |
 |--------------|--------|-----|
 | [01 Overview & structure](01-overview-and-project-structure.md) | Partial | No `brain/` package; logic split across `server/` and `src/ai/` |
-| [02 Requirements & config](02-requirements-and-config.md) | Partial | [`server/src/config.ts`](../../server/src/config.ts) has LLM config only; no analysis limits (`max_rows_analysis`, outlier thresholds) |
+| [02 Requirements & config](02-requirements-and-config.md) | Partial | [`server/src/config.ts`](../../../server/src/config.ts) has LLM config only; no analysis limits (`max_rows_analysis`, outlier thresholds) |
 | [03 Data models](03-data-models.md) | Missing | No `IntentType`, `ColumnRole`, `SheetProfile`, `ToolResult`, `UserIntent` TS types |
 
 **Recommendation:** Add shared types in `src/ai/types.ts` (or `shared/`) mirroring spec models — even if not all are used yet.
@@ -67,7 +67,7 @@ smartsh!t has implemented a **thin brain layer** — mode routing, structured co
 |--------------|--------|-----|
 | [04 Conversation context](04-memory-context.md) | Partial | Chat history in Zustand (`messages[]`); no `tool_used` / `tool_result` on turns |
 | [05 Sheet state manager](05-memory-sheet-state.md) | Partial | Workbook undo/redo exists; no AI-mutation snapshots separate from manual edits |
-| `get_context_summary()` | Partial | [`buildSpreadsheetContext()`](../../src/ai/buildContext.ts) sends structured JSON; no session metadata or pending clarification queue |
+| `get_context_summary()` | Partial | [`buildSpreadsheetContext()`](../../../src/ai/buildContext.ts) sends structured JSON; no session metadata or pending clarification queue |
 
 **Recommendation:** Extend `ChatMessage` with optional `toolUsed` and `insightsSnapshot`. Call `pushHistory()` before every `applyAction()`.
 
@@ -95,8 +95,8 @@ smartsh!t has implemented a **thin brain layer** — mode routing, structured co
 
 | Spec tool | smartsh!t equivalent | Status |
 |-----------|---------------------|--------|
-| [08 Reader](08-tools-reader.md) | [`importWorkbookFromFile()`](../../src/io/xlsx.ts) | Partial — loads file, no `SheetProfile` or purpose detection |
-| [09 Analyzer](09-tools-analyzer.md) | [`sheetInsights.ts`](../../src/ai/sheetInsights.ts) | Partial — basic stats only; no outliers, trends, correlations, purpose detection |
+| [08 Reader](08-tools-reader.md) | [`importWorkbookFromFile()`](../../../src/io/xlsx.ts) | Partial — loads file, no `SheetProfile` or purpose detection |
+| [09 Analyzer](09-tools-analyzer.md) | [`sheetInsights.ts`](../../../src/ai/sheetInsights.ts) | Partial — basic stats only; no outliers, trends, correlations, purpose detection |
 | [10 Writer](10-tools-writer.md) | `bulkSetCells`, `setCellValue`, `executeAction` | Partial — template writes work; no generic cell/range writer API |
 | [11 Formatter](11-tools-formatter.md) | `setCellFormat`, `format_cells` action | Partial — limited formatting vs spec |
 | [12 Formula engine](12-tools-formula-engine.md) | Formualizer + `apply_formula` action | Partial — SUM/AVG/MAX/MIN/COUNT columns only |

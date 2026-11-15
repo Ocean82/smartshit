@@ -181,7 +181,7 @@ Zero component tests (no React Testing Library), zero tests on the Formualizer w
 
 ## 5. Documentation & Product
 
-Documentation is a genuine strength and, unusually, an over-investment. 106 markdown files including 27 numbered planning docs, `PRODUCT.md` (with an articulated brand voice — "punk-in-a-jacket" — and an explicit anti-reference list), `DESIGN.md`, `CONTRIBUTING.md`, issue templates, an ENV matrix, and a naming-conventions doc. `docs/architecture-fix-plan.md` tracks prior review findings with checkboxes, and I verified the Phase-1 items (ErrorBoundary, Zod validation) are actually implemented — the docs are honest, not aspirational.
+Documentation is a genuine strength and, unusually, an over-investment. 106 markdown files including 27 numbered planning docs, `PRODUCT.md` (with an articulated brand voice — "punk-in-a-jacket" — and an explicit anti-reference list), `DESIGN.md`, `CONTRIBUTING.md`, issue templates, an ENV matrix, and a naming-conventions doc. `docs/archive/architecture-fix-plan.md` tracks prior review findings with checkboxes, and I verified the Phase-1 items (ErrorBoundary, Zod validation) are actually implemented — the docs are honest, not aspirational.
 
 The README is genuinely good: clear problem statement, a feature table, an ASCII architecture diagram, a copy-pasteable quick start, and a screenshot. It would land well on Hacker News.
 

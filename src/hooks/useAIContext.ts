@@ -5,7 +5,7 @@
  * It assembles real-time state from the Zustand store into the shape expected
  * by the chat API (SpreadsheetContextPayload + audit results).
  *
- * Implements the useAIContext hook described in docs/chat-prompt/chat.md.
+ * Implements the useAIContext hook described in docs/archive/chat-prompt/chat.md.
  */
 
 import { useMemo } from 'react'

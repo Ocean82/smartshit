@@ -2,7 +2,7 @@
 
 > Formula templates and generation.
 
-> Source: [`docs/images/notes`](../images/notes)
+> Source: [`docs/images/notes`](../../images/notes)
 
 ## tools/formula_engine.py
 

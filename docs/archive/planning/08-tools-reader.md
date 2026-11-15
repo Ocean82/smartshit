@@ -2,7 +2,7 @@
 
 > Read and profile spreadsheet files.
 
-> Source: [`docs/images/notes`](../images/notes)
+> Source: [`docs/images/notes`](../../images/notes)
 
 ## tools/reader.py
 

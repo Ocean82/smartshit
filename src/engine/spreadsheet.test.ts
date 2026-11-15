@@ -2,7 +2,7 @@
  * Regression tests for the calculation engine.
  *
  * These cover defects found in the 2026-07-24 review of src/engine — see
- * docs/agent-engine-code-review.md.
+ * docs/archive/agent-engine-code-review.md.
  */
 
 import { describe, it, expect, vi } from 'vitest'

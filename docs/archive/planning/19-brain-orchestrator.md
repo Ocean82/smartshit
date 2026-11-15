@@ -2,7 +2,7 @@
 
 > Main SpreadsheetBrain entry point and dispatch logic.
 
-> Source: [`docs/images/notes`](../images/notes)
+> Source: [`docs/images/notes`](../../images/notes)
 
 ## brain.py — The Main Orchestrator
 

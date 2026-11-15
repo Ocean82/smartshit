@@ -2,7 +2,7 @@
 
 > Undo/redo snapshots for spreadsheet mutations.
 
-> Source: [`docs/images/notes`](../images/notes)
+> Source: [`docs/images/notes`](../../images/notes)
 
 ## memory/sheet_state.py
 

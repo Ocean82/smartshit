@@ -2,7 +2,7 @@
 
 > Enums and dataclasses shared across tools, skills, and memory.
 
-> Source: [`docs/images/notes`](../images/notes)
+> Source: [`docs/images/notes`](../../images/notes)
 
 ## models.py
 
