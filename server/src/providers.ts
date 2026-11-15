@@ -1,6 +1,6 @@
 /**
  * LLM provider utilities — extracted to avoid circular dependencies.
- * Both index.ts and llmIntentParser.ts import from here.
+ * Imported by index.ts (and historically by the now-removed llmIntentParser.ts).
  *
  * Features:
  * - Pass jsonMode to ALL providers (not just Groq)
