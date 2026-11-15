@@ -4,6 +4,43 @@ Substantive architectural or behavioral changes that affect how the app works, d
 
 ---
 
+## 2026-11-13 — Local Ollama fallback dropped; install dedup migration; prod cleanup
+
+**Context:** A production review over SSH of env files, logs, the database and the local model. Changes made 2026-11-13 and 2026-11-14 (UTC).
+
+### Ollama removed from the chat provider order (2026-11-14)
+- `LLM_PROVIDER_ORDER` in production is now `groq,openrouter` (was `groq,openrouter,ollama`). It was changed in the GitHub `production` `ENV` secret and synced by the #85 deploy. The boot log shows `Provider order: groq -> openrouter`.
+- The `ollama` systemd service on the box is **stopped and disabled**. This frees about 4 GB of RAM on the 8 GB `t3.large`. The GGUF and the `smartshit` model registration are kept on disk.
+- **Why:** the local model could not answer within the server's 90 s Ollama timeout, so the fallback only made users wait 90 s before an error. Measured on prod (`t3.large`: 2 vCPU, 1 physical core, about 2% CPU steal, so not credit-throttled):
+  - `smartshit:latest` **is** the intended model, `Spreadsheet-RL-4B.Q4_K_M.gguf` (4.4B Qwen3, Q4_K_M, 2.7 GB on disk, about 4.1 GB loaded including the 8K-context cache).
+  - Its base is **Qwen3-4B-Thinking-2507**, a reasoning-only model. It reasons before every answer. `think:false`, `/no_think` and a prefilled empty `<think>` block all failed to stop it.
+  - Throughput is about 2.1 to 2.5 tokens/s. A reasoned answer of a few hundred tokens takes 2 to 4 minutes, and the server gives Ollama 90 s.
+  - The smallest quant in `Ocean82/Spreadsheet-RL-4B-GGUF`, Q2_K (1.8 GB), also gave no reply within 90 s with either 1 or 2 threads. Every quant in that repo has the same thinking weights. Quantization only shrinks the file, so none of them can work here.
+- **Effect:** if both Groq and OpenRouter fail, chat now returns an error right away. Health and deploy are unaffected: `/health` liveness counts Ollama only when no cloud key exists, and `/health?strict=1` checks DB, S3 and Clerk. Token budgeting already targets the first cloud provider.
+- **To restore later** (a bigger instance, or a non-thinking model): `sudo systemctl enable --now ollama`, then set `LLM_PROVIDER_ORDER=groq,openrouter,ollama` in the `ENV` secret and deploy. Retest the speed first. A non-reasoning model such as an Instruct build is needed on CPU-only hosts.
+
+### Migration 007 applied: `template_installs` (2026-11-13)
+- Added in #84 (`server/migrations/007_template_installs.sql`) and applied to production RDS with `npm run migrate`. The runner skipped 001 to 006.
+- Each user's marketplace install now counts once toward a template's public `downloads`. Before 007 existed, the route served installs without counting them, so deploying ahead of the migration was safe. No installs went uncounted: production had **0 published marketplace templates** during the gap between deploy and migration (checked 2026-11-13), so nothing needs backfilling.
+- Verified: `smartsht.migrations` lists 007; the table has PK `(user_id, template_id)` and the index `idx_template_installs_template`.
+
+### Malformed bearer token returns 401, not 500 (#85, 2026-11-14)
+- `@clerk/express` passed a `SyntaxError` to `next(err)` for undecodable tokens such as `a.b.c`. The global handler logged "Unhandled error" and answered 500.
+- `withMalformedTokenAs401` in `server/src/auth/clerk.ts` now answers 401 and records an auth denial, but only when `isUndecodableBearer` confirms the token does not decode. Other errors still reach the handler. Verified on prod: `Bearer a.b.c` → 401.
+- The Groq `max_tokens` work drafted in the same PR was **dropped**. Groq's "Request too large" 429 (OTPM 1000 on the on-demand tier, while we request 2048) is intermittent, about once a week, and already falls over. Skipping or clamping Groq would have moved all chat to OpenRouter or streamed cut-off answers.
+
+### Production `.env` backups cleaned up (2026-11-13)
+- Seven old, unrotated backups in `/opt/smartsht/` were removed after being copied off-box and checksum-verified: `.env.bak-2026090*`, `-dbuser-`, `-model-`, `-rds-`, `-rename-` and `-tidy-`. The ten rotating `.env.bak-gha-*` backups made by the deploy workflow remain.
+- **Follow-ups (owner):** rotate any credentials in those old files that may still be valid, then delete the archive. Move the stray database-admin credentials file the app does not use off the host into a password manager or AWS Secrets Manager. The path is deliberately not listed here because this repo is public.
+
+### Notes for the record
+- The running API loads `server/dist/server/.env`, a **symlink** to `/opt/smartsht/.env`, which is written from the GitHub `ENV` secret on each deploy. `server/.env` is a separate **copy** that `deploy.sh` refreshes only when the shared file is newer, so an edit to `server/.env` does not change the running config. Treat `/opt/smartsht/.env` (and the `ENV` secret) as the only source. The repo's `server/.env.production` is a placeholder template and is not used at runtime.
+- **Open security item:** production database TLS is **not verified**. `db.ts` sets `rejectUnauthorized: true`, but the URL's `sslmode=require` overrides it in `pg` 8.22. Both the API and `run-migration.mjs` accept any RDS certificate, and the host has no RDS CA bundle. Measured on prod 2026-11-14: the connection succeeds with `SELF_SIGNED_CERT_IN_CHAIN` unverified. The fix (pin the AWS RDS CA bundle and verify) changes the production DB connection and is tracked separately.
+- `/opt/smartsht/logs/error.log` and `out.log` date from September. Live logs are in `~/.pm2/logs/smartsht-api-*.log`. The `ERR_MODULE_NOT_FOUND …/home/ubuntu/smartsht/…` and `ollama.js … assistModelAvailable` errors there come from an old checkout that no longer exists.
+- Open, not addressed: one Stripe webhook signature failure on 2026-11-05 08:03 UTC. Check Stripe's delivery log for a dropped event.
+
+---
+
 ## 2026-08-09 — Major Review Remediation (7 Tasks)
 
 **Context:** Systematic pass through findings in `docs/major-review.md`. All 1482 tests pass (1270 client + 212 server).
@@ -154,4 +191,4 @@ sudo cp dist/index.html /var/www/smartsht/app/index.html
 **What's NOT automated:**
 - No CI/CD pipeline deploys to production automatically. Push to `main` triggers GitHub Actions (lint + build check) but deploy is manual SSH.
 - No staging environment. Changes are verified locally then deployed directly.
-- No database migrations runner. Schema changes to the PostgreSQL database (cloud workbooks, usage tracking) are applied manually.
+- No database migrations runner. Schema changes to the PostgreSQL database (cloud workbooks, usage tracking) are applied manually. *(Superseded: `server/scripts/run-migration.mjs` (`npm run migrate`) now tracks applied files in `smartsht.migrations`; still run by hand after deploy. Noted 2026-11-13.)*
