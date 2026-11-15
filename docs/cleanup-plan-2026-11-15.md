@@ -13,7 +13,7 @@
 - `tsc --noEmit`: clean (root and `server/`).
 - `npm test`: 6 failing files / 32 failing tests, all pre-existing and **network/Clerk-dependent** (cloudSync, serverHealth, useSubscriptionStatus, sendMessage, startCheckout, useAutoFixGate). None caused by this pass; they need Clerk keys / a running server to pass. Investigate separately.
 - `npm run test:realengine`: 2 files / 32 tests pass.
-- `npm test --prefix server`: 51 files / 680 tests pass.
+- `npm test --prefix server`: 52 files / 688 tests pass.
 
 ## Remaining backlog (docs/BACKLOG.md, 42 open) — triaged
 
@@ -22,9 +22,9 @@
 - #176 Audit findings in inspector — per-cell findings via `findingsForCell`, severity pill + link to Auditor.
 - #177 Top categories on import card — top 3 from `insights.categoryTotals`.
 - #182 Import warning for formulas engine gets wrong — verified against 0.9.3; warns only for #312 date arithmetic, #283 approximate lookups, #295 `~`/`_`/`%` criteria.
-- #183 Engine golden tests for upstream issues — `src/engine/knownGaps.realengine.test.ts` (18 assertions incl. verified workarounds).
+- #183 Engine golden tests for upstream issues — `src/engine/knownGaps.realengine.test.ts` (19 tests incl. verified workarounds).
 - #268 Issue count in status bar — fresh-audit only, click opens Auditor.
-- #280 Server-side Sentry + handlers — `SENTRY_DSN`-gated, 5xx + uncaught exceptions, `unhandledRejection` logged without killing the API.
+- #280 Server-side Sentry + handlers — `SENTRY_DSN`-gated; captures the Express 5xx handler, every route 500 that goes through `sendServerError`, checkout failures, and uncaught exceptions. `unhandledRejection` is logged without killing the API.
 - #294 Ollama Modelfile tool-list drift — `server/src/modelfiles.test.ts` validates all three Modelfiles against `shared/toolRegistry.ts`.
 
 ### Tier 2 — medium, contained
