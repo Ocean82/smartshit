@@ -9,9 +9,9 @@ import type { AuditResult } from '@/auditor/types'
 /** Health badge colour for an audit score (green ≥90, amber ≥70, red below). */
 export function auditBadgeColor(score: number, stale: boolean): string {
   if (stale) return 'var(--neutral-300)'
-  if (score >= 90) return 'var(--success, #16a34a)'
-  if (score >= 70) return 'var(--warning, #d97706)'
-  return 'var(--danger, #dc2626)'
+  if (score >= 90) return 'var(--success)'
+  if (score >= 70) return 'var(--warning)'
+  return 'var(--error)'
 }
 
 export function auditBadgeTitle(result: AuditResult, stale: boolean): string {

@@ -30,7 +30,7 @@ describe('audit badge helpers', () => {
     expect(auditBadgeColor(90, false)).toContain('success')
     expect(auditBadgeColor(89, false)).toContain('warning')
     expect(auditBadgeColor(70, false)).toContain('warning')
-    expect(auditBadgeColor(69, false)).toContain('danger')
+    expect(auditBadgeColor(69, false)).toContain('error')
   })
 
   it('greys out a stale audit regardless of score', () => {

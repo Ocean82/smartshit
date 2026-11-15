@@ -169,7 +169,7 @@ export function StatusBar() {
             type="button"
             onClick={() => setActivePanel('auditor')}
             className="inline-flex items-center gap-1 rounded px-1 transition-colors hover:bg-black/5"
-            style={{ color: auditIssueCount === 0 ? 'var(--success)' : 'var(--danger, #dc2626)' }}
+            style={{ color: auditIssueCount === 0 ? 'var(--success)' : 'var(--error)' }}
             title="Open the Auditor panel"
           >
             <ShieldCheck size={11} />
