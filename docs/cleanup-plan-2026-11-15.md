@@ -10,20 +10,22 @@
 - Repo now clean on `main` at `ba29ed7` (+ merge `0193480`/`5f54ebb`).
 
 ## Verification
-- `tsc --noEmit`: clean.
+- `tsc --noEmit`: clean (root and `server/`).
 - `npm test`: 6 failing files / 32 failing tests, all pre-existing and **network/Clerk-dependent** (cloudSync, serverHealth, useSubscriptionStatus, sendMessage, startCheckout, useAutoFixGate). None caused by this pass; they need Clerk keys / a running server to pass. Investigate separately.
+- `npm run test:realengine`: 2 files / 32 tests pass.
+- `npm test --prefix server`: 51 files / 680 tests pass.
 
 ## Remaining backlog (docs/BACKLOG.md, 42 open) — triaged
 
-### Tier 1 — small, low-risk, do next
-- #174 Health badge on sheet tabs (S)
-- #176 Audit findings in inspector (S)
-- #177 Top categories on import card (S, data computed)
-- #182 Import warning for formulas engine gets wrong (S)
-- #183 Engine golden tests for upstream issues (S)
-- #268 Issue count in status bar (S)
-- #280 Server-side Sentry + unhandledRejection handler (S)
-- #294 Ollama Modelfile* tool-list drift (ops)
+### Tier 1 — DONE 2026-11-15
+- #174 Health badge on sheet tabs — per-sheet audit map (`auditResultsBySheet`), green/amber/red dot, greyed when stale.
+- #176 Audit findings in inspector — per-cell findings via `findingsForCell`, severity pill + link to Auditor.
+- #177 Top categories on import card — top 3 from `insights.categoryTotals`.
+- #182 Import warning for formulas engine gets wrong — verified against 0.9.3; warns only for #312 date arithmetic, #283 approximate lookups, #295 `~`/`_`/`%` criteria.
+- #183 Engine golden tests for upstream issues — `src/engine/knownGaps.realengine.test.ts` (18 assertions incl. verified workarounds).
+- #268 Issue count in status bar — fresh-audit only, click opens Auditor.
+- #280 Server-side Sentry + handlers — `SENTRY_DSN`-gated, 5xx + uncaught exceptions, `unhandledRejection` logged without killing the API.
+- #294 Ollama Modelfile tool-list drift — `server/src/modelfiles.test.ts` validates all three Modelfiles against `shared/toolRegistry.ts`.
 
 ### Tier 2 — medium, contained
 - #175 Critical-findings banner (S–M)

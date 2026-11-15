@@ -29,13 +29,19 @@ These are open issues on GitHub that directly impact SmartSht's uploaded workshe
 
 | Issue | Impact on SmartSht |
 |-------|-------------------|
-| [#312](https://github.com/psu3d0/formualizer/issues/312) — binary +/- preserve a Date type that Excel doesn't have | Date arithmetic produces wrong types; formulas like `=A1+30` on date cells may not return expected serial numbers |
+| [#312](https://github.com/psu3d0/formualizer/issues/312) — binary +/- preserve a Date type that Excel doesn't have | Date arithmetic produces wrong types; `DATE(...)+30` returns a Date object (rendered as `#ERROR!`), not Excel's serial number |
 | [#291](https://github.com/psu3d0/formualizer/issues/291) — date text in ordering comparisons and COUNTIF/SUMIF diverges from Excel | COUNTIF/SUMIF with date criteria produce wrong counts |
 | [#290](https://github.com/psu3d0/formualizer/issues/290) — additional date/time text forms rejected that Excel accepts | Single-digit year, 24:00, fractional seconds, month-year formats fail to parse |
-| [#319](https://github.com/psu3d0/formualizer/issues/319) — MATCH exact-match coerces blank cell to 0 | MATCH(0, range, 0) falsely matches empty rows |
-| [#285](https://github.com/psu3d0/formualizer/issues/285) — COUNTBLANK/COUNTIF over never-written blank ranges | Counting blanks in sparse ranges gives wrong results |
-| [#283](https://github.com/psu3d0/formualizer/issues/283) — VLOOKUP/HLOOKUP approximate mode has no sortedness guard | Approximate VLOOKUP on unsorted data returns garbage instead of #N/A |
-| [#295](https://github.com/psu3d0/formualizer/issues/295) — wildcard matchers ignore ~ escapes, leak SQL LIKE metacharacters | COUNTIF/SUMIF with wildcard criteria (*, ?) produce wrong results |
+| [#319](https://github.com/psu3d0/formualizer/issues/319) — MATCH exact-match coerces blank cell to 0 | **Not reproducible on 0.9.3** — pinned as a regression guard |
+| [#285](https://github.com/psu3d0/formualizer/issues/285) — COUNTBLANK/COUNTIF over never-written blank ranges | **Not reproducible on 0.9.3** — pinned as a regression guard |
+| [#283](https://github.com/psu3d0/formualizer/issues/283) — VLOOKUP/HLOOKUP approximate mode has no sortedness guard | Approximate lookups return `#N/A` on unsorted data even when the key exists; exact match (`FALSE`) is correct |
+| [#295](https://github.com/psu3d0/formualizer/issues/295) — wildcard matchers ignore ~ escapes, leak SQL LIKE metacharacters | `*` and `?` work; `~` escapes are dropped and `_` / `%` act as wildcards |
+
+**Verified against 0.9.3 (2026-11-15)** — characterisation tests in
+`src/engine/knownGaps.realengine.test.ts`. The import card (`#182`,
+`src/lib/engineKnownIssues.ts`) warns only for the three patterns that actually
+diverge (#312, #283, #295); the two fixed issues stay as regression guards so a
+future upgrade is caught in CI rather than in a user's workbook.
 
 ### Structural Edit Bugs (Affect Row/Column Insert During Use)
 
