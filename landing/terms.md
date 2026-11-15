@@ -1,5 +1,5 @@
 ---
-title: Terms of Service — smartsht
+title: "Terms of Service — smartsh!t"
 description: "Terms of Service for smartsht, the AI-powered spreadsheet application."
 ---
 
@@ -89,5 +89,5 @@ These Terms are governed by the laws of the United States. Any disputes will be 
 Questions about these Terms: [support@smartsht.com](mailto:support@smartsht.com)
 
 ```json
-{"@context":"https://schema.org","@graph":[{"@type":"WebPage","@id":"https://smartsht.com/terms#webpage","url":"https://smartsht.com/terms","name":"Terms of Service — smartsht","description":"Terms of Service for smartsht, the AI-powered spreadsheet application.","isPartOf":{"@id":"https://smartsht.com/#website"},"about":{"@id":"https://smartsht.com/#app"},"dateModified":"2026-07-23","inLanguage":"en-US","breadcrumb":{"@id":"https://smartsht.com/terms#breadcrumb"}},{"@type":"BreadcrumbList","@id":"https://smartsht.com/terms#breadcrumb","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://smartsht.com/"},{"@type":"ListItem","position":2,"name":"Terms of Service","item":"https://smartsht.com/terms"}]}]}
+{"@context":"https://schema.org","@graph":[{"@type":"WebPage","@id":"https://smartsht.com/terms#webpage","url":"https://smartsht.com/terms","name":"Terms of Service — smartsh!t","description":"Terms of Service for smartsht, the AI-powered spreadsheet application.","isPartOf":{"@id":"https://smartsht.com/#website"},"about":{"@id":"https://smartsht.com/#app"},"dateModified":"2026-07-23","inLanguage":"en-US","breadcrumb":{"@id":"https://smartsht.com/terms#breadcrumb"}},{"@type":"BreadcrumbList","@id":"https://smartsht.com/terms#breadcrumb","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://smartsht.com/"},{"@type":"ListItem","position":2,"name":"Terms of Service","item":"https://smartsht.com/terms"}]}]}
 ```

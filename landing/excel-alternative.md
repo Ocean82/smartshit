@@ -1,5 +1,5 @@
 ---
-title: "Excel Alternative: Free AI Spreadsheet | smartsht"
+title: "Excel Alternative: Free AI Spreadsheet | smartsh!t"
 description: "A free Excel and Google Sheets alternative. Build budgets in plain English, keep the workbook in your browser, and start with no credit card."
 image: "https://smartsht.com/og-image.png"
 ---
@@ -48,5 +48,5 @@ Stay in Excel if you depend on desktop macros, a specific add-in, or a workbook 
 Or read the [formula auditor](https://smartsht.com/formula-auditor) page, the [pricing](https://smartsht.com/#pricing) section, and the [homepage](https://smartsht.com/).
 
 ```json
-{"@context":"https://schema.org","@graph":[{"@type":"WebPage","@id":"https://smartsht.com/excel-alternative#webpage","url":"https://smartsht.com/excel-alternative","name":"Excel Alternative: Free AI Spreadsheet | smartsht","description":"A free Excel and Google Sheets alternative. Build budgets in plain English, keep the workbook in your browser, and start with no credit card.","isPartOf":{"@id":"https://smartsht.com/#website"},"about":{"@id":"https://smartsht.com/#app"},"dateModified":"2026-11-05","inLanguage":"en-US","breadcrumb":{"@id":"https://smartsht.com/excel-alternative#breadcrumb"}},{"@type":"BreadcrumbList","@id":"https://smartsht.com/excel-alternative#breadcrumb","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://smartsht.com/"},{"@type":"ListItem","position":2,"name":"Excel alternative","item":"https://smartsht.com/excel-alternative"}]}]}
+{"@context":"https://schema.org","@graph":[{"@type":"WebPage","@id":"https://smartsht.com/excel-alternative#webpage","url":"https://smartsht.com/excel-alternative","name":"Excel Alternative: Free AI Spreadsheet | smartsh!t","description":"A free Excel and Google Sheets alternative. Build budgets in plain English, keep the workbook in your browser, and start with no credit card.","isPartOf":{"@id":"https://smartsht.com/#website"},"about":{"@id":"https://smartsht.com/#app"},"dateModified":"2026-11-05","inLanguage":"en-US","breadcrumb":{"@id":"https://smartsht.com/excel-alternative#breadcrumb"}},{"@type":"BreadcrumbList","@id":"https://smartsht.com/excel-alternative#breadcrumb","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://smartsht.com/"},{"@type":"ListItem","position":2,"name":"Excel alternative","item":"https://smartsht.com/excel-alternative"}]}]}
 ```

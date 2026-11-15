@@ -1,0 +1,195 @@
+# Chat System Analysis — 
+
+## Architecture Overview
+
+The system uses a **staged pipeline** where each stage either *claims* a message (returns a result) or *passes* it to the next stage. The pipeline runs in fixed priority order:
+
+```mermaid
+flowchart TD
+    A[User Message] --> B[IntentClassifier\nnever claims — enriches context]
+    B --> C[GoalRouter\nkeyword/profile match]
+    C -->|null| D[SemanticCapabilityRouter\nMiniLM embedding match]
+    D -->|null| E[AgentParser\nregex tool dispatch]
+    E -->|null| F[DeterministicDispatcher\nclean/report/compare/budget/query]
+    F -->|null| G[LLMGateway\nalways claims — terminal]
+    
+    C -->|claimed| R[StageResult → ChatMessage]
+    D -->|claimed| R
+    E -->|claimed| R
+    F -->|claimed| R
+    G --> R
+```
+
+---
+
+## What's Working Well ✅
+
+### 1. Layered Fallback Strategy
+The pipeline has solid graceful degradation: deterministic results → local analysis → LLM → local fallback. The `localAnalysis` pattern in `DeterministicDispatcher` → `LLMGateway` is especially good — open-ended budget questions compute data locally and pass it to the LLM as *context*, not as the final answer. This is the right approach for open-ended questions.
+
+### 2. Open-Ended Question Handling (`advise` mode)
+The `advise` mode path in `deterministicDispatcher.ts` (L228) correctly identifies that questions like "where am I overspending?" need **judgment** from the LLM, not just a top-N listing. The budget analysis is computed locally and set on `context.localAnalysis` for the model to build on. The injected prompt:
+
+```
+Local budget analysis computed from this sheet (build on it with judgment; do not just repeat it):
+```
+
+is a well-worded instruction that prevents the LLM from just parroting back numbers.
+
+### 3. Safety on Mutations
+`SemanticCapabilityRouter` is correctly conservative: question framings (`/^can I|should I|what if/`) pass through to the LLM for destructive tools, and ambiguous scores produce clarification chips rather than winner-takes-all execution.
+
+### 4. `insightsBlock` Suppression for Follow-ups
+In `LLMGateway`, the insights block is only sent on `isLlmOnlyMode(mode)` — it's intentionally skipped for follow-up questions. This avoids re-flooding the model with already-known context, which is correct.
+
+### 5. Contextual Suggestions Engine
+The `getContextualSuggestions()` priority scoring (goals > data-aware > column-aware > insights-based) produces genuinely relevant follow-up chips rather than generic ones. The deduplication against `goalTitles` and last message prevents redundant suggestions.
+
+---
+
+## Issues & Recommended Changes 🔧
+
+### 🟥 Issue 1: `insightsBlock` Never Sent for Open-Ended LLM Questions
+
+**File:** [`llmGateway.ts:66-68`](file:///d:/spreadsheet/smartsht/src/ai/pipeline/stages/llmGateway.ts#L66-L68)
+
+```typescript
+const insightsBlock = isLlmOnlyMode(mode)
+  ? formatInsights(sheetContext.insights)
+  : ''
+```
+
+**Problem:** `isLlmOnlyMode` returns `true` only for `explain` and `advise`. But the most common "open-ended" chat messages — *"what does this data mean?"*, *"can you summarize this?"* — arrive in **`chat` mode**, where `insightsBlock` is empty. The LLM gets the raw compressed sheet encoding but **no pre-computed insight summary** (totals, top expenses, outliers) as explicit context.
+
+**Impact:** The LLM must re-derive everything from the raw sheet, which is slower, less reliable, and increases token cost.
+
+**Fix:** Also include `insightsBlock` for `chat` mode when there's no prior conversation context:
+
+```typescript
+const isFirstTurn = !context.priorInsights && (!context.history || context.history.length === 0)
+const insightsBlock = (isLlmOnlyMode(mode) || (mode === 'chat' && isFirstTurn))
+  ? formatInsights(sheetContext.insights)
+  : ''
+```
+
+---
+
+### 🟥 Issue 2: `priorInsights` Hint Is Vague and Stateless
+
+**File:** [`llmGateway.ts:222-224`](file:///d:/spreadsheet/smartsht/src/ai/pipeline/stages/llmGateway.ts#L222-L224)
+
+```typescript
+if (priorInsights) {
+  parts.push('Prior turn insights still apply for follow-up questions.')
+}
+```
+
+**Problem:** This single generic sentence is sent whenever there are prior insights, regardless of whether the conversation is actually a follow-up. It adds noise without real information. The LLM can't know *what* was in the prior turn from this hint alone.
+
+**Fix:** Either omit this hint entirely (the conversation `history` array already provides the context), or include a brief diff/delta:
+
+```typescript
+if (priorInsights && localAnalysis == null) {
+  // Only hint when not already dominated by localAnalysis
+  parts.push('The user is continuing a conversation — prior sheet context was already provided.')
+}
+```
+
+---
+
+### 🟨 Issue 3: Open-Ended `chat` Mode Has No Mode-Specific LLM Guidance
+
+**File:** [`buildSummary()` in `llmGateway.ts:214-236`](file:///d:/spreadsheet/smartsht/src/ai/pipeline/stages/llmGateway.ts#L214-L236)
+
+**Problem:** The `deterministicSummary` sent to the server has no signal about *what kind of response* is expected. For `explain` mode the server presumably uses a different system prompt, but the `mode` value is not included in the context payload sent to the server.
+
+**Impact:** The LLM cannot tailor response style (analytical vs. instructional vs. conversational) based on the classified mode.
+
+**Fix:** Pass `mode` explicitly in the context payload:
+
+```typescript
+const serverResult = await chatWithAgentServerStream({
+  message: context.message,
+  context: {
+    ...sheetContext,
+    deterministicSummary,
+    mode: context.mode,  // ← add this
+    ...(focusData ? { focusData } : {}),
+  },
+  ...
+})
+```
+
+Then use it server-side to adjust tone/format in the system prompt.
+
+---
+
+### 🟨 Issue 4: `queryEngine` Claims `filter` Intent Without a Column, Returning a Question
+
+**File:** [`queryEngine.ts:281-287`](file:///d:/spreadsheet/smartsht/src/ai/queryEngine.ts#L281-L287)
+
+```typescript
+if (!col && needsColumn) {
+  return {
+    success: true,
+    message: `Which numeric column should I use?${choices ? ` Available columns: ${choices}.` : ''}`,
+  }
+}
+```
+
+**Problem:** When a `filter` or `sort` intent matches but no column can be resolved, the deterministic dispatcher **claims the message** with a clarifying question. This bypasses the LLM entirely — but the LLM would often give a much richer, more natural clarifying response based on what the user actually asked.
+
+**Fix:** Return `null` here to fall through to the LLM, which can ask for clarification in context:
+
+```typescript
+if (!col && needsColumn) {
+  return null  // Let LLM clarify naturally
+}
+```
+
+Alternatively, keep the current behavior but enrich the question with the actual column suggestions formatted naturally (not just a comma-joined list).
+
+---
+
+### 🟨 Issue 5: Deterministic Dispatcher Duplicated Between `brain.ts` and `deterministicDispatcher.ts`
+
+**Files:** [`brain.ts:255-338`](file:///d:/spreadsheet/smartsht/src/ai/brain.ts#L255-L338) and [`deterministicDispatcher.ts`](file:///d:/spreadsheet/smartsht/src/ai/pipeline/stages/deterministicDispatcher.ts)
+
+**Problem:** The `DETERMINISTIC_HANDLERS` array in `brain.ts` and the if-chain in `deterministicDispatcher.ts` implement the *same* logic in two different places. The `buildDataAwarenessResponse()` function is also literally copy-pasted between the two files (including the structure of the output). This is the single biggest correctness risk — a bug fixed in one place may not be fixed in the other.
+
+**Fix:** Since `brain.ts` is marked `@deprecated`, the fix is to complete the migration. The `buildDataAwarenessResponse()` in `brain.ts` (L224-L234) uses the `AWARENESS_SECTIONS` declarative pattern while `deterministicDispatcher.ts` (L38-L91) uses an imperative if-chain. They should produce identical output but could diverge. **Export the shared implementation from one canonical location** and import it into both files until `brain.ts` is fully retired.
+
+---
+
+### 🟩 Issue 6: `contextualSuggestions` Returns Max 3 Results — May Suppress High-Value Suggestions
+
+**File:** [`contextualSuggestions.ts:127`](file:///d:/spreadsheet/smartsht/src/ai/contextualSuggestions.ts#L127)
+
+```typescript
+if (!seen.has(s.text) && results.length < 3) {
+```
+
+**Problem:** Goal-based suggestions (priority 10) always win the top slots. If `listSuggestedGoals` returns 3 goals, the data-aware suggestions (outlier warnings, budget overspend, etc.) are completely suppressed even when they're more relevant.
+
+**Fix:** Consider a smarter mix: max 2 goal chips + 1 insight chip, or cap goal chips at 2:
+
+```typescript
+const goalCount = suggestions.filter((s) => s.priority === 10).length
+const cap = goalCount >= 2 ? 1 : 3 - goalCount  // reserve at least 1 slot for insights
+```
+
+---
+
+## Summary of Recommendations
+
+| Priority | Issue | File | Fix Complexity |
+|----------|-------|------|---------------|
+| 🟥 High | `insightsBlock` missing in `chat` mode | `llmGateway.ts` | Low |
+| 🟥 High | Vague `priorInsights` hint adds noise | `llmGateway.ts` | Low |
+| 🟨 Med | `mode` not passed to server | `llmGateway.ts` | Low (needs server support) |
+| 🟨 Med | `queryEngine` claims with clarifying question | `queryEngine.ts` | Low |
+| 🟨 Med | Duplicated deterministic logic + `buildDataAwarenessResponse` | `brain.ts` / `deterministicDispatcher.ts` | Medium |
+| 🟩 Low | Suggestion capping suppresses insight chips | `contextualSuggestions.ts` | Low |
+
+> [!NOTE]
+> The overall architecture is sound. The pipeline's claim-or-pass design, the `localAnalysis` pattern for open-ended questions, and the safety gates on mutations are all correct. The issues above are refinements, not structural problems.

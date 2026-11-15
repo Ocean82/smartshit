@@ -1,5 +1,5 @@
 ---
-title: Privacy Policy — smartsht
+title: "Privacy Policy — smartsh!t"
 description: Privacy Policy for smartsht. The workbook stays in your browser unless you enable cloud backup. AI questions send a cell summary.
 ---
 
@@ -88,5 +88,5 @@ We may update this Privacy Policy from time to time. Material changes will be co
 Privacy questions: [support@smartsht.com](mailto:support@smartsht.com)
 
 ```json
-{"@context":"https://schema.org","@graph":[{"@type":"WebPage","@id":"https://smartsht.com/privacy#webpage","url":"https://smartsht.com/privacy","name":"Privacy Policy — smartsht","description":"Privacy Policy for smartsht. The workbook stays in your browser unless you enable cloud backup. AI questions send a cell summary.","isPartOf":{"@id":"https://smartsht.com/#website"},"about":{"@id":"https://smartsht.com/#organization"},"dateModified":"2026-10-06","inLanguage":"en-US","breadcrumb":{"@id":"https://smartsht.com/privacy#breadcrumb"}},{"@type":"BreadcrumbList","@id":"https://smartsht.com/privacy#breadcrumb","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://smartsht.com/"},{"@type":"ListItem","position":2,"name":"Privacy Policy","item":"https://smartsht.com/privacy"}]}]}
+{"@context":"https://schema.org","@graph":[{"@type":"WebPage","@id":"https://smartsht.com/privacy#webpage","url":"https://smartsht.com/privacy","name":"Privacy Policy — smartsh!t","description":"Privacy Policy for smartsht. The workbook stays in your browser unless you enable cloud backup. AI questions send a cell summary.","isPartOf":{"@id":"https://smartsht.com/#website"},"about":{"@id":"https://smartsht.com/#organization"},"dateModified":"2026-10-06","inLanguage":"en-US","breadcrumb":{"@id":"https://smartsht.com/privacy#breadcrumb"}},{"@type":"BreadcrumbList","@id":"https://smartsht.com/privacy#breadcrumb","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://smartsht.com/"},{"@type":"ListItem","position":2,"name":"Privacy Policy","item":"https://smartsht.com/privacy"}]}]}
 ```
