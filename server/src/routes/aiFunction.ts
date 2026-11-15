@@ -22,6 +22,7 @@ import { assertPublicByokHost, byokSchema, type ByokCredentials } from '../schem
 import { runDeterministicFunction } from '../deterministicFunctions.js'
 import { validateLabel, parseAllowlist, parseSentiment } from '../labelValidation.js'
 import { processBatch, estimateBatchCost, type BatchInput } from '../batch.js'
+import { captureError } from '../errorReporting.js'
 
 export const aiFunctionRouter = Router()
 
@@ -362,6 +363,7 @@ aiFunctionRouter.post('/', aiFunctionRateLimiter, validateBody(aiFunctionBodySch
   if (rawResult === null) {
     await releaseReservation()
     console.error(`[ai-function] All providers failed for ${funcName}:`, lastError)
+    captureError(new Error(`All providers failed: ${lastError}`), { context: 'ai-function.providers', funcName })
     res.status(502).json({
       // Don't echo provider internals back to the client
       error: 'AI providers are currently unavailable. Please try again shortly.',
@@ -465,6 +467,7 @@ aiFunctionRouter.post('/batch', aiFunctionRateLimiter, validateBody(aiFunctionBa
     await release(reserved)
     const message = err instanceof Error ? err.message : 'Unknown error'
     console.error('[ai-function/batch] Error:', message)
+    captureError(err, { context: 'ai-function.batch' })
     res.status(502).json({ error: 'Batch processing failed. Please try again.' })
   }
 })

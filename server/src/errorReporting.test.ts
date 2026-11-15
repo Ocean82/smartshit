@@ -84,12 +84,14 @@ describe('server errorReporting with a DSN', () => {
     expect(mod.initErrorReporting()).toBe(true)
     expect(mod.isErrorReportingEnabled()).toBe(true)
     expect(sentry.init).toHaveBeenCalledTimes(1)
-    expect(sentry.init).toHaveBeenCalledWith({
-      dsn: DSN,
-      environment: 'staging',
-      release: 'smartsht@test',
-      tracesSampleRate: 0.25,
-    })
+    expect(sentry.init).toHaveBeenCalledWith(
+      expect.objectContaining({
+        dsn: DSN,
+        environment: 'staging',
+        release: 'smartsht@test',
+        tracesSampleRate: 0.25,
+      }),
+    )
   })
 
   it('falls back to 0 traces when the rate is missing or invalid', async () => {
@@ -99,12 +101,24 @@ describe('server errorReporting with a DSN', () => {
     const mod = await loadModule()
 
     mod.initErrorReporting()
-    expect(sentry.init).toHaveBeenCalledWith({
-      dsn: DSN,
-      environment: 'staging',
-      release: undefined,
-      tracesSampleRate: 0,
-    })
+    expect(sentry.init).toHaveBeenCalledWith(
+      expect.objectContaining({ dsn: DSN, environment: 'staging', release: undefined, tracesSampleRate: 0 }),
+    )
+  })
+
+  it('drops Sentry\'s own crash handlers so index.ts is the only reporter', async () => {
+    stubConfig()
+    const mod = await loadModule()
+    mod.initErrorReporting()
+    const { integrations } = sentry.init.mock.calls[0][0] as {
+      integrations: (d: { name: string }[]) => { name: string }[]
+    }
+    const kept = integrations([
+      { name: 'OnUncaughtException' },
+      { name: 'OnUnhandledRejection' },
+      { name: 'Console' },
+    ])
+    expect(kept.map((i) => i.name)).toEqual(['Console'])
   })
 
   it('is idempotent: a later DSN cannot turn reporting on after startup', async () => {
@@ -154,5 +168,34 @@ describe('server errorReporting with a DSN', () => {
 
     sentry.flush.mockRejectedValueOnce(new Error('network'))
     await expect(mod.flushErrorReporting(10)).resolves.toBe(false)
+  })
+})
+
+describe('secret redaction', () => {
+  it('masks API keys, bearer tokens and key= query params', async () => {
+    const { redactSecrets } = await loadModule()
+    expect(redactSecrets('Incorrect API key provided: sk-proj-abcdef1234567890')).toBe(
+      'Incorrect API key provided: [redacted]',
+    )
+    expect(redactSecrets('401 gsk_AbCdEfGhIjKlMnOp rejected')).toBe('401 [redacted] rejected')
+    expect(redactSecrets('Authorization: Bearer abc.def-ghi_jkl123')).toBe('Authorization: [redacted]')
+    expect(redactSecrets('GET /v1?key=SECRET123&alt=json')).toBe('GET /v1?key=[redacted]&alt=json')
+  })
+
+  it('leaves ordinary messages alone', async () => {
+    const { redactSecrets } = await loadModule()
+    expect(redactSecrets('connect ECONNREFUSED 127.0.0.1:5432')).toBe('connect ECONNREFUSED 127.0.0.1:5432')
+    expect(redactSecrets('task-runner timed out')).toBe('task-runner timed out')
+  })
+
+  it('scrubs exception values and messages on the event', async () => {
+    const { scrubEvent } = await loadModule()
+    const event = scrubEvent({
+      type: undefined,
+      message: 'failed with sk-live-0123456789abcdef',
+      exception: { values: [{ value: 'Bearer abcdefgh12345678' }, {}] },
+    })
+    expect(event.message).toBe('failed with [redacted]')
+    expect(event.exception?.values?.[0].value).toBe('[redacted]')
   })
 })

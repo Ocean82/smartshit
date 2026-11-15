@@ -16,6 +16,14 @@
 
 import * as Sentry from '@sentry/node'
 
+/** Provider/SDK error text can echo (masked) API keys, bearer tokens, or key= URLs. */
+const SECRET_PATTERN =
+  /\b(?:sk|gsk|pk|rk|xai)[-_][A-Za-z0-9_-]{8,}|Bearer\s+[A-Za-z0-9._~+/=-]{8,}|([?&](?:key|api_key|token)=)[^&\s]+/gi
+
+export function redactSecrets(text: string): string {
+  return text.replace(SECRET_PATTERN, (_m, urlPrefix?: string) => (urlPrefix ? `${urlPrefix}[redacted]` : '[redacted]'))
+}
+
 let initialized = false
 let enabled = false
 
@@ -32,6 +40,15 @@ function parseSampleRate(raw: string | undefined, fallback: number): number {
   if (raw === undefined || raw.trim() === '') return fallback
   const value = Number(raw)
   return Number.isFinite(value) && value >= 0 && value <= 1 ? value : fallback
+}
+
+/** Redact secrets from every exception message before it leaves the process. */
+export function scrubEvent<T extends Sentry.ErrorEvent>(event: T): T {
+  if (event.message) event.message = redactSecrets(event.message)
+  for (const ex of event.exception?.values ?? []) {
+    if (ex.value) ex.value = redactSecrets(ex.value)
+  }
+  return event
 }
 
 /**
@@ -52,6 +69,11 @@ export function initErrorReporting(options: ErrorReportingOptions = {}): boolean
     release: options.release ?? process.env.SENTRY_RELEASE,
     tracesSampleRate:
       options.tracesSampleRate ?? parseSampleRate(process.env.SENTRY_TRACES_SAMPLE_RATE, 0),
+    // index.ts owns uncaughtException/unhandledRejection (report, flush, exit policy).
+    // Leaving Sentry's built-ins on would report each crash twice.
+    integrations: (defaults) =>
+      defaults.filter((i) => i.name !== 'OnUncaughtException' && i.name !== 'OnUnhandledRejection'),
+    beforeSend: scrubEvent,
   })
 
   enabled = true
