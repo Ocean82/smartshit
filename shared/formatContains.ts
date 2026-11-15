@@ -13,7 +13,7 @@
 // below is skipped for it ("containing \"red\"" means the text red, not the
 // color cue). An unquoted stop word is a type/color request and is rejected.
 const CONTAINS_VALUE_RE =
-  /cells?\s+(?:that\s+)?(?:contain(?:ing|s)?|with|having|have|has)\s+(?:(?:a|an|the|any|some|each|every|number|value|values|text|digit|digits|letter|letters|char|character|characters)\s+)*(["']?)([\w.$-]+)["']?/
+  /cells?\s+(?:that\s+)?(?:contain(?:ing|s)?|with|having|have|has|says?|reads?|named|called)\s+(?:(?:a|an|the|any|some|each|every|number|value|values|text|digit|digits|letter|letters|char|character|characters)\s+)*(["']?)([\w.$-]+)["']?/
 
 /**
  * Stop words that are never a real literal to search for: number-type words and

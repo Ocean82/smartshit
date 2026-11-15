@@ -9,6 +9,12 @@ describe('extractCellContainsValue', () => {
     expect(extractCellContainsValue('highlight cells with 4')).toBe('4')
   })
 
+  it('captures the value after says / reads / named / called', () => {
+    expect(extractCellContainsValue('highlight the cell that says groceries')).toBe('groceries')
+    expect(extractCellContainsValue('highlight cells named rent')).toBe('rent')
+    expect(extractCellContainsValue('highlight the cell called total')).toBe('total')
+  })
+
   it('strips articles and descriptor nouns before the value', () => {
     expect(extractCellContainsValue('highlight all cells that contain a 4')).toBe('4')
     expect(extractCellContainsValue('highlight cells containing an X')).toBe('x')

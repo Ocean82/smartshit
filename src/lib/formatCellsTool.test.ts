@@ -63,6 +63,11 @@ describe('expandRange', () => {
     expect(expandRange('B:B', sheet)?.sort()).toEqual(['B1', 'B2', 'B3'])
   })
 
+  it('expands "all" / "sheet" to every populated cell (not a column named ALL)', () => {
+    expect(expandRange('all', sheet)?.sort()).toEqual(['A1', 'AB2', 'B1', 'B2', 'B3'])
+    expect(expandRange('Sheet', sheet)?.sort()).toEqual(['A1', 'AB2', 'B1', 'B2', 'B3'])
+  })
+
   it('handles single cells and rejects garbage', () => {
     expect(expandRange('b3', sheet)).toEqual(['B3'])
     expect(expandRange('not a range', sheet)).toBeNull()
@@ -142,6 +147,43 @@ describe('cellMatchesCondition', () => {
 })
 
 describe('applyFormatCells', () => {
+  // Regression: an unscoped style with nothing selected recoloured EVERY cell and
+  // reported success ("highlight rent" right after an import).
+  it('never widens an unscoped style to the whole sheet', () => {
+    const sheet = makeSheet({ A1: 'Item', B1: 'Amount', A2: 'Rent', B2: 1200, A3: 'Food', B3: 300 })
+    const { ctx, formats } = makeContext(sheet, [])
+
+    const result = applyFormatCells({ bgColor: '#FFF9C4' }, ctx)
+
+    expect(result.success).toBe(false)
+    expect(result.modified).toBe(0)
+    expect(result.message).toMatch(/which cells/i)
+    expect(formats).toEqual({})
+  })
+
+  it('formats exactly the selection when there is one', () => {
+    const sheet = makeSheet({ A1: 'Item', A2: 'Rent', A3: 'Food' })
+    const { ctx, formats } = makeContext(sheet, ['A2'])
+
+    const result = applyFormatCells({ bgColor: '#FFF9C4' }, ctx)
+
+    expect(result.success).toBe(true)
+    expect(Object.keys(formats)).toEqual(['A2'])
+  })
+
+  it('still scans the whole sheet for a conditional style with nothing selected', () => {
+    const sheet = makeSheet({ A1: 'Item', A2: 'Rent', A3: 'Food' })
+    const { ctx, formats } = makeContext(sheet, [])
+
+    const result = applyFormatCells(
+      { condition: { operator: 'contains', value: 'rent' }, bgColor: '#FFF9C4' },
+      ctx,
+    )
+
+    expect(result.modified).toBe(1)
+    expect(Object.keys(formats)).toEqual(['A2'])
+  })
+
   it('highlights only matching cells in an explicit range (eq 4)', () => {
     const sheet = makeSheet({ B2: 4, B3: 14, B4: 4, B5: 9 })
     const { ctx, formats } = makeContext(sheet)
@@ -190,7 +232,8 @@ describe('applyFormatCells', () => {
     const sheet = makeSheet({ A1: 'Hello', B1: 'World' })
     const { ctx, formats } = makeContext(sheet)
 
-    const result = applyFormatCells({ fontColor: '#FF0000' }, ctx)
+    // Whole-sheet scope must be explicit; an omitted range means "the selection".
+    const result = applyFormatCells({ fontColor: '#FF0000', range: 'all' }, ctx)
 
     expect(result.success).toBe(true)
     expect(formats.A1.fontColor).toBe('#FF0000')

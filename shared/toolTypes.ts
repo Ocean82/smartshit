@@ -28,7 +28,7 @@ export interface FormatCondition {
 
 /** Canonical params for the format_cells tool. */
 export interface FormatCellsParams {
-  /** A1-style range ("B2:D10"), column ("B" or "B:B"), or single cell. Omit to use selection/whole sheet. */
+  /** A1-style range ("B2:D10"), column ("B" or "B:B"), or single cell, or "all" for the whole sheet. Omit to use the current selection only. */
   range?: string
   bold?: boolean
   italic?: boolean

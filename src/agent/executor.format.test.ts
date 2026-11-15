@@ -18,7 +18,7 @@ function makeSheet(cells: Record<string, string | number>): SheetData {
   }
 }
 
-function makeContext(sheet: SheetData) {
+function makeContext(sheet: SheetData, selection: string[] = []) {
   const formats: Record<string, Partial<CellFormat>> = {}
   const filterCalls: FilterConfig[][] = []
   const templateCalls: Array<{ tool: string; params: Record<string, unknown> }> = []
@@ -47,7 +47,7 @@ function makeContext(sheet: SheetData) {
     addSheet: () => {},
     renameSheet: () => ({ ok: true }),
     pushHistory: () => {},
-    getSelection: () => [],
+    getSelection: () => selection,
     executeTemplate: (tool, params) => {
       templateCalls.push({ tool, params })
       return { success: true, message: `Built ${tool}`, modified: 0 }
@@ -74,7 +74,8 @@ describe('fast path: parser → executor formatting', () => {
 
   it('"change the text to red" applies fontColor, never find/replace', () => {
     const sheet = makeSheet({ A1: 'Hello', B1: 'World' })
-    const { ctx, formats } = makeContext(sheet)
+    // An unscoped style applies to the selection (see applyFormatCells).
+    const { ctx, formats } = makeContext(sheet, ['A1', 'B1'])
 
     const parsed = parseMessage('change the text to red')
     expect(parsed.calls[0].tool).toBe('format_cells')
@@ -85,6 +86,15 @@ describe('fast path: parser → executor formatting', () => {
     expect(formats.B1.fontColor).toBe('#FF0000')
     // Cell values untouched
     expect(sheet.cells.A1.value).toBe('Hello')
+  })
+
+  it('"change the text to red" with nothing selected asks which cells instead of recolouring the sheet', () => {
+    const sheet = makeSheet({ A1: 'Hello', B1: 'World' })
+    const { ctx, formats } = makeContext(sheet)
+    const result = executeTool(parseMessage('change the text to red').calls[0], ctx)
+    expect(result.success).toBe(false)
+    expect(result.message).toMatch(/which cells/i)
+    expect(formats).toEqual({})
   })
 })
 

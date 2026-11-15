@@ -60,6 +60,92 @@ describe('resolveActTemplates — other rules still resolve', () => {
   })
 })
 
+/**
+ * Regression: "highlight rent" used to resolve to an UNSCOPED format_cells, which
+ * recoloured every cell (or the wrong one). Anything naming a target we cannot
+ * map must defer to the LLM; explicit targets must carry their range.
+ */
+describe('resolveActTemplates — styling requests are scoped, never guessed', () => {
+  function paramsOf(message: string): Record<string, unknown> | undefined {
+    return resolveActTemplates(message).actions[0]?.params as Record<string, unknown> | undefined
+  }
+
+  it('defers a named target it cannot map instead of formatting the selection', () => {
+    for (const msg of [
+      'highlight rent',
+      'highlight groceries',
+      'highlight duplicates',
+      'highlight the errors',
+      'highlight anything over 500',
+      'highlight where the category is food',
+      'highlight all rows containing Netflix',
+    ]) {
+      expect(resolveActTemplates(msg).actions, msg).toHaveLength(0)
+    }
+  })
+
+  it('carries an explicit cell, range, column, row or header as a range', () => {
+    expect(paramsOf('highlight cell B7')).toMatchObject({ range: 'B7', bgColor: '#FFF9C4' })
+    expect(paramsOf('highlight B7')).toMatchObject({ range: 'B7' })
+    expect(paramsOf('highlight a1:c3 in red')).toMatchObject({ range: 'A1:C3' })
+    expect(paramsOf('highlight column C')).toMatchObject({ range: 'C' })
+    expect(paramsOf('highlight row 5')).toMatchObject({ range: 'A5:Z5' })
+    expect(paramsOf('bold the headers')).toMatchObject({ range: 'A1:Z1', bold: true })
+  })
+
+  it('resolves a literal value after says / named / called', () => {
+    expect(paramsOf('highlight the cell that says groceries')).toMatchObject({
+      condition: { operator: 'contains', value: 'groceries' },
+    })
+    expect(paramsOf('highlight cells named rent')).toMatchObject({
+      condition: { operator: 'contains', value: 'rent' },
+    })
+  })
+
+  it('styles the whole sheet only when asked for explicitly', () => {
+    expect(paramsOf('make everything bold')).toMatchObject({ bold: true, range: 'all' })
+    expect(paramsOf('highlight all cells in yellow')).toMatchObject({ range: 'all' })
+    expect(paramsOf('change all text to red')).toMatchObject({ fontColor: expect.any(String), range: 'all' })
+    // "all" plus a target we cannot map is still deferred, not widened.
+    expect(resolveActTemplates('highlight all rows containing Netflix').actions).toHaveLength(0)
+  })
+
+  it('scopes a font-colour request too, deferring an unmappable target', () => {
+    expect(resolveActTemplates('make the rent text red').actions).toHaveLength(0)
+    expect(paramsOf('change the text in B2 to red')).toMatchObject({ range: 'B2' })
+  })
+
+  it('still formats the selection when the message names no target', () => {
+    expect(paramsOf('highlight in red')).toMatchObject({ bgColor: expect.any(String) })
+    expect(paramsOf('highlight this cell')).toMatchObject({ bgColor: '#FFF9C4' })
+    expect(paramsOf('highlight cells in yellow')).toMatchObject({ bgColor: expect.any(String) })
+    expect(paramsOf('highlight in red')).not.toHaveProperty('range')
+  })
+
+  it('does not let formula or template rules claim a styling request', () => {
+    for (const msg of [
+      'highlight the total',
+      'highlight the largest value',
+      'highlight the highest amount',
+      'highlight the lowest expense',
+      'color the total green',
+      'make the total bold',
+    ]) {
+      const tools = resolveActTemplates(msg).actions.map((a) => a.tool)
+      expect(tools, msg).not.toContain('apply_formula')
+      expect(tools, msg).not.toContain('create_budget_template')
+    }
+  })
+
+  it('does not treat a part-of-sheet clear or an empty-cell highlight as a sheet wipe', () => {
+    for (const msg of ['highlight empty cells', 'highlight the blank cells', 'clear cell B2', 'clear column C', 'show empty cells']) {
+      expect(toolOf(msg), msg).not.toBe('clear_sheet')
+    }
+    expect(toolOf('clear all cells')).toBe('clear_sheet')
+    expect(toolOf('clear the whole sheet')).toBe('clear_sheet')
+  })
+})
+
 describe('resolveActTemplates — numeric-highlight gating', () => {
   function operatorOf(message: string): string | undefined {
     const params = resolveActTemplates(message).actions[0]?.params as
@@ -74,17 +160,20 @@ describe('resolveActTemplates — numeric-highlight gating', () => {
     expect(operatorOf('make cells with numbers red')).toBe('is_number')
   })
 
-  it('does NOT swallow "make numeric cells bold" as an is_number highlight', () => {
+  it('does NOT swallow "make numeric cells bold" as an is_number highlight FILL', () => {
     // bold reaches the formatting resolver, but the numeric FILL branch must not
-    // claim it — it falls through to the generic bold handler.
+    // claim it. The bold applies to numeric cells only (condition), not the whole
+    // selection, and no background colour is added.
     const action = resolveActTemplates('make numeric cells bold').actions[0]
-    expect((action?.params as { condition?: unknown })?.condition).toBeUndefined()
-    expect(action?.params).toMatchObject({ bold: true })
+    expect(action?.params).toMatchObject({ bold: true, condition: { operator: 'is_number' } })
+    expect(action?.params).not.toHaveProperty('bgColor')
   })
 
   it('does NOT swallow a numeric font-color request as an is_number highlight', () => {
-    // "numeric font color blue" is a font-color intent, not a background fill.
-    const op = operatorOf('change the numeric font color to blue')
-    expect(op).not.toBe('is_number')
+    // "numeric font color blue" is a font-color intent, not a background fill:
+    // the colour goes on the font of numeric cells, with no bgColor.
+    const action = resolveActTemplates('change the numeric font color to blue').actions[0]
+    expect(action?.params).toMatchObject({ fontColor: expect.any(String), condition: { operator: 'is_number' } })
+    expect(action?.params).not.toHaveProperty('bgColor')
   })
 })

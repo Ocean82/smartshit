@@ -54,10 +54,67 @@ function isClearSheetRequest(lower: string): boolean {
   if (/\b(?:fill|populate|replace|substitute|set|put|convert|turn|make|keep|find|count|show)\b[^.?!]{0,48}\bblank\b/.test(lower)) {
     return false
   }
+  // "clear cell B2", "clear column C", "show empty cells" name part of the sheet,
+  // not all of it. Only an explicit all/whole/everything keeps them a wipe.
+  if (
+    /\b[a-z]{1,3}\d{1,5}\b|\b(?:cells?|rows?|columns?|cols?|range|selection|selected)\b/.test(lower) &&
+    !/\b(?:all|every|everything|whole|entire)\b/.test(lower)
+  ) {
+    return false
+  }
   if (/\bstart\s+over\b/.test(lower)) return true
   if (/\bblank\s+out\b/.test(lower)) return true
   if (/\bblank\s+(?:the\s+|this\s+|my\s+|whole\s+|entire\s+)*(?:sheet|tab|page|grid|spreadsheet|workbook)\b/.test(lower)) return true
   return /\b(?:clear|wipe|erase|reset|empty)\b/.test(lower)
+}
+
+// ─── Formatting target resolution ────────────────────────────────────────────
+
+/** Words that name no target: styling verbs/modifiers, politeness, "this/it", colors. */
+const TARGET_FILLER = new Set([
+  'please', 'pls', 'can', 'could', 'would', 'will', 'you', 'i', 'want', 'need', 'like', 'to', 'me', 'just', 'for',
+  'the', 'a', 'an', 'my', 'this', 'that', 'these', 'those', 'it', 'them', 'selected', 'selection', 'cell', 'cells', 'here',
+  'text', 'font', 'writing', 'in', 'with', 'as', 'using', 'into',
+  'make', 'change', 'turn', 'set', 'paint', 'apply', 'highlight', 'highlighted', 'color', 'colour', 'colored', 'coloured', 'shade', 'shaded', 'fill', 'filled',
+  'format', 'bold', 'italic', 'underline', 'strikethrough', 'background', 'numbers', 'numeric',
+  'red', 'blue', 'green', 'yellow', 'orange', 'purple', 'pink', 'black', 'white', 'gray', 'grey',
+])
+
+/** Explicit targets we can map to a range without seeing the sheet. */
+const RANGE_TARGETS: Array<[RegExp, (m: RegExpMatchArray) => string]> = [
+  [/\b([a-z]{1,3}\d{1,5})(?::([a-z]{1,3}\d{1,5}))?\b/, (m) => (m[2] ? `${m[1]}:${m[2]}` : m[1]).toUpperCase()],
+  [/\bcolumns?\s+([a-z]{1,2})\b/, (m) => m[1].toUpperCase()],
+  [/\brow\s+(\d{1,5})\b/, (m) => `A${m[1]}:Z${m[1]}`],
+  [/\b(?:headers?|(?:first|top)\s+row)\b/, () => 'A1:Z1'],
+  // Whole sheet only when asked for explicitly ("make everything bold"); last so a named target wins.
+  [/\b(?:all|every|everything|entire|whole)\b(?:\s+(?:the\s+)?(?:cells?|sheet|spreadsheet|text|data))?/, () => 'all'],
+]
+
+function extractFormatTarget(lower: string): { range?: string; rest: string } {
+  for (const [re, toRange] of RANGE_TARGETS) {
+    const m = lower.match(re)
+    if (m) return { range: toRange(m), rest: lower.replace(re, ' ') }
+  }
+  return { rest: lower }
+}
+
+/** True when words remain that name something we could not resolve ("rent", "duplicates", "500"). */
+function hasUnresolvedTarget(rest: string): boolean {
+  return rest.replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).some((w) => w !== '' && !TARGET_FILLER.has(w))
+}
+
+/**
+ * Scope a style request, writing `range` / `condition` into `params`.
+ * Returns null when the message names a target we cannot map ("highlight rent",
+ * "highlight duplicates", "highlight the total"): the caller defers to the LLM,
+ * which sees the sheet, instead of restyling whatever is selected.
+ */
+function scopeFormatParams(lower: string, params: Record<string, unknown>): { range?: string } | null {
+  const target = extractFormatTarget(lower)
+  if (hasUnresolvedTarget(target.rest)) return null
+  if (target.range) params.range = target.range
+  else if (/\bnumbers\b|\bnumeric\b/.test(lower)) params.condition = { operator: 'is_number' }
+  return { range: target.range }
 }
 
 // ─── Formatting sub-resolver ─────────────────────────────────────────────────
@@ -127,9 +184,13 @@ function resolveFormattingTemplate(lower: string, colorWord: string | undefined)
 
   // Change font/text color
   if (colorWord && FONT_COLOR_HEX[colorWord] && /\b(text|font|writing)\b/.test(lower)) {
+    const fontParams: Record<string, unknown> = { fontColor: FONT_COLOR_HEX[colorWord] }
+    const scope = scopeFormatParams(lower, fontParams)
+    if (!scope) return { message: '', actions: [] }
+    const where = scope.range ? ` in ${scope.range}` : ''
     return {
-      message: `I will change the text color to ${colorWord}. Click Apply to confirm.`,
-      actions: [{ tool: 'format_cells', params: { fontColor: FONT_COLOR_HEX[colorWord] }, description: `Change text color to ${colorWord}` }],
+      message: `I will change the text color to ${colorWord}${where}. Click Apply to confirm.`,
+      actions: [{ tool: 'format_cells', params: fontParams, description: `Change text color to ${colorWord}${where}` }],
     }
   }
 
@@ -144,9 +205,18 @@ function resolveFormattingTemplate(lower: string, colorWord: string | undefined)
     return { message: '', actions: [] }
   }
 
+  // Scope. Without it this action restyles whatever happens to be selected (or,
+  // before applyFormatCells stopped doing so, every cell). A target we cannot
+  // map ("highlight rent", "highlight duplicates", "highlight the total") is
+  // deferred to the LLM, which sees the sheet, instead of guessed at.
+  const scope = scopeFormatParams(lower, params)
+  if (!scope) return { message: '', actions: [] }
+
   return {
-    message: 'I will format the selected cells. Click Apply to confirm.',
-    actions: [{ tool: 'format_cells', params, description: 'Format selected cells' }],
+    message: scope.range
+      ? `I will format ${scope.range}. Click Apply to confirm.`
+      : 'I will format the selected cells. Click Apply to confirm.',
+    actions: [{ tool: 'format_cells', params, description: scope.range ? `Format ${scope.range}` : 'Format selected cells' }],
   }
 }
 
@@ -502,6 +572,16 @@ const RULES: TemplateRule[] = [
 
 // ─── Public API ──────────────────────────────────────────────────────────────
 
+/**
+ * A message that opens with a styling verb ("highlight the total", "make the
+ * total bold") is a styling request. The formula/template/clear rules match
+ * nouns inside it (total, largest, budget, empty) and would otherwise claim it
+ * and write a SUM, build a template, or wipe the sheet instead of styling.
+ */
+const STYLING_LEAD_RE =
+  /^(?:(?:please|pls|can you|could you|would you|will you|i want to|i need to|i'd like to)\s+)*(?:(?:highlight|colou?r|shade|bold|italicize|underline)\b|make\b.*\b(?:bold|italic|underlined?|highlighted)\b)/
+const STYLING_RULE_IDS = new Set(['formatting', 'number_format', 'format_as_table', 'style_recipe', 'professionalize', 'layout'])
+
 export function resolveActTemplates(message: string): ActTemplateResult {
   const original = message.trim()
   const lower = original.toLowerCase()
@@ -511,7 +591,9 @@ export function resolveActTemplates(message: string): ActTemplateResult {
   // but must never produce a mutation proposal.
   if (isNonCommandRequest(original)) return { message: '', actions: [] }
 
+  const isStyling = STYLING_LEAD_RE.test(lower)
   for (const rule of RULES) {
+    if (isStyling && !STYLING_RULE_IDS.has(rule.id)) continue
     if (rule.match(lower)) return rule.resolve(lower, original)
   }
 

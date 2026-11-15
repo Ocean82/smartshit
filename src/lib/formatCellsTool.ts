@@ -45,10 +45,14 @@ function populatedCellIds(sheet: SheetData): string[] {
  * - "B2:D10" → every cell in the rectangle
  * - "B" / "B:B" → populated cells in that column
  * - "B3" → single cell
+ * - "all" / "sheet" → every populated cell (the only way to style the whole sheet)
  * Returns null when the spec cannot be parsed.
  */
 export function expandRange(range: string, sheet: SheetData): string[] | null {
   const spec = range.trim().toUpperCase()
+
+  // Explicit whole-sheet scope. Must precede the column check, which would read "ALL" as a column.
+  if (spec === 'ALL' || spec === 'SHEET') return populatedCellIds(sheet)
 
   const rect = spec.match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/)
   if (rect) {
@@ -250,7 +254,9 @@ export function applyFormatCells(
       // A single-cell selection is just the cursor — scan the whole sheet instead
       candidates = selection.length > 1 ? selection : populatedCellIds(sheet)
     } else {
-      candidates = selection.length > 0 ? selection : populatedCellIds(sheet)
+      // Never widen an unscoped style to the whole sheet: "highlight rent" with
+      // nothing selected used to recolour every cell and report success.
+      candidates = selection
     }
   }
 
@@ -261,7 +267,7 @@ export function applyFormatCells(
   if (targets.length === 0) {
     const why = condition
       ? `No cells matched the condition (${condition.operator}${condition.value != null ? ` ${condition.value}` : ''}).`
-      : 'No cells to format — the sheet is empty and nothing is selected.'
+      : 'Which cells should I format? Select them first, or name a range like B2:B10.'
     return { success: false, message: why, modified: 0 }
   }
 

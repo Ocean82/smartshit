@@ -166,9 +166,9 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
     name: 'format_cells',
     category: 'mutate',
     description:
-      'Format cells: bold, italic, underline, strikethrough, font family/size, text/background color, horizontal & vertical alignment, text wrap, borders, number format. Optional "range" (e.g. "A1:D1", "B", "B2:B10"); defaults to selection or populated cells. Optional "condition" targets cells by value.',
+      'Format cells: bold, italic, underline, strikethrough, font family/size, text/background color, horizontal & vertical alignment, text wrap, borders, number format. Optional "range" (e.g. "A1:D1", "B", "B2:B10", or "all" for the whole sheet); defaults to the current selection only. Optional "condition" targets cells by value.',
     params: [
-      { name: 'range', type: 'string', description: 'A1-style range, column letter, or single cell. Omit to use selection/whole sheet.' },
+      { name: 'range', type: 'string', description: 'A1-style range, column letter, or single cell; "all" for the whole sheet. Omit to use the current selection only.' },
       { name: 'bold', type: 'boolean', description: 'Make text bold' },
       { name: 'italic', type: 'boolean', description: 'Make text italic' },
       { name: 'underline', type: 'boolean', description: 'Underline text' },
