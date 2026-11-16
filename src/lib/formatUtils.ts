@@ -249,8 +249,10 @@ function parseDateFromValue(value: string | number | boolean | null): Date | nul
   }
 
   if (typeof value === 'number') {
-    // Excel serial date: numbers between 1 and 2958465 (roughly 1900-9999)
-    if (value >= 1 && value <= 2958465) {
+    // Excel serial: whole days since 1899-12-30, time as the fraction. Under 1
+    // is a time of day (0.5 = noon); it used to fall to the Unix branch and
+    // render as 12/31/1969.
+    if (value >= 0 && value <= 2958465) {
       return excelSerialToDate(value);
     }
     // Unix timestamp fallback
@@ -263,16 +265,15 @@ function parseDateFromValue(value: string | number | boolean | null): Date | nul
 }
 
 function excelSerialToDate(serial: number): Date {
-  // Excel epoch is Jan 1, 1900 (with the Lotus 1-2-3 leap year bug)
-  const epoch = new Date(1899, 11, 30); // Dec 30, 1899
-  const days = Math.floor(serial);
-  const fraction = serial - days;
-  const date = new Date(epoch.getTime() + days * 86400000);
-  if (fraction > 0) {
-    const totalMs = Math.round(fraction * 86400000);
-    date.setMilliseconds(date.getMilliseconds() + totalMs);
-  }
-  return date;
+  // Days since 1899-12-30 (Excel's epoch, Lotus leap-year bug included).
+  // Do the arithmetic in UTC, then rebuild the same calendar fields in local
+  // time. Adding fixed milliseconds to a local midnight made every time
+  // between March and November an hour late (the epoch is in standard time).
+  const u = new Date(Date.UTC(1899, 11, 30) + Math.round(serial * 86400000));
+  return new Date(
+    u.getUTCFullYear(), u.getUTCMonth(), u.getUTCDate(),
+    u.getUTCHours(), u.getUTCMinutes(), u.getUTCSeconds(),
+  );
 }
 
 function formatDateValue(value: string | number | boolean | null, locale: string, options: Intl.DateTimeFormatOptions): string {

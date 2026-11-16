@@ -10,6 +10,7 @@ import {
 } from '@/engine/spreadsheet'
 import { cellScalar } from '@/lib/formatUtils'
 import { mapExcelVerticalAlign } from '@/io/xlsxFormat'
+import { normalizeCsvDates } from '@/io/csvDates'
 import { parseMergeRange } from '@/lib/merge'
 
 export interface WorkbookImportMeta {
@@ -99,12 +100,7 @@ const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype'])
  */
 function isExcelDateFormatId(fmt: string | undefined): boolean {
   if (!fmt || fmt === 'General') return false
-  // Strip locale blocks
-  const stripped = fmt.replace(/\[\$[^\]]*\]/g, '').toLowerCase()
-  // Check for date/time tokens that aren't part of number formats
-  const hasDateTokens = /[dmy]/.test(stripped) && !/[#0]/.test(stripped)
-  const hasTimeTokens = /[h]/.test(stripped) && /[ms]/.test(stripped) && !/[#0]/.test(stripped)
-  return hasDateTokens || hasTimeTokens
+  return mapExcelDateTimeFmt(fmt) !== null
 }
 
 /**
@@ -137,26 +133,49 @@ function isDefaultBg(hex: string): boolean {
  * IMPORTANT: Excel uses [$-xxx] syntax for locale identifiers (e.g. [$-409] for US English).
  * These contain '$' but are NOT currency formats. We strip them before checking for currency symbols.
  */
+/**
+ * Classify an Excel date/time format, or return null if it is not one.
+ *
+ * In Excel "m" is minutes next to h or s and month otherwise, so "h:mm" is a
+ * time and "mm/dd/yyyy" a date. The previous letter check sent every time
+ * format to `date`, which rendered noon as 12/31/1969, and it dropped the year
+ * from "d-mmm-yy" and the time from "m/d/yyyy h:mm".
+ */
+function mapExcelDateTimeFmt(fmt: string): string | null {
+  const s = fmt
+    .split(';')[0] // positive section only
+    .replace(/"[^"]*"/g, '') // quoted literals
+    .replace(/\\./g, '') // escaped characters
+    .replace(/\[(h+|m+|s+)\]/gi, '$1') // elapsed time, e.g. [h]:mm
+    .replace(/\[[^\]]*\]/g, '') // locale, colour and condition blocks
+    .toLowerCase()
+  if (/[#0?]/.test(s)) return null // a number format
+  const ampm = /am\/pm|a\/p/.test(s)
+  const t = s.replace(/am\/pm|a\/p/g, '')
+  const hasTime = /[hs]/.test(t)
+  const hasMonthName = /mmm/.test(t)
+  const hasDate = /[yd]/.test(t) || hasMonthName || (!hasTime && /m/.test(t))
+  if (!hasDate && !hasTime) return null
+  if (hasDate && hasTime) return 'datetime'
+  if (hasTime) return /s/.test(t) ? 'time-seconds' : ampm ? 'time' : 'time-24'
+  if (hasMonthName) {
+    const hasDay = /d/.test(t)
+    const hasYear = /y/.test(t)
+    return hasDay && hasYear ? 'date-long' : hasYear ? 'date-mmm-yy' : 'date-d-mmm'
+  }
+  // Numeric date: keep the file's field order.
+  const first = t[t.search(/[dmy]/)]
+  return first === 'y' ? 'date-iso' : first === 'd' ? 'date-short-eu' : 'date'
+}
+
 function mapExcelNumFmt(fmt: string): string | null {
   // Strip locale/conditional blocks like [$-409], [$-F800], [$USD-409] before analysis
   const stripped = fmt.replace(/\[\$[^\]]*\]/g, '')
   const lower = stripped.toLowerCase()
-  
-  // Date formats — check BEFORE currency because some date formats include locale blocks with $
-  // Check for date-specific patterns: d, m, y tokens (but not when they're part of number formats)
-  if ((lower.includes('d') || lower.includes('m') || lower.includes('y')) && !lower.includes('#') && !lower.includes('0')) {
-    if (lower.includes('yyyy') && lower.includes('mm') && lower.includes('dd')) return 'date-iso'
-    if (lower.includes('mmm') && lower.includes('d')) return 'date-d-mmm'
-    if (lower.includes('d') && lower.includes('m') && lower.includes('y')) return 'date'
-    return 'date'
-  }
-  
-  // Time formats  
-  if (lower.includes('h') && lower.includes('m') && !lower.includes('d') && !lower.includes('y')) {
-    if (lower.includes('ss')) return 'time-seconds'
-    if (lower.includes('am') || lower.includes('pm')) return 'time'
-    return 'time-24'
-  }
+
+  // Dates and times first: some date formats carry locale blocks with "$".
+  const dateTime = mapExcelDateTimeFmt(fmt)
+  if (dateTime) return dateTime
 
   // Percentage formats
   if (lower.includes('%')) {
@@ -245,6 +264,9 @@ export async function importWorkbookFromFileWithMeta(file: File): Promise<Workbo
     if (parsedSheet && typeof parsedSheet === 'object') stripUnsafeKeys(parsedSheet)
   }
   book.SheetNames = book.SheetNames.filter((name) => !UNSAFE_KEYS.has(name))
+  if (/\.csv$/i.test(file.name)) {
+    for (const name of book.SheetNames) normalizeCsvDates(book.Sheets[name])
+  }
   const baseName = file.name.replace(/\.(csv|xlsx|xls)$/i, '')
   const maxRows = AI_ANALYSIS_CONFIG.maxImportRows
   const maxCols = AI_ANALYSIS_CONFIG.maxImportCols
