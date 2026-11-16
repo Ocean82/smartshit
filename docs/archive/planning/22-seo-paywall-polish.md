@@ -1,3 +1,5 @@
+> **Archived 2026-11-15.** Its action items were completed or superseded by the landing SEO and asset work (PRs #74, #76) and the brand/claims fixes.
+
 # SEO, Paywall, Branding & Production Polish
 
 > Final production-readiness pass: auth token flow, paywall gating, logos/favicons, legal pages, SEO keywords, sitemap, mobile-friendliness, page speed, and HTTPS.

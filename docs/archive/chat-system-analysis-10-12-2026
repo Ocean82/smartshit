@@ -1,3 +1,5 @@
+> **Archived 2026-11-15.** A snapshot analysis of the chat pipeline from 2026-10-12. Its one open action (retire the deprecated `processMessage` in `src/ai/brain.ts`) is tracked in `docs/BACKLOG.md` section 8.
+
 # Chat System Analysis — 
 
 ## Architecture Overview

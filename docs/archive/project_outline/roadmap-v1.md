@@ -1,3 +1,5 @@
+> **Archived 2026-11-15.** Phase 1 shipped. The unbuilt Phase 2-4 items (smart search, section detection, selection-aware chat, value proof) are carried forward in `docs/ROADMAP.md`.
+
 # smartsh!t v1 Roadmap — Understand Your Spreadsheet
 
 > **Core problem:** You open a complex budget or financial spreadsheet someone else built.

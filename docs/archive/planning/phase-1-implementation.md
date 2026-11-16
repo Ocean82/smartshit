@@ -1,3 +1,5 @@
+> **Archived 2026-11-15.** Phase 1 shipped (panel rail, import insights, auditor auto-run, cell inspector). The acceptance checkboxes below were never ticked.
+
 # Phase 1 Implementation Plan: Proactive Intelligence + Panel Architecture
 
 > **Goal:** The app explains the spreadsheet before the user asks. The grid is king.

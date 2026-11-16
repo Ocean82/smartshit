@@ -18,7 +18,9 @@ Substantive architectural or behavioral changes that affect how the app works, d
 - **Not covered:** how well a real model handles the deferred prompts. That needs a live LLM (see `verification-backlog.md`).
 
 ### Docs
-- 46 completed, superseded or historical docs moved to `docs/archive/` with `git mv` (history kept), links and code-comment pointers repaired, `ARCHIVE.md` rewritten. `docs/superpowers/` is gitignored and was left as is.
+- 53 completed, superseded or historical docs moved to `docs/archive/` with `git mv` (history kept), links and code-comment pointers repaired, `ARCHIVE.md` rewritten. Each carries an "Archived" banner.
+- New `docs/ROADMAP.md` is the single forward plan (done / unproven / next / dropped). The strategy doc is marked complete and points to it; `BACKLOG.md` gained section 9 and two stale items were ticked.
+- Gitignored agent history was moved, not deleted, into dated archive folders with a reversible `MOVED.md` manifest: `.agents/tasks` (74 files), `.superpowers/sdd` (55), `docs/superpowers` plans, specs and follow-ups (36). The `.kiro/specs/cloud-sync-per-file-binding` tasks were ticked after verifying the code.
 
 ---
 

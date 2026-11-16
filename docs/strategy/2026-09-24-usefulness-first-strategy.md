@@ -1,6 +1,6 @@
 # Strategy: Useful First, Unique Second
 
-**Status:** Living — current forward plan  
+**Status:** Complete (P0, P1, P2.1, P2.2 shipped). The forward plan is now [`ROADMAP.md`](../ROADMAP.md). This file is kept for the principle and the decisions behind it.  
 **Date:** 2026-09-24 (updated 2026-09-25)  
 **Principle:** Ship a spreadsheet people can trust and finish work in. Differentiation (auditor, privacy, formatting polish) comes after the core job works.
 
@@ -107,12 +107,13 @@ Same executor spine. No new agent runtime.
 
 | Layer | Role | Canonical files |
 |-------|------|-----------------|
-| **Living strategy** | What we build next | **This file** |
+| **Forward plan** | What we build next | `docs/ROADMAP.md` |
+| **Strategy (this file)** | Principle and the shipped P0-P2 record | **This file** |
 | **Product truth** | Public claims | `README.md`, landing — must match code |
 | **Ops** | Deploy / env | `DEPLOY.md`, `ENV.md` |
 | **Change log** | What landed | `MAJOR_CHANGES.md` |
 | **Historical** | Context only | `docs/ARCHIVE.md` |
-| **Planning specs** | Architecture intent | `docs/planning/*` — verify against `src/` |
+| **Planning specs** | Historical architecture intent | `docs/archive/planning/*` — verify against `src/` |
 
 ---
 
@@ -128,7 +129,7 @@ Same executor spine. No new agent runtime.
 ## Related
 
 - Open work outside this plan: [`docs/BACKLOG.md`](../BACKLOG.md)  
-- Planning priorities: [`docs/planning/README.md`](../planning/README.md)  
+- Forward plan: [`docs/ROADMAP.md`](../ROADMAP.md)  
 - Formatter sketch: [`docs/archive/planning/11-tools-formatter.md`](../archive/planning/11-tools-formatter.md)  
 - Engine gaps: [`docs/formualizer-gaps.md`](../formualizer-gaps.md)  
 - Archived reviews: [`docs/ARCHIVE.md`](../ARCHIVE.md)

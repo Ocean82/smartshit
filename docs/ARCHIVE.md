@@ -3,7 +3,8 @@
 Everything under `docs/archive/` is historical: plans that were executed, reviews whose findings were addressed, specs that were superseded, and assessments of a prior state of the codebase. They are kept for context and decision history, not as a description of the current system. Trust the code and the live docs below first.
 
 **For current documentation, see:**
-- `strategy/2026-09-24-usefulness-first-strategy.md` — Living forward plan (useful first, unique second)
+- `ROADMAP.md` — The forward plan: what is done, what is unproven, what to build next
+- `strategy/2026-09-24-usefulness-first-strategy.md` — The "useful first, unique second" principle and the shipped P0-P2 record (complete)
 - `BACKLOG.md` — Open product and code work outside the strategy (incl. P2.3)
 - `MAJOR_CHANGES.md` — Running log of substantive changes
 - `DEPLOY.md` — Production deployment guide
@@ -55,7 +56,29 @@ Everything under `docs/archive/` is historical: plans that were executed, review
 | `archive/chat-prompt/chat.md` | Stale | A pasted prompt-design conversation, not a spec. |
 | `archive/intent-unification-migration.md` | Historical | Its own header says the pipeline has since grown several stages. |
 
-Still live under `planning/`: `phase-1-implementation.md` and `22-seo-paywall-polish.md` (partly open) and the README.
+## Archived in the 2026-11-15 consolidation
+
+Each file carries an "Archived" banner at the top saying why.
+
+| File | Why it was retired |
+|------|--------------------|
+| `archive/project_outline/roadmap-v1.md` | Phase 1 shipped. The unbuilt Phase 2-4 items moved into `ROADMAP.md`. |
+| `archive/planning/phase-1-implementation.md` | Phase 1 shipped; acceptance boxes were never ticked. |
+| `archive/planning/22-seo-paywall-polish.md` | Completed or superseded by the landing SEO work (PRs #74, #76). |
+| `archive/planning/README.md` | Indexed the archived planning docs. |
+| `archive/formula-improvements8.21.md` | Raw notes; the open idea (guided formula builder) is in `BACKLOG.md`. |
+| `archive/persistence-hardening-followups.md` | IndexedDB shipped; the LRU item is in `BACKLOG.md`. |
+| `archive/chat-system-analysis-10-12-2026` | Snapshot analysis; its open action is in `BACKLOG.md` section 8. |
+
+### Local-only history (gitignored, so not in this repository)
+
+Moved, not deleted. Each folder has a `MOVED.md` listing every original path so a move can be reversed.
+
+| Location | Contents |
+|----------|----------|
+| `.agents/archive/2026-11-15/` | Investigations, designs, plans and PR reviews from agent runs. Every one maps to a merged PR or a decision recorded in `ROADMAP.md`. |
+| `.superpowers/archive/2026-11-15/` | Subagent-driven-development scratch: task briefs, reports and review diffs. A stale ledger here once misled a status check. |
+| `docs/superpowers/archive/2026-11-15/` | 18 plans, 17 specs and `open-followups.md`. Every feature topic was checked against the code and found present. |
 
 ## Reference Material (still relevant)
 

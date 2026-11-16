@@ -216,7 +216,7 @@ See **[CONTRIBUTING.md](CONTRIBUTING.md)** for setup and PR guidelines.
 
 ## Roadmap
 
-See [docs/project_outline/roadmap-v1.md](docs/project_outline/roadmap-v1.md) for the full plan.
+See [docs/ROADMAP.md](docs/ROADMAP.md) for the current plan.
 
 Shipped since v1 planning: auto-insights on import, auditor auto-run with a findings panel, and the cell inspector (precedents/dependents + plain-English formula explanation).
 

@@ -1,6 +1,8 @@
-﻿# Planning Documents
+﻿> **Archived 2026-11-15.** The numbered planning docs it indexes were archived; see `docs/ARCHIVE.md` and the live plan in `docs/ROADMAP.md`.
 
-> **Living forward plan:** [`docs/strategy/2026-09-24-usefulness-first-strategy.md`](../strategy/2026-09-24-usefulness-first-strategy.md)  
+# Planning Documents
+
+> **Living forward plan:** [`docs/strategy/2026-09-24-usefulness-first-strategy.md`](../../strategy/2026-09-24-usefulness-first-strategy.md)  
 > Useful first, unique second. P0 complete; formatting sandbox is P1.
 
 ## Core Focus
@@ -31,10 +33,10 @@ inspectors, and proactive insights that surface automatically.
 
 ## Archived
 
-The rest of this folder (the numbered `01`–`25` specs, the gap analysis, the implementation roadmap, the chat-system and cloud plans) is historical and now lives in [`../archive/planning/`](../archive/planning/). The `01`–`21` documents are a Python "Spreadsheet Brain" spec that the TypeScript brain layer did not follow literally. See [`../ARCHIVE.md`](../ARCHIVE.md) for what each one was and why it was retired.
+The rest of this folder (the numbered `01`–`25` specs, the gap analysis, the implementation roadmap, the chat-system and cloud plans) is historical and now lives in [`../archive/planning/`](). The `01`–`21` documents are a Python "Spreadsheet Brain" spec that the TypeScript brain layer did not follow literally. See [`../ARCHIVE.md`](../../ARCHIVE.md) for what each one was and why it was retired.
 
 ## Related Docs
 
 - [Product Roadmap](../project_outline/roadmap-v1.md) — what we're building and when
-- [Product Vision](../project_outline/outline.md) — why this exists and who it's for
-- [Auditor plans (archived)](../archive/auditor/auditor-plans.md) — the original formula auditor design; the auditor has shipped
+- [Product Vision](../../project_outline/outline.md) — why this exists and who it's for
+- [Auditor plans (archived)](../auditor/auditor-plans.md) — the original formula auditor design; the auditor has shipped

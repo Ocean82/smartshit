@@ -5,6 +5,8 @@ Open product and code work that is not on the living strategy
 Server/ops actions live in [`PRODUCTION-TODO.md`](PRODUCTION-TODO.md); checks that need live
 infrastructure live in [`verification-backlog.md`](verification-backlog.md).
 
+**The prioritised path through these items is [`ROADMAP.md`](ROADMAP.md).** This file is the catalog; the roadmap says what to do first and why.
+
 Swept 2026-10-06 from the planning, review, auditor, engine, and chat docs, checked against
 `src/` and `server/src/`. Swept again 2026-10-09 across all of `docs/` (sections 6–8).
 Re-verified against code at HEAD `f65d8b7` on 2026-10-11: every open item spot-checked
@@ -32,7 +34,7 @@ M 1–2 days, L more.
     No provider selection looks at the plan; re-add the claim only if that is built.
 - [ ] **Community template marketplace is live** (2026-10-09)
   - `src/lib/communityTemplates.ts` and the community tab in `TemplateGallery`; the strategy's
-    non-goals and `project_outline/roadmap-v1.md` rule a marketplace out. Keep, flag off, or remove.
+    non-goals and `archive/project_outline/roadmap-v1.md` rule a marketplace out. Keep, flag off, or remove.
 - [x] **Instant edits from the goal and regex routes** (2026-10-09, chat review F1)
   - `src/ai/pipeline/stages/goalRouter.ts` and `.../agentParser.ts` apply NON-destructive edits
     with Undo (`executeTool` + `pushHistory`) but no Apply step; destructive tools (`delete_row`,
@@ -177,7 +179,7 @@ M 1–2 days, L more.
 - [x] Top categories on the import card; data is already computed (S) — done 2026-11-15 (`869b205`).
 - [ ] Copyable / exportable audit report, pairs with `/app?audit=1` (M).
 - [ ] Formula explainer coverage: SUMIFS, COUNTIF(S), XLOOKUP, INDEX/MATCH, `$` refs (M).
-- [ ] Selection-aware chat: send formulas, cap size, rank above whole-sheet data (M).
+- [ ] Selection-aware chat: send formulas, cap size, rank above whole-sheet data (M). Partly done: selected cell values are already sent (`selectionSnapshot`, prompt priority 5).
 - [ ] Selection-based suggestions and an "Explain cell" context-menu entry (S–M).
 - [x] Import warning for formulas the engine is known to get wrong (S) — done 2026-11-15 (`869b205`, `86d5a5b`; warns for #312, #283, #295 only, the divergences that reproduce on 0.9.3).
 - [x] Engine golden tests for upstream issues #312, #283, #295, #319, #285 (S) — done 2026-11-15 (`448413c`; `src/engine/knownGaps.realengine.test.ts`, 19 tests; #319/#285 no longer reproduce and are kept as regression guards).
@@ -264,8 +266,8 @@ Grid and UI:
 - [ ] Autocomplete in the formula bar; it only works in-cell today (phase-3 plan, Task 7) (S–M).
 - [ ] Pivot Table in the toolbar and cell context menu; reachable only from MenuBar, mobile
   menu, and command palette (S).
-- [ ] Guided formula builder and named formula recipes (`formula-improvements8.21.md`) (L).
-- [x] Issue count in the status bar (`planning/phase-1-implementation.md`) (S) — done 2026-11-15 (`61c94ce`; click opens the Auditor).
+- [ ] Guided formula builder and named formula recipes (`archive/formula-improvements8.21.md`) (L).
+- [x] Issue count in the status bar (`archive/planning/phase-1-implementation.md`) (S) — done 2026-11-15 (`61c94ce`; click opens the Auditor).
 - [ ] Dark mode (`archive/review8.16.2026.md`) (M).
 - [ ] Deferred by their own plans: styled xlsx export, status-bar aggregates, AutoSum that
   expands upward, header-filter search box, row auto-fit on wrap, Ctrl+Shift+M merge,
@@ -279,7 +281,7 @@ Platform:
 - [ ] Native tool calling for the model (still prompt-only JSON) (L).
 - [x] Server-side Sentry and an `unhandledRejection` handler (S) — done 2026-11-15 (`082c9b2`, `a54e9e4`, `1c94f56`). Code is live but inert: production has no `SENTRY_DSN` yet (add it to the deploy `ENV` secret, not the server file).
 - [ ] Server integration/validation tests and an xlsx round-trip test (`archive/architecture-fix-plan.md`) (M).
-- [ ] LRU eviction of local workbooks (`persistence-hardening-followups.md` item 1) (M; low
+- [ ] LRU eviction of local workbooks (`archive/persistence-hardening-followups.md` item 1) (M; low
   value now that IndexedDB is the main store).
 - [ ] Mobile cell editing: no hidden-input / `inputMode` handling; confirm on a device (S–M).
 
@@ -289,10 +291,10 @@ Platform:
   points at `brainDispatcher.ts`, which no longer exists, so the comment is doubly stale),
   `callProviderStructured` (`server/src/structuredOutput.ts`, tests only), `defaultStepExecutor` stub
   (`src/ai/macro/macroExecutor.ts`). No production imports found 2026-10-11 — safe to delete.
-- [ ] `server/src/providers.ts` header comment still mentions the deleted `llmIntentParser.ts`.
+- [x] `server/src/providers.ts` header comment still mentions the deleted `llmIntentParser.ts` — done 2026-11-15 (`ba29ed7`; it now says the file was removed).
 - [ ] `SpreadsheetGrid.tsx` is back to ~1,400 lines (846 after the architecture fix plan).
 - [x] Ollama `Modelfile*` keep their own tool lists; they can drift from `shared/toolRegistry.ts` — guarded 2026-11-15 (`5b7c90d`; `server/src/modelfiles.test.ts` fails CI on drift).
-- [ ] Landing title and `og:title` say "smartsht"; `NAMING.md` says always "smartsh!t"
+- [x] (done 2026-11-15, `0193480`) Landing title and `og:title` say "smartsht"; `NAMING.md` says always "smartsh!t"
   (or record the SEO exception in `NAMING.md`).
 
 ## Later / larger
@@ -301,3 +303,14 @@ Platform:
 - [ ] Section detection and outline panel (M–L), then smart search on top of it (M–L).
 - [ ] More intent-engine goals: conditions, count, average, lookup (M–L).
 - [ ] AI formula args with named ranges and other sheets (S–M).
+
+## 9. Added 2026-11-15 (docs and plans review)
+
+Found while consolidating every plan, spec and review. Ordering and rationale are in [`ROADMAP.md`](ROADMAP.md).
+
+- [ ] **Re-run the P0 usefulness gate** with a real budget `.xlsx` and 5+ Q&A turns; record it in `verification-backlog.md` section 11. Step 4 failed on 2026-09-28 and was patched but never re-run; steps 2, 3, 5, 6 were never run (human).
+- [ ] **First-session prompt corpus** (S). About 60 prompts a new user types (highlight, find, select, clear, format, sum) with the expected tool and scope, or an explicit defer-to-LLM. Prevents the unscoped-highlight class of bug (fixed 2026-11-15, `a98da4b`) from returning.
+- [ ] **Find / go-to / select cells** (M). No tool exists to move the selection, scroll, or search for a value, so "find rent", "go to C5" and "select column B" can only reach an LLM that has no tool for them. Read-only, so it can be allowed from every chat mode. This is the "Smart Search" of the original v1 roadmap.
+- [ ] **Stripe cancel / resubscribe round trip** and a look at the deployed boot-reconcile log (human; the last open piece of the subscription-entitlement plan).
+- [ ] **Decide the headline positioning** ("local-first, auditor-led, AI optional" vs the current AI-first copy). `dev-first-positioning-claims` (2026-11-10) found the supporting claims; #77-#81 fixed them.
+- [ ] Known small gaps: floating images ignore row/column insert and delete; unquoted sheet names with spaces (`Sheet 1!A1`) are not parsed.

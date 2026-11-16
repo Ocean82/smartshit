@@ -1,3 +1,5 @@
+> **Archived 2026-11-15.** Item 2 (move local persistence to IndexedDB) shipped. Item 1 (LRU eviction) is low value now and stays in `docs/BACKLOG.md`.
+
 # Persistence hardening — deferred follow-ups
 
 Context: the immediate silent data-loss risks in local persistence were fixed in

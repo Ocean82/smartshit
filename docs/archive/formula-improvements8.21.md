@@ -1,3 +1,5 @@
+> **Archived 2026-11-15.** Raw notes from 2026-08-21. The one open idea (a guided formula builder) is tracked in `docs/BACKLOG.md`.
+
 ## Formula and chat improvements 8/21/2026
 
 Most users don't know:
