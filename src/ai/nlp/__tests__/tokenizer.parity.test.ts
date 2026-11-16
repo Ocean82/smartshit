@@ -9,21 +9,25 @@
  * `node scripts/gen-tokenizer-golden.mjs`.
  */
 import { describe, expect, it } from 'vitest'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { WordPieceTokenizer, type TokenizerJsonFormat } from '../tokenizer'
 import golden from './tokenizer.golden.json'
 
-const tokenizerJson = JSON.parse(
-  readFileSync(join(__dirname, '../../../../public/models/minilm/tokenizer.json'), 'utf8'),
-) as TokenizerJsonFormat
-
+// The model's tokenizer.json is gitignored and downloaded at deploy, so CI uses
+// its vocabulary, committed as minilm-vocab.txt by the generator. The generator
+// checks the json's settings equal the vocab.txt defaults.
 const tokenizer = new WordPieceTokenizer()
-tokenizer.loadFromTokenizerJson(tokenizerJson)
+tokenizer.loadFromVocabTxt(readFileSync(join(__dirname, 'minilm-vocab.txt'), 'utf8'))
+
+/** Where the deployed tokenizer.json is present (a dev machine), check the production loading path too. */
+const DEPLOYED_JSON = join(__dirname, '../../../../public/models/minilm/tokenizer.json')
+const jsonTokenizer = existsSync(DEPLOYED_JSON) ? new WordPieceTokenizer() : null
+jsonTokenizer?.loadFromTokenizerJson(JSON.parse(readFileSync(DEPLOYED_JSON, 'utf8')) as TokenizerJsonFormat)
 
 /** Ids up to and including [SEP], i.e. without the padding. */
-function realIds(text: string): number[] {
-  const { inputIds, attentionMask } = tokenizer.encode(text)
+function realIds(text: string, t: WordPieceTokenizer = tokenizer): number[] {
+  const { inputIds, attentionMask } = t.encode(text)
   const ids: number[] = []
   for (let i = 0; i < inputIds.length && attentionMask[i] === 1n; i++) ids.push(Number(inputIds[i]))
   return ids
@@ -42,4 +46,8 @@ describe('WordPiece tokenizer matches Hugging Face', () => {
       expect(realIds(text)).toEqual(ids)
     },
   )
+
+  it.skipIf(!jsonTokenizer)('the tokenizer.json loading path gives the same ids (dev machines only)', () => {
+    for (const [text, ids] of cases) expect(realIds(text, jsonTokenizer!), text).toEqual(ids)
+  })
 })

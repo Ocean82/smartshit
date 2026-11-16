@@ -6,8 +6,9 @@
  *
  * Encodes a few hundred strings with Hugging Face `tokenizers` (the library
  * that produced public/models/minilm/tokenizer.json) and writes the expected
- * ids to src/ai/nlp/__tests__/tokenizer.golden.json. The test there checks the
- * browser tokenizer against it, so CI needs no Python.
+ * ids to src/ai/nlp/__tests__/tokenizer.golden.json, plus the vocabulary as
+ * minilm-vocab.txt (the model files are gitignored). The test there checks the
+ * browser tokenizer against both, so CI needs neither Python nor the model.
  *
  * Requires: python with `pip install tokenizers`. Rerun after changing the
  * tokenizer.json or the phrase lists.
@@ -20,6 +21,7 @@ import { fileURLToPath } from 'node:url'
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const TOKENIZER = join(ROOT, 'public/models/minilm/tokenizer.json')
 const OUT = join(ROOT, 'src/ai/nlp/__tests__/tokenizer.golden.json')
+const VOCAB_OUT = join(ROOT, 'src/ai/nlp/__tests__/minilm-vocab.txt')
 
 const { CAPABILITIES } = await import('../shared/capabilities.js')
 const { INTENT_PHRASES } = await import('../shared/intentPhrases.js')
@@ -88,3 +90,19 @@ const header = {
 }
 writeFileSync(OUT, JSON.stringify(header) + '\n')
 console.log(`wrote ${cases.length} cases to ${OUT}`)
+
+// The model files are gitignored (downloaded at deploy), so CI cannot read
+// tokenizer.json. Commit its vocabulary as vocab.txt, where line number = id.
+const json = JSON.parse(readFileSync(TOKENIZER, 'utf8'))
+const vocab = Object.entries(json.model.vocab)
+const lines = new Array(vocab.length)
+for (const [token, id] of vocab) lines[id] = token
+if (lines.some((t) => typeof t !== 'string' || /[\r\n]/.test(t))) {
+  throw new Error('vocab ids are not contiguous 0..n-1, or a token contains a newline: vocab.txt cannot represent it')
+}
+const m = json.model
+if (m.unk_token !== '[UNK]' || m.continuing_subword_prefix !== '##' || m.max_input_chars_per_word !== 100) {
+  throw new Error('tokenizer.json config differs from the vocab.txt defaults; the parity test must load the json instead')
+}
+writeFileSync(VOCAB_OUT, lines.join('\n') + '\n')
+console.log(`wrote ${lines.length} tokens to ${VOCAB_OUT}`)
