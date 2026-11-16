@@ -105,9 +105,11 @@ async function handleClassify(id: string, text: string): Promise<void> {
     const encoded = tokenizer.encode(text)
 
     // 2. Create ONNX tensors
-    const inputIdsTensor = new ort.Tensor('int64', encoded.inputIds, [1, 128])
-    const attentionMaskTensor = new ort.Tensor('int64', encoded.attentionMask, [1, 128])
-    const tokenTypeIdsTensor = new ort.Tensor('int64', encoded.tokenTypeIds, [1, 128])
+    // Shape follows the tokenizer's max length instead of repeating 128 here.
+    const seqLen = encoded.inputIds.length
+    const inputIdsTensor = new ort.Tensor('int64', encoded.inputIds, [1, seqLen])
+    const attentionMaskTensor = new ort.Tensor('int64', encoded.attentionMask, [1, seqLen])
+    const tokenTypeIdsTensor = new ort.Tensor('int64', encoded.tokenTypeIds, [1, seqLen])
 
     // 3. Run inference
     const feeds: Record<string, ort.Tensor> = {
@@ -125,7 +127,7 @@ async function handleClassify(id: string, text: string): Promise<void> {
     const hiddenSize = 384
 
     // 5. Mean pooling with attention mask
-    const embedding = meanPool(outputData, encoded.attentionMask, 128, hiddenSize)
+    const embedding = meanPool(outputData, encoded.attentionMask, seqLen, hiddenSize)
 
     // 6. L2 normalize the embedding
     l2Normalize(embedding)
