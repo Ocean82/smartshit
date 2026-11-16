@@ -6,7 +6,7 @@
  */
 
 import type { ParsedToolCall } from './parser'
-import type { SheetData, FilterConfig, CellFormat, ChartConfig } from '@/types'
+import type { SheetData, FilterConfig, CellFormat, ChartConfig, Selection } from '@/types'
 import type { SortPatch } from '@/lib/sheetSort'
 import type { RenameSheetResult } from '@/lib/sheetRename'
 import { resolveToolName, TEMPLATE_TOOL_NAMES } from '@shared/toolRegistry'
@@ -40,6 +40,8 @@ export interface ExecutionContext {
   pushHistory: (desc: string) => void
   /** Currently selected cell ids, if any (used by format_cells defaults). */
   getSelection?: () => string[]
+  /** Select these ranges (first is primary) and scroll the first into view. Read-only navigation. */
+  selectRanges?: (ranges: Selection[]) => void
   /** Adds a chart to the active sheet (used by create_chart). */
   addChart?: (chart: ChartConfig) => void
   /** Runs a create_* template via the template module (src/templates). */

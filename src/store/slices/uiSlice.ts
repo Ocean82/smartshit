@@ -44,6 +44,13 @@ export interface UIState {
   // Scroll
   scrollRow: number
   scrollCol: number
+  /**
+   * Ask the grid to scroll a cell into view. The grid owns the real geometry
+   * (row heights, column widths, frozen panes, hidden and filtered rows), so
+   * dialogs and chat request it here instead of guessing pixel offsets.
+   * `nonce` makes a repeat request for the same cell fire again.
+   */
+  revealRequest: { row: number; col: number; nonce: number } | null
 
   // Toast notifications
   toasts: Toast[]
@@ -78,6 +85,8 @@ export interface UIActions {
   setShowNameManagerDialog: (show: boolean) => void
   setContextMenu: (menu: { x: number; y: number; cell: string } | null) => void
   setScrollPosition: (row: number, col: number) => void
+  /** Scroll the grid so this cell (0-indexed) is visible. */
+  revealCell: (row: number, col: number) => void
   setApplyPosture: (posture: ApplyPosture) => void
   showToast: (toast: Omit<Toast, 'id'>) => void
   dismissToast: (id: string) => void
@@ -130,6 +139,7 @@ export function createUIState(): UIState {
     panelWidths: JSON.parse(storage?.getItem('smartsht-panel-widths') || '{}'),
     scrollRow: 0,
     scrollCol: 0,
+    revealRequest: null,
     toasts: [],
     confirmDialog: null,
   }
@@ -214,6 +224,9 @@ export function createUIActions(
     setShowNameManagerDialog: (show) => set((s) => { s.showNameManagerDialog = show }),
     setContextMenu: (menu) => set((s) => { s.contextMenu = menu }),
     setScrollPosition: (row, col) => set((s) => { s.scrollRow = row; s.scrollCol = col }),
+    revealCell: (row, col) => set((s) => {
+      s.revealRequest = { row, col, nonce: (s.revealRequest?.nonce ?? 0) + 1 }
+    }),
     setApplyPosture: (posture) => {
       set((s) => { s.applyPosture = posture })
       try { storage?.setItem('smartsht-apply-posture', posture) } catch { /* ignore */ }

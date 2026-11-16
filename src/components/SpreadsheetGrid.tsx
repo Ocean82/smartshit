@@ -665,6 +665,17 @@ export function SpreadsheetGrid() {
     else if (cellLeft < scrollLeft + leftInset) gridEl.scrollLeft = Math.max(0, cellLeft - leftInset);
   }, [viewport.gridRef, viewport.frozenRows, viewport.frozenCols, viewport.displayRows, viewport.displayCols, viewport.rowOffsets, resolvedGetColWidth]);
 
+  // Reveal requests from outside the grid (chat find/go-to, Go To dialog, name
+  // box, Find & Replace) use the same geometry as keyboard navigation. The ref
+  // keeps the effect keyed on the request alone: re-running it when geometry
+  // changes would yank the view back to an old target after a column resize.
+  const revealRequest = useStore((s) => s.revealRequest);
+  const scrollCellIntoViewRef = useRef(scrollCellIntoView);
+  scrollCellIntoViewRef.current = scrollCellIntoView;
+  useEffect(() => {
+    if (revealRequest) scrollCellIntoViewRef.current(revealRequest.row, revealRequest.col);
+  }, [revealRequest]);
+
   // Cumulative pixel offsets in *display* space for point→cell mapping.
   const displayColOffsets = useMemo(() => {
     const count = viewport.displayColCount;

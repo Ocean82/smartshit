@@ -33,6 +33,7 @@ import {
   createGoalRouterStage,
   createAgentParserStage,
   createTemplateResolverStage,
+  createNavigationStage,
   createIntentClassifierStage,
   createSemanticCapabilityRouterStage,
   createMacroPlannerStage,
@@ -181,6 +182,9 @@ function insightsScopeMatches(snapshotScope: InsightsScope | undefined, current:
 function buildStages(deps: ChatServiceDeps, isNonCommand: boolean): PipelineStage[] {
   const stages: PipelineStage[] = [createIntentClassifierStage()]
   if (!isNonCommand) {
+    // Navigation first and in any mode: it only moves the selection, and
+    // "where is the rent?" is a question whose answer is the cell.
+    stages.push(createNavigationStage({ buildExecContext: deps.buildExecContext }))
     stages.push(createGoalRouterStage({ buildExecContext: deps.buildExecContext, pushHistory: deps.pushHistory }))
     stages.push(createAgentParserStage({ buildExecContext: deps.buildExecContext, pushHistory: deps.pushHistory }))
     stages.push(createTemplateResolverStage({ buildExecContext: deps.buildExecContext, pushHistory: deps.pushHistory }))

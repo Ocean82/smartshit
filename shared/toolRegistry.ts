@@ -505,6 +505,16 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
     examples: ['smallest expense', 'lowest value in column C'],
   },
   {
+    name: 'select_cells',
+    category: 'read',
+    description: 'Select and scroll to a cell, range, column or row, or to every cell containing a value. Never changes the sheet.',
+    params: [
+      { name: 'range', type: 'string', description: 'A1 cell or range, "column B", or "row 5"' },
+      { name: 'find', type: 'string', description: 'Text or number to search for (case-insensitive). Use instead of range.' },
+    ],
+    examples: ['go to C5', 'select column B', 'find rent', 'where is the total'],
+  },
+  {
     name: 'count_rows',
     category: 'read',
     description: 'Count data rows matching a text or numeric condition without changing the sheet',

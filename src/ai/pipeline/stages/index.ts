@@ -12,6 +12,8 @@ export { createTemplateResolverStage } from './templateResolver'
 export type { TemplateResolverDeps } from './templateResolver'
 
 export { createIntentClassifierStage } from './intentClassifier'
+export { createNavigationStage } from './navigation'
+export type { NavigationDeps } from './navigation'
 
 export { createSemanticCapabilityRouterStage } from './semanticCapabilityRouter'
 export type { SemanticCapabilityRouterDeps } from './semanticCapabilityRouter'

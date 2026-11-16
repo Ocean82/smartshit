@@ -377,6 +377,15 @@ export function buildExecutionContext(
       if (additional.length === 0) return primary;
       return [...new Set([...primary, ...additional])];
     },
+    selectRanges: (ranges) => {
+      if (ranges.length === 0) return;
+      const [first, ...rest] = ranges;
+      set((s: AppState) => {
+        s.selection = first;
+        s.additionalSelections = rest;
+      });
+      get().revealCell(first.startRow, first.startCol);
+    },
     addChart: (chart) => get().addChart(chart),
     exportData: (format) => {
       const state = get();

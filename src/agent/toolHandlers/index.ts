@@ -9,6 +9,7 @@ import { handleRenameHeader, handleModifyColumn, handleApplyFormula } from './co
 import { handleClearSheet, handleRenameSheet, handleSortSheet, handleMultiSort } from './sheetOps'
 import { handleFormulaAnalyzer, handleCountRows, handleFindMax, handleFindMin } from './queryOps'
 import { handleMultiSheetJoin } from './joinOps'
+import { handleSelectCells } from './navigationOps'
 import { handleFormatCells, handleFormatAsTable, handleStyleRecipe } from './formatOps'
 import { handleSetColumnWidth, handleSetRowHeight, handleAutoFit } from './layoutOps'
 import {
@@ -38,6 +39,7 @@ export const TOOL_HANDLERS: Record<string, ToolHandler> = {
   count_rows: handleCountRows,
   find_max: handleFindMax,
   find_min: handleFindMin,
+  select_cells: handleSelectCells,
   multi_sheet_join: handleMultiSheetJoin,
   format_cells: handleFormatCells,
   format_as_table: handleFormatAsTable,

@@ -17,6 +17,7 @@ export {
   createGoalRouterStage,
   createAgentParserStage,
   createTemplateResolverStage,
+  createNavigationStage,
   createIntentClassifierStage,
   createSemanticCapabilityRouterStage,
   createMacroPlannerStage,
@@ -24,6 +25,7 @@ export {
   createLLMGatewayStage,
 } from './stages'
 export type {
+  NavigationDeps,
   AgentParserDeps,
   GoalRouterDeps,
   TemplateResolverDeps,

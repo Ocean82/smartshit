@@ -58,6 +58,8 @@ export function FindReplaceDialog({ isOpen, onClose }: Props) {
 
   const navigateToMatch = useCallback((match: MatchResult) => {
     setSelection({ startRow: match.row, startCol: match.col, endRow: match.row, endCol: match.col })
+    // Without this, Find Next selected an off-screen match without showing it.
+    useStore.getState().revealCell(match.row, match.col)
   }, [setSelection])
 
   const doSearch = useCallback(() => {

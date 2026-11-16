@@ -125,17 +125,8 @@ export function FormulaBar() {
     if (match) {
       const ref = cellToRef(val);
       setSelection({ startRow: ref.row, startCol: ref.col, endRow: ref.row, endCol: ref.col });
-      // Scroll to the cell
-      const gridEl = document.querySelector('[data-spreadsheet-grid]');
-      if (gridEl) {
-        const cellHeight = 28;
-        const defaultCellWidth = 100;
-        gridEl.scrollTo({
-          top: Math.max(0, ref.row * cellHeight - cellHeight * 2),
-          left: Math.max(0, ref.col * defaultCellWidth - defaultCellWidth),
-          behavior: 'smooth',
-        });
-      }
+      // The grid scrolls with its real row heights, column widths and frozen panes.
+      useStore.getState().revealCell(ref.row, ref.col);
     }
     setNameBoxEditing(false);
   }, [nameBoxValue, setSelection]);

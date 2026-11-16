@@ -31,6 +31,8 @@ export interface CorpusCase {
   client?: Expect
   /** Why this row exists, or the roadmap item that will flip it. */
   note?: string
+  /** The navigation stage (src/lib/navigation.ts) answers it by selecting cells. */
+  navigates?: true
 }
 
 const defer: Expect = { kind: 'defer' }
@@ -97,17 +99,17 @@ export const FIRST_SESSION_CORPUS: CorpusCase[] = [
   { prompt: 'show empty cells', server: defer },
   { prompt: 'delete row 3', server: defer, client: tool('delete_row', { row: 3 }) },
 
-  // ── Find / go to / select: no tool exists yet (roadmap 1.1) ─────────────
-  { prompt: 'find rent', server: defer, client: defer, note: 'roadmap 1.1: find/go-to/select' },
-  { prompt: 'find groceries', server: defer, client: defer, note: 'roadmap 1.1' },
-  { prompt: 'find the biggest expense', server: defer, note: 'roadmap 1.1' },
-  { prompt: 'where is the total', server: defer, client: defer, note: 'roadmap 1.1' },
-  { prompt: 'where is the rent', server: defer, client: defer, note: 'roadmap 1.1' },
-  { prompt: 'go to cell C5', server: defer, client: defer, note: 'roadmap 1.1' },
-  { prompt: 'select column B', server: defer, client: defer, note: 'roadmap 1.1' },
-  { prompt: 'select cell C5', server: defer, client: defer, note: 'roadmap 1.1' },
-  { prompt: 'search for netflix', server: defer, client: defer, note: 'roadmap 1.1' },
-  { prompt: 'locate the total row', server: defer, note: 'roadmap 1.1' },
+  // ── Find / go to / select: the navigation stage selects the cells ───────
+  { prompt: 'find rent', server: defer, client: defer, navigates: true },
+  { prompt: 'find groceries', server: defer, client: defer, navigates: true },
+  { prompt: 'find the biggest expense', server: defer, note: 'superlative: find_max, not navigation' },
+  { prompt: 'where is the total', server: defer, client: defer, navigates: true },
+  { prompt: 'where is the rent', server: defer, client: defer, navigates: true },
+  { prompt: 'go to cell C5', server: defer, client: defer, navigates: true },
+  { prompt: 'select column B', server: defer, client: defer, navigates: true },
+  { prompt: 'select cell C5', server: defer, client: defer, navigates: true },
+  { prompt: 'search for netflix', server: defer, client: defer, navigates: true },
+  { prompt: 'locate the total row', server: defer, navigates: true },
 
   // ── Formulas and data ops ───────────────────────────────────────────────
   { prompt: 'sum column C', server: tool('apply_formula', { column: 'C', formula: 'SUM' }) },

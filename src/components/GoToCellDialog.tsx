@@ -16,8 +16,9 @@ interface GoToCellDialogProps {
 }
 
 export function GoToCellDialog({ open, onClose }: GoToCellDialogProps) {
-  // Single stable action ref — plain selector, no re-render on unrelated state.
+  // Stable action refs — plain selectors, no re-render on unrelated state.
   const setSelection = useStore((s) => s.setSelection);
+  const revealCell = useStore((s) => s.revealCell);
   const [value, setValue] = useState('');
   const [error, setError] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -46,17 +47,17 @@ export function GoToCellDialog({ open, onClose }: GoToCellDialogProps) {
       const start = cellToRef(`${rangeMatch[1]}${rangeMatch[2]}`);
       const end = cellToRef(`${rangeMatch[3]}${rangeMatch[4]}`);
       setSelection({ startRow: start.row, startCol: start.col, endRow: end.row, endCol: end.col });
-      scrollToCell(start.row, start.col);
+      revealCell(start.row, start.col);
       onClose();
     } else if (cellMatch) {
       const ref = cellToRef(cleaned);
       setSelection({ startRow: ref.row, startCol: ref.col, endRow: ref.row, endCol: ref.col });
-      scrollToCell(ref.row, ref.col);
+      revealCell(ref.row, ref.col);
       onClose();
     } else {
       setError('Invalid cell reference. Use format: A1, B10, or A1:C5');
     }
-  }, [value, setSelection, onClose]);
+  }, [value, setSelection, revealCell, onClose]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
@@ -131,16 +132,4 @@ export function GoToCellDialog({ open, onClose }: GoToCellDialogProps) {
       </div>
     </div>
   );
-}
-
-function scrollToCell(row: number, col: number) {
-  const gridEl = document.querySelector('[data-spreadsheet-grid]');
-  if (!gridEl) return;
-  const cellHeight = 28;
-  const defaultCellWidth = 100;
-  gridEl.scrollTo({
-    top: Math.max(0, row * cellHeight - cellHeight * 3),
-    left: Math.max(0, col * defaultCellWidth - defaultCellWidth * 2),
-    behavior: 'smooth',
-  });
 }
