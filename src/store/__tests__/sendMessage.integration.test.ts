@@ -54,12 +54,18 @@ function seedBudgetData() {
   store.setCellValue('B5', 15)
 }
 
+// The first send in a cold worker pays one-off pipeline module loading (about
+// 4 s measured on Windows, under 3 s warm). A 3 s wait made the first test
+// flake whenever transforms were cold, so allow headroom for that one cost.
+const SEND_WAIT_MS = 10_000
+vi.setConfig({ testTimeout: SEND_WAIT_MS + 5_000 })
+
 async function sendAndWait(input: string) {
   useStore.setState({ chatInput: input })
   useStore.getState().sendMessage()
   await vi.waitFor(() => {
     expect(useStore.getState().isAiProcessing).toBe(false)
-  }, { timeout: 3000 })
+  }, { timeout: SEND_WAIT_MS })
 }
 
 describe('sendMessage integration — local parser path', () => {
