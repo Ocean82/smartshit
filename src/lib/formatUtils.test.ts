@@ -159,6 +159,16 @@ describe('formatCellValue', () => {
   it('handles unknown format gracefully', () => {
     expect(formatCellValue(42, 'unknown-format')).toBe('42')
   })
+
+  // The grid formats the engine's computed value, a string even for numbers.
+  // A serial string once showed as the year itself ("1/1/45330").
+  it('reads a numeric string as a date serial', () => {
+    expect(formatCellValue('45330', 'date')).toBe(formatCellValue(45330, 'date'))
+    expect(formatCellValue('45330', 'date')).toBe('2/8/2024')
+    expect(formatCellValue('0.5', 'time')).toBe('12:00 PM')
+    expect(formatCellValue('45330.5', 'datetime')).toBe(formatCellValue(45330.5, 'datetime'))
+    expect(formatCellValue('2/8/2024', 'date')).toBe('2/8/2024')
+  })
 })
 
 describe('isNegativeRedFormat', () => {

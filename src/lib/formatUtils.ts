@@ -216,6 +216,12 @@ function parseDateFromValue(value: string | number | boolean | null): Date | nul
     // RegExp.exec() performs pattern matching only, no code is executed.
     const safeStr: string = String(value).trim();
 
+    // The grid formats the engine's computed value, which is a string even for
+    // a number, so an Excel date serial arrives as "45330". Parsed as text it
+    // became the year 45330 ("1/1/45330"), and a time "0.5" became midnight.
+    // A plain number string is a serial, the same as the number.
+    if (/^-?\d+(?:\.\d+)?$/.test(safeStr)) return parseDateFromValue(Number(safeStr));
+
     // ISO date: 2026-07-11
     const isoDay = /^(\d{4})-(\d{2})-(\d{2})$/.exec(safeStr);
     if (isoDay) {
