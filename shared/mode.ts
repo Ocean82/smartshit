@@ -69,6 +69,7 @@ const ACT_SIGNALS = [
   'generate',
   'add a',
   'add an',
+  'add up',
   'set up',
   'setup',
   // Cell / row mutations the agent parser handles (gate requires mode=act).

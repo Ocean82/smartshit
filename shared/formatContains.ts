@@ -25,6 +25,11 @@ const CONTAINS_VALUE_RE =
  */
 export const CONTAINS_STOP_WORDS = new Set([
   'number', 'numbers', 'numeric', 'to',
+  // Superlatives and structural words describe WHICH cell ("the cell with the
+  // biggest number"), not text to search for. Quote one to search for it literally.
+  'biggest', 'largest', 'highest', 'maximum', 'max', 'lowest', 'smallest', 'minimum', 'min',
+  'most', 'least', 'top', 'bottom', 'first', 'last', 'empty', 'blank', 'errors', 'error',
+  'duplicate', 'duplicates', 'formula', 'formulas',
   'red', 'blue', 'green', 'yellow', 'orange', 'purple', 'pink', 'black', 'white', 'gray', 'grey',
 ])
 

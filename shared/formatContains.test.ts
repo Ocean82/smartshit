@@ -9,6 +9,17 @@ describe('extractCellContainsValue', () => {
     expect(extractCellContainsValue('highlight cells with 4')).toBe('4')
   })
 
+  it('does not treat a superlative or structural word as a literal to search for', () => {
+    // "the cell with the biggest number" describes WHICH cell, not text to find.
+    expect(extractCellContainsValue('highlight the cell with the biggest number')).toBeNull()
+    expect(extractCellContainsValue('highlight cells with the highest amount')).toBeNull()
+    expect(extractCellContainsValue('highlight cells with errors')).toBeNull()
+    // Quoting opts back in to a literal search.
+    expect(extractCellContainsValue('highlight cells containing "biggest"')).toBe('biggest')
+    // Real literals are unaffected.
+    expect(extractCellContainsValue('highlight cells with rent')).toBe('rent')
+  })
+
   it('captures the value after says / reads / named / called', () => {
     expect(extractCellContainsValue('highlight the cell that says groceries')).toBe('groceries')
     expect(extractCellContainsValue('highlight cells named rent')).toBe('rent')

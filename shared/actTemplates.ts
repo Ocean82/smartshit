@@ -85,7 +85,7 @@ const RANGE_TARGETS: Array<[RegExp, (m: RegExpMatchArray) => string]> = [
   [/\b([a-z]{1,3}\d{1,5})(?::([a-z]{1,3}\d{1,5}))?\b/, (m) => (m[2] ? `${m[1]}:${m[2]}` : m[1]).toUpperCase()],
   [/\bcolumns?\s+([a-z]{1,2})\b/, (m) => m[1].toUpperCase()],
   [/\brow\s+(\d{1,5})\b/, (m) => `A${m[1]}:Z${m[1]}`],
-  [/\b(?:headers?|(?:first|top)\s+row)\b/, () => 'A1:Z1'],
+  [/\b(?:headers?(?:\s+row)?|(?:first|top)\s+row)\b/, () => 'A1:Z1'],
   // Whole sheet only when asked for explicitly ("make everything bold"); last so a named target wins.
   [/\b(?:all|every|everything|entire|whole)\b(?:\s+(?:the\s+)?(?:cells?|sheet|spreadsheet|text|data))?/, () => 'all'],
 ]
@@ -580,6 +580,14 @@ const RULES: TemplateRule[] = [
  */
 const STYLING_LEAD_RE =
   /^(?:(?:please|pls|can you|could you|would you|will you|i want to|i need to|i'd like to)\s+)*(?:(?:highlight|colou?r|shade|bold|italicize|underline)\b|make\b.*\b(?:bold|italic|underlined?|highlighted)\b)/
+/**
+ * Lookup and navigation verbs ("locate the total row", "find rent", "go to C5").
+ * They name things like "total" that the formula rules match, so without this
+ * "locate the total row" wrote a SUM. There is no deterministic navigation tool
+ * yet (docs/ROADMAP.md 1.1); defer so the LLM answers instead of the sheet changing.
+ */
+const NAVIGATION_LEAD_RE =
+  /^(?:(?:please|pls|can you|could you|would you|will you)\s+)*(?:find|locate|search|look\s+for|go\s+to|jump\s+to|scroll\s+to|navigate\s+to|select|where)\b/
 const STYLING_RULE_IDS = new Set(['formatting', 'number_format', 'format_as_table', 'style_recipe', 'professionalize', 'layout'])
 
 export function resolveActTemplates(message: string): ActTemplateResult {
@@ -590,6 +598,8 @@ export function resolveActTemplates(message: string): ActTemplateResult {
   // "what if I blank the sheet") contain the same keywords as the rules below
   // but must never produce a mutation proposal.
   if (isNonCommandRequest(original)) return { message: '', actions: [] }
+
+  if (NAVIGATION_LEAD_RE.test(lower)) return { message: '', actions: [] }
 
   const isStyling = STYLING_LEAD_RE.test(lower)
   for (const rule of RULES) {
