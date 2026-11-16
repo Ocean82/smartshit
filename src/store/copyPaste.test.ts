@@ -2,19 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useStore } from './useStore'
 import { createEmptyWorkbook } from '@/engine/spreadsheet'
 
-class FakeClipboardItem {
-  data: Record<string, Blob | string>
-  constructor(data: Record<string, Blob | string>) {
-    this.data = data
-  }
-
-  async getType(type: string): Promise<Blob> {
-    const d = this.data[type]
-    if (d instanceof Blob) return d
-    return new Blob([String(d)], { type })
-  }
-}
-
 describe('clipboard', () => {
   beforeEach(() => {
     const wb = createEmptyWorkbook('Clipboard Test')
@@ -33,41 +20,45 @@ describe('clipboard', () => {
     vi.restoreAllMocks()
   })
 
-  it('copy writes a single ClipboardItem with TSV/CSV/text to the OS clipboard', async () => {
-    const write = vi.fn().mockResolvedValue(undefined)
-    vi.stubGlobal('navigator', { clipboard: { write } })
-    vi.stubGlobal('ClipboardItem', FakeClipboardItem)
+  // Plain text only: Chrome rejects a ClipboardItem carrying text/csv or
+  // text/tab-separated-values, which once made every copy fail silently.
+  it('copy writes tab-separated plain text with writeText', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    const write = vi.fn()
+    vi.stubGlobal('navigator', { clipboard: { writeText, write } })
 
     useStore.getState().copy()
-    await vi.waitFor(() => expect(write).toHaveBeenCalledTimes(1))
-
-    const items = write.mock.calls[0][0] as Array<{ getType: (t: string) => Promise<Blob> }>
-    expect(items.length).toBe(1)
-    const csv = await items[0].getType('text/csv').then((b) => b.text())
-    expect(csv).toBe('src,2')
-    const plain = await items[0].getType('text/plain').then((b) => b.text())
-    expect(plain).toBe('src\t2')
-    const tsv = await items[0].getType('text/tab-separated-values').then((b) => b.text())
-    expect(tsv).toBe('src\t2')
+    await vi.waitFor(() => expect(writeText).toHaveBeenCalledTimes(1))
+    expect(writeText).toHaveBeenCalledWith('src\t2')
+    expect(write).not.toHaveBeenCalled()
   })
 
-  it('copy applies formulas in all representations', async () => {
-    const write = vi.fn().mockResolvedValue(undefined)
-    vi.stubGlobal('navigator', { clipboard: { write } })
-    vi.stubGlobal('ClipboardItem', FakeClipboardItem)
+  it('copy writes formulas as formula text', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    vi.stubGlobal('navigator', { clipboard: { writeText } })
 
     useStore.getState().setCellValue('A1', 3, '=SUM(A1)')
     useStore.getState().copy()
-    await vi.waitFor(() => expect(write).toHaveBeenCalledTimes(1))
-    const items = write.mock.calls[0][0] as Array<{ getType: (t: string) => Promise<Blob> }>
-    const text = await items[0].getType('text/plain').then((b) => b.text())
-    expect(text).toBe('=SUM(A1)\t2')
+    await vi.waitFor(() => expect(writeText).toHaveBeenCalledTimes(1))
+    expect(writeText).toHaveBeenCalledWith('=SUM(A1)\t2')
+  })
+
+  it('copy writes dates and times as displayed, not as serials', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    vi.stubGlobal('navigator', { clipboard: { writeText } })
+
+    useStore.getState().setCellValue('A1', 45330)
+    useStore.getState().setCellFormat('A1', { numberFormat: 'date' })
+    useStore.getState().setCellValue('B1', 0.5)
+    useStore.getState().setCellFormat('B1', { numberFormat: 'time' })
+    useStore.getState().copy()
+    await vi.waitFor(() => expect(writeText).toHaveBeenCalledTimes(1))
+    expect(writeText).toHaveBeenCalledWith('2/8/2024\t12:00 PM')
   })
 
   it('copy swallows clipboard errors rather than throwing', () => {
-    const write = vi.fn().mockRejectedValue(new Error('denied'))
-    vi.stubGlobal('navigator', { clipboard: { write } })
-    vi.stubGlobal('ClipboardItem', FakeClipboardItem)
+    const writeText = vi.fn().mockRejectedValue(new Error('denied'))
+    vi.stubGlobal('navigator', { clipboard: { writeText } })
 
     expect(() => useStore.getState().copy()).not.toThrow()
   })
@@ -147,12 +138,11 @@ describe('clipboard', () => {
     /** Round-trips through a fake OS clipboard; Windows returns CRLF line endings. */
     function stubRoundTripClipboard() {
       let written = ''
-      const write = vi.fn(async (items: FakeClipboardItem[]) => {
-        written = await items[0].getType('text/plain').then((b) => b.text())
+      const writeText = vi.fn(async (text: string) => {
+        written = text
       })
       const readText = vi.fn(async () => written.replace(/\n/g, '\r\n'))
-      vi.stubGlobal('navigator', { clipboard: { write, readText } })
-      vi.stubGlobal('ClipboardItem', FakeClipboardItem)
+      vi.stubGlobal('navigator', { clipboard: { writeText, readText } })
       return { waitForWrite: () => vi.waitFor(() => expect(written).not.toBe('')) }
     }
 

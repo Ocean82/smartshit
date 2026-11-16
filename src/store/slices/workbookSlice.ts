@@ -68,23 +68,23 @@ function sameClipboardText(a: string, b: string): boolean {
   return normalize(a) === normalize(b)
 }
 
-/** Best-effort write of a cell block to the OS clipboard. Never throws. */
+/**
+ * Best-effort write of a cell block to the OS clipboard. Never throws.
+ *
+ * Plain text only: Chrome's async clipboard rejects any item carrying a type
+ * outside text/plain, text/html and image/png, so the old item with
+ * text/tab-separated-values and text/csv failed every time, silently, and
+ * nothing reached the OS clipboard. Spreadsheets read tab-separated text/plain.
+ */
 async function writeToOsClipboard(
   cells: Record<string, CellData>,
   selection: Selection,
 ): Promise<void> {
   try {
-    if (typeof navigator === 'undefined' || !navigator.clipboard || typeof ClipboardItem === 'undefined') return
-    const { tsv, csv, text } = encodeCellBlock(cells, selection)
-    await navigator.clipboard.write([
-      new ClipboardItem({
-        'text/tab-separated-values': new Blob([tsv], { type: 'text/tab-separated-values' }),
-        'text/csv': new Blob([csv], { type: 'text/csv' }),
-        'text/plain': new Blob([text], { type: 'text/plain' }),
-      }),
-    ])
+    if (typeof navigator === 'undefined' || !navigator.clipboard?.writeText) return
+    await navigator.clipboard.writeText(encodeCellBlock(cells, selection).text)
   } catch {
-    // Clipboard unavailable, not in a user gesture, or permission denied — non-fatal.
+    // Clipboard unavailable, not in a user gesture, or permission denied: non-fatal.
   }
 }
 

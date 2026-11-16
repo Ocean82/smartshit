@@ -7,6 +7,7 @@
  */
 import type { CellData } from '@/types'
 import { refToCell } from '@/engine/spreadsheet'
+import { formatCellValue } from '@/lib/formatUtils'
 
 /** Serialize a cell block. `selection` defines the rectangle's extent. */
 export function encodeCellBlock(
@@ -28,7 +29,7 @@ export function encodeCellBlock(
       if (cell) {
         text = cell.formula != null && cell.formula !== ''
           ? cell.formula
-          : (cell.value == null ? '' : String(cell.value))
+          : displayText(cell)
       }
       line.push(text)
     }
@@ -40,6 +41,16 @@ export function encodeCellBlock(
     csv: toCsv(rows.map((r) => r.split('\t'))),
     text: tsv,
   }
+}
+
+/**
+ * A date or time is stored as an Excel serial; copy it as shown ("2/8/2024"),
+ * not as 45330. Other formats keep the raw value so no precision is lost.
+ */
+function displayText(cell: CellData): string {
+  if (cell.value == null) return ''
+  const fmt = cell.format?.numberFormat
+  return fmt && /^(date|time)/.test(fmt) ? formatCellValue(cell.value, fmt) : String(cell.value)
 }
 
 function toCsv(rows: string[][]): string {
