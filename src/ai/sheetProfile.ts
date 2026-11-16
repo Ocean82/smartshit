@@ -76,12 +76,17 @@ export function inferRole(
   return 'quantity'
 }
 
+/**
+ * Guess what the sheet is for from its headers. Words must start at a word
+ * boundary (plurals still match): bare substrings read "factual" as budget,
+ * "syntax" as an invoice, "ideal" as sales and "billable hours" as an invoice.
+ */
 export function detectPurpose(headers: string[]): SheetPurpose {
   const joined = headers.join(' ').toLowerCase()
-  if (/budget|expense|income|spending|savings|variance|actual|planned/.test(joined)) return 'budget'
-  if (/invoice|bill|client|subtotal|tax/.test(joined)) return 'invoice'
-  if (/inventory|stock|sku|warehouse|quantity|reorder/.test(joined)) return 'inventory'
-  if (/sales|revenue|product|profit|pipeline|deal/.test(joined)) return 'sales'
+  if (/\b(budget|expense|income|spending|savings|variance|actual|planned)/.test(joined)) return 'budget'
+  if (/\b(invoice|bill\b|bills\b|billing|client|subtotal|tax)/.test(joined)) return 'invoice'
+  if (/\b(inventory|stock|sku|warehouse|quantity|reorder)/.test(joined)) return 'inventory'
+  if (/\b(sales|revenue|product|profit|pipeline|deal)/.test(joined)) return 'sales'
   return 'generic'
 }
 

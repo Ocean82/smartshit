@@ -1,6 +1,6 @@
 import { GOAL_REGISTRY } from './registry'
 import { explainGoal } from './explain'
-import { rolesSatisfied } from './matchGoal'
+import { rolesSatisfied, uniqueRoleColumn } from './matchGoal'
 import type { GoalMatch } from './types'
 import type { SheetProfile } from '@/ai/types'
 
@@ -10,10 +10,11 @@ export function listSuggestedGoals(profile: SheetProfile | null | undefined): Go
   const matches: GoalMatch[] = []
   for (const def of GOAL_REGISTRY) {
     if (!rolesSatisfied(def, profile)) continue
+    // Same column choice as matchGoal, so a suggestion runs on the column it names.
     const slots = {
-      amountColumn: profile.columns.find((c) => c.role === 'amount')?.column,
-      categoryColumn: profile.columns.find((c) => c.role === 'category')?.column,
-      dateColumn: profile.columns.find((c) => c.role === 'date')?.column,
+      amountColumn: uniqueRoleColumn(profile.columns, 'amount')?.column,
+      categoryColumn: uniqueRoleColumn(profile.columns, 'category')?.column,
+      dateColumn: uniqueRoleColumn(profile.columns, 'date')?.column,
     }
     matches.push({
       status: 'matched',

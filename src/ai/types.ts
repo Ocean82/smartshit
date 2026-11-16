@@ -2,14 +2,29 @@ import type { ChartConfig, ProviderMeta } from '@/types'
 
 export type { IntentType, UserIntent } from '@shared/intentTypes'
 
+/**
+ * What a column holds, from `inferRole` in sheetProfile.ts.
+ *
+ * `amount` means MONEY: it is shown with a currency symbol in chat, insight
+ * cards and the makeover, and it is the only role summed as expenses. Assign it
+ * only on evidence (a money word in the header, currency formatting, or
+ * currency symbols in the cells). For "a number to add up", which also covers
+ * hours and quantities, use `roleCandidates(columns, 'amount')` in goals/matchGoal.ts.
+ */
 export type ColumnRole =
   | 'date'
+  /** Text that groups rows: item, vendor, employee, project. */
   | 'category'
+  /** Money. See above. */
   | 'amount'
+  /** A plain number: hours, counts, quantities, scores. Never shown as money. */
   | 'quantity'
+  /** Text that is not a grouping column. */
   | 'label'
+  /** An identifier (employee ID, SKU, phone, bin). Never summed, averaged or flagged as unusual. */
   | 'id'
   | 'percentage'
+  /** Free text. Not produced by inferRole today. */
   | 'description'
   | 'unknown'
 

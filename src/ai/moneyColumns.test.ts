@@ -11,6 +11,9 @@ import { describe, expect, it } from 'vitest'
 import { buildSheetProfile, inferRole } from './sheetProfile'
 import { computeSheetInsights } from './sheetInsights'
 import { formatInsights, formatProfile } from './responseBuilder'
+import { detectPurpose } from './sheetProfile'
+import { matchGoal } from './goals/matchGoal'
+import { listSuggestedGoals } from './goals/suggestGoals'
 import { refToCell } from '@/engine/spreadsheet'
 import type { SheetData } from '@/types'
 
@@ -108,11 +111,72 @@ describe('a timesheet is never described as money', () => {
     expect(formatProfile(buildSheetProfile(sheet, get))).not.toContain('$')
   })
 
+  it('still offers totals on hours: "total hours by employee" and the suggestion chips work', () => {
+    const profile = buildSheetProfile(sheet, get)
+    // One measure column needed: drop Overtime/Total Hours so Hours is the only one.
+    const oneMeasure = { ...profile, columns: profile.columns.filter((c) => !['Overtime', 'Total Hours'].includes(c.name)) }
+    const match = matchGoal({ profile: oneMeasure, utterance: 'hours by name' })
+    expect(match.status).toBe('matched')
+    expect(match.slots.amountColumn).toBe('C') // Hours
+    expect(listSuggestedGoals(oneMeasure).map((g) => g.goal?.id)).toContain('total')
+
+    // Several measures: ask which, in plain words, and offer each as a chip.
+    const many = matchGoal({ profile, utterance: 'total hours' })
+    expect(many.status).toBe('ambiguous')
+    expect(many.question).toMatch(/multiple number columns/)
+    expect(many.question).toContain('Hours (C)')
+    expect(many.question).not.toContain('Employee ID')
+  })
+
   it('still shows money with a dollar sign on a budget', () => {
     const { sheet: b, get: g } = sheetOf([
       ['Category', 'Amount'], ['Rent', 1500], ['Food', 400], ['Fun', 60], ['Gas', 80], ['Big', 9000],
     ])
     const text = formatInsights(computeSheetInsights(b, g))
     expect(text).toContain('$')
+  })
+})
+
+describe('per-unit prices are not spending', () => {
+  it('does not report an inventory\'s summed Unit Cost as total expenses', () => {
+    const { sheet, get } = sheetOf([
+      ['SKU', 'Item', 'Qty On Hand', 'Unit Cost'],
+      [100234, 'Bolt', 450, 0.12],
+      [100235, 'Nut', 900, 0.05],
+      [100410, 'Washer', 1200, 0.02],
+    ])
+    const ins = computeSheetInsights(sheet, get)
+    expect(ins.totalExpenses).toBeUndefined()
+    expect(ins.categoryTotals).toBeUndefined()
+  })
+
+  it('totals an invoice by its Amount, not its per-unit Price', () => {
+    const { sheet, get } = sheetOf([
+      ['Item', 'Qty', 'Price', 'Amount'],
+      ['Design', 10, 50, 500],
+      ['Hosting', 2, 25, 50],
+    ])
+    expect(computeSheetInsights(sheet, get).totalExpenses).toBe(550)
+  })
+
+  it('still totals a shopping list whose only money column is Price', () => {
+    const { sheet, get } = sheetOf([['Item', 'Price'], ['Milk', 3], ['Bread', 2.5]])
+    expect(computeSheetInsights(sheet, get).totalExpenses).toBe(5.5)
+  })
+})
+
+describe('detectPurpose matches whole words', () => {
+  it.each([
+    [['Factual Notes', 'Value'], 'generic'],
+    [['Syntax', 'Count'], 'generic'],
+    [['Ideal Weight', 'Kg'], 'generic'],
+    [['Employee', 'Billable Hours'], 'generic'],
+    [['Category', 'Budget', 'Actual'], 'budget'],
+    [['Invoice #', 'Client', 'Tax'], 'invoice'],
+    [['Billing Date', 'Amount'], 'invoice'],
+    [['SKU', 'Stock Level'], 'inventory'],
+    [['Product', 'Sales'], 'sales'],
+  ] as const)('%j → %s', (headers, purpose) => {
+    expect(detectPurpose([...headers])).toBe(purpose)
   })
 })

@@ -36,7 +36,7 @@ export function matchGoal(input: MatchGoalInput): GoalMatch {
 
   for (const role of def.requiredRoles) {
     if (slotForRole(slots, role)) continue
-    const candidates = (profile?.columns ?? []).filter((col) => col.role === role && col.nonNullCount > 0)
+    const candidates = roleCandidates(profile?.columns ?? [], role)
     if (candidates.length > 1) {
       const names = candidates.map((col) => `${col.name} (${col.column})`).join(', ')
       return {
@@ -45,7 +45,7 @@ export function matchGoal(input: MatchGoalInput): GoalMatch {
         slots,
         output,
         explain: explainGoal(def, slots, output),
-        question: `There are multiple ${role} columns: ${names}. Which should I use?`,
+        question: `There are multiple ${roleNoun(role)} columns: ${names}. Which should I use?`,
         chips: candidates.map((col) => ambiguousChip(def.id, col.column, col.name)),
       }
     }
@@ -53,7 +53,7 @@ export function matchGoal(input: MatchGoalInput): GoalMatch {
       status: 'unmatched',
       goal: def,
       slots,
-      explain: `I need a ${role} column to run ${def.title}.`,
+      explain: `I need a ${roleNoun(role)} column to run ${def.title}.`,
     }
   }
 
@@ -142,7 +142,7 @@ function resolveSlots(
     const key = slotKey(role)
     if (!key) continue
 
-    const mentionedForRole = mentioned.filter((col) => col.role === role)
+    const mentionedForRole = mentioned.filter((col) => fillsRole(col, role))
     if (mentionedForRole.length === 1) {
       slots[key] = mentionedForRole[0].column
       continue
@@ -171,9 +171,30 @@ function resolveSlots(
   return slots
 }
 
-function uniqueRoleColumn(columns: ColumnProfile[], role: ColumnRole): ColumnProfile | undefined {
-  const matches = columns.filter((col) => col.role === role && col.nonNullCount > 0)
+/**
+ * Does this column fill a goal role? The `amount` role means "the numbers to
+ * add up", so plain-number columns (hours, quantities, scores) fill it too.
+ * Money columns are still preferred when present (see roleCandidates).
+ */
+function fillsRole(col: ColumnProfile, role: ColumnRole): boolean {
+  return role === 'amount' ? col.role === 'amount' || col.role === 'quantity' : col.role === role
+}
+
+/** Columns that can fill `role`: exact-role columns if any exist, otherwise any column that fills it. */
+export function roleCandidates(columns: ColumnProfile[], role: ColumnRole): ColumnProfile[] {
+  const populated = columns.filter((col) => col.nonNullCount > 0)
+  const exact = populated.filter((col) => col.role === role)
+  return exact.length > 0 ? exact : populated.filter((col) => fillsRole(col, role))
+}
+
+export function uniqueRoleColumn(columns: ColumnProfile[], role: ColumnRole): ColumnProfile | undefined {
+  const matches = roleCandidates(columns, role)
   return matches.length === 1 ? matches[0] : undefined
+}
+
+/** How a role reads in a question to the user ("Which number column…", not "Which amount column…"). */
+function roleNoun(role: ColumnRole): string {
+  return role === 'amount' ? 'number' : role
 }
 
 function columnFromSelection(
@@ -184,7 +205,7 @@ function columnFromSelection(
   if (!selection) return undefined
   if (selection.startCol !== selection.endCol) return undefined
   const letter = columns.find((col) => (
-    letterToCol(col.column) === selection.startCol && col.role === role
+    letterToCol(col.column) === selection.startCol && fillsRole(col, role)
   ))
   return letter?.column
 }

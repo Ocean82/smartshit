@@ -56,7 +56,8 @@ export function getContextualSuggestions(ctx: SuggestionContext): string[] {
 
   // Column-aware suggestions (skip when the same goal already appears as a chip)
   const hasDateColumn = profile?.columns.some((c) => c.role === 'date')
-  const hasAmountColumn = profile?.columns.some((c) => c.role === 'amount')
+  // Anything to add up: money, or plain numbers like hours and quantities.
+  const hasAmountColumn = profile?.columns.some((c) => c.role === 'amount' || c.role === 'quantity')
   const hasCategoryColumn = profile?.columns.some((c) => c.role === 'category')
 
   if (

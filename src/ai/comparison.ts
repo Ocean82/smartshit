@@ -76,7 +76,9 @@ function chooseAmountColumn(columns: ColumnProfile[], message: string): ColumnPr
     }).sort((a, b) => b.score - a.score)
     if (scored[0].score > 0 && scored[0].score > (scored[1]?.score ?? -1)) return scored[0].column
   }
-  return numeric.length === 1 ? numeric[0] : null
+  // Fallback: the one numeric column that is not an identifier; totals of IDs mean nothing.
+  const measures = numeric.filter((column) => column.role !== 'id')
+  return measures.length === 1 ? measures[0] : null
 }
 
 function resolveSheetPair(

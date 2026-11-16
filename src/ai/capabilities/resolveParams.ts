@@ -24,7 +24,8 @@ function amountColumn(columns: ColumnProfile[] | undefined): string | undefined 
     const expense = amounts.find((c) => /expense|amount|cost|price|spent/i.test(c.name))
     if (expense) return expense.column
   }
-  const numeric = (columns ?? []).filter((c) => c.dtype === 'number' && c.nonNullCount > 0)
+  // Fallback: the one numeric column that is not an identifier (SKU, employee ID).
+  const numeric = (columns ?? []).filter((c) => c.dtype === 'number' && c.role !== 'id' && c.nonNullCount > 0)
   if (numeric.length === 1) return numeric[0].column
   return undefined
 }

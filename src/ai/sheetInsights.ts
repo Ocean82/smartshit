@@ -190,10 +190,17 @@ export function computeSheetInsights(
 
   const categoryCol = findColumnIndex(normalizedHeaders, ['category', 'item', 'description', 'name', 'expense'])
   // Expense totals come only from a money column: "Total Hours" matched "total"
-  // and turned a timesheet into "Total expenses: $26.50".
+  // and turned a timesheet into "Total expenses: $26.50". A per-unit price is
+  // money but not spending, so summing it is meaningless: an inventory's
+  // "Unit Cost" was reported as total expenses, and an invoice's "Price" was
+  // picked over its "Amount" because it came first. A bare "Price" or "Rate"
+  // counts as per-unit only when the sheet also has a quantity column.
+  const hasQuantity = roles.includes('quantity')
+  const isPerUnit = (h: string) =>
+    /\b(unit|per|each)\b/.test(h) || (hasQuantity && /\b(price|prices|rate)\b/.test(h))
   const amountPatterns = ['amount', 'actual', 'cost', 'price', 'total', 'spent']
   const amountCol = normalizedHeaders.findIndex(
-    (h, c) => roles[c] === 'amount' && amountPatterns.some((p) => h.includes(p)),
+    (h, c) => roles[c] === 'amount' && !isPerUnit(h) && amountPatterns.some((p) => h.includes(p)),
   )
   const budgetCol = findColumnIndex(normalizedHeaders, ['budget', 'planned', 'plan'])
   const actualCol = findColumnIndex(normalizedHeaders, ['actual', 'spent', 'real'])
