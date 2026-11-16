@@ -42,7 +42,7 @@ Ordered by what turns a first-time user away. Build only after the earlier stage
 
 ### Stage 0. Prove what shipped (S, mostly human)
 - **0.1 Run the P0 gate** with a real budget `.xlsx` and at least five Q&A turns. Fix whatever fails before building anything new.
-- **0.2 First-session prompt corpus (S).** About 60 prompts a new user actually types (highlight, find, select, clear, format, sum, "make it look professional") with the expected tool and scope, or an explicit "defer to the LLM". The highlight bug came from a gap no test covered, and this closes that class. It extends the existing false-positive corpus.
+- **0.2 First-session prompt corpus (S). Done 2026-11-15:** `shared/firstSessionCorpus.ts` (73 prompts, server and client). It caught four misroutes, all fixed: "locate the total row" wrote a SUM, "highlight the cell with the biggest number" searched for the word "biggest", and "highlight the header row" and "add up column B" did nothing. Add a row whenever a real prompt misbehaves. Originally: about 60 prompts a new user actually types (highlight, find, select, clear, format, sum, "make it look professional") with the expected tool and scope, or an explicit "defer to the LLM". The highlight bug came from a gap no test covered, and this closes that class. It extends the existing false-positive corpus.
 - **0.3 Billing round trip** (section 2, item 3).
 
 ### Stage 1. Navigation and selection (the missing core of the original roadmap)
