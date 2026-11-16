@@ -10,6 +10,7 @@ import { useStore } from '@/store/useStore';
 import { cellToRef, refToCell, colToLetter } from '@/engine/spreadsheet';
 import { isInMultiSelection } from '@/lib/selection';
 import { buildMergeIndex, isMergeAnchor, type MergeRange } from '@/lib/merge';
+import { edgeScrollStep } from '@/lib/edgeAutoScroll';
 import type { SheetData } from '@/types';
 
 interface SelectionManagerConfig {
@@ -25,6 +26,8 @@ interface SelectionManagerConfig {
   onEditStart?: () => void;
   /** Map a viewport client point to a cell (supplied by SpreadsheetGrid for the fill drag). */
   pointToCellInViewport?: (clientX: number, clientY: number) => { row: number; col: number };
+  /** The scrolling grid element and its cell area (headers excluded) in client pixels, for drag auto-scroll. */
+  getScrollArea?: () => { el: HTMLElement; top: number; left: number; right: number; bottom: number } | null;
 }
 
 export function useSelectionManager(config: SelectionManagerConfig) {
@@ -37,6 +40,7 @@ export function useSelectionManager(config: SelectionManagerConfig) {
     scrollCellIntoView,
     onEditStart,
     pointToCellInViewport,
+    getScrollArea,
   } = config;
 
   const {
@@ -294,18 +298,55 @@ export function useSelectionManager(config: SelectionManagerConfig) {
     };
     const onPointerCancel = () => endDrag();
 
+    // Edge auto-scroll. Cells extend the selection with their own mousemove,
+    // but once the pointer is past the grid's edge there is no cell under it,
+    // so the selection stopped growing and the grid never scrolled. Track the
+    // pointer here and, each frame it is near or past an edge, scroll and
+    // extend the selection to the cell under the clamped point.
+    let pointer = { x: e.clientX, y: e.clientY };
+    let frame = 0;
+    let moved = false;
+    const onDocMouseMove = (ev: globalThis.MouseEvent) => {
+      pointer = { x: ev.clientX, y: ev.clientY };
+      moved = true;
+      if ((ev.buttons & 1) === 0) endDrag();
+    };
+    const tick = () => {
+      frame = requestAnimationFrame(tick);
+      const area = getScrollArea?.();
+      // A plain click near an edge must not nudge the grid; wait for a real drag.
+      if (!moved || !area || !pointToCellInViewport) return;
+      const dx = edgeScrollStep(pointer.x, area.left, area.right);
+      const dy = edgeScrollStep(pointer.y, area.top, area.bottom);
+      if (dx === 0 && dy === 0) return;
+      area.el.scrollLeft += dx;
+      area.el.scrollTop += dy;
+      const target = pointToCellInViewport(
+        Math.min(Math.max(pointer.x, area.left + 1), area.right - 1),
+        Math.min(Math.max(pointer.y, area.top + 1), area.bottom - 1),
+      );
+      const current = useStore.getState().selection;
+      if (current && (current.endRow !== target.row || current.endCol !== target.col)) {
+        setSelection({ startRow: current.startRow, startCol: current.startCol, endRow: target.row, endCol: target.col });
+      }
+    };
+    frame = requestAnimationFrame(tick);
+
     document.addEventListener('mouseup', onMouseUp);
+    document.addEventListener('mousemove', onDocMouseMove);
     window.addEventListener('blur', onBlur);
     document.addEventListener('visibilitychange', onVisibilityChange);
     document.addEventListener('pointercancel', onPointerCancel);
 
     stopDragCleanupRef.current = () => {
+      cancelAnimationFrame(frame);
       document.removeEventListener('mouseup', onMouseUp);
+      document.removeEventListener('mousemove', onDocMouseMove);
       window.removeEventListener('blur', onBlur);
       document.removeEventListener('visibilitychange', onVisibilityChange);
       document.removeEventListener('pointercancel', onPointerCancel);
     };
-  }, [handleCellClick, endDrag]);
+  }, [handleCellClick, endDrag, getScrollArea, pointToCellInViewport, setSelection]);
 
   const handleMouseMove = useCallback((row: number, col: number, e: MouseEvent) => {
     // Guard: only extend selection while the primary (left) button bit is set.

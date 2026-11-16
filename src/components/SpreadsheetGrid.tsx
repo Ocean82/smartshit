@@ -712,6 +712,20 @@ export function SpreadsheetGrid() {
     };
   }, [viewport.gridRef, viewport.rowOffsets, viewport.displayRowCount, viewport.displayColCount, viewport.displayRows, viewport.displayCols, displayColOffsets]);
 
+  // The grid's cell area in client pixels (headers excluded), for drag auto-scroll.
+  const getScrollArea = useCallback(() => {
+    const el = viewport.gridRef.current;
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return {
+      el,
+      top: r.top + COL_HEADER_HEIGHT,
+      left: r.left + ROW_HEADER_WIDTH,
+      right: r.left + el.clientWidth,
+      bottom: r.top + el.clientHeight,
+    };
+  }, [viewport.gridRef]);
+
   const onEditStartRef = useRef<() => void>(() => {});
 
   const selectionManager = useSelectionManager({
@@ -723,6 +737,7 @@ export function SpreadsheetGrid() {
     scrollCellIntoView,
     onEditStart: () => onEditStartRef.current(),
     pointToCellInViewport,
+    getScrollArea,
   });
 
   const editingController = useEditingController({
