@@ -21,6 +21,7 @@ import { colToLetter, refToCell } from '@/engine/spreadsheet'
 import { AUTO_APPLY_LOW_RISK_TOOLS } from '@/lib/applyPosture'
 import { detectTableRange, TABLE_THEMES } from '@/lib/formatAsTable'
 import { detectPurpose, inferRole } from '@/ai/sheetProfile'
+import { parseNumeric } from '@/ai/utils'
 
 /**
  * Map a column's inferred role (+ the sheet's detected purpose) to the
@@ -178,8 +179,18 @@ export function buildMakeoverPlan(
       // Roles are inferred from the DETECTED header row (rolesByCol), keyed by
       // spreadsheet column index — not profile.columns, which assumes row 0.
       const role = rolesByCol.get(colIdx) ?? 'unknown'
-      const numberFormat = roleToNumberFormat(role, purpose)
+      let numberFormat = roleToNumberFormat(role, purpose)
       if (!numberFormat) continue
+      // number-int rounds for display; a column with fractions (7.5 hours) keeps them.
+      if (
+        numberFormat === 'number-int' &&
+        (valuesByCol.get(colIdx) ?? []).some((v) => {
+          const n = parseNumeric(v)
+          return n !== null && !Number.isInteger(n)
+        })
+      ) {
+        numberFormat = 'number'
+      }
 
       const colName = headerLabels[colIdx - startCol] ?? colToLetter(colIdx)
       const letter = colToLetter(colIdx)

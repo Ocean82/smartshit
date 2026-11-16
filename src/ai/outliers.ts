@@ -15,6 +15,8 @@ export interface OutlierItem {
   /** Signed z-score: (value - mean) / std */
   zScore: number
   direction: 'high' | 'low'
+  /** True when the column holds money; only then is the value shown with a currency symbol. */
+  money?: boolean
 }
 
 export function detectOutliers(

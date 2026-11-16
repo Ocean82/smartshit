@@ -5,6 +5,8 @@ import { AI_ANALYSIS_CONFIG } from '@/ai/config'
 import { detectOutliers, type OutlierItem } from '@/ai/outliers'
 import { findSummaryRowIndexes } from '@/lib/sheetRows'
 import { parseNumeric, normalizeHeader } from '@/ai/utils'
+import { inferRole } from '@/ai/sheetProfile'
+import type { ColumnRole } from '@/ai/types'
 
 export interface ColumnStat {
   column: string
@@ -14,6 +16,8 @@ export interface ColumnStat {
   max?: number
   average?: number
   count: number
+  /** True when the column holds money (role `amount`); only then is it shown with a currency symbol. */
+  money?: boolean
 }
 
 export interface CategoryTotal {
@@ -140,8 +144,23 @@ export function computeSheetInsights(
   const headers = (matrix[headerRow] ?? []).map((h) => (h === null ? '' : String(h)))
   const normalizedHeaders = headers.map(normalizeHeader)
 
+  // One role per column, from the same classifier the profile and the model use,
+  // so "is this money?" has a single answer everywhere.
+  const roles: ColumnRole[] = []
+  for (let c = 0; c <= maxCol; c++) {
+    const raw: (string | number | null)[] = []
+    for (let r = headerRow + 1; r <= maxRow; r++) {
+      if (summaryRows.has(r)) continue
+      const v = matrix[r]?.[c] ?? null
+      if (v !== null && v !== '') raw.push(v)
+    }
+    roles.push(inferRole(headers[c] ?? '', raw))
+  }
+
   const columnStats: ColumnStat[] = []
   for (let c = 0; c <= maxCol; c++) {
+    // Sums and averages of identifiers (employee IDs, SKUs) are meaningless.
+    if (roles[c] === 'id') continue
     const values: number[] = []
     for (let r = headerRow + 1; r <= maxRow; r++) {
       if (summaryRows.has(r)) continue
@@ -159,6 +178,7 @@ export function computeSheetInsights(
       max: Math.max(...values),
       average: sum / values.length,
       count: values.length,
+      money: roles[c] === 'amount',
     })
   }
 
@@ -169,7 +189,12 @@ export function computeSheetInsights(
   }
 
   const categoryCol = findColumnIndex(normalizedHeaders, ['category', 'item', 'description', 'name', 'expense'])
-  const amountCol = findColumnIndex(normalizedHeaders, ['amount', 'actual', 'cost', 'price', 'total', 'spent'])
+  // Expense totals come only from a money column: "Total Hours" matched "total"
+  // and turned a timesheet into "Total expenses: $26.50".
+  const amountPatterns = ['amount', 'actual', 'cost', 'price', 'total', 'spent']
+  const amountCol = normalizedHeaders.findIndex(
+    (h, c) => roles[c] === 'amount' && amountPatterns.some((p) => h.includes(p)),
+  )
   const budgetCol = findColumnIndex(normalizedHeaders, ['budget', 'planned', 'plan'])
   const actualCol = findColumnIndex(normalizedHeaders, ['actual', 'spent', 'real'])
   const diffCol = findColumnIndex(normalizedHeaders, ['difference', 'diff', 'variance', 'over'])
@@ -246,6 +271,7 @@ export function computeSheetInsights(
 
   const allOutliers: OutlierItem[] = []
   for (let c = 0; c <= maxCol; c++) {
+    if (roles[c] === 'id') continue // an ID far from the "average ID" is not unusual
     const letter = colToLetter(c)
     const label = headers[c] || `Column ${letter}`
     const values: Array<{ row: number; value: number }> = []
@@ -254,7 +280,8 @@ export function computeSheetInsights(
       const num = parseNumeric(matrix[r]?.[c] ?? null)
       if (num !== null) values.push({ row: r + 1, value: num })
     }
-    allOutliers.push(...detectOutliers(values, label, letter))
+    const money = roles[c] === 'amount'
+    allOutliers.push(...detectOutliers(values, label, letter).map((o) => ({ ...o, money })))
   }
   if (allOutliers.length > 0) insights.outliers = allOutliers.slice(0, 10)
 

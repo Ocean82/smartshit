@@ -11,10 +11,16 @@ function formatMoney(n: number): string {
   return `$${n.toFixed(2)}`
 }
 
+/** A plain number: "1,250", "7.5", "88,123". For hours, counts, scores and anything not money. */
+function formatPlain(n: number): string {
+  return n.toLocaleString('en-US', { maximumFractionDigits: 2 })
+}
+
 function formatOutlierLine(o: OutlierItem, includeReason: boolean): string {
+  const fmt = o.money ? formatMoney : formatPlain
   const cell = o.cellRef || `${o.columnLetter || '?'}${o.row}`
   const colName = o.column && !/^Column [A-Z]+$/i.test(o.column) ? ` (${o.column})` : ''
-  const label = `- **${cell}**${colName}: ${formatMoney(o.value)}`
+  const label = `- **${cell}**${colName}: ${fmt(o.value)}`
   if (!includeReason || o.zScore === undefined || o.mean === undefined) return label
 
   const absZ = Math.abs(o.zScore).toFixed(1)
@@ -23,7 +29,7 @@ function formatOutlierLine(o: OutlierItem, includeReason: boolean): string {
   const typicalHigh = o.mean + AI_ANALYSIS_CONFIG.outlierStdThreshold * o.std
   return (
     `${label} — ${absZ}σ ${side} the column ${o.columnLetter || ''} average `
-    + `(avg ${formatMoney(o.mean)}; most values fall near ${formatMoney(typicalLow)}–${formatMoney(typicalHigh)})`
+    + `(avg ${fmt(o.mean)}; most values fall near ${fmt(typicalLow)}–${fmt(typicalHigh)})`
   )
 }
 
@@ -99,7 +105,9 @@ export function formatProfile(profile: SheetProfile): string {
 
   for (const col of profile.columns.slice(0, 12)) {
     let line = `- **${col.name}** (${col.role}, ${col.dtype})`
-    if (col.sumVal !== undefined) line += ` — sum $${col.sumVal.toFixed(2)}`
+    if (col.sumVal !== undefined && col.role !== 'id') {
+      line += ` — sum ${col.role === 'amount' ? formatMoney(col.sumVal) : formatPlain(col.sumVal)}`
+    }
     lines.push(line)
   }
 

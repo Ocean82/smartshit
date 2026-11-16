@@ -5,19 +5,75 @@ import type { ColumnProfile, ColumnRole, SheetProfile, SheetPurpose } from '@/ai
 import { findSummaryRowIndexes } from '@/lib/sheetRows'
 import { parseNumeric } from '@/ai/utils'
 
-export function inferRole(header: string, values: (string | number | null)[]): ColumnRole {
-  const h = header.toLowerCase()
-  if (/date|month|year|due/.test(h)) return 'date'
-  if (/category|item|description|name|vendor|merchant/.test(h)) return 'category'
-  if (/amount|actual|cost|price|total|spent|budget|income|revenue|salary/.test(h)) return 'amount'
-  if (/qty|quantity|units|count/.test(h)) return 'quantity'
-  if (/id|sku|code/.test(h)) return 'id'
-  if (/%|percent|rate/.test(h)) return 'percentage'
+// Header vocabularies, matched on whole words. Substring matching made "Paid"
+// an id ("pa-id") and "Total Hours" money ("total").
+const DATE_WORD_RE = /\b(date|timestamp)\b/
+const DATE_PART_RE = /\b(month|year|due|week|period)\b/
+const CATEGORY_RE = /\b(category|item|description|name|vendor|merchant|product|employee|customer|client|project|department)\b/
+const ID_RE = /\b(ids?|sku|upc|ean|isbn|barcode|serial|code|zip|postcode|postal|phone|badge|bin|lot|batch|ticket|ref|po)\b|#(?!\s*of\b)|\bno\.?$|\bnumber\b(?!\s+of\b)/
+const PERCENT_RE = /%|\bpercent(age)?\b|\bpct\b/
+const MONEY_RATE_RE = /\b(hourly|pay|bill|billing|day|daily)\s+rate\b|\bwage\b/
+// Strong money words: a measure word next to them does not override ("Price per Unit").
+const MONEY_RE = /[$€£¥]|\b(amounts?|amt|costs?|prices?|spent|paid|payments?|fees?|salary|salaries|wages|revenue|income|expenses?|tax|subtotal|profit|earnings|debit|credit|refunds?|balance)\b/
+// Measures: plain numbers that are not money ("Total Hours", "Qty On Hand", "Reorder Point").
+const MEASURE_RE = /\b(qty|quantity|units?|count|pcs|pieces|hours?|hrs|minutes?|mins|seconds|days|weeks|overtime|on hand|stock|reorder|score|points?|rating|weight|kg|lbs?|miles|km|age|level|rank|zone|aisle|shelf|floor|seats?)\b/
+// Weak money words: money only when no measure word is present ("Budget Hours" is not money).
+const WEAK_MONEY_RE = /\b(total|totals|actual|budget|budgeted|planned|spend|spending|variance)\b/
 
-  const numericCount = values.filter((v) => parseNumeric(v) !== null).length
-  if (numericCount > values.length * 0.7) return 'amount'
-  if (values.length > 0) return 'label'
-  return 'unknown'
+/** Integers that are all distinct and large, or written with leading zeros: identifiers, not quantities. */
+function looksLikeIds(values: (string | number | null)[], numbers: number[]): boolean {
+  if (values.some((v) => typeof v === 'string' && /^0\d/.test(v.trim()))) return true
+  if (numbers.length < 3 || !numbers.every(Number.isInteger)) return false
+  return new Set(numbers).size === numbers.length && Math.min(...numbers) >= 1000
+}
+
+/**
+ * Classify a column from its header and values.
+ *
+ * `amount` means money and is shown with a currency symbol everywhere (chat
+ * answers, insight cards, the makeover's number formats, and the model's
+ * prompt). So a column is money only on evidence: a money word in the header,
+ * currency formatting on its cells, or currency symbols in the values. A plain
+ * number column is `quantity`, or `id` when it looks like identifiers. It used
+ * to be `amount` by default, which turned employee IDs, bins, hours and
+ * scores into dollars.
+ */
+export function inferRole(
+  header: string,
+  values: (string | number | null)[],
+  currencyFormatted = false,
+): ColumnRole {
+  const h = header.toLowerCase().trim()
+  const numbers: number[] = []
+  for (const v of values) {
+    const n = parseNumeric(v)
+    if (n !== null) numbers.push(n)
+  }
+  // An empty column is classified by its header alone.
+  const isNumeric = values.length === 0 || numbers.length > values.length * 0.7
+
+  if (DATE_WORD_RE.test(h)) return 'date'
+  if (!isNumeric) {
+    if (CATEGORY_RE.test(h)) return 'category'
+    if (DATE_PART_RE.test(h)) return 'date'
+    if (ID_RE.test(h)) return 'id'
+    return 'label'
+  }
+
+  if (PERCENT_RE.test(h)) return 'percentage'
+  if (MONEY_RATE_RE.test(h)) return 'amount'
+  if (/\brate\b/.test(h)) return 'percentage'
+  if (ID_RE.test(h)) return 'id'
+  if (MONEY_RE.test(h)) return 'amount'
+  if (MEASURE_RE.test(h)) return 'quantity'
+  if (WEAK_MONEY_RE.test(h)) return 'amount'
+  if (DATE_PART_RE.test(h)) return 'date'
+  if (values.length === 0) return 'unknown'
+
+  const symbols = values.some((v) => typeof v === 'string' && /[$€£¥]/.test(v))
+  if (currencyFormatted || symbols) return 'amount'
+  if (looksLikeIds(values, numbers)) return 'id'
+  return 'quantity'
 }
 
 export function detectPurpose(headers: string[]): SheetPurpose {
@@ -69,6 +125,7 @@ export function buildSheetProfile(
     const values: (string | number | null)[] = []
     const numericValues: number[] = []
     let nullCount = 0
+    let currencyCells = 0
     const uniques = new Set<string>()
 
     for (let r = headerRow + 1; r <= maxRow; r++) {
@@ -86,6 +143,7 @@ export function buildSheetProfile(
         continue
       }
       values.push(cellScalar(raw))
+      if (/^(currency|accounting)/.test(cell?.format?.numberFormat ?? '')) currencyCells++
       uniques.add(String(raw))
       const num = parseNumeric(raw)
       if (num !== null) numericValues.push(num)
@@ -97,7 +155,7 @@ export function buildSheetProfile(
       name: header,
       column: colLetter,
       dtype: numericValues.length > values.length * 0.5 ? 'number' : 'text',
-      role: inferRole(header, values),
+      role: inferRole(header, values, currencyCells > values.length / 2),
       nonNullCount: values.length,
       nullCount,
       uniqueCount: uniques.size,

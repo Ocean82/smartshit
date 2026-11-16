@@ -26,6 +26,11 @@ function formatCurrency(n: number): string {
   }).format(n)
 }
 
+/** Hours, counts, scores: no currency symbol. */
+function formatPlain(n: number): string {
+  return n.toLocaleString('en-US', { maximumFractionDigits: 2 })
+}
+
 export function InsightsPanelContent() {
   const { sheet, getComputedValue } = useStore(
     useShallow((s) => ({
@@ -189,7 +194,7 @@ export function InsightsPanelContent() {
                   {o.cellRef || `${o.columnLetter}${o.row}`}
                   {o.column && <span className="text-gray-400 ml-1">({o.column})</span>}
                 </span>
-                <span className="font-medium text-amber-700 shrink-0">{formatCurrency(o.value)}</span>
+                <span className="font-medium text-amber-700 shrink-0">{o.money ? formatCurrency(o.value) : formatPlain(o.value)}</span>
               </div>
             ))}
           </div>
@@ -214,8 +219,8 @@ export function InsightsPanelContent() {
                 </div>
                 {col.sum != null && (
                   <div className="flex gap-3 text-[10px] text-gray-500 mt-0.5">
-                    <span>Sum: {formatCurrency(col.sum)}</span>
-                    {col.average != null && <span>Avg: {formatCurrency(col.average)}</span>}
+                    <span>Sum: {col.money ? formatCurrency(col.sum) : formatPlain(col.sum)}</span>
+                    {col.average != null && <span>Avg: {col.money ? formatCurrency(col.average) : formatPlain(col.average)}</span>}
                   </div>
                 )}
               </div>

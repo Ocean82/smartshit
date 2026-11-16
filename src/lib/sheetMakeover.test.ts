@@ -133,8 +133,24 @@ describe('buildMakeoverPlan — content', () => {
     const sheet = genericSheet()
     const profile = buildSheetProfile(sheet, computed(sheet))
     const { steps } = buildMakeoverPlan(sheet, profile, computed(sheet))
-    expect(steps.some((s) => s.params.numberFormat === 'currency')).toBe(false)
-    expect(steps.some((s) => s.params.numberFormat === 'number')).toBe(true)
+    expect(steps.some((s) => /^(currency|accounting)/.test(String(s.params.numberFormat)))).toBe(false)
+    // "Value" with whole numbers is a plain number, not money.
+    expect(steps.some((s) => s.params.numberFormat === 'number-int')).toBe(true)
+  })
+
+  it('keeps fractions on a plain numeric column (7.5 hours must not display as 8)', () => {
+    const sheet = makeSheet({
+      A1: { value: 'Name' }, B1: { value: 'Hours' }, C1: { value: 'Employee ID' },
+      A2: { value: 'Ana' }, B2: { value: 7.5 }, C2: { value: 5012 },
+      A3: { value: 'Ben' }, B3: { value: 8 }, C3: { value: 5013 },
+    })
+    const profile = buildSheetProfile(sheet, computed(sheet))
+    const { steps } = buildMakeoverPlan(sheet, profile, computed(sheet))
+    const hours = steps.find((s) => String(s.params.range).startsWith('B'))
+    expect(hours?.params.numberFormat).toBe('number')
+    // IDs get no number format at all, so they are never shown as $5,012.00.
+    expect(steps.some((s) => String(s.params.range).startsWith('C') && s.params.numberFormat)).toBe(false)
+    expect(steps.some((s) => /^(currency|accounting)/.test(String(s.params.numberFormat)))).toBe(false)
   })
 
   it('emits a header-styling step and an auto_fit layout step', () => {
