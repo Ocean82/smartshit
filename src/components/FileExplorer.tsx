@@ -149,6 +149,7 @@ export function FileExplorer() {
                 <File size={14} className="text-blue-500 shrink-0" />
               )}
               <input
+                aria-label={showNewInput === 'folder' ? 'New folder name' : 'New file name'}
                 className="flex-1 text-xs px-1.5 py-0.5 border border-blue-300 rounded outline-none"
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}

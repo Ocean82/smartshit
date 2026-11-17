@@ -44,6 +44,13 @@ export function useEditingController(config: EditingControllerConfig) {
     }
   }, [editingCell]);
 
+  // Anchor the formula autocomplete popup under the active edit input.
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!editingCell || !el) return;
+    const r = el.getBoundingClientRect();
+    setAutocompletePos((prev) => (prev.top === r.bottom + 2 && prev.left === r.left ? prev : { top: r.bottom + 2, left: r.left }));
+  }, [editingCell, editValue]);
   const commitEdit = useCallback(() => {
     // Read from store as the authoritative source — React closures may be stale
     // if another event handler ran between the trigger and this callback.

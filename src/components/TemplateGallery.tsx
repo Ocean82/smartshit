@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react'
+import { useFocusTrap } from '@/hooks/useFocusTrap'
 import { useStore } from '@/store/useStore'
 import { useShallow } from 'zustand/react/shallow'
 import { LayoutTemplate, X, Search, ChevronRight, Upload, Download, Star, Globe, Loader2, Send } from 'lucide-react'
@@ -120,6 +121,7 @@ export function TemplateGallery({ open, onClose }: TemplateGalleryProps) {
     return allTemplates.filter(t => t.category === activeCategory)
   }, [searchQuery, activeCategory, communityTemplates, allTemplates])
 
+  const trapRef = useFocusTrap<HTMLDivElement>(open)
   if (!open) return null
 
   function runTemplate(prompt: string, tools?: string[]) {
@@ -194,6 +196,7 @@ export function TemplateGallery({ open, onClose }: TemplateGalleryProps) {
       <div
         role="dialog"
         aria-modal="true"
+        ref={trapRef}
         aria-labelledby="template-gallery-title"
         className="w-full max-w-4xl h-[min(92dvh,100%)] md:h-auto md:max-h-[90vh] rounded-t-2xl md:rounded-2xl bg-white shadow-2xl overflow-hidden flex flex-col min-h-0"
         onClick={(e) => e.stopPropagation()}

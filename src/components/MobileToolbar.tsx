@@ -3,7 +3,7 @@
  * Shows only essential actions in a fixed bottom bar with proper touch targets.
  * Reveals additional tools via expandable tray.
  */
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useStore } from '@/store/useStore';
 import { refToCell } from '@/engine/spreadsheet';
@@ -48,12 +48,22 @@ export function MobileToolbar() {
   const selectedCellId = selection ? refToCell(selection.startRow, selection.startCol) : '';
   const selectedCellData = selectedCellId ? sheet.cells[selectedCellId] : undefined;
 
+  const rootRef = useRef<HTMLDivElement>(null);
+  // Tapping outside the toolbar closes the open tray.
+  useEffect(() => {
+    if (!expandedGroup) return;
+    const onDown = (e: PointerEvent) => {
+      if (!rootRef.current?.contains(e.target as Node)) setExpandedGroup(null);
+    };
+    document.addEventListener('pointerdown', onDown);
+    return () => document.removeEventListener('pointerdown', onDown);
+  }, [expandedGroup]);
   const toggleGroup = (group: ToolGroup) => {
     setExpandedGroup(expandedGroup === group ? null : group);
   };
 
   return (
-    <div className="md:hidden fixed bottom-0 left-0 right-0 z-20 border-t safe-area-bottom" style={{ background: 'var(--surface-panel)', borderColor: 'var(--neutral-200)' }}>
+    <div ref={rootRef} className="md:hidden fixed bottom-0 left-0 right-0 z-20 border-t safe-area-bottom" style={{ background: 'var(--surface-panel)', borderColor: 'var(--neutral-200)' }}>
       {/* Expanded tray */}
       {expandedGroup && (
         <div className="border-b px-3 py-2 flex items-center gap-1 overflow-x-auto scrollbar-hide" style={{ borderColor: 'var(--neutral-100)' }}>

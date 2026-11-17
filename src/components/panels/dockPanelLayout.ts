@@ -44,7 +44,7 @@ export function resolveDockPanelFrame(
     }
   }
 
-  const reservedRail = 360
+  const reservedRail = viewportWidth < 1024 ? Math.round(viewportWidth * 0.5) : 360
   const viewportMaxWidth = Math.max(0, viewportWidth - reservedRail)
   const effectiveMaxWidth = Math.max(def.minWidth, Math.min(def.maxWidth, viewportMaxWidth))
   const raw = Number.isFinite(storedWidth) ? storedWidth : def.defaultWidth

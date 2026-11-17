@@ -87,7 +87,7 @@ export function MobileMenu({ onOpenTemplates, onOpenCloudPicker, onOpenShare, on
     if (Object.keys(getActiveSheet().cells).length > 0) {
       showConfirm({
         title: 'New workbook',
-        message: 'This will replace the current workbook with a new, blank workbook. Undo history will be cleared.',
+        message: 'This will replace the current workbook with a new, blank workbook. Its autosaved copy will be overwritten and undo history cleared. Export first if you want to keep it.',
         confirmLabel: 'Create new',
         variant: 'warning',
         onConfirm: () => {

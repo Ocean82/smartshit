@@ -213,7 +213,7 @@ export function MenuBar() {
     if (Object.keys(getActiveSheet().cells).length > 0) {
       showConfirm({
         title: 'New workbook',
-        message: 'This will replace the current workbook with a new, blank workbook. Undo history will be cleared.',
+        message: 'This will replace the current workbook with a new, blank workbook. Its autosaved copy will be overwritten and undo history cleared. Export first if you want to keep it.',
         confirmLabel: 'Create new',
         variant: 'warning',
         onConfirm: doCreate,
@@ -250,7 +250,7 @@ export function MenuBar() {
       showConfirm({
         title: 'Restore from backup',
         message:
-          'Restoring a backup will replace the current workbook. This cannot be undone.',
+          'Restoring a backup will replace the current workbook, including its autosaved copy. You can undo this with Ctrl+Z.',
         confirmLabel: 'Restore',
         variant: 'warning',
         onConfirm: proceed,
@@ -335,6 +335,8 @@ export function MenuBar() {
         { label: 'Freeze First Column', action: () => { useStore.getState().setFreeze(0, 1); setOpenMenu(null) } },
         { label: 'Freeze Panes', action: () => { if (selection) { useStore.getState().setFreeze(selection.startRow, selection.startCol); } setOpenMenu(null) }, disabled: !selection },
         { label: 'Unfreeze Panes', action: () => { useStore.getState().setFreeze(0, 0); setOpenMenu(null) }, dividerAfter: true },
+        { label: 'Keyboard Shortcuts', shortcut: 'Ctrl+/', action: () => { window.dispatchEvent(new Event('smartsht:show-shortcuts')); setOpenMenu(null) } },
+        { label: 'Show Welcome Tour', action: () => { window.dispatchEvent(new Event('smartsht:show-welcome')); setOpenMenu(null) } },
         { label: 'Full Screen', shortcut: 'F11', action: () => { document.documentElement.requestFullscreen?.(); setOpenMenu(null) } },
       ],
     },

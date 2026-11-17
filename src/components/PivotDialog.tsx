@@ -122,6 +122,11 @@ export function PivotDialog({ isOpen, onClose }: Props) {
     </div>
   );
 
+  const ZONE_COLORS: Record<string, { active: string; label: string }> = {
+    green: { active: 'border-green-400 bg-green-50/30', label: 'text-green-500' },
+    purple: { active: 'border-purple-400 bg-purple-50/30', label: 'text-purple-500' },
+    orange: { active: 'border-orange-400 bg-orange-50/30', label: 'text-orange-500' },
+  };
   const DropZone = ({
     label, items, zone, color,
   }: {
@@ -132,7 +137,7 @@ export function PivotDialog({ isOpen, onClose }: Props) {
   }) => (
     <div
       className={`min-h-[60px] border-2 border-dashed rounded-lg p-2 transition-colors ${
-        dragItem ? `border-${color}-400 bg-${color}-50/30` : 'border-gray-200 bg-gray-50/50'
+        dragItem ? ZONE_COLORS[color]?.active ?? 'border-gray-400' : 'border-gray-200 bg-gray-50/50'
       }`}
       onDragOver={(e) => e.preventDefault()}
       onDrop={(e) => {
@@ -140,7 +145,7 @@ export function PivotDialog({ isOpen, onClose }: Props) {
         if (dragItem) assign(dragItem, zone);
       }}
     >
-      <div className={`text-[10px] font-medium text-${color}-500 uppercase tracking-wide mb-1.5`}>{label}</div>
+      <div className={`text-[10px] font-medium ${ZONE_COLORS[color]?.label ?? 'text-gray-500'} uppercase tracking-wide mb-1.5`}>{label}</div>
       <div className="flex flex-wrap gap-1">
         {items.length === 0 && (
           <span className="text-[11px] text-gray-400">Tap Rows / Cols / Values on a field below</span>

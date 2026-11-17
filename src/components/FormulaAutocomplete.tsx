@@ -114,11 +114,6 @@ export function FormulaAutocomplete({ visible, editValue, onSelect, position }: 
           e.stopPropagation();
           onSelect(filtered[selectedIndex].name);
           break;
-        case 'Escape':
-          e.preventDefault();
-          e.stopPropagation();
-          onSelect('');
-          break;
       }
     };
 

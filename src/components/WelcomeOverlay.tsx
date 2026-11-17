@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useFocusTrap } from '@/hooks/useFocusTrap'
 import { MessageSquare, Zap, LayoutTemplate, ArrowRight, X, Shield, Search } from 'lucide-react'
 import { assetUrl } from '@/lib/assetUrl'
 
@@ -17,6 +18,13 @@ export function WelcomeOverlay({ onOpenTemplates }: WelcomeOverlayProps) {
   })
   const [step, setStep] = useState(0)
 
+  // Reopen from the Help menu without touching the permanent-dismiss flag.
+  useEffect(() => {
+    const show = () => { setStep(0); setIsVisible(true) }
+    window.addEventListener('smartsht:show-welcome', show)
+    return () => window.removeEventListener('smartsht:show-welcome', show)
+  }, [])
+  const trapRef = useFocusTrap<HTMLDivElement>(isVisible, dismiss)
   if (!isVisible) return null
 
   const steps = [
@@ -65,7 +73,7 @@ export function WelcomeOverlay({ onOpenTemplates }: WelcomeOverlayProps) {
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-end md:items-center justify-center z-[100] p-4">
-      <div className="bg-white rounded-t-3xl md:rounded-3xl shadow-2xl w-[520px] max-w-full max-h-[min(92dvh,100%)] overflow-y-auto" role="dialog" aria-modal="true" aria-labelledby="welcome-title">
+      <div ref={trapRef} className="bg-white rounded-t-3xl md:rounded-3xl shadow-2xl w-[520px] max-w-full max-h-[min(92dvh,100%)] overflow-y-auto" role="dialog" aria-modal="true" aria-labelledby="welcome-title">
         <div className="relative">
           <div className="absolute top-4 right-4">
             <button

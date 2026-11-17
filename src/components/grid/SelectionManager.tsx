@@ -98,6 +98,10 @@ export function useSelectionManager(config: SelectionManagerConfig) {
   }, []);
 
   useEffect(() => () => { endDrag(); }, [endDrag]);
+  // Fresh sheets start with A1 active so keyboard-only users can navigate and type immediately.
+  useEffect(() => {
+    if (!useStore.getState().selection) setSelection({ startRow: 0, startCol: 0, endRow: 0, endCol: 0 });
+  }, [setSelection]);
 
   const isSelected = useCallback((row: number, col: number) => {
     if (!selection) return false;
@@ -156,6 +160,14 @@ export function useSelectionManager(config: SelectionManagerConfig) {
     }
 
     if (!selection) return;
+    // Keyboard equivalent of right-click: Shift+F10 or the Menu key opens the context menu at the active cell.
+    if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
+      e.preventDefault();
+      const cell = refToCell(selection.startRow, selection.startCol);
+      const rect = document.querySelector(`[data-cell-id="${cell}"]`)?.getBoundingClientRect();
+      useStore.getState().setContextMenu({ x: rect ? rect.left + 8 : 120, y: rect ? rect.bottom : 160, cell });
+      return;
+    }
     const { startRow: r, startCol: c } = selection;
 
     if (e.key === 'Delete' || e.key === 'Backspace') {

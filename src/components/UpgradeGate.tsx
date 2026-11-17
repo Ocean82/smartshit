@@ -9,6 +9,7 @@
  */
 
 import { useState } from 'react'
+import { useFocusTrap } from '@/hooks/useFocusTrap'
 import { X, Sparkles, Lock } from 'lucide-react'
 import { startCheckout, type CheckoutInterval } from '@/auth/startCheckout'
 import type { GatedFeature } from '@/lib/featureGates'
@@ -140,10 +141,12 @@ function UpgradeModal({
   onDismiss?: () => void
 }) {
   const [loading, setLoading] = useState(false)
+  const trapRef = useFocusTrap<HTMLDivElement>(true, onDismiss)
 
   return (
     <div className="fixed inset-0 z-[90] flex items-center justify-center p-4" style={{ background: 'oklch(0.1 0.02 250 / 0.5)', backdropFilter: 'blur(3px)' }}>
       <div
+        ref={trapRef}
         className="w-full max-w-sm rounded-2xl p-6 relative"
         style={{ background: 'var(--surface-panel)', boxShadow: '0 24px 48px oklch(0.1 0 0 / 0.18), 0 4px 12px oklch(0.1 0 0 / 0.08)' }}
         role="dialog"

@@ -60,7 +60,12 @@ export function SharedView({ token }: SharedViewProps) {
   const handleMakeCopy = () => {
     if (!workbook) return
     // Store workbook in localStorage and navigate to the main app
-    localStorage.setItem('smartsht-import-shared', JSON.stringify(workbook))
+    try {
+      localStorage.setItem('smartsht-import-shared', JSON.stringify(workbook))
+    } catch {
+      alert('This workbook is too large to copy into browser storage.')
+      return
+    }
     window.location.href = '/'
   }
 

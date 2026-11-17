@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { useFocusTrap } from '@/hooks/useFocusTrap'
 import {
   Search, Sparkles, MessageSquare, LayoutTemplate, BarChart2, Table2,
   Paintbrush, Download, Undo2, Redo2, FileJson, X,
@@ -216,6 +217,7 @@ export function CommandPalette({
     setSelectedIndex(0)
   }, [query])
 
+  const trapRef = useFocusTrap<HTMLDivElement>(open)
   if (!open) return null
 
   function runSelected(index: number) {
@@ -237,6 +239,7 @@ export function CommandPalette({
         onClick={(e) => e.stopPropagation()}
         style={{ background: 'var(--surface-panel)', borderColor: 'var(--neutral-200)', boxShadow: '0 24px 48px oklch(0.1 0 0 / 0.18), 0 4px 12px oklch(0.1 0 0 / 0.08)' }}
         role="dialog"
+        ref={trapRef}
         aria-label="Command palette"
       >
         <div className="flex items-center gap-2 px-4 py-3 border-b" style={{ borderColor: 'var(--neutral-100)' }}>

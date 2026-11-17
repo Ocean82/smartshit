@@ -123,7 +123,7 @@ export function ValidationDialog({ isOpen, onClose }: Props) {
         </div>
 
         <label className="block text-sm font-medium mb-1" style={{ color: 'var(--ink-primary)' }}>Allow:</label>
-        <select
+        <select aria-label="Allow"
           value={type}
           onChange={e => setType(e.target.value as DataValidation['type'])}
           className="w-full border rounded-lg px-3 py-2 mb-3 text-sm outline-none transition-colors focus:ring-2"
@@ -142,12 +142,12 @@ export function ValidationDialog({ isOpen, onClose }: Props) {
             <div className="flex gap-2 mb-3">
               <div className="flex-1">
                 <label className="block text-xs mb-1" style={{ color: 'var(--ink-secondary)' }}>Min</label>
-                <input type="number" value={min} onChange={e => setMin(e.target.value)}
+                <input aria-label="Min" type="number" value={min} onChange={e => setMin(e.target.value)}
                   className="w-full border rounded-lg px-3 py-2 text-sm outline-none transition-colors focus:ring-2" style={{ borderColor: 'var(--neutral-200)', color: 'var(--ink-primary)' }} placeholder="No min" />
               </div>
               <div className="flex-1">
                 <label className="block text-xs mb-1" style={{ color: 'var(--ink-secondary)' }}>Max</label>
-                <input type="number" value={max} onChange={e => setMax(e.target.value)}
+                <input aria-label="Max" type="number" value={max} onChange={e => setMax(e.target.value)}
                   className="w-full border rounded-lg px-3 py-2 text-sm outline-none transition-colors focus:ring-2" style={{ borderColor: 'var(--neutral-200)', color: 'var(--ink-primary)' }} placeholder="No max" />
               </div>
             </div>
@@ -157,7 +157,7 @@ export function ValidationDialog({ isOpen, onClose }: Props) {
         {type === 'list' && (
           <div className="mb-3">
             <label className="block text-xs mb-1" style={{ color: 'var(--ink-secondary)' }}>Values (comma-separated)</label>
-            <input value={valuesText} onChange={e => setValuesText(e.target.value)}
+            <input aria-label="Values (comma-separated)" value={valuesText} onChange={e => setValuesText(e.target.value)}
               className="w-full border rounded-lg px-3 py-2 text-sm outline-none transition-colors focus:ring-2" style={{ borderColor: 'var(--neutral-200)', color: 'var(--ink-primary)' }} placeholder="Option1, Option2, Option3" />
           </div>
         )}
@@ -168,12 +168,12 @@ export function ValidationDialog({ isOpen, onClose }: Props) {
             <div className="flex gap-2">
               <div className="flex-1">
                 <label className="block text-xs mb-1" style={{ color: 'var(--ink-secondary)' }}>Checked value</label>
-                <input value={criteria || 'TRUE'} onChange={e => setCriteria(e.target.value)}
+                <input aria-label="Checked value" value={criteria || 'TRUE'} onChange={e => setCriteria(e.target.value)}
                   className="w-full border rounded-lg px-3 py-2 text-sm outline-none transition-colors focus:ring-2" style={{ borderColor: 'var(--neutral-200)', color: 'var(--ink-primary)', background: 'var(--surface-panel)' }} placeholder="TRUE" />
               </div>
               <div className="flex-1">
                 <label className="block text-xs mb-1" style={{ color: 'var(--ink-secondary)' }}>Unchecked value</label>
-                <input value={containsText || 'FALSE'} onChange={e => setContainsText(e.target.value)}
+                <input aria-label="Unchecked value" value={containsText || 'FALSE'} onChange={e => setContainsText(e.target.value)}
                   className="w-full border rounded-lg px-3 py-2 text-sm outline-none transition-colors focus:ring-2" style={{ borderColor: 'var(--neutral-200)', color: 'var(--ink-primary)', background: 'var(--surface-panel)' }} placeholder="FALSE" />
               </div>
             </div>
@@ -183,7 +183,7 @@ export function ValidationDialog({ isOpen, onClose }: Props) {
         {type === 'text' && (
           <div className="mb-3">
             <label className="block text-xs mb-1" style={{ color: 'var(--ink-secondary)' }}>Criteria</label>
-            <select value={criteria} onChange={e => setCriteria(e.target.value)}
+            <select aria-label="Criteria" value={criteria} onChange={e => setCriteria(e.target.value)}
               className="w-full border rounded-lg px-3 py-2 text-sm outline-none transition-colors focus:ring-2" style={{ borderColor: 'var(--neutral-200)', color: 'var(--ink-primary)', background: 'var(--surface-panel)' }}>
               <option value="">Any text</option>
               <option value="length">Minimum length</option>
@@ -191,14 +191,14 @@ export function ValidationDialog({ isOpen, onClose }: Props) {
             </select>
             {criteria === 'length' && (
               <div className="flex gap-2 mt-2">
-                <input type="number" value={min} onChange={e => setMin(e.target.value)}
+                <input aria-label="Min length" type="number" value={min} onChange={e => setMin(e.target.value)}
                   className="flex-1 border rounded-lg px-3 py-2 text-sm outline-none transition-colors focus:ring-2" style={{ borderColor: 'var(--neutral-200)', color: 'var(--ink-primary)' }} placeholder="Min length" />
-                <input type="number" value={max} onChange={e => setMax(e.target.value)}
+                <input aria-label="Max length" type="number" value={max} onChange={e => setMax(e.target.value)}
                   className="flex-1 border rounded-lg px-3 py-2 text-sm outline-none transition-colors focus:ring-2" style={{ borderColor: 'var(--neutral-200)', color: 'var(--ink-primary)' }} placeholder="Max length" />
               </div>
             )}
             {criteria === 'contains' && (
-              <input value={containsText} onChange={e => setContainsText(e.target.value)}
+              <input aria-label="Text to contain" value={containsText} onChange={e => setContainsText(e.target.value)}
                 className="w-full border rounded-lg px-3 py-2 text-sm mt-2 outline-none transition-colors focus:ring-2" style={{ borderColor: 'var(--neutral-200)', color: 'var(--ink-primary)' }} placeholder="Text to contain" />
             )}
           </div>
@@ -207,14 +207,14 @@ export function ValidationDialog({ isOpen, onClose }: Props) {
         {type === 'custom' && (
           <div className="mb-3">
             <label className="block text-xs mb-1" style={{ color: 'var(--ink-secondary)' }}>Formula (returns true = valid)</label>
-            <input value={criteria} onChange={e => setCriteria(e.target.value)}
+            <input aria-label="Formula (returns true = valid)" value={criteria} onChange={e => setCriteria(e.target.value)}
               className="w-full border rounded-lg px-3 py-2 text-sm font-mono outline-none transition-colors focus:ring-2" style={{ borderColor: 'var(--neutral-200)', color: 'var(--ink-primary)' }} placeholder="value > 0" />
           </div>
         )}
 
         <div className="mb-4">
           <label className="block text-xs mb-1" style={{ color: 'var(--ink-secondary)' }}>Error message (optional)</label>
-          <input value={message} onChange={e => setMessage(e.target.value)}
+          <input aria-label="Error message (optional)" value={message} onChange={e => setMessage(e.target.value)}
             className="w-full border rounded-lg px-3 py-2 text-sm outline-none transition-colors focus:ring-2" style={{ borderColor: 'var(--neutral-200)', color: 'var(--ink-primary)' }} placeholder="Custom error message" />
         </div>
 
