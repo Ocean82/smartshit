@@ -384,6 +384,13 @@ export function validateConfig(): void {
     warnings.push({ level: 'warn', message: 'No cloud AI provider keys configured — only local Ollama inference available' })
   }
 
+  const placeholderKeys = Object.entries({ GROQ_API_KEY: config.groqApiKey, OPENROUTER_API_KEY: config.openRouterApiKey, HUGGINGFACE_API_KEY: config.huggingFaceApiKey })
+    .filter(([, value]) => value?.includes('YOUR_'))
+    .map(([name]) => name)
+  if (placeholderKeys.length > 0) {
+    warnings.push({ level: 'warn', message: `Placeholder value in ${placeholderKeys.join(', ')} - replace the template text with a real key` })
+  }
+
   // Output warnings
   for (const w of warnings) {
     if (w.level === 'error') console.error(`[config] ❌ ${w.message}`)

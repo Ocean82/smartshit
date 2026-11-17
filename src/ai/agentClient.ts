@@ -124,6 +124,23 @@ async function mayCallChatServer(): Promise<boolean> {
   return canCallServer()
 }
 
+/**
+ * Map a thrown fetch failure to a user-facing error. Returns null when the caller
+ * cancelled (the pipeline already handles that). A timeout aborts with AbortError
+ * and anything else (offline, DNS, CORS, refused) surfaces as TypeError.
+ */
+function toNetworkError(err: unknown, callerSignal?: AbortSignal): AgentServerError | null {
+  if (callerSignal?.aborted) return null
+  const timedOut = err instanceof DOMException && (err.name === 'AbortError' || err.name === 'TimeoutError')
+  return {
+    kind: 'server-error',
+    status: 'error',
+    httpStatus: 0,
+    message: timedOut
+      ? 'The AI service took too long to respond. Please try again in a moment.'
+      : "I couldn't connect to the AI service. Check your connection and try again.",
+  }
+}
 export type AgentChatTurn = { role: 'user' | 'assistant'; content: string }
 
 /** Shared payload for non-streaming and streaming chat. */
@@ -200,8 +217,8 @@ export async function chatWithAgentServer(
     // it instead of returning null, which the pipeline treats as "unreachable".
     if (!res.ok) return await toAgentServerError(res)
     return (await res.json()) as ServerChatResponse
-  } catch {
-    return null
+  } catch (err) {
+    return toNetworkError(err)
   }
 }
 
@@ -236,8 +253,8 @@ export async function chatWithAgentServerStream(
     const reader = res.body?.getReader()
     if (!reader) return null
     return await readAgentSseStream(reader, request.onToken)
-  } catch {
-    return null
+  } catch (err) {
+    return toNetworkError(err, request.signal)
   }
 }
 

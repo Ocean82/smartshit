@@ -13,6 +13,8 @@ import { getClerkClient, planFromPublicMetadata } from './auth/clerk.js'
 const PRO_CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
 /** If Clerk is unreachable, a stale Pro status is honored only this long past expiry. */
 const STALE_PRO_GRACE_MS = 60 * 1000
+/** Clerk lookup cap: a slow Clerk must not stall every chat/save request. */
+const CLERK_LOOKUP_TIMEOUT_MS = 3000
 
 export type SubscriptionStatus = {
   isPro: boolean
@@ -24,6 +26,14 @@ const statusCache = new Map<string, { status: SubscriptionStatus; expiresAt: num
 
 /** Bumped on invalidation so lookups started earlier cannot repopulate the cache. */
 const cacheGeneration = new Map<string, number>()
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`Clerk lookup timed out after ${ms}ms`)), ms)
+  })
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer))
+}
 
 function emptyStatus(): SubscriptionStatus {
   return { isPro: false, revocationReason: null }
@@ -54,7 +64,7 @@ export async function resolveSubscriptionStatus(userId: string | null | undefine
 
   const generation = cacheGeneration.get(userId) ?? 0
   try {
-    const user = await getClerkClient().users.getUser(userId)
+    const user = await withTimeout(getClerkClient().users.getUser(userId), CLERK_LOOKUP_TIMEOUT_MS)
     const metadata = (user.publicMetadata ?? {}) as Record<string, unknown>
     const status: SubscriptionStatus = {
       isPro: planFromPublicMetadata(metadata) === 'pro',
