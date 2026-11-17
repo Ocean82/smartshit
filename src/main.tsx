@@ -10,6 +10,7 @@ import { setAnonAIFunctionNotifier } from '@/engine/aiFunctionDefinitions'
 import { ANON_AI_FUNCTION_TOAST } from '@/auth/anonCopy'
 import { useStore } from '@/store/useStore'
 import { savePersistedState, savePersistedStateAsync } from '@/lib/persistence'
+import { setSaveStatus } from '@/lib/saveStatus'
 import { hydrateFromIdbIfNewer } from '@/store/hydrateFromIdb'
 import { buildPersistenceSnapshot } from '@/lib/fileWorkbooks'
 import { flushSave, isCloudConfigured } from '@/lib/cloudSync'
@@ -59,11 +60,14 @@ function warnSaveFailedOnce(reason: 'quota' | 'error') {
  * we only warn when BOTH layers fail.
  */
 async function persistLocalSnapshot() {
+  setSaveStatus('saving')
   const result = await savePersistedStateAsync(currentSnapshot())
   if (result.ok) {
     localSaveBlocked = false
+    setSaveStatus('saved')
     return
   }
+  setSaveStatus('failed')
   warnSaveFailedOnce(result.reason)
 }
 

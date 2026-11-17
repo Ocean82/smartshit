@@ -14,6 +14,7 @@ import { ImageOverlay } from '@/components/ImageOverlay'
 import { FormatPanel } from '@/components/FormatPanel'
 import { StatusBar } from '@/components/StatusBar'
 import { WelcomeOverlay } from '@/components/WelcomeOverlay'
+import { ShortcutsDialog } from '@/components/ShortcutsDialog'
 import { MenuBar } from '@/components/MenuBar'
 import { MobileToolbar } from '@/components/MobileToolbar'
 import { MobileMenu } from '@/components/MobileMenu'
@@ -318,7 +319,7 @@ const {
         <FilterDialog isOpen={showFilterDialog} onClose={() => setShowFilterDialog(false)} />
         <ConditionalFormatDialog isOpen={showConditionalFormatDialog} onClose={() => setShowConditionalFormatDialog(false)} />
       </Suspense>
-      <WelcomeOverlay onOpenTemplates={() => setShowTemplates(true)} />
+      <WelcomeOverlay onOpenTemplates={() => setShowTemplates(true)} /><ShortcutsDialog />
       <Suspense fallback={null}>
         <TemplateGallery open={showTemplates} onClose={() => setShowTemplates(false)} />
         <CommandPalette

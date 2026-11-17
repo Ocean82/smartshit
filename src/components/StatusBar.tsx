@@ -1,5 +1,6 @@
 import { useStore } from '@/store/useStore';
-import { refToCell } from '@/engine/spreadsheet';
+import { cellToRef } from '@/lib/cellRef';
+import { useSaveStatus } from '@/lib/saveStatus';
 import { useMemo, useEffect, useCallback } from 'react';
 import type { ChangeEvent } from 'react';
 import { useShallow } from 'zustand/react/shallow';
@@ -33,6 +34,7 @@ function computeResponseTime(messages: ChatMessage[]): string | null {
 }
 
 export function StatusBar() {
+  const saveStatus = useSaveStatus();
   // Narrow subscription: re-render on selection, active-sheet, zoom, or a
   // completed AI response — but NOT on every streamed token (which only grows
   // the streaming message's content, leaving responseTime and the sheet
@@ -109,17 +111,15 @@ export function StatusBar() {
     const values: number[] = [];
     let count = 0;
 
-    for (let r = minR; r <= maxR; r++) {
-      for (let c = minC; c <= maxC; c++) {
-        const cellId = refToCell(r, c);
-        const data = sheet.cells[cellId];
-        if (data?.value != null || data?.formula) {
-          count++;
-          const computed = getComputedValue(r, c);
-          const num = parseFloat(computed);
-          if (!isNaN(num)) values.push(num);
-        }
-      }
+    // Walk populated cells only; walking the rectangle freezes the tab on select-all.
+    for (const cellId in sheet.cells) {
+      const data = sheet.cells[cellId];
+      if (data?.value == null && !data?.formula) continue;
+      const { row: r, col: c } = cellToRef(cellId);
+      if (r < minR || r > maxR || c < minC || c > maxC) continue;
+      count++;
+      const num = parseFloat(getComputedValue(r, c));
+      if (!isNaN(num)) values.push(num);
     }
 
     if (values.length === 0) return { count, sum: null, avg: null, min: null, max: null };
@@ -137,6 +137,23 @@ export function StatusBar() {
   const cellCount = Object.keys(sheet.cells).filter((k) => sheet.cells[k]?.value != null).length;
 
   return (
+    <>
+    {stats && stats.count > 1 && (
+      <div
+        className="md:hidden h-6 border-t flex items-center px-3 text-[10px] gap-3 shrink-0"
+        style={{ background: 'var(--surface-secondary)', borderColor: 'var(--neutral-200)', color: 'var(--neutral-600)' }}
+        role="status"
+        aria-live="polite"
+      >
+        <span>Count: {stats.count}</span>
+        {stats.sum !== null && (
+          <>
+            <span className="font-medium">Sum: {stats.sum.toLocaleString()}</span>
+            <span>Avg: {stats.avg?.toLocaleString()}</span>
+          </>
+        )}
+      </div>
+    )}
     <div
       className="h-6 border-t flex items-center px-3 text-[10px] gap-3 shrink-0 hidden md:flex"
       style={{ background: 'var(--surface-secondary)', borderColor: 'var(--neutral-200)', color: 'var(--neutral-500)' }}
@@ -144,6 +161,11 @@ export function StatusBar() {
       <span className="font-medium" style={{ color: 'var(--neutral-700)' }}>{sheet.name}</span>
       <span style={{ color: 'var(--neutral-300)' }}>·</span>
       <span>{cellCount} cells</span>
+      {saveStatus !== 'idle' && (
+        <span role="status" aria-live="polite" style={{ color: saveStatus === 'failed' ? 'var(--error)' : undefined }}>
+          {saveStatus === 'saving' ? 'Saving…' : saveStatus === 'saved' ? 'Saved locally' : 'Save failed'}
+        </span>
+      )}
 
       {stats && stats.count > 0 && (
         <>
@@ -221,5 +243,6 @@ export function StatusBar() {
         </button>
       </div>
     </div>
+    </>
   );
 }
