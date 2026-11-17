@@ -3,7 +3,7 @@
  * File, Edit, View, Insert, Format, Data menus.
  */
 
-import React, { useState, useRef, useCallback } from 'react'
+import React, { useState, useRef, useCallback, useEffect } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '@/store/useStore'
 import { exportWorkbookToXlsx, exportSheetToCsv } from '@/io/xlsx'
@@ -19,6 +19,9 @@ import { pickAndInsertSheetImage } from '@/components/ImageOverlay'
 type MenuId = 'file' | 'edit' | 'view' | 'insert' | 'format' | 'data'
 
 const MENU_ORDER: MenuId[] = ['file', 'edit', 'view', 'insert', 'format', 'data']
+/** Alt+letter mnemonics (WAI-ARIA menubar). Format uses O because F is File. */
+const MNEMONICS: Record<MenuId, string> = { file: 'f', edit: 'e', view: 'v', insert: 'i', format: 'o', data: 'd' }
+const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/i.test(navigator.platform)
 
 interface MenuItem {
   label: string
@@ -189,6 +192,24 @@ export function MenuBar() {
 
   const currentMenuIdRef = useRef<MenuId>('file')
   const openMenuItemsRef = useRef<MenuItem[]>([])
+
+  // Alt+letter opens a menu and focuses its first item. Skipped on macOS, where
+  // Option+letter types special characters.
+  useEffect(() => {
+    if (IS_MAC) return
+    const onKey = (e: KeyboardEvent) => {
+      if (!e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return
+      const id = MENU_ORDER.find((m) => MNEMONICS[m] === e.key.toLowerCase())
+      if (!id) return
+      e.preventDefault()
+      activeTriggerRef.current = triggerRefs.current[id] ?? null
+      setOpenMenu(id)
+      triggerRefs.current[id]?.focus()
+      setTimeout(() => focusItem(0), 0)
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [focusItem])
 
   const toggleMenu = useCallback((id: MenuId) => {
     if (openMenu === id) {
@@ -421,6 +442,7 @@ export function MenuBar() {
               aria-expanded={openMenu === id}
               aria-controls={openMenu === id ? panelId : undefined}
               aria-haspopup="menu"
+              aria-keyshortcuts={IS_MAC ? undefined : `Alt+${MNEMONICS[id].toUpperCase()}`}
               onMouseDown={(e) => {
                 // Keep the button from stealing focus so the click toggles feel native.
                 e.preventDefault()
