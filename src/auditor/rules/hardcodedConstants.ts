@@ -43,6 +43,7 @@ export const hardcodedConstantsRule: AuditRule = {
 
       // Strip cell references and range references so we don't false-flag them
       const stripped = cell.formula
+        .replace(/"(?:[^"]|"")*"/g, '""') // text such as "Q3 2024" is not a number in the formula
         .replace(/[A-Z]{1,3}\d{1,5}:[A-Z]{1,3}\d{1,5}/g, '') // remove ranges
         .replace(/[A-Z]{1,3}\d{1,5}/g, '') // remove cell refs
 
@@ -58,8 +59,10 @@ export const hardcodedConstantsRule: AuditRule = {
         const target = findFirstEmptyCellRight(ctx, cell.row, cell.col)
         const escaped = num.replace(/\./g, '\\.')
         const replacePattern = new RegExp(`(?<![A-Za-z0-9_.])${escaped}(?![A-Za-z0-9_.])`)
+        // The fix rewrites the first match, so skip it when the same digits also sit inside quoted text.
+        const inText = (cell.formula.match(/"(?:[^"]|"")*"/g) ?? []).some((s) => replacePattern.test(s))
         const fixActions: FixWrite[] | undefined =
-          target && replacePattern.test(cell.formula)
+          target && !inText && replacePattern.test(cell.formula)
             ? [
                 { cellId: target, value: Number(num) },
                 { cellId: cell.cellId, formula: `=${cell.formula.replace(replacePattern, target)}` },

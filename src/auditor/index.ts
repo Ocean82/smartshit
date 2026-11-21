@@ -20,6 +20,9 @@ export { findingKey, cellSignature } from './utils'
 export { createCustomAuditRule, loadCustomRules, saveCustomRules, ruleMatches, OPERATOR_LABELS } from './customRules'
 export type { CustomAuditRule, CustomRuleOperator, NumericRuleOperator, TextRuleOperator, EmptyRuleOperator } from './customRules'
 
+/** Most points any single rule can take off the 100-point health score. */
+const MAX_PENALTY_PER_RULE = 40
+
 /**
  * Reason a batch of fix writes cannot be applied, or null if all targets are free.
  */
@@ -64,7 +67,13 @@ export function runAudit(
     if (cellData.value === null && !cellData.formula) continue
 
     const ref = cellToRef(cellId)
-    const computedValue = getComputedValue(ref.row, ref.col)
+    // One cell the engine cannot evaluate must not abort the whole audit.
+    let computedValue: string
+    try {
+      computedValue = getComputedValue(ref.row, ref.col)
+    } catch {
+      computedValue = ''
+    }
     const formula = cellData.formula
       ? (cellData.formula.startsWith('=') ? cellData.formula.slice(1) : cellData.formula)
       : null
@@ -166,7 +175,14 @@ export function runAudit(
     low: 2,
     info: 0,
   }
-  const totalPenalty = findings.reduce((sum, f) => sum + weights[f.severity], 0)
+  // Cap each rule's share so one noisy rule (say a pasted block that trips
+  // "inconsistent formulas") cannot alone drive the score to zero.
+  const penaltyByRule = new Map<string, number>()
+  for (const f of findings) {
+    penaltyByRule.set(f.ruleId, (penaltyByRule.get(f.ruleId) ?? 0) + weights[f.severity])
+  }
+  let totalPenalty = 0
+  for (const penalty of penaltyByRule.values()) totalPenalty += Math.min(penalty, MAX_PENALTY_PER_RULE)
   const score = Math.max(0, Math.min(100, 100 - totalPenalty))
 
   // Generate summary

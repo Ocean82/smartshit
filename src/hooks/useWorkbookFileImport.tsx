@@ -57,6 +57,7 @@ export function useWorkbookFileImport({ verb = 'Open', onDone }: WorkbookFileImp
     const store = useStore.getState()
     let imported = false
     const asNewFile = modeRef.current === 'new'
+    modeRef.current = 'replace' // a choice applies to one import only
     try {
       if (!asNewFile) store.pushHistory(`${verb} file`)
       const { workbook, meta } = await importWorkbookFromFileWithMeta(file)

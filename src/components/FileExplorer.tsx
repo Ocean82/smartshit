@@ -74,6 +74,7 @@ export function FileExplorer() {
   const rootFiles = liveFiles.filter((f) => f.parentId === null);
   // Items taken along with a trashed folder come back with it, so only list the top level.
   const trashed = files.filter((f) => f.deletedAt !== undefined && f.trashedWith === undefined);
+  const fileCount = liveFiles.filter((f) => f.type === 'file').length;
 
   const handleToggleFolder = (id: string) => {
     setExpandedFolders((prev) => {
@@ -286,7 +287,7 @@ export function FileExplorer() {
       {/* Storage info */}
       <div className="px-3 py-2 border-t border-gray-100">
         <div className="flex items-center justify-between text-[10px] text-gray-400">
-          <span>{liveFiles.filter(f => f.type === 'file').length} files</span>
+          <span>{fileCount} {fileCount === 1 ? 'file' : 'files'}</span>
           <span>Local storage</span>
         </div>
       </div>

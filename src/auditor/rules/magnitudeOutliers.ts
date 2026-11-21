@@ -8,8 +8,13 @@
 import type { AuditRule, AuditFinding, AuditContext } from '../types'
 import { findingId, colToLetter } from '../utils'
 
-/** Minimum data points in a column before outlier detection applies. */
-const MIN_COLUMN_SIZE = 5
+/**
+ * Minimum data points in a column before outlier detection applies. With a
+ * sample standard deviation no value can be more than (n-1)/sqrt(n) deviations
+ * from the mean, which only exceeds the 3.0 threshold from 11 values up, so a
+ * smaller minimum could never flag anything.
+ */
+const MIN_COLUMN_SIZE = 11
 /** Z-score threshold for flagging a value as an outlier. */
 const Z_SCORE_THRESHOLD = 3.0
 
@@ -35,6 +40,8 @@ export const magnitudeOutliersRule: AuditRule = {
       )
 
       const values = columnCells.map((c) => c.rawValue as number)
+      // Computed once: Math.max(...) per outlier was quadratic and throws on very large columns.
+      const lastDataRow = columnCells.reduce((max, c) => (c.row > max ? c.row : max), -1)
       const mean = values.reduce((a, b) => a + b, 0) / values.length
       const variance = values.reduce((sum, v) => sum + (v - mean) ** 2, 0) / Math.max(1, values.length - 1)
       const stddev = Math.sqrt(variance)
@@ -49,7 +56,7 @@ export const magnitudeOutliersRule: AuditRule = {
           // Skip if this cell is adjacent to a formula row (likely a manually-entered total)
           if (formulaCellRows.has(cell.row - 1) || formulaCellRows.has(cell.row + 1)) continue
           // Skip if this is the last data cell in the column (likely a total)
-          if (cell.row === Math.max(...columnCells.map((c) => c.row))) continue
+          if (cell.row === lastDataRow) continue
 
           findings.push({
             id: findingId(),

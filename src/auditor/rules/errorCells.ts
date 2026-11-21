@@ -19,7 +19,7 @@ const ERROR_DESCRIPTIONS: Record<string, string> = {
 const ERROR_SUGGESTIONS: Record<string, (formula: string | null) => string> = {
   '#REF!': () => 'Update the formula to reference valid cells, or re-enter it',
   '#VALUE!': () => 'Check that all referenced cells contain the expected data types',
-  '#DIV/0!': (f) => f ? `Wrap in IFERROR: =IFERROR(${f}, 0)` : 'Add a check for zero before dividing',
+  '#DIV/0!': (f) => f ? `Wrap in IFERROR: =IFERROR(${f}, 0). This shows 0 in place of the error, so first check that a zero divisor is expected.` : 'Add a check for zero before dividing',
   '#NAME?': () => 'Check function spelling and ensure any named ranges exist',
   '#N/A': (f) => f ? `Add error handling: =IFERROR(${f}, "Not found")` : 'Verify the lookup value exists in the source range',
   '#NULL!': () => 'Check for missing comma or colon between cell references',

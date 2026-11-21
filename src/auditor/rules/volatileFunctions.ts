@@ -28,10 +28,10 @@ export const volatileFunctionsRule: AuditRule = {
     for (const cell of ctx.formulaCells) {
       if (!cell.formula) continue
 
-      const upper = cell.formula.toUpperCase()
-
+      // Whole function names only (not KNOW( or SUBTOTAL-like substrings), and not text inside quotes.
+      const upper = cell.formula.replace(/"(?:[^"]|"")*"/g, '""').toUpperCase()
       for (const vf of VOLATILE_FUNCTIONS) {
-        if (upper.includes(`${vf.name}(`)) {
+        if (new RegExp(`(?<![A-Z0-9_.])${vf.name}\\(`).test(upper)) {
           findings.push({
             id: findingId(),
             ruleId: 'volatile-functions',

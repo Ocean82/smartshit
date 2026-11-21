@@ -114,3 +114,56 @@ describe('auditor preferences', () => {
     expect(loadDismissed('wb3')).toEqual({ ok: entry })
   })
 })
+
+describe('audit robustness', () => {
+  it('an engine failure on one cell does not abort the audit', () => {
+    const cells: SheetData['cells'] = {
+      A1: { value: 1 }, A2: { value: null, formula: '=A1+1' }, A3: { value: null, formula: '=1/0' },
+    }
+    const result = runAudit(sheetOf(cells), (row) => {
+      if (row === 1) throw new Error('engine exploded')
+      return row === 2 ? '#DIV/0!' : '1'
+    })
+    expect(result.totalCells).toBe(3)
+    expect(result.findings.some((f) => f.ruleId === 'error-cells')).toBe(true)
+  })
+
+  it('one noisy rule cannot take more than 40 points off the score', () => {
+    const cells: SheetData['cells'] = {}
+    for (let r = 1; r <= 30; r++) cells[`A${r}`] = { value: null, formula: `=1/0` }
+    const result = runAudit(sheetOf(cells), () => '#DIV/0!')
+    expect(result.findings.filter((f) => f.ruleId === 'error-cells')).toHaveLength(30)
+    expect(result.score).toBe(60)
+  })
+
+  it('does not flag numbers or volatile names that only appear inside quoted text', () => {
+    const cells: SheetData['cells'] = {
+      A1: { value: 1 },
+      B1: { value: null, formula: '=IF(A1>0,"Q3 2024 target 4817","n/a")' },
+      B2: { value: null, formula: '=IF(A1>0,"RAND(1) 9999","x")' },
+      B3: { value: null, formula: '=KNOW(A1)' },
+    }
+    const ids = runAudit(sheetOf(cells), () => '1').findings.map((f) => f.ruleId)
+    expect(ids).not.toContain('hardcoded-constants')
+    expect(ids).not.toContain('volatile-functions')
+  })
+
+  it('still flags a real hardcoded number and a real volatile call', () => {
+    const cells: SheetData['cells'] = {
+      A1: { value: 1 },
+      B1: { value: null, formula: '=A1*4817' },
+      B2: { value: null, formula: '=RAND()+A1' },
+    }
+    const ids = runAudit(sheetOf(cells), () => '1').findings.map((f) => f.ruleId)
+    expect(ids).toContain('hardcoded-constants')
+    expect(ids).toContain('volatile-functions')
+  })
+
+  it('finds an outlier in a long column without crashing', () => {
+    const cells: SheetData['cells'] = {}
+    for (let r = 1; r <= 40; r++) cells[`A${r}`] = { value: 100 + (r % 3) }
+    cells.A20 = { value: 100000 }
+    const outliers = runAudit(sheetOf(cells), () => '1').findings.filter((f) => f.ruleId === 'magnitude-outliers')
+    expect(outliers.map((f) => f.cells[0].cellId)).toEqual(['A20'])
+  })
+})
