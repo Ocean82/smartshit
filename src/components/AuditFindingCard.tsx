@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ChevronRight, ChevronDown, Wrench, ExternalLink } from 'lucide-react'
+import { ChevronRight, ChevronDown, Wrench, ExternalLink, EyeOff } from 'lucide-react'
 import type { AuditFinding } from '@/auditor/types'
 import { AuditBadge } from './AuditBadge'
 
@@ -7,9 +7,11 @@ interface AuditFindingCardProps {
   finding: AuditFinding
   onCellNavigate?: (row: number, col: number) => void
   onFix?: (finding: AuditFinding) => void
+  /** Hide just this finding. */
+  onDismiss?: (finding: AuditFinding) => void
 }
 
-export function AuditFindingCard({ finding, onCellNavigate, onFix }: AuditFindingCardProps) {
+export function AuditFindingCard({ finding, onCellNavigate, onFix, onDismiss }: AuditFindingCardProps) {
   const [expanded, setExpanded] = useState(false)
 
   return (
@@ -82,10 +84,26 @@ export function AuditFindingCard({ finding, onCellNavigate, onFix }: AuditFindin
               </button>
             ))}
 
+            {onDismiss && (
+              <button
+                type="button"
+                className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold rounded-lg border transition-all active:scale-95"
+                style={{ borderColor: 'var(--neutral-200)', background: 'var(--surface-panel)', color: 'var(--ink-secondary)' }}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onDismiss(finding)
+                }}
+                title="Hide this finding. It comes back if these cells change."
+              >
+                <EyeOff size={10} />
+                DISMISS
+              </button>
+            )}
+
             {finding.autoFixable && onFix && (
               <button
                 type="button"
-                className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold rounded-lg text-white transition-all active:scale-95"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold rounded-lg text-white transition-all active:scale-95"
                 style={{ background: 'var(--success)', boxShadow: 'var(--shadow-sm)' }}
                 onClick={(e) => {
                   e.stopPropagation()

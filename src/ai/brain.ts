@@ -25,6 +25,7 @@ import { chatWithAgentServerStream, isAgentServerError } from '@/ai/agentClient'
 import { isAnonGated, anonGatedMetadata } from '@/ai/anonGate'
 import { recordTelemetry } from '@/ai/telemetry'
 import { runAudit, formatAuditForContext } from '@/auditor'
+import { isAuditorEnabled } from '@/auditor/preferences'
 import { getContextualSuggestions } from '@/ai/contextualSuggestions'
 import type { SheetInsights } from '@/ai/sheetInsights'
 import { isOutlierFollowUp } from '@/ai/outliers'
@@ -897,7 +898,7 @@ export async function processMessage(input: ProcessMessageInput): Promise<ToolRe
   const insightsBlock = isLlmOnlyMode(mode) && !isFollowUp ? formatInsights(target.context.insights) : ''
 
   let auditBlock = ''
-  if (isLlmOnlyMode(mode) || mode === 'advise') {
+  if ((isLlmOnlyMode(mode) || mode === 'advise') && isAuditorEnabled()) {
     try {
       const auditResult = runAudit(input.sheet, input.getComputedValue)
       auditBlock = formatAuditForContext(auditResult)

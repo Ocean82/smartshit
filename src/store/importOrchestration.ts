@@ -17,6 +17,7 @@ export interface ImportEffectAccess {
   lastAuditResult: import('@/auditor/types').AuditResult | null
   lastAuditRevision: number | null
   auditResultsBySheet: Record<string, { result: import('@/auditor/types').AuditResult; revision: number }>
+  auditorEnabled?: boolean
   workbookRevision: number
   getActiveSheet: () => WorkbookData['sheets'][number]
   getComputedValue: (row: number, col: number) => string
@@ -111,6 +112,7 @@ export function applyWorkbookImportEffects(
     setTimeout(() => {
       if (auditGeneration !== importAuditGeneration) return
       try {
+        if (get().auditorEnabled === false) return
         const activeSheet = get().getActiveSheet()
         if (Object.keys(activeSheet.cells).length > 4) {
           const auditResult = runAudit(activeSheet, get().getComputedValue, loadCustomRules())

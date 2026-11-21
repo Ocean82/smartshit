@@ -27,6 +27,9 @@ import type { AppState } from './storeTypes'
 import { applyWorkbookImportEffects } from './importOrchestration'
 import { runAudit } from '@/auditor'
 import { loadCustomRules } from '@/auditor/customRules'
+import { findingKey, cellSignature } from '@/auditor/utils'
+import { isAuditorEnabled, saveAuditorEnabled, loadDismissed, saveDismissed } from '@/auditor/preferences'
+import type { AuditFinding } from '@/auditor/types'
 
 export type { AppState } from './storeTypes'
 
@@ -114,15 +117,54 @@ export const useStore = create<AppState>()(
       lastAuditResult: null,
       lastAuditRevision: null,
       auditResultsBySheet: {},
+      auditorEnabled: isAuditorEnabled(),
       runActiveSheetAudit: () => {
         const state = useStore.getState()
-        const result = runAudit(state.getActiveSheet(), state.getComputedValue, loadCustomRules())
+        const result = runAudit(
+          state.getActiveSheet(),
+          state.getComputedValue,
+          loadCustomRules(),
+          loadDismissed(state.workbook.id),
+        )
         useStore.setState((st) => {
           st.lastAuditResult = result
           st.lastAuditRevision = st.workbookRevision
           st.auditResultsBySheet[result.sheetId] = { result, revision: st.workbookRevision }
         })
         return result
+      },
+      setAuditorEnabled: (enabled: boolean) => {
+        saveAuditorEnabled(enabled)
+        useStore.setState((st) => {
+          st.auditorEnabled = enabled
+          if (!enabled) {
+            // Drop results so the badges, status bar and rail counts disappear.
+            st.lastAuditResult = null
+            st.lastAuditRevision = null
+            st.auditResultsBySheet = {}
+          }
+        })
+      },
+      dismissAuditFinding: (finding: AuditFinding) => {
+        const state = useStore.getState()
+        const sheet = state.getActiveSheet()
+        // ponytail: entries are never pruned; a workbook would need thousands of dismissals to matter.
+        const dismissed = loadDismissed(state.workbook.id)
+        dismissed[findingKey(sheet.id, finding)] = {
+          cellIds: finding.cells.map((c) => c.cellId),
+          dismissedAt: Date.now(),
+          valueSnapshot: Object.fromEntries(finding.cells.map((c) => [c.cellId, cellSignature(sheet.cells[c.cellId])])),
+        }
+        saveDismissed(state.workbook.id, dismissed)
+        state.runActiveSheetAudit()
+      },
+      restoreAuditFindings: (findings: AuditFinding[]) => {
+        const state = useStore.getState()
+        const sheetId = state.getActiveSheet().id
+        const dismissed = loadDismissed(state.workbook.id)
+        for (const finding of findings) delete dismissed[findingKey(sheetId, finding)]
+        saveDismissed(state.workbook.id, dismissed)
+        state.runActiveSheetAudit()
       },
 
       undoStack: [],

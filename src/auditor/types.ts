@@ -1,8 +1,9 @@
 /**
  * Spreadsheet Auditor — Type definitions.
  *
- * All audit findings are typed here. The auditor is read-only:
- * it reports defects but never modifies the workbook.
+ * All audit findings are typed here. Running an audit never modifies the
+ * workbook; fixes are proposed as `fixActions` and applied only after the
+ * user reviews and accepts them.
  */
 
 export type Severity = 'critical' | 'high' | 'medium' | 'low' | 'info'
@@ -42,6 +43,8 @@ export interface AuditResult {
   totalCells: number
   formulaCells: number
   findings: AuditFinding[]
+  /** Findings the user dismissed. Excluded from `findings`, `score` and `summary`. */
+  dismissed?: AuditFinding[]
   /** 0–100 health score (100 = no issues) */
   score: number
   summary: string

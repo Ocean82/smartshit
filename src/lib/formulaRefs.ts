@@ -7,6 +7,8 @@ export interface FormulaRef {
   /** The reference as written, without the sheet prefix (e.g. "$A$1:B5"). */
   text: string
   isRange: boolean
+  /** Offset of `text` within the formula string. */
+  textStart: number
   startRow: number
   startCol: number
   endRow: number
@@ -67,6 +69,7 @@ export function extractFormulaRefs(formula: string): FormulaRef[] {
       sheet,
       text,
       isRange: text.includes(':'),
+      textStart: (m.index ?? 0) + m[0].length - text.length,
       startRow: Math.min(a.row, b.row),
       startCol: Math.min(a.col, b.col),
       endRow: Math.max(a.row, b.row),

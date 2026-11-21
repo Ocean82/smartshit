@@ -76,6 +76,13 @@ export interface AppState extends UIState, UIActions, FileActions, ChatActions {
   auditResultsBySheet: Record<string, { result: import('@/auditor/types').AuditResult; revision: number }>
   /** Audit the active sheet with custom rules and store the result. */
   runActiveSheetAudit: () => import('@/auditor/types').AuditResult
+  /** Whether the auditor is on. Off: no scans run and no results or badges show. */
+  auditorEnabled: boolean
+  setAuditorEnabled: (enabled: boolean) => void
+  /** Hide one finding. It returns if any of its cells change. Re-audits the active sheet. */
+  dismissAuditFinding: (finding: import('@/auditor/types').AuditFinding) => void
+  /** Bring dismissed findings back. Re-audits the active sheet. */
+  restoreAuditFindings: (findings: import('@/auditor/types').AuditFinding[]) => void
 
   // History
   undoStack: HistoryEntry[]

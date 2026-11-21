@@ -13,6 +13,21 @@ export function findingId(): string {
   return Math.random().toString(36).slice(2, 10)
 }
 
+/**
+ * Stable identity of a finding across audit runs (finding ids are random per
+ * run): the sheet, the rule, and the cells it points at.
+ */
+export function findingKey(sheetId: string, finding: Pick<AuditFinding, 'ruleId' | 'cells'>): string {
+  return `${sheetId}|${finding.ruleId}|${finding.cells.map((c) => c.cellId).sort().join(',')}`
+}
+
+/** What a dismissal remembers about a cell: its formula, or else its value. */
+export function cellSignature(cell: { value: unknown; formula?: string | null } | undefined): string {
+  if (!cell) return ''
+  if (cell.formula) return cell.formula.startsWith('=') ? cell.formula : `=${cell.formula}`
+  return cell.value == null ? '' : String(cell.value)
+}
+
 /** Findings that reference `cellId`, preserving the audit's severity order. */
 export function findingsForCell(findings: AuditFinding[], cellId: string): AuditFinding[] {
   return findings.filter((finding) => finding.cells.some((cell) => cell.cellId === cellId))
@@ -137,7 +152,10 @@ export function extractRangeRefs(formula: string): Array<{ range: string; start:
  * row 0 (headers) or a row far away from the formula are marked as absolute.
  */
 export function normalizeFormula(formula: string, row: number, col: number): string {
-  return formula.replace(/(\$?)([A-Z]{1,3})(\$?)(\d{1,5})\b/g, (match, colAbs: string, colStr: string, rowAbs: string, rowStr: string) => {
+  // String literals pass through untouched, and a ref must not touch identifier
+  // characters or be a function call, so LOG10(, ATAN2( and "Q2" are not cells.
+  return formula.replace(/("(?:[^"]|"")*")|(?<![A-Za-z0-9_.])(\$?)([A-Z]{1,3})(\$?)(\d{1,5})(?![A-Za-z0-9_.(])/g, (match, literal: string | undefined, colAbs: string, colStr: string, rowAbs: string, rowStr: string) => {
+    if (literal !== undefined) return match
     const refCol = letterToCol(colStr)
     const refRow = parseInt(rowStr, 10) - 1
 
@@ -154,6 +172,17 @@ export function normalizeFormula(formula: string, row: number, col: number): str
 
     return `R[${refRow - row}]C[${refCol - col}]`
   })
+}
+
+/**
+ * Replace the first unqualified occurrence of `range` (as returned by
+ * extractRangeRefs) with `replacement`. Positional, so the same text inside a
+ * sheet-qualified ref ("Other!A2:A3") or a string literal is never touched.
+ */
+export function replaceRangeRef(formula: string, range: string, replacement: string): string {
+  const ref = extractFormulaRefs(formula).find((r) => r.sheet === null && r.text === range)
+  if (!ref) return formula
+  return formula.slice(0, ref.textStart) + replacement + formula.slice(ref.textStart + range.length)
 }
 
 /** Check if a cell looks like a summary/total row (heuristic). */

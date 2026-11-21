@@ -5,7 +5,7 @@
  */
 
 import type { AuditRule, AuditFinding, AuditContext } from '../types'
-import { findingId, extractRangeRefs, cellToRef, refToCell } from '../utils'
+import { findingId, extractRangeRefs, replaceRangeRef, cellToRef, refToCell } from '../utils'
 
 const AGGREGATE_PATTERN = /\b(SUM|AVERAGE|COUNT|COUNTA|MIN|MAX|SUBTOTAL)\b/i
 
@@ -53,7 +53,7 @@ export const rangeGapsRule: AuditRule = {
                 autoFixable: true,
                 fixActions: [{
                   cellId: cell.cellId,
-                  formula: `=${cell.formula!.replace(range, `${extendedStart}:${end}`)}`,
+                  formula: `=${replaceRangeRef(cell.formula!, range, `${extendedStart}:${end}`)}`,
                 }],
               })
             }
@@ -78,7 +78,7 @@ export const rangeGapsRule: AuditRule = {
                 autoFixable: true,
                 fixActions: [{
                   cellId: cell.cellId,
-                  formula: `=${cell.formula!.replace(range, `${start}:${extendedEnd}`)}`,
+                  formula: `=${replaceRangeRef(cell.formula!, range, `${start}:${extendedEnd}`)}`,
                 }],
               })
             }
@@ -109,7 +109,7 @@ export const rangeGapsRule: AuditRule = {
                 autoFixable: true,
                 fixActions: [{
                   cellId: cell.cellId,
-                  formula: `=${cell.formula.replace(range, `${extendedStart}:${end}`)}`,
+                  formula: `=${replaceRangeRef(cell.formula!, range, `${extendedStart}:${end}`)}`,
                 }],
               })
             }
@@ -133,7 +133,7 @@ export const rangeGapsRule: AuditRule = {
                 autoFixable: true,
                 fixActions: [{
                   cellId: cell.cellId,
-                  formula: `=${cell.formula.replace(range, `${start}:${extendedEnd}`)}`,
+                  formula: `=${replaceRangeRef(cell.formula!, range, `${start}:${extendedEnd}`)}`,
                 }],
               })
             }

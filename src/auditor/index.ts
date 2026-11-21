@@ -9,13 +9,14 @@
  */
 
 import type { SheetData } from '@/types'
-import type { AuditResult, AuditContext, AuditFinding, CellInfo, FixWrite, Severity } from './types'
+import type { AuditResult, AuditContext, AuditFinding, CellInfo, DismissedFindingEntry, FixWrite, Severity } from './types'
 import { ALL_RULES } from './rules'
 import { createCustomAuditRule, type CustomAuditRule } from './customRules'
-import { refToCell, cellToRef, classifyCellType, isErrorValue, getErrorType } from './utils'
+import { refToCell, cellToRef, classifyCellType, isErrorValue, getErrorType, findingKey, cellSignature } from './utils'
 
 export type { AuditResult, AuditFinding, CellInfo, Severity } from './types'
 export type { CellLocation, AuditRule, AuditContext, DismissedFindingEntry } from './types'
+export { findingKey, cellSignature } from './utils'
 export { createCustomAuditRule, loadCustomRules, saveCustomRules, ruleMatches, OPERATOR_LABELS } from './customRules'
 export type { CustomAuditRule, CustomRuleOperator, NumericRuleOperator, TextRuleOperator, EmptyRuleOperator } from './customRules'
 
@@ -39,12 +40,15 @@ export function getFixAbortReason(sheet: SheetData, fixActions: FixWrite[]): str
  * @param sheet - The sheet data from the Zustand store.
  * @param getComputedValue - Function to get Formualizer-computed value for a cell.
  * @param customRules - Optional user-defined custom audit rules to run alongside the built-ins.
+ * @param dismissed - Findings the user dismissed, keyed by `findingKey`. A
+ *   dismissal applies only while every cell it covers is unchanged.
  * @returns Structured audit result with findings and score.
  */
 export function runAudit(
   sheet: SheetData,
   getComputedValue: (row: number, col: number) => string,
   customRules: CustomAuditRule[] = [],
+  dismissed: Record<string, DismissedFindingEntry> = {},
 ): AuditResult {
   const startTime = performance.now()
 
@@ -121,12 +125,12 @@ export function runAudit(
   }
 
   // Execute all rules (built-in + custom), catching errors so one bad rule doesn't crash the audit
-  const findings: AuditFinding[] = []
+  const allFindings: AuditFinding[] = []
   const rules = [...ALL_RULES, ...customRules.map(createCustomAuditRule)]
   for (const rule of rules) {
     try {
       const ruleFindings = rule.run(ctx)
-      findings.push(...ruleFindings)
+      allFindings.push(...ruleFindings)
     } catch (err) {
       console.warn(`Audit rule "${rule.id}" failed:`, err)
     }
@@ -140,7 +144,19 @@ export function runAudit(
     low: 3,
     info: 4,
   }
-  findings.sort((a, b) => severityOrder[a.severity] - severityOrder[b.severity])
+  allFindings.sort((a, b) => severityOrder[a.severity] - severityOrder[b.severity])
+
+  // Split out findings the user dismissed (and whose cells are unchanged since).
+  const findings: AuditFinding[] = []
+  const dismissedFindings: AuditFinding[] = []
+  for (const finding of allFindings) {
+    const entry = dismissed[findingKey(sheet.id, finding)]
+    const stillApplies = entry !== undefined && (
+      !entry.valueSnapshot ||
+      finding.cells.every((c) => entry.valueSnapshot![c.cellId] === cellSignature(sheet.cells[c.cellId]))
+    )
+    ;(stillApplies ? dismissedFindings : findings).push(finding)
+  }
 
   // Calculate health score (100 = perfect, 0 = catastrophic)
   const weights: Record<Severity, number> = {
@@ -177,6 +193,7 @@ export function runAudit(
     totalCells: allCells.length,
     formulaCells: formulaCells.length,
     findings,
+    dismissed: dismissedFindings,
     score,
     summary,
   }

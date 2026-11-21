@@ -31,6 +31,7 @@ import { buildAdaptiveContext, getClientContextBudget } from '@/ai/adaptiveConte
 import { formatInsights, mergeToolResultContent } from '@/ai/responseBuilder'
 import { isLlmOnlyMode } from '@/ai/mode'
 import { runAudit, formatAuditForContext } from '@/auditor'
+import { isAuditorEnabled } from '@/auditor/preferences'
 import { getContextualSuggestions } from '@/ai/contextualSuggestions'
 import { isReadProbeTool } from '@shared/toolRegistry'
 
@@ -87,7 +88,7 @@ export function createLLMGatewayStage(deps?: LLMGatewayDeps): PipelineStage {
       }
 
       let auditBlock = ''
-      if (isLlmOnlyMode(mode) || mode === 'advise') {
+      if ((isLlmOnlyMode(mode) || mode === 'advise') && isAuditorEnabled()) {
         try {
           const auditResult = runAudit(target.sheet, target.getComputedValue)
           auditBlock = formatAuditForContext(auditResult)

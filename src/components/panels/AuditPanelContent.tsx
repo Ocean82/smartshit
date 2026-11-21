@@ -14,7 +14,7 @@ import { UpgradeGate } from '@/components/UpgradeGate'
 import { useUsage } from '@/auth'
 import { useWorkbookFileImport } from '@/hooks/useWorkbookFileImport'
 import { FREE_AUTOFIX_LIFETIME_LIMIT, getAutoFixUsed } from '@/lib/featureGates'
-import { ShieldCheck, Loader2, RefreshCw, X } from 'lucide-react'
+import { ShieldCheck, Loader2, RefreshCw, X, ChevronDown, ChevronRight, Undo2 } from 'lucide-react'
 
 const AUTO_RESCAN_DEBOUNCE_MS = 1200
 const AUTO_RESCAN_MAX_CELLS = 20000
@@ -23,8 +23,15 @@ const SEVERITY_FILTERS = ['all', 'critical', 'high', 'medium', 'low', 'info'] as
 type FilterValue = (typeof SEVERITY_FILTERS)[number]
 
 export function AuditPanelContent() {
-  const { workbook, activeSheetId, lastAuditResult, runActiveSheetAudit, isStale, workbookRevision } = useStore(
+  const {
+    workbook, activeSheetId, lastAuditResult, runActiveSheetAudit, isStale, workbookRevision,
+    auditorEnabled, setAuditorEnabled, dismissAuditFinding, restoreAuditFindings,
+  } = useStore(
     useShallow((s) => ({
+      auditorEnabled: s.auditorEnabled,
+      setAuditorEnabled: s.setAuditorEnabled,
+      dismissAuditFinding: s.dismissAuditFinding,
+      restoreAuditFindings: s.restoreAuditFindings,
       workbookRevision: s.workbookRevision,
       workbook: s.workbook,
       activeSheetId: s.activeSheetId,
@@ -40,11 +47,13 @@ export function AuditPanelContent() {
   const [ruleVersion, setRuleVersion] = useState(0)
   const [fixMessage, setFixMessage] = useState<string | null>(null)
   const [showUpgradeGate, setShowUpgradeGate] = useState(false)
+  const [showDismissed, setShowDismissed] = useState(false)
   const { requestImport, fileInput } = useWorkbookFileImport({ verb: 'Import' })
 
   const activeSheet = workbook.sheets.find((s) => s.id === activeSheetId)
 
   const handleRunAudit = useCallback(() => {
+    if (!auditorEnabled) return
     setFixMessage(null)
     setLoading(true)
     requestAnimationFrame(() => {
@@ -59,7 +68,7 @@ export function AuditPanelContent() {
     // ruleVersion is read here solely as a version-bump trigger so the callback is
     // recreated (and the auto-run effect re-fires) when custom rules change
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [runActiveSheetAudit, ruleVersion])
+  }, [runActiveSheetAudit, ruleVersion, auditorEnabled])
 
   // Auto-run on first open, on sheet switch, and whenever custom rules change
   useEffect(() => {
@@ -74,7 +83,7 @@ export function AuditPanelContent() {
   // period. Silent (no spinner) and skipped on very large sheets, where the
   // stale banner's manual Re-scan stays the cheap option.
   useEffect(() => {
-    if (!isStale || !result) return
+    if (!auditorEnabled || !isStale || !result) return
     if (Object.keys(activeSheet?.cells ?? {}).length > AUTO_RESCAN_MAX_CELLS) return
     const timer = setTimeout(() => {
       try {
@@ -84,7 +93,7 @@ export function AuditPanelContent() {
       }
     }, AUTO_RESCAN_DEBOUNCE_MS)
     return () => clearTimeout(timer)
-  }, [isStale, result, workbookRevision, activeSheet, runActiveSheetAudit])
+  }, [auditorEnabled, isStale, result, workbookRevision, activeSheet, runActiveSheetAudit])
 
   const handleCellNavigate = useCallback((row: number, col: number) => {
     useStore.getState().setSelection({ startRow: row, startCol: col, endRow: row, endCol: col })
@@ -105,6 +114,8 @@ export function AuditPanelContent() {
       ? 'Fix staged. Review the highlighted cells on the grid, then Apply or Reject.'
       : staged.message)
   }, [isPro])
+
+  const dismissedFindings = result?.dismissed ?? []
 
   const filteredFindings = result
     ? filter === 'all'
@@ -134,8 +145,43 @@ export function AuditPanelContent() {
         : 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.3)]'
     : ''
 
+  const toggle = (
+    <div className="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-slate-100 bg-white shrink-0">
+      <div className="min-w-0">
+        <span className="text-[11px] font-bold text-slate-700 block">Auditor</span>
+        <span className="text-[10px] text-slate-400">
+          {auditorEnabled ? 'Scanning this sheet for problems' : 'Off. Nothing is scanned.'}
+        </span>
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={auditorEnabled}
+        aria-label="Auditor"
+        onClick={() => setAuditorEnabled(!auditorEnabled)}
+        className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1 ${auditorEnabled ? 'bg-blue-600' : 'bg-slate-300'}`}
+      >
+        <span
+          className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${auditorEnabled ? 'translate-x-[18px]' : 'translate-x-0.5'}`}
+        />
+      </button>
+    </div>
+  )
+
+  if (!auditorEnabled) {
+    return (
+      <div className="flex flex-col h-full bg-slate-50/20">
+        {toggle}
+        <p className="text-center text-[11px] text-gray-400 mt-8 px-4 leading-relaxed">
+          The auditor is turned off. Switch it on to scan this sheet again.
+        </p>
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-col h-full bg-slate-50/20">
+      {toggle}
       {/* Score display */}
       <div className="px-4 py-4 border-b border-slate-100 shrink-0 bg-white shadow-sm">
         {!result && !loading && (
@@ -303,8 +349,54 @@ export function AuditPanelContent() {
             finding={finding}
             onCellNavigate={handleCellNavigate}
             onFix={handleFix}
+            onDismiss={dismissAuditFinding}
           />
         ))}
+
+        {dismissedFindings.length > 0 && (
+          <div className="pt-2">
+            <div className="flex items-center justify-between">
+              <button
+                type="button"
+                className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-slate-500 hover:text-slate-700"
+                onClick={() => setShowDismissed((v) => !v)}
+                aria-expanded={showDismissed}
+              >
+                {showDismissed ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                Dismissed ({dismissedFindings.length})
+              </button>
+              {showDismissed && (
+                <button
+                  type="button"
+                  className="text-[10px] font-semibold text-blue-700 hover:underline"
+                  onClick={() => restoreAuditFindings(dismissedFindings)}
+                >
+                  Restore all
+                </button>
+              )}
+            </div>
+            {showDismissed && (
+              <ul className="mt-2 space-y-1.5">
+                {dismissedFindings.map((finding) => (
+                  <li
+                    key={finding.id}
+                    className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2"
+                  >
+                    <span className="text-[11px] text-slate-500 truncate" title={finding.title}>{finding.title}</span>
+                    <button
+                      type="button"
+                      className="shrink-0 inline-flex items-center gap-1 text-[10px] font-semibold text-blue-700 hover:underline"
+                      onClick={() => restoreAuditFindings([finding])}
+                    >
+                      <Undo2 size={10} />
+                      Restore
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )
