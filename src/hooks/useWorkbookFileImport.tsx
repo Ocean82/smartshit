@@ -20,25 +20,33 @@ interface WorkbookFileImport {
 }
 
 /**
- * Pick an .xlsx/.xls/.csv file and replace the workbook with it, confirming first
- * when the current workbook has content. Owns its file input so any surface can
+ * Pick an .xlsx/.xls/.csv file and open it. When the current workbook has content
+ * the user chooses between opening the file as a new file (nothing existing is
+ * touched) and replacing the open file; an empty workbook is simply filled. Owns
+ * its file input so any surface can
  * offer import without depending on the toolbar being mounted. A CSV that looks
  * like a bank statement also gets a categorized "Bank Summary" sheet; the raw
  * data is kept, so a false detection costs only an extra sheet.
  */
 export function useWorkbookFileImport({ verb = 'Open', onDone }: WorkbookFileImportOptions = {}): WorkbookFileImport {
   const inputRef = useRef<HTMLInputElement>(null)
-
+  const modeRef = useRef<'new' | 'replace'>('replace')
   const requestImport = useCallback(() => {
-    const proceed = () => inputRef.current?.click()
-    if (!workbookHasContent(useStore.getState().workbook)) return proceed()
-    const action = `${verb} file`
-    useStore.getState().showConfirm({
-      title: action,
-      message: `${verb === 'Open' ? 'Opening' : 'Importing'} a file will replace the current workbook and clear undo history. This cannot be undone.`,
-      confirmLabel: action,
-      variant: 'warning',
-      onConfirm: proceed,
+    const choose = (mode: 'new' | 'replace') => {
+      modeRef.current = mode
+      inputRef.current?.click()
+    }
+    const state = useStore.getState()
+    if (!workbookHasContent(state.workbook)) return choose('replace')
+    const current = state.files.find((f) => f.id === state.activeFileId)?.name ?? state.workbook.name
+    state.showConfirm({
+      title: `${verb} file`,
+      message: `Open it as a new file and keep "${current}" as it is? Or replace "${current}" with it. Replacing clears the undo history of "${current}" and cannot be undone.`,
+      confirmLabel: 'Open as new file',
+      variant: 'primary',
+      onConfirm: () => choose('new'),
+      secondaryLabel: 'Replace current',
+      onSecondary: () => choose('replace'),
     })
   }, [verb])
 
@@ -48,8 +56,9 @@ export function useWorkbookFileImport({ verb = 'Open', onDone }: WorkbookFileImp
     if (!file) return
     const store = useStore.getState()
     let imported = false
+    const asNewFile = modeRef.current === 'new'
     try {
-      store.pushHistory(`${verb} file`)
+      if (!asNewFile) store.pushHistory(`${verb} file`)
       const { workbook, meta } = await importWorkbookFromFileWithMeta(file)
       const bank = /\.csv$/i.test(file.name) ? parseBankCSV(await file.text()) : null
       if (bank) {
@@ -57,7 +66,7 @@ export function useWorkbookFileImport({ verb = 'Open', onDone }: WorkbookFileImp
         workbook.sheets.push(summary)
         workbook.activeSheetId = summary.id
       }
-      useStore.getState().importWorkbook(workbook, { fileName: file.name, warnings: meta.warnings })
+      useStore.getState().importWorkbook(workbook, { fileName: file.name, warnings: meta.warnings, asNewFile })
       if (bank) {
         useStore.getState().addMessage({
           id: uuid(),

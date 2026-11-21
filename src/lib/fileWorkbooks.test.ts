@@ -3,9 +3,20 @@ import {
   resolveInitialState,
   switchFileState,
   computePostDeleteSwitch,
-  rebindActiveFile,
+  addFileState,
+  trashFiles,
+  restoreFiles,
+  removeFiles,
+  deleteForever,
+  emptyTrash,
+  purgeExpired,
+  stashUndoSlot,
+  uniqueFileName,
+  dropUndoSlots,
   buildPersistenceSnapshot,
+  type UndoSlot,
 } from './fileWorkbooks'
+import type { HistoryEntry } from '@/lib/historyDiff'
 import type { FileItem, WorkbookData, ChatMessage } from '@/types'
 import type { PersistedState } from '@/lib/persistence'
 
@@ -180,34 +191,160 @@ describe('computePostDeleteSwitch', () => {
   })
 })
 
-describe('rebindActiveFile', () => {
-  it('rebinds the active file and drops its old slot', () => {
-    const slots = { old: makeWorkbook('old', 'Old'), other: makeWorkbook('other', 'Other') }
+describe('addFileState', () => {
+  it('adds a new file, saves the current workbook untouched, and activates the new one', () => {
+    const live = makeWorkbook('old', 'Old')
+    const slots = { other: makeWorkbook('other', 'Other') }
     const files = [makeFile('f1', 'old'), makeFile('f2', 'other')]
-    const fresh = makeWorkbook('new', 'Fresh')
-
-    const next = rebindActiveFile({ workbookSlots: slots, files, activeFileId: 'f1', workbook: fresh })
-
-    expect(next.files.find((f) => f.id === 'f1')!.workbookId).toBe('new')
-    expect(next.files.find((f) => f.id === 'f2')!.workbookId).toBe('other')
-    expect(next.workbookSlots.old).toBeUndefined()
-    expect(next.workbookSlots.new).toBe(fresh)
+    const imported = makeWorkbook('new', 'sheet.xlsx')
+    const next = addFileState({ workbookSlots: slots, files, activeFileId: 'f1', workbook: live, newWorkbook: imported, name: 'Budget 2026' })
+    expect(next.workbookSlots.old).toBe(live)
     expect(next.workbookSlots.other).toBe(slots.other)
-  })
-
-  it('is a no-op when the active file cannot be found', () => {
-    const slots = { wb1: makeWorkbook('wb1', 'A') }
-    const files = [makeFile('f1', 'wb1')]
-    const fresh = makeWorkbook('new', 'Fresh')
-
-    const next = rebindActiveFile({ workbookSlots: slots, files, activeFileId: 'ghost', workbook: fresh })
-
-    expect(next.files).toEqual(files)
-    expect(next.workbookSlots.wb1).toBe(slots.wb1)
-    expect(next.workbookSlots.new).toBeUndefined()
+    expect(next.files).toHaveLength(3)
+    const added = next.files[2]
+    expect(added).toMatchObject({ name: 'Budget 2026', type: 'file', parentId: null, workbookId: 'new' })
+    expect(next.activeFileId).toBe(added.id)
+    expect(next.workbook.id).toBe('new')
+    expect(next.workbook.name).toBe('Budget 2026')
+    expect(next.workbookSlots.new).toBe(next.workbook)
   })
 })
 
+describe('uniqueFileName', () => {
+  it('keeps a free name and numbers a taken one, ignoring trashed files', () => {
+    const files: FileItem[] = [{ ...makeFile('a'), name: 'Budget' }, { ...makeFile('b'), name: 'budget 2' }, { ...makeFile('c'), name: 'Plan', deletedAt: 1 }]
+    expect(uniqueFileName(files, 'Plan')).toBe('Plan')
+    expect(uniqueFileName(files, 'Budget')).toBe('Budget 3')
+    expect(uniqueFileName([], 'New Workbook')).toBe('New Workbook')
+  })
+})
+
+describe('trash', () => {
+  const folder: FileItem = { ...makeFile('dir'), type: 'folder', children: [] }
+  const inDir = (id: string): FileItem => ({ ...makeFile(id, `wb-${id}`), parentId: 'dir' })
+
+  it('trashFiles marks a file and leaves the rest alone', () => {
+    const files = [makeFile('a', 'wa'), makeFile('b', 'wb')]
+    const r = trashFiles(files, 'a', 100)
+    expect(r.trashedIds).toEqual(['a'])
+    expect(r.files.find((f) => f.id === 'a')).toMatchObject({ deletedAt: 100 })
+    expect(r.files.find((f) => f.id === 'b')!.deletedAt).toBeUndefined()
+  })
+
+  it('trashing a folder takes nested files with it, and restoring the folder brings them back', () => {
+    const files = [folder, inDir('x'), inDir('y'), makeFile('z', 'wz')]
+    const trashed = trashFiles(files, 'dir', 100)
+    expect(trashed.trashedIds.sort()).toEqual(['dir', 'x', 'y'])
+    expect(trashed.files.find((f) => f.id === 'x')).toMatchObject({ deletedAt: 100, trashedWith: 'dir' })
+    expect(trashed.files.find((f) => f.id === 'z')!.deletedAt).toBeUndefined()
+    const restored = restoreFiles(trashed.files, 'dir')
+    expect(restored.every((f) => f.deletedAt === undefined && f.trashedWith === undefined)).toBe(true)
+    expect(restored.find((f) => f.id === 'x')!.parentId).toBe('dir')
+  })
+
+  it('restoring a file whose folder is still in Trash returns it to the root', () => {
+    const trashed = trashFiles([folder, inDir('x')], 'dir', 100).files
+    const restored = restoreFiles(trashed, 'x')
+    const x = restored.find((f) => f.id === 'x')!
+    expect(x.deletedAt).toBeUndefined()
+    expect(x.parentId).toBeNull()
+    expect(restored.find((f) => f.id === 'dir')!.deletedAt).toBe(100)
+  })
+
+  it('trashing is idempotent and ignores unknown ids', () => {
+    const files = [makeFile('a', 'wa')]
+    const once = trashFiles(files, 'a', 1).files
+    expect(trashFiles(once, 'a', 2).files).toBe(once)
+    expect(trashFiles(files, 'nope', 2).trashedIds).toEqual([])
+  })
+
+  it('purgeExpired removes only items older than 30 days, with their workbooks', () => {
+    const day = 24 * 60 * 60 * 1000
+    const slots = { wa: makeWorkbook('wa', 'A'), wb: makeWorkbook('wb', 'B'), wc: makeWorkbook('wc', 'C') }
+    const files: FileItem[] = [
+      { ...makeFile('a', 'wa'), deletedAt: 0 },
+      { ...makeFile('b', 'wb'), deletedAt: 20 * day },
+      makeFile('c', 'wc'),
+    ]
+    const r = purgeExpired(files, slots, 31 * day)
+    expect(r.files.map((f) => f.id)).toEqual(['b', 'c'])
+    expect(Object.keys(r.workbookSlots).sort()).toEqual(['wb', 'wc'])
+    expect(r.removedIds).toEqual(['a'])
+  })
+
+  it('deleteForever and emptyTrash only touch trashed items', () => {
+    const slots = { wa: makeWorkbook('wa', 'A'), wb: makeWorkbook('wb', 'B') }
+    const files: FileItem[] = [makeFile('a', 'wa'), { ...makeFile('b', 'wb'), deletedAt: 5 }]
+    expect(deleteForever(files, slots, 'a').files).toBe(files)
+    expect(deleteForever(files, slots, 'b').files.map((f) => f.id)).toEqual(['a'])
+    const emptied = emptyTrash(files, slots)
+    expect(emptied.files.map((f) => f.id)).toEqual(['a'])
+    expect(Object.keys(emptied.workbookSlots)).toEqual(['wa'])
+  })
+
+  it('removing a folder returns surviving children to the root instead of orphaning them', () => {
+    const r = removeFiles([folder, inDir('x')], {}, new Set(['dir']))
+    expect(r.files.map((f) => [f.id, f.parentId])).toEqual([['x', null]])
+  })
+
+  it('never switches to or lands on a trashed file', () => {
+    const files: FileItem[] = [{ ...makeFile('a', 'wa'), deletedAt: 1 }, makeFile('b', 'wb')]
+    expect(computePostDeleteSwitch(files)).toEqual({ type: 'switch', fileId: 'b' })
+    expect(computePostDeleteSwitch([files[0]])).toEqual({ type: 'create-fallback', name: 'My Workbook' })
+    expect(
+      switchFileState({ workbookSlots: {}, files, activeFileId: 'b', workbook: makeWorkbook('wb', 'B'), targetId: 'a' }),
+    ).toBeNull()
+  })
+
+  it('resolveInitialState purges old trash and seeds a live file when every file is trashed', () => {
+    const day = 24 * 60 * 60 * 1000
+    const persisted: PersistedState = {
+      workbooks: { wa: makeWorkbook('wa', 'A'), wb: makeWorkbook('wb', 'B') },
+      files: [
+        { ...makeFile('a', 'wa'), deletedAt: 39 * day },
+        { ...makeFile('b', 'wb'), deletedAt: 0 },
+      ],
+      activeFileId: 'a',
+      activeWorkbookId: 'wa',
+      messages: [] as ChatMessage[],
+    }
+    const r = resolveInitialState(persisted, 40 * day)
+    expect(r.files.map((f) => f.id)).toContain('a') // 1 day in Trash: kept
+    expect(r.files.map((f) => f.id)).not.toContain('b') // 40 days: purged
+    expect(r.workbookSlots.wb).toBeUndefined()
+    expect(r.workbookSlots.wa).toBeDefined()
+    expect(r.activeFileId).not.toBe('a') // never opens a trashed file
+    expect(r.files.find((f) => f.id === r.activeFileId)!.deletedAt).toBeUndefined()
+  })
+})
+describe('per-file undo history', () => {
+  const entry = (id: string) => ({ id }) as unknown as HistoryEntry
+  const slot = (n: number): UndoSlot => ({ undoStack: Array.from({ length: n }, (_, i) => entry(String(i))), redoStack: [] })
+
+  it('parks history per file and ignores empty history', () => {
+    let slots = stashUndoSlot({}, 'a', slot(2))
+    slots = stashUndoSlot(slots, 'b', slot(0))
+    expect(Object.keys(slots)).toEqual(['a'])
+    expect(slots.a.undoStack).toHaveLength(2)
+  })
+
+  it('re-parking a file replaces its old entry', () => {
+    let slots = stashUndoSlot({}, 'a', slot(2))
+    slots = stashUndoSlot(slots, 'a', slot(0))
+    expect(slots).toEqual({})
+  })
+
+  it('keeps at most MAX_UNDO_SLOTS files, dropping the least recently parked', () => {
+    let slots: Record<string, UndoSlot> = {}
+    for (const id of ['a', 'b', 'c', 'd']) slots = stashUndoSlot(slots, id, slot(1))
+    expect(Object.keys(slots)).toEqual(['b', 'c', 'd'])
+  })
+
+  it('dropUndoSlots forgets deleted files', () => {
+    const slots = stashUndoSlot(stashUndoSlot({}, 'a', slot(1)), 'b', slot(1))
+    expect(Object.keys(dropUndoSlots(slots, ['a']))).toEqual(['b'])
+  })
+})
 describe('buildPersistenceSnapshot', () => {
   it('collapses the live workbook into the active file’s slot', () => {
     const slots = { wb1: makeWorkbook('wb1', 'A'), wb2: makeWorkbook('wb2', 'B') }

@@ -219,29 +219,16 @@ export function MenuBar() {
     openMenuId(id)
   }, [openMenu, openMenuId])
 
+  // New Workbook opens a blank file next to the others; nothing is replaced.
   const handleNewWorkbook = () => {
-    const doCreate = () => {
-      initWorkbook('New Workbook')
-      addMessage({
-        id: uuid(),
-        role: 'assistant',
-        content: 'Started a fresh workbook. Try **"Create a monthly budget"** or import a file to get started.',
-        timestamp: Date.now(),
-      })
-      setOpenMenu(null)
-    }
-
-    if (Object.keys(getActiveSheet().cells).length > 0) {
-      showConfirm({
-        title: 'New workbook',
-        message: 'This will replace the current workbook with a new, blank workbook. Its autosaved copy will be overwritten and undo history cleared. Export first if you want to keep it.',
-        confirmLabel: 'Create new',
-        variant: 'warning',
-        onConfirm: doCreate,
-      })
-    } else {
-      doCreate()
-    }
+    initWorkbook('New Workbook')
+    addMessage({
+      id: uuid(),
+      role: 'assistant',
+      content: 'Started a fresh workbook. Try **"Create a monthly budget"** or import a file to get started.',
+      timestamp: Date.now(),
+    })
+    setOpenMenu(null)
   }
 
   const handleOpen = () => {

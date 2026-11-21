@@ -93,6 +93,14 @@ export interface AppState extends UIState, UIActions, FileActions, ChatActions {
   activeFileId: string | null
   /** Non-active workbooks keyed by workbookId (the active one lives in `workbook`). */
   workbookSlots: Record<string, WorkbookData>
+  /** Undo/redo history of recently used inactive files, by file id. In memory only. */
+  undoSlots: Record<string, import('@/lib/fileWorkbooks').UndoSlot>
+  /** Bring a trashed file or folder back from Trash. */
+  restoreFile: (id: string) => void
+  /** Permanently delete one item from Trash. */
+  deleteFileForever: (id: string) => void
+  /** Permanently delete everything in Trash. */
+  emptyTrash: () => void
 
   // Chat
   messages: ChatMessage[]
@@ -115,6 +123,7 @@ export interface AppState extends UIState, UIActions, FileActions, ChatActions {
   activeSortConfig: SortConfig | null
 
   // Workbook / sheet actions
+  /** New Workbook: adds a blank file and opens it. The current file is kept as it is. */
   initWorkbook: (name?: string) => void
   /** Unbind every file's cloudWorkbookId (account switch). Local data is untouched. */
   clearCloudBindings: () => void
@@ -206,7 +215,8 @@ export interface AppState extends UIState, UIActions, FileActions, ChatActions {
 
   // Bulk operations (for AI)
   bulkSetCells: (cells: Record<string, { value: string | number | boolean | null; formula?: string }>) => void
-  importWorkbook: (workbook: WorkbookData, meta?: { fileName?: string; warnings?: string[] }) => void
+  /** `asNewFile` opens the workbook as its own file and leaves the current file untouched. */
+  importWorkbook: (workbook: WorkbookData, meta?: { fileName?: string; warnings?: string[]; asNewFile?: boolean }) => void
   loadWorkbookData: (workbook: WorkbookData, opts?: { pushUndo?: boolean }) => void
 
   // Get helpers

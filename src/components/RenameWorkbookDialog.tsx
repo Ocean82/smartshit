@@ -21,7 +21,10 @@ export function RenameWorkbookDialog({ open, onClose }: Props) {
   const commit = () => {
     const trimmed = name.trim()
     if (trimmed) {
-      useStore.setState((s) => { s.workbook.name = trimmed })
+      // The file name is the workbook name; renameFile keeps both in step.
+      const { activeFileId, renameFile } = useStore.getState()
+      if (activeFileId) renameFile(activeFileId, trimmed)
+      else useStore.setState((s) => { s.workbook.name = trimmed })
     }
     onClose()
   }

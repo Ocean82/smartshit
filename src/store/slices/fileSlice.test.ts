@@ -20,8 +20,8 @@ describe('fileSlice', () => {
     expect(files[0].workbookId).toBeTruthy()
   })
 
-  it('deleteFile removes only the matching id', () => {
-    const files = [
+  it('deleteFile moves the item and its folder contents to Trash instead of removing them', () => {
+    const files: import('@/types').FileItem[] = [
       { id: 'a', name: 'A', type: 'file' as const, parentId: null, createdAt: 1, updatedAt: 1 },
       { id: 'b', name: 'B', type: 'folder' as const, parentId: null, children: [], createdAt: 1, updatedAt: 1 },
       { id: 'c', name: 'C', type: 'file' as const, parentId: 'b', createdAt: 1, updatedAt: 1 },
@@ -36,7 +36,10 @@ describe('fileSlice', () => {
 
     actions.deleteFile('b')
 
-    expect(files.map((f) => f.id)).toEqual(['a', 'c'])
+    expect(files.map((f) => f.id)).toEqual(['a', 'b', 'c'])
+    expect(files.find((f) => f.id === 'a')!.deletedAt).toBeUndefined()
+    expect(files.find((f) => f.id === 'b')!.deletedAt).toBeTypeOf('number')
+    expect(files.find((f) => f.id === 'c')).toMatchObject({ trashedWith: 'b' })
     expect(activeFileId).toBe('a')
   })
 })

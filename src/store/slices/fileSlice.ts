@@ -7,6 +7,7 @@
 import type { FileItem } from '@/types'
 import { createEmptyWorkbook } from '@/engine/spreadsheet'
 import { v4 as uuid } from 'uuid'
+import { trashFiles } from '@/lib/fileWorkbooks'
 
 export interface FileState {
   files: FileItem[]
@@ -25,8 +26,9 @@ export interface FileActions {
 
 /**
  * Create file actions. Takes the immer `set` function from Zustand.
- * Behavior matches the previous inline store implementations (workbookId on create;
- * delete is filter-only without cascading children).
+ * deleteFile here only marks items as trashed (a folder takes its contents along).
+ * The composed store (useStore) overrides openFile, deleteFile and renameFile
+ * to also switch workbooks, keep the workbook for Restore, and keep names in step.
  */
 export function createFileActions(
   set: (fn: (s: FileState) => void) => void,
@@ -60,7 +62,7 @@ export function createFileActions(
     },
 
     deleteFile: (id) => {
-      set((s) => { s.files = s.files.filter((f) => f.id !== id) })
+      set((s) => { s.files = trashFiles(s.files, id, Date.now()).files })
     },
 
     renameFile: (id, name) => {

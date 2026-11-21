@@ -24,6 +24,7 @@ import { reserveAutoFixForApply } from '@/lib/autoFixReserver'
 import { captureActionScope, validateActionScope } from '@/lib/actionScope'
 import { shouldAutoApply } from '@/lib/applyPosture'
 import { validateToolParams } from '@shared/validateToolParams'
+import { workbookHasContent } from '@/lib/workbookGuard'
 import { v4 as uuid } from 'uuid'
 import {
   processAICommand,
@@ -93,7 +94,7 @@ export interface ChatStoreAccess extends ChatState {
   /** Undo history; the chat slice reads only the top entry's id to guard the Undo toast. */
   undoStack: ReadonlyArray<{ id: string }>
   applyAction: (actionId: string) => void
-  importWorkbook: (workbook: WorkbookData, meta?: { fileName?: string; warnings?: string[] }) => void
+  importWorkbook: (workbook: WorkbookData, meta?: { fileName?: string; warnings?: string[]; asNewFile?: boolean }) => void
   setCellValue: (cellId: string, value: string | number | boolean | null, formula?: string) => void
   setCellFormat: (cellId: string, format: Partial<import('@/types').CellFormat>) => void
   bulkSetCells: (cells: Record<string, { value: string | number | boolean | null; formula?: string }>) => void
@@ -375,16 +376,22 @@ export function createChatActions(
     importAttachedFile: async () => {
       const preview = get().attachedFilePreview
       if (!preview) return
+      // Never overwrite work the user already has: with content in the open
+      // file, the attachment opens as its own file.
+      const asNewFile = workbookHasContent(get().workbook)
       get().importWorkbook(preview.workbook, {
         fileName: preview.fileName,
         warnings: preview.importWarnings,
+        asNewFile,
       })
       set((s) => {
         s.attachedFilePreview = null
         s.messages.push({
           id: uuid(),
           role: 'assistant',
-          content: `Imported **${preview.fileName}** into your workbook. Ask me to explain the data or build a budget from it.`,
+          content: asNewFile
+            ? `Opened **${preview.fileName}** as a new file. Your other file is untouched. Ask me to explain the data or build a budget from it.`
+            : `Imported **${preview.fileName}** into your workbook. Ask me to explain the data or build a budget from it.`,
           timestamp: Date.now(),
         })
       })

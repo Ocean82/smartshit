@@ -3,9 +3,18 @@ import { useStore } from '@/store/useStore';
 import { useShallow } from 'zustand/react/shallow';
 import {
   File, Folder, FolderPlus, FilePlus, Trash2, Edit3,
-  ChevronRight, ChevronDown, X,
+  ChevronRight, ChevronDown, X, Undo2,
 } from 'lucide-react';
+import { TRASH_TTL_MS } from '@/lib/fileWorkbooks';
+import type { FileItem as FileEntry } from '@/types';
 import { MOBILE_PANEL_BELOW_TITLEBAR } from '@/components/panels/dockPanelLayout';
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Days until a trashed item is deleted for good. */
+function trashDaysLeft(item: FileEntry): number {
+  return Math.max(0, Math.ceil(((item.deletedAt ?? 0) + TRASH_TTL_MS - Date.now()) / DAY_MS));
+}
 
 export function FileExplorer() {
   const {
@@ -18,6 +27,9 @@ export function FileExplorer() {
     deleteFile,
     renameFile,
     openFile,
+    restoreFile,
+    deleteFileForever,
+    emptyTrash,
     showConfirm,
   } = useStore(
     useShallow((s) => ({
@@ -30,6 +42,9 @@ export function FileExplorer() {
       deleteFile: s.deleteFile,
       renameFile: s.renameFile,
       openFile: s.openFile,
+      restoreFile: s.restoreFile,
+      deleteFileForever: s.deleteFileForever,
+      emptyTrash: s.emptyTrash,
       showConfirm: s.showConfirm,
     })),
   );
@@ -39,6 +54,7 @@ export function FileExplorer() {
   const [renameValue, setRenameValue] = useState('');
   const [showNewInput, setShowNewInput] = useState<'file' | 'folder' | null>(null);
   const [newName, setNewName] = useState('');
+  const [showTrash, setShowTrash] = useState(false);
 
   // Close the full-screen mobile drawer with Escape (desktop is an inline sidebar).
   useEffect(() => {
@@ -54,7 +70,10 @@ export function FileExplorer() {
 
   if (!showFileExplorer) return null;
 
-  const rootFiles = files.filter((f) => f.parentId === null);
+  const liveFiles = files.filter((f) => f.deletedAt === undefined);
+  const rootFiles = liveFiles.filter((f) => f.parentId === null);
+  // Items taken along with a trashed folder come back with it, so only list the top level.
+  const trashed = files.filter((f) => f.deletedAt !== undefined && f.trashedWith === undefined);
 
   const handleToggleFolder = (id: string) => {
     setExpandedFolders((prev) => {
@@ -93,12 +112,34 @@ export function FileExplorer() {
 
   const handleDelete = (id: string) => {
     const target = files.find((f) => f.id === id);
+    const contained = files.filter((f) => f.parentId === id && f.deletedAt === undefined).length;
     showConfirm({
-      title: 'Delete file',
-      message: `"${target?.name || 'this file'}" will be permanently deleted from local storage. This cannot be undone.`,
-      confirmLabel: 'Delete',
-      variant: 'danger',
+      title: target?.type === 'folder' ? 'Delete folder' : 'Delete file',
+      message: `"${target?.name || 'this file'}"${contained ? ` and the ${contained} item${contained === 1 ? '' : 's'} in it` : ''} will move to Trash. You can restore ${contained ? 'them' : 'it'} for 30 days.`,
+      confirmLabel: 'Move to Trash',
+      variant: 'warning',
       onConfirm: () => deleteFile(id),
+    });
+  };
+
+  const handleDeleteForever = (id: string) => {
+    const target = files.find((f) => f.id === id);
+    showConfirm({
+      title: 'Delete forever',
+      message: `"${target?.name || 'This item'}" will be permanently deleted. This cannot be undone.`,
+      confirmLabel: 'Delete forever',
+      variant: 'danger',
+      onConfirm: () => deleteFileForever(id),
+    });
+  };
+
+  const handleEmptyTrash = () => {
+    showConfirm({
+      title: 'Empty Trash',
+      message: `Everything in Trash (${trashed.length} item${trashed.length === 1 ? '' : 's'}) will be permanently deleted. This cannot be undone.`,
+      confirmLabel: 'Empty Trash',
+      variant: 'danger',
+      onConfirm: emptyTrash,
     });
   };
 
@@ -168,7 +209,7 @@ export function FileExplorer() {
           <FileItem
             key={file.id}
             file={file}
-            files={files}
+            files={liveFiles}
             activeFileId={activeFileId}
             expandedFolders={expandedFolders}
             onToggleFolder={handleToggleFolder}
@@ -184,10 +225,68 @@ export function FileExplorer() {
         ))}
       </div>
 
+      {/* Trash */}
+      {trashed.length > 0 && (
+        <div className="border-t border-gray-100">
+          <button
+            type="button"
+            className="w-full flex items-center gap-1.5 px-3 py-2 max-md:py-2.5 text-[11px] font-semibold text-gray-500 hover:bg-gray-50"
+            onClick={() => setShowTrash((v) => !v)}
+            aria-expanded={showTrash}
+          >
+            {showTrash ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+            <Trash2 size={12} />
+            Trash ({trashed.length})
+          </button>
+          {showTrash && (
+            <div className="max-h-48 overflow-y-auto pb-1">
+              {trashed.map((item) => (
+                <div key={item.id} className="flex items-center gap-1 px-3 py-1 max-md:py-1.5 text-xs text-gray-500">
+                  {item.type === 'folder' ? (
+                    <Folder size={14} className="text-amber-300 shrink-0" />
+                  ) : (
+                    <File size={14} className="text-blue-300 shrink-0" />
+                  )}
+                  <span className="flex-1 truncate" title={item.name}>{item.name}</span>
+                  <span className="text-[10px] text-gray-400 shrink-0" title="Time left before it is deleted for good">
+                    {trashDaysLeft(item)}d
+                  </span>
+                  <button
+                    type="button"
+                    className="p-0.5 max-md:p-2 hover:text-blue-600"
+                    onClick={() => restoreFile(item.id)}
+                    title="Restore"
+                    aria-label={`Restore ${item.name}`}
+                  >
+                    <Undo2 size={12} />
+                  </button>
+                  <button
+                    type="button"
+                    className="p-0.5 max-md:p-2 hover:text-red-600"
+                    onClick={() => handleDeleteForever(item.id)}
+                    title="Delete forever"
+                    aria-label={`Delete ${item.name} forever`}
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              ))}
+              <button
+                type="button"
+                className="mx-3 mt-1 text-[11px] font-medium text-red-600 hover:underline"
+                onClick={handleEmptyTrash}
+              >
+                Empty Trash
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Storage info */}
       <div className="px-3 py-2 border-t border-gray-100">
         <div className="flex items-center justify-between text-[10px] text-gray-400">
-          <span>{files.filter(f => f.type === 'file').length} files</span>
+          <span>{liveFiles.filter(f => f.type === 'file').length} files</span>
           <span>Local storage</span>
         </div>
       </div>

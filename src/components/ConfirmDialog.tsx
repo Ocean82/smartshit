@@ -10,6 +10,7 @@ export function ConfirmDialog() {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const confirmBtnRef = useRef<HTMLButtonElement>(null);
   const cancelBtnRef = useRef<HTMLButtonElement>(null);
+  const secondaryBtnRef = useRef<HTMLButtonElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
 
   // Open/close the native dialog element
@@ -37,6 +38,10 @@ export function ConfirmDialog() {
     dismissConfirm();
   }, [confirmDialog, dismissConfirm]);
 
+  const handleSecondary = useCallback(() => {
+    confirmDialog?.onSecondary?.();
+    dismissConfirm();
+  }, [confirmDialog, dismissConfirm]);
   const handleCancel = useCallback(() => {
     if (confirmDialog?.onCancel) {
       confirmDialog.onCancel();
@@ -53,7 +58,7 @@ export function ConfirmDialog() {
   // Trap keyboard focus inside the dialog
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Tab') {
-      const focusableElements = [cancelBtnRef.current, confirmBtnRef.current].filter(Boolean) as HTMLElement[];
+      const focusableElements = [cancelBtnRef.current, secondaryBtnRef.current, confirmBtnRef.current].filter(Boolean) as HTMLElement[];
       const firstEl = focusableElements[0];
       const lastEl = focusableElements[focusableElements.length - 1];
 
@@ -73,7 +78,7 @@ export function ConfirmDialog() {
 
   if (!confirmDialog) return null;
 
-  const { title, message, confirmLabel = 'Confirm', cancelLabel = 'Cancel', variant = 'danger' } = confirmDialog;
+  const { title, message, confirmLabel = 'Confirm', cancelLabel = 'Cancel', variant = 'danger', secondaryLabel } = confirmDialog;
 
   return (
     <dialog
@@ -104,6 +109,16 @@ export function ConfirmDialog() {
         >
           {cancelLabel}
         </button>
+        {secondaryLabel && (
+          <button
+            ref={secondaryBtnRef}
+            type="button"
+            className="confirm-btn confirm-btn-secondary"
+            onClick={handleSecondary}
+          >
+            {secondaryLabel}
+          </button>
+        )}
         <button
           ref={confirmBtnRef}
           type="button"

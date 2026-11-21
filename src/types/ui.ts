@@ -27,6 +27,9 @@ export interface ConfirmDialogState {
   variant?: 'danger' | 'warning' | 'primary' | 'secondary';
   onConfirm: () => void;
   onCancel?: () => void;
+  /** Optional middle button for a second way forward (e.g. "Replace" next to "Create new"). */
+  secondaryLabel?: string;
+  onSecondary?: () => void;
 }
 
 export interface ContextMenuState {

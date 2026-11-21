@@ -116,6 +116,25 @@
   background: var(--neutral-200);
 }
 
+.confirm-btn-secondary {
+  background: white;
+  color: var(--neutral-700);
+  box-shadow: inset 0 0 0 1px var(--neutral-300);
+}
+
+.confirm-btn-secondary:hover {
+  background: var(--neutral-100);
+}
+
+.confirm-btn-primary {
+  background: var(--accent-600);
+  color: white;
+}
+
+.confirm-btn-primary:hover {
+  background: var(--accent-700);
+}
+
 .confirm-btn-danger {
   background: oklch(0.55 0.2 25);
   color: white;

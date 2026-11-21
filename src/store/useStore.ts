@@ -3,6 +3,7 @@ import { immer } from 'zustand/middleware/immer'
 import type { FileItem, SheetData, WorkbookData } from '@/types'
 import {
   SpreadsheetEngine,
+  createEmptyWorkbook,
 } from '@/engine/spreadsheet'
 import { loadPersistedState, clearPersistedState } from '@/lib/persistence'
 import { clearUserApiKey } from '@/lib/userApiKey'
@@ -11,7 +12,15 @@ import {
   resolveInitialState,
   switchFileState,
   computePostDeleteSwitch,
-  rebindActiveFile,
+  addFileState,
+  trashFiles,
+  restoreFiles,
+  deleteForever,
+  emptyTrash,
+  stashUndoSlot,
+  dropUndoSlots,
+  uniqueFileName,
+  type SwitchResult,
 } from '@/lib/fileWorkbooks'
 import { defaultSkills } from '@/data/chatPresets'
 import {
@@ -61,6 +70,36 @@ export const useStore = create<AppState>()(
       }, 0)
     })
 
+    /**
+     * Make `next` the open file. The outgoing file's undo history is parked and
+     * the incoming file's restored, and per-document UI state (selection, edit
+     * in progress, filters, sort) is cleared so nothing leaks between files.
+     */
+    const applyFileSwitch = (next: SwitchResult) => {
+      const s = useStore.getState()
+      let undoSlots = s.activeFileId
+        ? stashUndoSlot(s.undoSlots, s.activeFileId, { undoStack: s.undoStack, redoStack: s.redoStack })
+        : s.undoSlots
+      const incoming = undoSlots[next.activeFileId]
+      if (incoming) undoSlots = dropUndoSlots(undoSlots, [next.activeFileId])
+      s.loadWorkbookData(next.workbook)
+      useStore.setState((st) => {
+        st.workbook = next.workbook
+        st.workbookSlots = next.workbookSlots
+        st.files = next.files
+        st.activeFileId = next.activeFileId
+        st.undoSlots = undoSlots
+        st.undoStack = incoming?.undoStack ?? []
+        st.redoStack = incoming?.redoStack ?? []
+        st.selection = null
+        st.editingCell = null
+        st.editValue = ''
+        st.additionalSelections = []
+        st.copiedRange = null
+        st.activeFilters = []
+        st.activeSortConfig = null
+      })
+    }
     /** Switch the live workbook to another file. Saves the current one first. */
     const swapToFile = (id: string) => {
       const s = useStore.getState()
@@ -71,15 +110,19 @@ export const useStore = create<AppState>()(
         workbook: s.workbook,
         targetId: id,
       })
-      if (!next) return
-
-      useStore.getState().loadWorkbookData(next.workbook)
-      useStore.setState((st) => {
-        st.workbook = next.workbook
-        st.workbookSlots = next.workbookSlots
-        st.files = next.files
-        st.activeFileId = next.activeFileId
-      })
+      if (next) applyFileSwitch(next)
+    }
+    /** Open `workbook` as a new file next to the others. The current file is kept as it is. */
+    const openAsNewFile = (workbook: WorkbookData, name: string) => {
+      const s = useStore.getState()
+      applyFileSwitch(addFileState({
+        workbookSlots: s.workbookSlots,
+        files: s.files,
+        activeFileId: s.activeFileId,
+        workbook: s.workbook,
+        newWorkbook: workbook,
+        name: uniqueFileName(s.files, name),
+      }))
     }
 
     const uiState = createUIState()
@@ -172,6 +215,7 @@ export const useStore = create<AppState>()(
       files: seeded.files,
       activeFileId: seeded.activeFileId,
       workbookSlots: seeded.workbookSlots,
+      undoSlots: {},
       messages: persisted?.messages?.length ? persisted.messages : [createWelcomeMessage()],
       chatInput: '',
       isAiProcessing: false,
@@ -189,30 +233,66 @@ export const useStore = create<AppState>()(
       // loads the target file's workbook (created lazily if never opened).
       openFile: (id: string) => swapToFile(id),
 
-      // Remove a file's workbook data along with the file itself, and switch
-      // the active file when the one being deleted was active.
+      // Delete moves the file (or folder and its contents) to Trash. Its workbook
+      // is kept, so Restore brings back exactly what was there. If the open file
+      // is trashed, another live file opens first (its content is saved to its slot).
       deleteFile: (id: string) => {
         const state = useStore.getState()
-        const target = state.files.find((f) => f.id === id)
-        if (!target) return
-        if (target.workbookId) {
-          useStore.setState((st) => {
-            delete st.workbookSlots[target.workbookId!]
-          })
-        }
-        const wasActive = state.activeFileId === id
-        fileActions.deleteFile(id)
-        if (wasActive) {
+        const { files, trashedIds } = trashFiles(state.files, id, Date.now())
+        if (trashedIds.length === 0) return
+        useStore.setState((st) => {
+          st.files = files
+        })
+        if (state.activeFileId && trashedIds.includes(state.activeFileId)) {
           const decision = computePostDeleteSwitch(useStore.getState().files)
           if (decision.type === 'switch') {
             swapToFile(decision.fileId)
-          } else if (decision.type === 'create-fallback') {
+          } else {
             fileActions.createFile(decision.name)
-            swapToFile(useStore.getState().files[0].id)
+            const all = useStore.getState().files
+            swapToFile(all[all.length - 1].id)
           }
         }
       },
-
+      restoreFile: (id: string) => {
+        useStore.setState((st) => {
+          st.files = restoreFiles(st.files, id)
+        })
+      },
+      deleteFileForever: (id: string) => {
+        const s = useStore.getState()
+        const r = deleteForever(s.files, s.workbookSlots, id)
+        if (r.removedIds.length === 0) return
+        useStore.setState((st) => {
+          st.files = r.files
+          st.workbookSlots = r.workbookSlots
+          st.undoSlots = dropUndoSlots(st.undoSlots, r.removedIds)
+        })
+      },
+      emptyTrash: () => {
+        const s = useStore.getState()
+        const r = emptyTrash(s.files, s.workbookSlots)
+        if (r.removedIds.length === 0) return
+        useStore.setState((st) => {
+          st.files = r.files
+          st.workbookSlots = r.workbookSlots
+          st.undoSlots = dropUndoSlots(st.undoSlots, r.removedIds)
+        })
+      },
+      // The file name is the workbook's name: exports, the AI and reports use
+      // workbook.name, so rename keeps both in step.
+      renameFile: (id: string, name: string) => {
+        const trimmed = name.trim()
+        if (!trimmed) return
+        set((st) => {
+          const file = st.files.find((f) => f.id === id)
+          if (!file) return
+          file.name = trimmed
+          // The open file's content lives in `workbook` (its id can differ from the file's slot id after a replace).
+          if (id === st.activeFileId) st.workbook.name = trimmed
+          else if (file.workbookId && st.workbookSlots[file.workbookId]) st.workbookSlots[file.workbookId].name = trimmed
+        })
+      },
       clearCloudBindings: () => {
         set((st) => {
           for (const f of st.files) delete f.cloudWorkbookId
@@ -231,6 +311,7 @@ export const useStore = create<AppState>()(
         useStore.setState((st) => {
           st.workbook = fresh.workbook
           st.workbookSlots = fresh.workbookSlots
+          st.undoSlots = {}
           st.files = fresh.files
           st.activeFileId = fresh.activeFileId
           st.activeSheetId = fresh.workbook.activeSheetId
@@ -256,36 +337,30 @@ export const useStore = create<AppState>()(
       ...chatActions,
 
       // Wrap data-only import with chat/insights/audit orchestration.
-      // Imported content is a new local workbook, not the file's existing cloud
-      // workbook, so clear the cloud binding to avoid overwriting it on autosave.
-      importWorkbook: (workbook: WorkbookData, meta?: { fileName?: string; warnings?: string[] }) => {
-        workbookActions.importWorkbook(workbook, meta)
-        useStore.getState().setActiveFileCloudId(null)
+      // Default replaces the open file's content (it is a new local workbook, not the
+      // file's cloud workbook, so the cloud binding is cleared). With `asNewFile` the
+      // workbook opens as its own file and nothing existing is touched.
+      importWorkbook: (workbook: WorkbookData, meta?: { fileName?: string; warnings?: string[]; asNewFile?: boolean }) => {
+        if (meta?.asNewFile) {
+          const base = (meta.fileName ?? workbook.name).replace(/\.(xlsx|xls|csv)$/i, '').trim()
+          openAsNewFile(workbook, base || 'Imported workbook')
+        } else {
+          workbookActions.importWorkbook(workbook, meta)
+          useStore.getState().setActiveFileCloudId(null)
+          const active = useStore.getState().files.find((f) => f.id === useStore.getState().activeFileId)
+          if (active) useStore.getState().renameFile(active.id, active.name)
+        }
         applyWorkbookImportEffects(
           set as unknown as Parameters<typeof applyWorkbookImportEffects>[0],
           get as unknown as Parameters<typeof applyWorkbookImportEffects>[1],
-          workbook,
+          useStore.getState().workbook,
           meta,
         )
       },
-
-      // New Workbook replaces the active file's content: rebind the file's
-      // workbookId to the fresh workbook and drop the previous slot. The fresh
-      // workbook is not the old cloud workbook, so clear the cloud binding too.
+      // New Workbook opens a blank file next to the others; nothing is replaced.
       initWorkbook: (name?: string) => {
-        workbookActions.initWorkbook(name)
-        const s = useStore.getState()
-        const next = rebindActiveFile({
-          workbookSlots: s.workbookSlots,
-          files: s.files,
-          activeFileId: s.activeFileId,
-          workbook: s.workbook,
-        })
-        useStore.setState((st) => {
-          st.workbookSlots = next.workbookSlots
-          st.files = next.files
-        })
-        useStore.getState().setActiveFileCloudId(null)
+        const title = name ?? 'Untitled Workbook'
+        openAsNewFile(createEmptyWorkbook(title), title)
       },
     }
   }),

@@ -50,7 +50,6 @@ export function MobileMenu({ onOpenTemplates, onOpenCloudPicker, onOpenShare, on
     initWorkbook,
     showVersionHistory,
     setShowVersionHistory,
-    showConfirm,
   } = useStore(useShallow((s) => ({
     workbook: s.workbook,
     undo: s.undo,
@@ -75,7 +74,6 @@ export function MobileMenu({ onOpenTemplates, onOpenCloudPicker, onOpenShare, on
     initWorkbook: s.initWorkbook,
     showVersionHistory: s.showVersionHistory,
     setShowVersionHistory: s.setShowVersionHistory,
-    showConfirm: s.showConfirm,
   })));
 
   const sheet = getActiveSheet();
@@ -83,22 +81,10 @@ export function MobileMenu({ onOpenTemplates, onOpenCloudPicker, onOpenShare, on
 
   const { requestImport, fileInput } = useWorkbookFileImport({ onDone: () => setIsOpen(false) });
 
+  // New Workbook opens a blank file next to the others; nothing is replaced.
   const handleNewWorkbook = () => {
-    if (Object.keys(getActiveSheet().cells).length > 0) {
-      showConfirm({
-        title: 'New workbook',
-        message: 'This will replace the current workbook with a new, blank workbook. Its autosaved copy will be overwritten and undo history cleared. Export first if you want to keep it.',
-        confirmLabel: 'Create new',
-        variant: 'warning',
-        onConfirm: () => {
-          initWorkbook('New Workbook');
-          setIsOpen(false);
-        },
-      });
-    } else {
-      initWorkbook('New Workbook');
-      setIsOpen(false);
-    }
+    initWorkbook('New Workbook');
+    setIsOpen(false);
   };
 
   const actions = [

@@ -337,6 +337,10 @@ export interface FileItem {
   type: 'file' | 'folder';
   parentId: string | null;
   workbookId?: string;
+  /** Set when moved to Trash (epoch ms). Trashed items are hidden and purged after 30 days. */
+  deletedAt?: number;
+  /** Id of the trashed folder that took this item with it; restoring that folder restores the item. */
+  trashedWith?: string;
   /** Cloud workbook id this file syncs to. Absent = local-only, not yet in cloud. */
   cloudWorkbookId?: string;
   children?: string[];
