@@ -221,7 +221,7 @@ export function AuditPanelContent() {
                 <button
                   type="button"
                   className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all active:scale-90 shadow-sm border border-slate-100"
-                  onClick={() => void exportAuditReport(result, { workbookName: workbook.name, stale: isStale })}
+                  onClick={() => exportAuditReport(result, { workbookName: workbook.name, stale: isStale })}
                   title="Export report"
                   aria-label="Export audit report"
                 >

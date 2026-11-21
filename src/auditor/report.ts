@@ -8,6 +8,7 @@
  */
 
 import type { AuditFinding, AuditResult, Severity } from './types'
+import { REPORT_LOGO_DATA_URI } from './reportLogo'
 
 /** Where the footer sends the reader. UTM tags let analytics attribute the clicks. */
 export const REPORT_LINK =
@@ -159,33 +160,16 @@ ${dismissedHtml}
 </html>`
 }
 
-/** Logo as a data URI, or undefined if it can't be loaded (the report still works). */
-async function loadLogoDataUri(): Promise<string | undefined> {
-  try {
-    const res = await fetch(`${import.meta.env.BASE_URL}pwa-icon-192.png`)
-    if (!res.ok) return undefined
-    const blob = await res.blob()
-    return await new Promise<string | undefined>((resolve) => {
-      const reader = new FileReader()
-      reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : undefined)
-      reader.onerror = () => resolve(undefined)
-      reader.readAsDataURL(blob)
-    })
-  } catch {
-    return undefined
-  }
-}
-
 function safeFileName(name: string): string {
   return name.replace(/[^\w.-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'workbook'
 }
 
 /** Build the report and download it as an .html file. */
-export async function exportAuditReport(
+export function exportAuditReport(
   result: AuditResult,
   options: Pick<AuditReportOptions, 'workbookName' | 'stale'>,
-): Promise<void> {
-  const html = buildAuditReportHtml(result, { ...options, logoDataUri: await loadLogoDataUri() })
+): void {
+  const html = buildAuditReportHtml(result, { ...options, logoDataUri: REPORT_LOGO_DATA_URI })
   const url = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }))
   const link = document.createElement('a')
   link.href = url
