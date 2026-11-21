@@ -30,6 +30,9 @@ You can apply a suggested fix yourself, or ask the assistant to fix it. By defau
 
 An AI question is separate from the scan. The auditor stays local. A question sends that question and a summary of the cells it needs to our server, or to your own provider if you bring an API key.
 
+## Share the result
+Export the scan as a single report file with the score, each finding, the cells involved, and a suggested fix. Open it in any browser, or print it to PDF to send to a manager, client or teammate. The report is built on your machine and the file is not uploaded.
+
 ## How to run it
 
 1. Open smartsht and import an .xlsx or CSV, or start from a sheet you already have.

@@ -14,7 +14,8 @@ import { UpgradeGate } from '@/components/UpgradeGate'
 import { useUsage } from '@/auth'
 import { useWorkbookFileImport } from '@/hooks/useWorkbookFileImport'
 import { FREE_AUTOFIX_LIFETIME_LIMIT, getAutoFixUsed } from '@/lib/featureGates'
-import { ShieldCheck, Loader2, RefreshCw, X, ChevronDown, ChevronRight, Undo2 } from 'lucide-react'
+import { ShieldCheck, Loader2, RefreshCw, X, ChevronDown, ChevronRight, Undo2, Download } from 'lucide-react'
+import { exportAuditReport } from '@/auditor/report'
 
 const AUTO_RESCAN_DEBOUNCE_MS = 1200
 const AUTO_RESCAN_MAX_CELLS = 20000
@@ -217,6 +218,15 @@ export function AuditPanelContent() {
                     {result.score}<span className="text-xs font-bold opacity-40">/100</span>
                   </span>
                 </div>
+                <button
+                  type="button"
+                  className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all active:scale-90 shadow-sm border border-slate-100"
+                  onClick={() => void exportAuditReport(result, { workbookName: workbook.name, stale: isStale })}
+                  title="Export report"
+                  aria-label="Export audit report"
+                >
+                  <Download size={14} />
+                </button>
                 <button
                   type="button"
                   className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all active:scale-90 shadow-sm border border-slate-100"
