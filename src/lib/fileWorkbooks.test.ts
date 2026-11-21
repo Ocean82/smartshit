@@ -12,6 +12,9 @@ import {
   purgeExpired,
   stashUndoSlot,
   uniqueFileName,
+  moveFile,
+  moveTargets,
+  canMoveFile,
   dropUndoSlots,
   buildPersistenceSnapshot,
   type UndoSlot,
@@ -216,6 +219,36 @@ describe('uniqueFileName', () => {
     expect(uniqueFileName(files, 'Plan')).toBe('Plan')
     expect(uniqueFileName(files, 'Budget')).toBe('Budget 3')
     expect(uniqueFileName([], 'New Workbook')).toBe('New Workbook')
+  })
+})
+
+describe('moving files between folders', () => {
+  const folder = (id: string, parentId: string | null = null): FileItem => ({ ...makeFile(id), type: 'folder', children: [], parentId })
+  const file = (id: string, parentId: string | null = null): FileItem => ({ ...makeFile(id, `wb-${id}`), parentId })
+
+  it('moves a file into a folder and back to the top level', () => {
+    const files = [folder('dir'), file('a')]
+    const inside = moveFile(files, 'a', 'dir')
+    expect(inside.find((f) => f.id === 'a')!.parentId).toBe('dir')
+    expect(moveFile(inside, 'a', null).find((f) => f.id === 'a')!.parentId).toBeNull()
+  })
+
+  it('refuses a folder into itself or into its own contents', () => {
+    const files = [folder('outer'), folder('inner', 'outer'), file('a', 'inner')]
+    expect(moveFile(files, 'outer', 'outer')).toBe(files)
+    expect(moveFile(files, 'outer', 'inner')).toBe(files)
+    expect(moveTargets(files, 'outer').map((f) => f.id)).toEqual([])
+    expect(moveTargets(files, 'inner').map((f) => f.id)).toEqual(['outer'])
+  })
+
+  it('refuses no-op moves, files as targets, unknown ids and trashed folders', () => {
+    const files = [folder('dir'), { ...folder('gone'), deletedAt: 1 }, file('a'), file('b', 'dir')]
+    expect(moveFile(files, 'b', 'dir')).toBe(files)
+    expect(moveFile(files, 'a', 'b')).toBe(files)
+    expect(moveFile(files, 'nope', 'dir')).toBe(files)
+    expect(moveFile(files, 'a', 'gone')).toBe(files)
+    expect(canMoveFile(files, 'a', 'dir')).toBe(true)
+    expect(moveTargets(files, 'a').map((f) => f.id)).toEqual(['dir'])
   })
 })
 

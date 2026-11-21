@@ -7,7 +7,7 @@
 import type { FileItem } from '@/types'
 import { createEmptyWorkbook } from '@/engine/spreadsheet'
 import { v4 as uuid } from 'uuid'
-import { trashFiles } from '@/lib/fileWorkbooks'
+import { trashFiles, moveFile } from '@/lib/fileWorkbooks'
 
 export interface FileState {
   files: FileItem[]
@@ -20,6 +20,8 @@ export interface FileActions {
   deleteFile: (id: string) => void
   renameFile: (id: string, name: string) => void
   openFile: (id: string) => void
+  /** Move a file or folder into a folder (null = top level). Ignored when not allowed. */
+  moveFile: (id: string, parentId: string | null) => void
   /** Set (or clear, with null) the cloud workbook binding on the active file. */
   setActiveFileCloudId: (cloudId: string | null) => void
 }
@@ -74,6 +76,10 @@ export function createFileActions(
 
     openFile: (id) => {
       set((s) => { s.activeFileId = id })
+    },
+
+    moveFile: (id, parentId) => {
+      set((s) => { s.files = moveFile(s.files, id, parentId) })
     },
 
     setActiveFileCloudId: (cloudId) => {

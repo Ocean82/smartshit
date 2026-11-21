@@ -3,13 +3,29 @@ import { useStore } from '@/store/useStore';
 import { useShallow } from 'zustand/react/shallow';
 import {
   File, Folder, FolderPlus, FilePlus, Trash2, Edit3,
-  ChevronRight, ChevronDown, X, Undo2,
+  ChevronRight, ChevronDown, X, Undo2, FolderInput,
 } from 'lucide-react';
-import { TRASH_TTL_MS } from '@/lib/fileWorkbooks';
+import { TRASH_TTL_MS, canMoveFile, moveTargets } from '@/lib/fileWorkbooks';
 import type { FileItem as FileEntry } from '@/types';
 import { MOBILE_PANEL_BELOW_TITLEBAR } from '@/components/panels/dockPanelLayout';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+const ROOT_DROP = '__root__';
+
+/** What each row needs to take part in drag-and-drop and the move menu. */
+interface TreeActions {
+  dragId: string | null;
+  setDragId: (id: string | null) => void;
+  dropTargetId: string | null;
+  setDropTargetId: (id: string | null) => void;
+  canMove: (id: string, parentId: string | null) => boolean;
+  onMove: (id: string, parentId: string | null) => void;
+  moveOptions: (id: string) => { id: string; name: string }[];
+  movingId: string | null;
+  setMovingId: (id: string | null) => void;
+  onNewIn: (folderId: string) => void;
+}
 
 /** Days until a trashed item is deleted for good. */
 function trashDaysLeft(item: FileEntry): number {
@@ -27,6 +43,7 @@ export function FileExplorer() {
     deleteFile,
     renameFile,
     openFile,
+    moveFile,
     restoreFile,
     deleteFileForever,
     emptyTrash,
@@ -42,6 +59,7 @@ export function FileExplorer() {
       deleteFile: s.deleteFile,
       renameFile: s.renameFile,
       openFile: s.openFile,
+      moveFile: s.moveFile,
       restoreFile: s.restoreFile,
       deleteFileForever: s.deleteFileForever,
       emptyTrash: s.emptyTrash,
@@ -55,6 +73,10 @@ export function FileExplorer() {
   const [showNewInput, setShowNewInput] = useState<'file' | 'folder' | null>(null);
   const [newName, setNewName] = useState('');
   const [showTrash, setShowTrash] = useState(false);
+  const [newParentId, setNewParentId] = useState<string | null>(null);
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dropTargetId, setDropTargetId] = useState<string | null>(null);
+  const [movingId, setMovingId] = useState<string | null>(null);
 
   // Close the full-screen mobile drawer with Escape (desktop is an inline sidebar).
   useEffect(() => {
@@ -85,18 +107,44 @@ export function FileExplorer() {
     });
   };
 
+  const startNew = (kind: 'file' | 'folder', parentId: string | null = null) => {
+    setShowNewInput(kind);
+    setNewParentId(parentId);
+    if (parentId) setExpandedFolders((prev) => new Set(prev).add(parentId));
+  };
+
   const handleCreateNew = () => {
     if (!newName.trim()) {
       setShowNewInput(null);
       return;
     }
     if (showNewInput === 'file') {
-      createFile(newName.trim());
+      createFile(newName.trim(), newParentId);
     } else {
-      createFolder(newName.trim());
+      createFolder(newName.trim(), newParentId);
     }
     setNewName('');
     setShowNewInput(null);
+    setNewParentId(null);
+  };
+
+  const tree: TreeActions = {
+    dragId,
+    setDragId,
+    dropTargetId,
+    setDropTargetId,
+    canMove: (id, parentId) => canMoveFile(liveFiles, id, parentId),
+    onMove: (id, parentId) => {
+      moveFile(id, parentId);
+      if (parentId) setExpandedFolders((prev) => new Set(prev).add(parentId));
+      setMovingId(null);
+      setDragId(null);
+      setDropTargetId(null);
+    },
+    moveOptions: (id) => moveTargets(liveFiles, id).map((f) => ({ id: f.id, name: f.name })),
+    movingId,
+    setMovingId,
+    onNewIn: (folderId) => startNew('file', folderId),
   };
 
   const handleStartRename = (id: string, name: string) => {
@@ -155,7 +203,7 @@ export function FileExplorer() {
             style={{ color: 'var(--neutral-400)' }}
             onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--accent-600)'; e.currentTarget.style.background = 'var(--accent-50)' }}
             onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--neutral-400)'; e.currentTarget.style.background = '' }}
-            onClick={() => setShowNewInput('file')}
+            onClick={() => startNew('file')}
             title="New File"
           >
             <FilePlus size={14} />
@@ -165,7 +213,7 @@ export function FileExplorer() {
             style={{ color: 'var(--neutral-400)' }}
             onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--accent-600)'; e.currentTarget.style.background = 'var(--accent-50)' }}
             onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--neutral-400)'; e.currentTarget.style.background = '' }}
-            onClick={() => setShowNewInput('folder')}
+            onClick={() => startNew('folder')}
             title="New Folder"
           >
             <FolderPlus size={14} />
@@ -181,9 +229,31 @@ export function FileExplorer() {
       </div>
 
       {/* File list */}
-      <div className="flex-1 overflow-y-auto py-1">
+      <div
+        className={`flex-1 overflow-y-auto py-1 ${dropTargetId === ROOT_DROP ? 'bg-blue-50/60' : ''}`}
+        onDragOver={(e) => {
+          if (dragId && tree.canMove(dragId, null)) {
+            e.preventDefault();
+            setDropTargetId(ROOT_DROP);
+          }
+        }}
+        onDragLeave={(e) => {
+          if (e.currentTarget === e.target) setDropTargetId(null);
+        }}
+        onDrop={(e) => {
+          if (dragId && tree.canMove(dragId, null)) {
+            e.preventDefault();
+            tree.onMove(dragId, null);
+          }
+        }}
+      >
         {showNewInput && (
           <div className="px-2 py-1">
+            {newParentId && (
+              <p className="text-[10px] text-gray-400 mb-0.5 truncate">
+                In “{files.find((f) => f.id === newParentId)?.name}”
+              </p>
+            )}
             <div className="flex items-center gap-1">
               {showNewInput === 'folder' ? (
                 <Folder size={14} className="text-amber-500 shrink-0" />
@@ -221,6 +291,7 @@ export function FileExplorer() {
             renameValue={renameValue}
             setRenameValue={setRenameValue}
             onFinishRename={handleFinishRename}
+            tree={tree}
             depth={0}
           />
         ))}
@@ -308,9 +379,10 @@ function FileItem({
   renameValue,
   setRenameValue,
   onFinishRename,
+  tree,
   depth,
 }: {
-  file: { id: string; name: string; type: string };
+  file: { id: string; name: string; type: string; parentId: string | null };
   files: { id: string; name: string; type: string; parentId: string | null }[];
   activeFileId: string | null;
   expandedFolders: Set<string>;
@@ -322,6 +394,7 @@ function FileItem({
   renameValue: string;
   setRenameValue: (v: string) => void;
   onFinishRename: () => void;
+  tree: TreeActions;
   depth: number;
 }) {
   const isFolder = file.type === 'folder';
@@ -333,9 +406,41 @@ function FileItem({
     <div>
       <div
         className={`flex items-center gap-1 px-2 py-1 max-md:py-2.5 cursor-pointer group text-xs transition-colors ${
-          isActive ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'
-        }`}
+          tree.dropTargetId === file.id
+            ? 'bg-blue-100 ring-1 ring-blue-300 text-blue-700'
+            : isActive ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'
+        } ${tree.dragId === file.id ? 'opacity-50' : ''}`}
         style={{ paddingLeft: `${depth * 12 + 8}px` }}
+        draggable={renamingId !== file.id}
+        onDragStart={(e) => {
+          e.dataTransfer.setData('text/plain', file.id);
+          e.dataTransfer.effectAllowed = 'move';
+          tree.setDragId(file.id);
+        }}
+        onDragEnd={() => {
+          tree.setDragId(null);
+          tree.setDropTargetId(null);
+        }}
+        // A row never lets a drag fall through to the list: only blank space means "top level".
+        onDragOver={(e) => {
+          if (!tree.dragId) return;
+          e.stopPropagation();
+          if (isFolder && tree.canMove(tree.dragId, file.id)) {
+            e.preventDefault();
+            tree.setDropTargetId(file.id);
+          }
+        }}
+        onDragLeave={() => {
+          if (tree.dropTargetId === file.id) tree.setDropTargetId(null);
+        }}
+        onDrop={(e) => {
+          if (!tree.dragId) return;
+          e.stopPropagation();
+          if (isFolder && tree.canMove(tree.dragId, file.id)) {
+            e.preventDefault();
+            tree.onMove(tree.dragId, file.id);
+          }
+        }}
         role="button"
         tabIndex={0}
         aria-expanded={isFolder ? isExpanded : undefined}
@@ -376,7 +481,32 @@ function FileItem({
           <span className="flex-1 truncate">{file.name}</span>
         )}
 
-        <div className="opacity-0 group-hover:opacity-100 max-md:opacity-100 flex items-center gap-0.5">
+        <div className="opacity-0 group-hover:opacity-100 focus-within:opacity-100 max-md:opacity-100 flex items-center gap-0.5">
+          {isFolder && (
+            <button
+              className="p-0.5 max-md:p-2 hover:text-blue-600"
+              onClick={(e) => {
+                e.stopPropagation();
+                tree.onNewIn(file.id);
+              }}
+              title="New file in this folder"
+              aria-label={`New file in ${file.name}`}
+            >
+              <FilePlus size={10} />
+            </button>
+          )}
+          <button
+            className="p-0.5 max-md:p-2 hover:text-blue-600"
+            onClick={(e) => {
+              e.stopPropagation();
+              tree.setMovingId(tree.movingId === file.id ? null : file.id);
+            }}
+            title="Move to a folder"
+            aria-label={`Move ${file.name}`}
+            aria-expanded={tree.movingId === file.id}
+          >
+            <FolderInput size={10} />
+          </button>
           <button
             className="p-0.5 max-md:p-2 hover:text-blue-600"
             onClick={(e) => {
@@ -401,6 +531,26 @@ function FileItem({
           </button>
         </div>
       </div>
+      {tree.movingId === file.id && (
+        <div className="px-2 py-1" style={{ paddingLeft: `${depth * 12 + 8}px` }}>
+          <select
+            className="w-full text-xs border border-blue-300 rounded px-1 py-0.5 bg-white"
+            aria-label={`Move ${file.name} to`}
+            autoFocus
+            defaultValue=""
+            onChange={(e) => {
+              if (e.target.value) tree.onMove(file.id, e.target.value === ROOT_DROP ? null : e.target.value);
+            }}
+            onBlur={() => tree.setMovingId(null)}
+          >
+            <option value="" disabled>Move to…</option>
+            {file.parentId !== null && <option value={ROOT_DROP}>Top level</option>}
+            {tree.moveOptions(file.id).filter((o) => o.id !== file.parentId).map((o) => (
+              <option key={o.id} value={o.id}>{o.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
       {isFolder && isExpanded && children.map((child) => (
         <FileItem
           key={child.id}
@@ -416,6 +566,7 @@ function FileItem({
           renameValue={renameValue}
           setRenameValue={setRenameValue}
           onFinishRename={onFinishRename}
+          tree={tree}
           depth={depth + 1}
         />
       ))}

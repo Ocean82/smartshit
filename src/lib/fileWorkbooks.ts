@@ -205,6 +205,30 @@ export function computePostDeleteSwitch(files: FileItem[]): PostDeleteDecision {
   return { type: 'create-fallback', name: 'My Workbook' }
 }
 
+// ─── Folders ────────────────────────────────────────────────────────────────
+
+/** Folders `id` could be moved into: live folders other than itself and its own contents. */
+export function moveTargets(files: FileItem[], id: string): FileItem[] {
+  const item = files.find((f) => f.id === id)
+  if (!item || item.deletedAt !== undefined) return []
+  const blocked = item.type === 'folder' ? descendantIds(files, id) : new Set<string>()
+  blocked.add(id)
+  return files.filter((f) => f.type === 'folder' && f.deletedAt === undefined && !blocked.has(f.id))
+}
+
+/** True when moving `id` under `parentId` (null = top level) would change something and is allowed. */
+export function canMoveFile(files: FileItem[], id: string, parentId: string | null): boolean {
+  const item = files.find((f) => f.id === id)
+  if (!item || item.deletedAt !== undefined || item.parentId === parentId) return false
+  return parentId === null || moveTargets(files, id).some((f) => f.id === parentId)
+}
+
+/** Move a file or folder under `parentId` (null = top level). Returns the same array when the move is not allowed. */
+export function moveFile(files: FileItem[], id: string, parentId: string | null): FileItem[] {
+  if (!canMoveFile(files, id, parentId)) return files
+  return files.map((f) => (f.id === id ? { ...f, parentId, updatedAt: Date.now() } : f))
+}
+
 // ─── Trash ──────────────────────────────────────────────────────────────────
 
 function descendantIds(files: FileItem[], rootId: string): Set<string> {
