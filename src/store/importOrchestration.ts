@@ -123,6 +123,8 @@ export function applyWorkbookImportEffects(
           })
 
           // Open the auditor for serious findings, and for the free audit entry (?audit=1).
+          // No toast on top of it: the panel shows the same findings (and announces them to
+          // screen readers), and the status bar keeps the count.
           const hasSeriousIssues = auditResult.findings.some(
             (f) => f.severity === 'critical' || f.severity === 'high'
           )
@@ -130,13 +132,7 @@ export function applyWorkbookImportEffects(
           if (hasSeriousIssues || fromAuditEntry) {
             get().setActivePanel('auditor')
           }
-          if (hasSeriousIssues) {
-            get().showToast({
-              type: 'warning',
-              message: `Auditor found ${auditResult.findings.length} issue${auditResult.findings.length === 1 ? '' : 's'} in this spreadsheet`,
-            })
-          }
-        }
+}
       } catch {
         // Audit failure is non-fatal
       }

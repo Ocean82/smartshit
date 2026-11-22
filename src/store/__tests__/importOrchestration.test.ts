@@ -127,6 +127,24 @@ describe('importOrchestration', () => {
     vi.useRealTimers()
   })
 
+  it('opens the auditor for serious findings without a duplicate toast', () => {
+    vi.useFakeTimers()
+    vi.stubGlobal('location', { search: '' })
+    const wb = createEmptyWorkbook('Broken')
+    const cells: Record<string, { value: number | null; formula?: string }> = {}
+    for (let r = 0; r < 7; r++) cells[`A${r + 1}`] = { value: r }
+    cells.B1 = { value: null, formula: '=A1/0' }
+    wb.sheets[0].cells = cells
+    const access = makeAccess(wb, { getComputedValue: (row, col) => (row === 0 && col === 1 ? '#DIV/0!' : '') })
+    applyWorkbookImportEffects((fn) => { fn(access) }, () => access, wb, { fileName: 'broken.xlsx' })
+    vi.advanceTimersByTime(500)
+    expect(access.setActivePanel).toHaveBeenCalledWith('auditor')
+    const messages = (access.showToast as ReturnType<typeof vi.fn>).mock.calls.map(([t]) => t.message as string)
+    expect(messages.some((m) => m.startsWith('Auditor found'))).toBe(false)
+    vi.unstubAllGlobals()
+    vi.useRealTimers()
+  })
+
   it('opens the auditor from ?audit=1 even without serious findings', () => {
     vi.useFakeTimers()
     vi.stubGlobal('location', { search: '?audit=1' })

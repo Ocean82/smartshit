@@ -258,7 +258,7 @@ export function AuditPanelContent() {
                 </button>
               </div>
             )}
-            <div className="flex items-center gap-2 bg-slate-50 rounded-lg px-2 py-1.5 border border-slate-100">
+            <div role="status" className="flex items-center gap-2 bg-slate-50 rounded-lg px-2 py-1.5 border border-slate-100">
               <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
               <p className="text-[10px] text-slate-600 font-medium leading-tight">
                 {result.summary}
