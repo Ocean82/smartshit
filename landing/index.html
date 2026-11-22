@@ -102,7 +102,7 @@
         "mainEntity": { "@id": "https://smartsht.com/#app" },
         "publisher": { "@id": "https://smartsht.com/#organization" },
         "inLanguage": "en-US",
-        "dateModified": "2026-11-07"
+        "dateModified": "2026-11-21"
       },
       {
         "@type": "ImageObject",
@@ -275,7 +275,7 @@
             "url": "https://smartsht.com/#faq-pro",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Pro is $7 per month at the early adopter rate (listed vs $12/mo). It unlocks unlimited AI questions, unlimited auto-fix, unlimited cloud backup and sync, and version history."
+              "text": "Pro is $7 per month at the early adopter rate (listed vs $12/mo). It unlocks unlimited AI questions, unlimited auto-fix, unlimited cloud backup and sync, version history, and audit reports without the smartsht footer."
             }
           },
           {
@@ -305,7 +305,17 @@
             "url": "https://smartsht.com/#faq-auditor",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "The auditor checks for issues like skipped cells in SUM ranges, inconsistent formula patterns, statistical outliers, and hardcoded constants — then can propose fixes with a preview before anything changes."
+              "text": "The auditor checks for issues like skipped cells in SUM ranges, error values such as #REF! and #DIV/0!, inconsistent formula patterns, circular references, statistical outliers, and hardcoded constants — then can propose fixes with a preview before anything changes."
+            }
+          },
+          {
+            "@type": "Question",
+            "@id": "https://smartsht.com/#faq-audit-report",
+            "name": "Can I share an Excel audit report?",
+            "url": "https://smartsht.com/#faq-audit-report",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Yes. Export the scan as a single HTML report with the health score, each finding and a suggested fix, then open it in a browser or print it to PDF. It is built in your browser, so the file is not uploaded. Pro reports leave off the smartsht footer."
             }
           },
           {
@@ -1421,7 +1431,7 @@
           <div class="auditor-callout-emoji">🛡️</div>
           <h3 class="auditor-callout-title">Checks formulas in your browser</h3>
           <p class="auditor-callout-body">
-            The smartsh!t Auditor detects range gaps in SUM formulas, inconsistent column patterns, statistical outliers, circular references, and hardcoded magic numbers — automatically, in your browser, with zero latency.
+            The smartsh!t Auditor detects range gaps in SUM formulas, #REF! and #DIV/0! errors, inconsistent column patterns, statistical outliers, circular references, and hardcoded magic numbers — automatically, in your browser, with zero latency.
           </p>
           <a href="/app" class="btn btn-primary">Try the Auditor Free</a>
         </div>
@@ -1493,7 +1503,7 @@
       <div class="values-grid">
         <div class="value-item value-featured">
           <h3>The Auditor catches formula errors</h3>
-          <p>A local formula check looks for skipped cells in SUMs, inconsistent formula patterns, statistical outliers, and hardcoded constants. It runs in your browser, with no account. Auto-fix is limited on the free plan. <a href="/formula-auditor">How the formula auditor works</a>.</p>
+          <p>A local formula check looks for skipped cells in SUMs, error values like #REF! and #DIV/0!, inconsistent formula patterns, statistical outliers, and hardcoded constants. It runs in your browser, with no account. Dismiss what you have reviewed, and export the result as a shareable report. Auto-fix is limited on the free plan. <a href="/formula-auditor">How the formula auditor works</a>.</p>
         </div>
         <div class="value-item value-featured">
           <h3>Preview before anything changes</h3>
@@ -1514,6 +1524,10 @@
         <div class="value-item">
           <h3>Excel import and export</h3>
           <p>Bring your existing .xlsx and CSV files. Export back anytime. Imported formulas keep Excel's saved values until you edit the cell.</p>
+        </div>
+        <div class="value-item">
+          <h3>Folders and a 30-day Trash</h3>
+          <p>Every file is its own workbook, so opening one never overwrites another. Sort files into folders, and restore anything you delete from Trash for 30 days.</p>
         </div>
         <div class="value-item">
           <h3>Fast hybrid AI architecture</h3>
@@ -1549,6 +1563,7 @@
             <li class="included">All templates (budgets, invoices, trackers)</li>
             <li class="included">Excel and CSV import/export</li>
             <li class="limit">Auditor scans + 3 lifetime auto-fixes</li>
+            <li class="included">Shareable audit report (HTML or PDF)</li>
             <li class="limit">1 cloud workbook</li>
             <li class="limit">Read-only share links</li>
             <li class="included">Workbook stays in your browser</li>
@@ -1565,6 +1580,7 @@
             <li class="included"><strong>Unlimited auto-fix</strong></li>
             <li class="included">Unlimited cloud backup and sync</li>
             <li class="included">Version history (last 50 saves)</li>
+            <li class="included">Audit reports without the smartsht footer</li>
           </ul>
           <a href="/app" class="btn btn-primary">Start Free, Upgrade Later</a>
         </div>
@@ -1577,6 +1593,7 @@
             <li class="included"><strong>Unlimited auto-fix</strong></li>
             <li class="included">Unlimited cloud backup and sync</li>
             <li class="included">Version history (last 50 saves)</li>
+            <li class="included">Audit reports without the smartsht footer</li>
             <li class="included"><strong>Save $25 vs monthly</strong></li>
           </ul>
           <a href="/app" class="btn btn-primary">Start Free, Upgrade Later</a>
@@ -1624,11 +1641,11 @@
       <div class="faq-list">
         <div class="faq-item" id="faq-free">
           <h3>Is smartsht free?</h3>
-          <p>Yes. The Free plan includes the full spreadsheet, templates, Excel/CSV import and export, the formula auditor, and 7 AI questions per day. You can also bring your own API key (BYOK) for unlimited AI on your own provider account at no subscription cost. The spreadsheet, import and export, and the auditor work without an account; AI questions and cloud backup need a free sign-in.</p>
+          <p>Yes. The Free plan includes the full spreadsheet, templates, Excel/CSV import and export, the in-browser formula auditor, and 7 AI questions per day. Bring your own API key to send questions to your provider instead of using the daily limit. That provider bills the tokens. The spreadsheet, import and export, and the auditor work without an account; AI questions and cloud backup need a free sign-in.</p>
         </div>
         <div class="faq-item" id="faq-pro">
           <h3>How much is Pro?</h3>
-          <p>Pro is $7 per month at the early adopter rate (listed vs $12/mo). It unlocks unlimited AI questions, unlimited auto-fix, unlimited cloud backup and sync, and version history.</p>
+          <p>Pro is $7 per month at the early adopter rate (listed vs $12/mo). It unlocks unlimited AI questions, unlimited auto-fix, unlimited cloud backup and sync, version history, and audit reports without the smartsht footer.</p>
         </div>
         <div class="faq-item" id="faq-privacy">
           <h3>Does my spreadsheet data stay private?</h3>
@@ -1640,7 +1657,11 @@
         </div>
         <div class="faq-item" id="faq-auditor">
           <h3>What does the formula auditor catch?</h3>
-          <p>The auditor checks for issues like skipped cells in SUM ranges, inconsistent formula patterns, statistical outliers, and hardcoded constants — then can propose fixes with a preview before anything changes.</p>
+          <p>The auditor checks for issues like skipped cells in SUM ranges, error values such as #REF! and #DIV/0!, inconsistent formula patterns, circular references, statistical outliers, and hardcoded constants — then can propose fixes with a preview before anything changes.</p>
+        </div>
+        <div class="faq-item" id="faq-audit-report">
+          <h3>Can I share an Excel audit report?</h3>
+          <p>Yes. Export the scan as a single HTML report with the health score, each finding and a suggested fix, then open it in a browser or print it to PDF. It is built in your browser, so the file is not uploaded. Pro reports leave off the smartsht footer.</p>
         </div>
         <div class="faq-item" id="faq-install">
           <h3>Do I need to install anything?</h3>
