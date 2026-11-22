@@ -42,11 +42,13 @@ export function ImportInsightsOverlay() {
     getActiveSheet,
     getComputedValue,
     lastAuditResult,
+    activePanel,
     setActivePanel,
   } = useStore(useShallow((s) => ({
     getActiveSheet: s.getActiveSheet,
     getComputedValue: s.getComputedValue,
     lastAuditResult: s.lastAuditResult,
+    activePanel: s.activePanel,
     setActivePanel: s.setActivePanel,
   })))
 
@@ -157,6 +159,10 @@ export function ImportInsightsOverlay() {
 
   if (!visible || !insights || !profile) return null
 
+  // The auditor panel already lists these findings, so the card would only cover them.
+  // It stays queued and comes back when the panel closes.
+  if (activePanel === 'auditor') return null
+
   const auditIssueCount = lastAuditResult?.findings?.length ?? 0
   const hasFinancialData = (insights.totalIncome ?? 0) > 0 || (insights.totalExpenses ?? 0) > 0
   const hasOutliers = (insights.outliers?.length ?? 0) > 0
@@ -175,7 +181,7 @@ export function ImportInsightsOverlay() {
 
   return (
     <div
-      className="fixed bottom-20 right-4 md:bottom-6 md:right-[60px] z-50 w-[320px] max-w-[calc(100vw-2rem)] animate-slide-up"
+      className={`fixed bottom-20 right-4 md:bottom-6 md:right-[60px] z-50 w-[320px] max-w-[calc(100vw-2rem)] animate-slide-up ${activePanel ? 'max-md:hidden' : ''}`}
       role="complementary"
       aria-label="Import insights summary"
     >
