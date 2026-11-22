@@ -25,7 +25,8 @@ import { chatWithAgentServerStream, isAgentServerError } from '@/ai/agentClient'
 import { isAnonGated, anonGatedMetadata } from '@/ai/anonGate'
 import { recordTelemetry } from '@/ai/telemetry'
 import { runAudit, formatAuditForContext } from '@/auditor'
-import { isAuditorEnabled } from '@/auditor/preferences'
+import { isAuditorEnabled, loadDismissed } from '@/auditor/preferences'
+import { loadCustomRules } from '@/auditor/customRules'
 import { getContextualSuggestions } from '@/ai/contextualSuggestions'
 import type { SheetInsights } from '@/ai/sheetInsights'
 import { isOutlierFollowUp } from '@/ai/outliers'
@@ -900,7 +901,7 @@ export async function processMessage(input: ProcessMessageInput): Promise<ToolRe
   let auditBlock = ''
   if ((isLlmOnlyMode(mode) || mode === 'advise') && isAuditorEnabled()) {
     try {
-      const auditResult = runAudit(input.sheet, input.getComputedValue)
+      const auditResult = runAudit(input.sheet, input.getComputedValue, loadCustomRules(), loadDismissed(input.workbook.id))
       auditBlock = formatAuditForContext(auditResult)
     } catch { /* non-fatal */ }
   }

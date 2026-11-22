@@ -5,8 +5,8 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { hardcodedWeightsRule, isHighPrecisionNumeric, findContiguousRuns, isSuppressed } from './hardcodedWeights'
-import type { AuditContext, CellInfo, DismissedFindingEntry } from '../types'
+import { hardcodedWeightsRule, isHighPrecisionNumeric, findContiguousRuns } from './hardcodedWeights'
+import type { AuditContext, CellInfo } from '../types'
 
 /** Helper to create a numeric CellInfo */
 function makeCell(cellId: string, row: number, col: number, value: number): CellInfo {
@@ -35,10 +35,7 @@ function makeFormulaCell(cellId: string, row: number, col: number, formula: stri
 }
 
 /** Helper to build an AuditContext from a list of cells */
-function buildContext(
-  cells: CellInfo[],
-  dismissedFindings?: Record<string, DismissedFindingEntry>,
-): AuditContext {
+function buildContext(cells: CellInfo[]): AuditContext {
   let maxRow = 0
   let maxCol = 0
   const cellMap = new Map<string, CellInfo>()
@@ -67,7 +64,6 @@ function buildContext(
     getRow(row) {
       return cells.filter((c) => c.row === row)
     },
-    dismissedFindings,
   }
 }
 
@@ -211,65 +207,6 @@ describe('findContiguousRuns', () => {
   })
 })
 
-describe('isSuppressed', () => {
-  it('returns false when no dismissed entry exists', () => {
-    const cells = [makeCell('A1', 0, 0, 0.12345)]
-    expect(isSuppressed(cells, undefined)).toBe(false)
-  })
-
-  it('returns true when all cells are in dismissed list and values unchanged', () => {
-    const cells = [
-      makeCell('A1', 0, 0, 0.12345),
-      makeCell('B1', 0, 1, 0.67891),
-    ]
-    const dismissed: DismissedFindingEntry = {
-      cellIds: ['A1', 'B1'],
-      dismissedAt: Date.now(),
-      valueSnapshot: { A1: 0.12345, B1: 0.67891 },
-    }
-    expect(isSuppressed(cells, dismissed)).toBe(true)
-  })
-
-  it('returns false when a cell value has changed since dismissal', () => {
-    const cells = [
-      makeCell('A1', 0, 0, 0.99999), // changed from 0.12345
-      makeCell('B1', 0, 1, 0.67891),
-    ]
-    const dismissed: DismissedFindingEntry = {
-      cellIds: ['A1', 'B1'],
-      dismissedAt: Date.now(),
-      valueSnapshot: { A1: 0.12345, B1: 0.67891 },
-    }
-    expect(isSuppressed(cells, dismissed)).toBe(false)
-  })
-
-  it('returns false when not all cells are in the dismissed list', () => {
-    const cells = [
-      makeCell('A1', 0, 0, 0.12345),
-      makeCell('B1', 0, 1, 0.67891),
-      makeCell('C1', 0, 2, 0.11111),
-    ]
-    const dismissed: DismissedFindingEntry = {
-      cellIds: ['A1', 'B1'], // C1 not dismissed
-      dismissedAt: Date.now(),
-      valueSnapshot: { A1: 0.12345, B1: 0.67891 },
-    }
-    expect(isSuppressed(cells, dismissed)).toBe(false)
-  })
-
-  it('returns true when no value snapshot is provided (legacy dismissal)', () => {
-    const cells = [
-      makeCell('A1', 0, 0, 0.12345),
-      makeCell('B1', 0, 1, 0.67891),
-    ]
-    const dismissed: DismissedFindingEntry = {
-      cellIds: ['A1', 'B1'],
-      dismissedAt: Date.now(),
-    }
-    expect(isSuppressed(cells, dismissed)).toBe(true)
-  })
-})
-
 describe('hardcodedWeightsRule.run', () => {
   it('flags a row with 4+ consecutive high-precision cells', () => {
     const cells = [
@@ -356,47 +293,6 @@ describe('hardcodedWeightsRule.run', () => {
     const findingKeys = findings.map((f) => f.cells.map((c) => c.cellId).sort().join(','))
     const uniqueKeys = new Set(findingKeys)
     expect(findingKeys.length).toBe(uniqueKeys.size)
-  })
-
-  it('suppresses findings for dismissed cells with unchanged values', () => {
-    const cells = [
-      makeCell('A1', 0, 0, 0.12345),
-      makeCell('B1', 0, 1, 0.67891),
-      makeCell('C1', 0, 2, 0.11111),
-      makeCell('D1', 0, 3, 0.99999),
-    ]
-    const dismissed: Record<string, DismissedFindingEntry> = {
-      'hardcoded-weights': {
-        cellIds: ['A1', 'B1', 'C1', 'D1'],
-        dismissedAt: Date.now(),
-        valueSnapshot: { A1: 0.12345, B1: 0.67891, C1: 0.11111, D1: 0.99999 },
-      },
-    }
-    const ctx = buildContext(cells, dismissed)
-    const findings = hardcodedWeightsRule.run(ctx)
-
-    expect(findings).toHaveLength(0)
-  })
-
-  it('re-reports findings when a dismissed cell value changes', () => {
-    const cells = [
-      makeCell('A1', 0, 0, 0.55555), // changed!
-      makeCell('B1', 0, 1, 0.67891),
-      makeCell('C1', 0, 2, 0.11111),
-      makeCell('D1', 0, 3, 0.99999),
-    ]
-    const dismissed: Record<string, DismissedFindingEntry> = {
-      'hardcoded-weights': {
-        cellIds: ['A1', 'B1', 'C1', 'D1'],
-        dismissedAt: Date.now(),
-        valueSnapshot: { A1: 0.12345, B1: 0.67891, C1: 0.11111, D1: 0.99999 },
-      },
-    }
-    const ctx = buildContext(cells, dismissed)
-    const findings = hardcodedWeightsRule.run(ctx)
-
-    expect(findings).toHaveLength(1)
-    expect(findings[0].cells).toHaveLength(4)
   })
 
   it('handles mixed content in a row — only flags the qualifying run', () => {

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { runAudit, findingKey, cellSignature } from '../index'
+import { stableFindingId } from '../utils'
 import { normalizeFormula, replaceRangeRef } from '../utils'
 import { isAuditorEnabled, saveAuditorEnabled, loadDismissed, saveDismissed } from '../preferences'
 import type { DismissedFindingEntry } from '../types'
@@ -165,5 +166,53 @@ describe('audit robustness', () => {
     cells.A20 = { value: 100000 }
     const outliers = runAudit(sheetOf(cells), () => '1').findings.filter((f) => f.ruleId === 'magnitude-outliers')
     expect(outliers.map((f) => f.cells[0].cellId)).toEqual(['A20'])
+  })
+})
+
+describe('stable finding ids', () => {
+  const cells = (): SheetData['cells'] => ({
+    A1: { value: 1 }, A2: { value: 2 }, A3: { value: 3 }, A4: { value: 4 },
+    C1: { value: null, formula: '=SUM(A2:A3)' },
+    D1: { value: null, formula: '=SUM(A2:A3)' },
+  })
+
+  it('gives the same finding the same id on every run, and distinct ids within a run', () => {
+    const first = runAudit(sheetOf(cells()), () => '0').findings
+    const second = runAudit(sheetOf(cells()), () => '0').findings
+    expect(first.map((f) => f.id)).toEqual(second.map((f) => f.id))
+    expect(new Set(first.map((f) => f.id)).size).toBe(first.length)
+  })
+
+  it('keeps ids unique when two findings share a key', () => {
+    const taken = new Set<string>()
+    const a = stableFindingId('k', taken)
+    const b = stableFindingId('k', taken)
+    expect(a).not.toBe(b)
+  })
+})
+
+describe('hidden dependencies', () => {
+  const crossSheet = (n: number): SheetData['cells'] => {
+    const out: SheetData['cells'] = {}
+    for (let r = 1; r <= n; r++) out[`B${r}`] = { value: null, formula: `=Other!A${r}*2` }
+    return out
+  }
+  const ids = (n: number) => runAudit(sheetOf(crossSheet(n)), () => '1').findings.filter((f) => f.ruleId === 'hidden-dependencies')
+
+  it('reports each cell when there are a few', () => {
+    expect(ids(3)).toHaveLength(3)
+  })
+
+  it('reports one summary instead of going silent when there are many', () => {
+    const findings = ids(8)
+    expect(findings).toHaveLength(1)
+    expect(findings[0].severity).toBe('info')
+    expect(findings[0].title).toContain('8 formulas')
+    expect(findings[0].cells).toHaveLength(8)
+  })
+
+  it('ignores sheet names that only appear inside quoted text', () => {
+    const cells: SheetData['cells'] = { A1: { value: null, formula: '=IF(1,"see Other!A1","")' } }
+    expect(runAudit(sheetOf(cells), () => '').findings.some((f) => f.ruleId === 'hidden-dependencies')).toBe(false)
   })
 })

@@ -6,13 +6,11 @@
  * model weight embedding.
  *
  * Flags with severity "medium" and suggests registering as a Model_Asset.
- * Supports finding suppression: dismissed findings are suppressed for
- * specific cells until their values change.
  *
  * Requirements: 8.2, 8.5
  */
 
-import type { AuditRule, AuditFinding, AuditContext, CellInfo, DismissedFindingEntry } from '../types'
+import type { AuditRule, AuditFinding, AuditContext, CellInfo } from '../types'
 import { findingId } from '../utils'
 
 /** Minimum contiguous cells to trigger a finding. */
@@ -103,37 +101,6 @@ export function findContiguousRuns(
   return runs
 }
 
-/**
- * Check if a set of cells should be suppressed based on dismissed findings.
- * A finding is suppressed if all cells are in the dismissed list AND their
- * values haven't changed since dismissal.
- */
-export function isSuppressed(
-  cells: CellInfo[],
-  dismissed: DismissedFindingEntry | undefined,
-): boolean {
-  if (!dismissed) return false
-
-  const dismissedCellSet = new Set(dismissed.cellIds)
-
-  // All cells in this finding must be in the dismissed set
-  const allDismissed = cells.every((c) => dismissedCellSet.has(c.cellId))
-  if (!allDismissed) return false
-
-  // If there's a value snapshot, check that values haven't changed
-  if (dismissed.valueSnapshot) {
-    for (const cell of cells) {
-      const snapshotValue = dismissed.valueSnapshot[cell.cellId]
-      if (snapshotValue !== undefined && snapshotValue !== cell.rawValue) {
-        // Value has changed since dismissal — re-report
-        return false
-      }
-    }
-  }
-
-  return true
-}
-
 export const hardcodedWeightsRule: AuditRule = {
   id: RULE_ID,
   name: 'Suspected Hardcoded Weights',
@@ -142,7 +109,6 @@ export const hardcodedWeightsRule: AuditRule = {
 
   run(ctx: AuditContext): AuditFinding[] {
     const findings: AuditFinding[] = []
-    const dismissed = ctx.dismissedFindings?.[RULE_ID]
 
     // Track cells already flagged to avoid duplicate findings between row/col scans
     const flaggedCellKeys = new Set<string>()
@@ -153,8 +119,6 @@ export const hardcodedWeightsRule: AuditRule = {
       const runs = findContiguousRuns(rowCells, 'row')
 
       for (const run of runs) {
-        // Check suppression
-        if (isSuppressed(run, dismissed)) continue
 
         const cellKey = run.map((c) => c.cellId).sort().join(',')
         if (flaggedCellKeys.has(cellKey)) continue
@@ -170,8 +134,6 @@ export const hardcodedWeightsRule: AuditRule = {
       const runs = findContiguousRuns(colCells, 'col')
 
       for (const run of runs) {
-        // Check suppression
-        if (isSuppressed(run, dismissed)) continue
 
         const cellKey = run.map((c) => c.cellId).sort().join(',')
         if (flaggedCellKeys.has(cellKey)) continue

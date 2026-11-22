@@ -90,6 +90,4 @@ export interface AuditContext {
   maxRow: number
   /** Max populated col index */
   maxCol: number
-  /** User-dismissed findings for suppression (keyed by ruleId) */
-  dismissedFindings?: Record<string, DismissedFindingEntry>
 }

@@ -31,7 +31,8 @@ import { buildAdaptiveContext, getClientContextBudget } from '@/ai/adaptiveConte
 import { formatInsights, mergeToolResultContent } from '@/ai/responseBuilder'
 import { isLlmOnlyMode } from '@/ai/mode'
 import { runAudit, formatAuditForContext } from '@/auditor'
-import { isAuditorEnabled } from '@/auditor/preferences'
+import { isAuditorEnabled, loadDismissed } from '@/auditor/preferences'
+import { loadCustomRules } from '@/auditor/customRules'
 import { getContextualSuggestions } from '@/ai/contextualSuggestions'
 import { isReadProbeTool } from '@shared/toolRegistry'
 
@@ -90,7 +91,7 @@ export function createLLMGatewayStage(deps?: LLMGatewayDeps): PipelineStage {
       let auditBlock = ''
       if ((isLlmOnlyMode(mode) || mode === 'advise') && isAuditorEnabled()) {
         try {
-          const auditResult = runAudit(target.sheet, target.getComputedValue)
+          const auditResult = runAudit(target.sheet, target.getComputedValue, loadCustomRules(), loadDismissed(target.workbook.id))
           auditBlock = formatAuditForContext(auditResult)
         } catch {
           // Audit failure is non-fatal — continue without it

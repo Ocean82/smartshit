@@ -72,6 +72,14 @@ describe('buildAuditReportHtml', () => {
     expect(html).not.toContain('T229<')
   })
 
+  it('omits the footer and link for Pro but keeps the print button', () => {
+    const html = buildAuditReportHtml(result(), { workbookName: 'w', showFooterLink: false })
+    expect(html).not.toContain(REPORT_LINK)
+    expect(html).not.toContain('Checked with')
+    expect(html).toContain('window.print()')
+    expect(buildAuditReportHtml(result(), { workbookName: 'w', showFooterLink: true })).toContain(REPORT_LINK)
+  })
+
   it('flags a stale scan', () => {
     expect(buildAuditReportHtml(result(), { workbookName: 'w', stale: true })).toContain('edited after this scan')
   })

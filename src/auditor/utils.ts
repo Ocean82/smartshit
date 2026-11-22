@@ -8,9 +8,29 @@ import { extractFormulaRefs, refIsOnSheet } from '@/lib/formulaRefs'
 
 export { colToLetter, letterToCol, cellToRef, refToCell }
 
-/** Generate a short random ID for findings. */
+/**
+ * Placeholder id for a new finding. `runAudit` replaces it with a stable id
+ * (see `stableFindingId`) once every rule has run.
+ */
 export function findingId(): string {
   return Math.random().toString(36).slice(2, 10)
+}
+
+/**
+ * Same finding, same id on every run (FNV-1a of its key). `taken` keeps ids
+ * unique inside one audit when two findings share a key.
+ */
+export function stableFindingId(key: string, taken: Set<string>): string {
+  let hash = 0x811c9dc5
+  for (let i = 0; i < key.length; i++) {
+    hash ^= key.charCodeAt(i)
+    hash = Math.imul(hash, 0x01000193)
+  }
+  const base = (hash >>> 0).toString(36)
+  let id = base
+  for (let n = 2; taken.has(id); n++) id = `${base}-${n}`
+  taken.add(id)
+  return id
 }
 
 /**

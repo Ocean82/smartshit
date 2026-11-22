@@ -32,6 +32,8 @@ export interface AuditReportOptions {
   logoDataUri?: string
   /** True if the sheet changed after this scan. Adds a notice. */
   stale?: boolean
+  /** Show the "Checked with smartsh!t" footer and link. Pro removes it. Default true. */
+  showFooterLink?: boolean
   now?: Date
 }
 
@@ -152,8 +154,8 @@ ${dismissedHtml}
 <p class="scope">This scan checks formula structure and values: skipped ranges, pattern breaks, errors, circular references, outliers and hardcoded numbers. It cannot confirm that the business logic or the input data is right.</p>
 
 <footer>
-  Checked with <strong>smartsh!t</strong> · The scan ran in the browser and the file was not uploaded.<br>
-  <a href="${REPORT_LINK}" target="_blank" rel="noopener">Audit your own spreadsheet free at smartsht.com/formula-auditor</a>
+  ${options.showFooterLink === false ? '' : `Checked with <strong>smartsh!t</strong> · The scan ran in the browser and the file was not uploaded.<br>
+  <a href="${REPORT_LINK}" target="_blank" rel="noopener">Audit your own spreadsheet free at smartsht.com/formula-auditor</a>`}
   <div class="no-print"><button type="button" onclick="window.print()">Print / Save as PDF</button></div>
 </footer>
 </body>
@@ -167,7 +169,7 @@ function safeFileName(name: string): string {
 /** Build the report and download it as an .html file. */
 export function exportAuditReport(
   result: AuditResult,
-  options: Pick<AuditReportOptions, 'workbookName' | 'stale'>,
+  options: Pick<AuditReportOptions, 'workbookName' | 'stale' | 'showFooterLink'>,
 ): void {
   const html = buildAuditReportHtml(result, { ...options, logoDataUri: REPORT_LOGO_DATA_URI })
   const url = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }))

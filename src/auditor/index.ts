@@ -12,7 +12,7 @@ import type { SheetData } from '@/types'
 import type { AuditResult, AuditContext, AuditFinding, CellInfo, DismissedFindingEntry, FixWrite, Severity } from './types'
 import { ALL_RULES } from './rules'
 import { createCustomAuditRule, type CustomAuditRule } from './customRules'
-import { refToCell, cellToRef, classifyCellType, isErrorValue, getErrorType, findingKey, cellSignature } from './utils'
+import { refToCell, cellToRef, classifyCellType, isErrorValue, getErrorType, findingKey, cellSignature, stableFindingId } from './utils'
 
 export type { AuditResult, AuditFinding, CellInfo, Severity } from './types'
 export type { CellLocation, AuditRule, AuditContext, DismissedFindingEntry } from './types'
@@ -154,6 +154,10 @@ export function runAudit(
     info: 4,
   }
   allFindings.sort((a, b) => severityOrder[a.severity] - severityOrder[b.severity])
+
+  // Ids derive from what a finding is about, so they survive a re-scan.
+  const takenIds = new Set<string>()
+  for (const finding of allFindings) finding.id = stableFindingId(findingKey(sheet.id, finding), takenIds)
 
   // Split out findings the user dismissed (and whose cells are unchanged since).
   const findings: AuditFinding[] = []
