@@ -87,6 +87,33 @@ test('files: folders hold files via the folder button, drag and the Move menu', 
   await expect(page.getByText('Acme', { exact: true })).toBeVisible()
 })
 
+test('files: open and closed folders are remembered after a reload', async ({ page }) => {
+  await gotoApp(page)
+  await openFileExplorer(page)
+  await page.getByTitle('New Folder', { exact: true }).click()
+  await page.getByLabel('New folder name').fill('Clients')
+  await page.getByLabel('New folder name').press('Enter')
+  await row(page, 'Clients').hover()
+  await page.getByLabel('New file in Clients').click()
+  await page.getByLabel('New file name').fill('Acme')
+  await page.getByLabel('New file name').press('Enter')
+  await expect(row(page, 'Acme')).toBeVisible() // the folder opened itself
+
+  await page.waitForTimeout(1500) // autosave of the file list
+  await page.reload()
+  await expect(page.getByRole('grid', { name: 'Spreadsheet grid' })).toBeVisible()
+  await openFileExplorer(page)
+  await expect(row(page, 'Acme')).toBeVisible() // still open
+
+  await row(page, 'Clients').click() // close it
+  await expect(row(page, 'Acme')).toHaveCount(0)
+  await page.waitForTimeout(1500)
+  await page.reload()
+  await expect(page.getByRole('grid', { name: 'Spreadsheet grid' })).toBeVisible()
+  await openFileExplorer(page)
+  await expect(row(page, 'Clients')).toBeVisible()
+  await expect(row(page, 'Acme')).toHaveCount(0) // still closed
+})
 test.describe('phone width', () => {
   test.use({ viewport: { width: 375, height: 700 } })
 

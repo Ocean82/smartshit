@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useStore } from '@/store/useStore';
 import { useShallow } from 'zustand/react/shallow';
 import {
@@ -6,6 +6,7 @@ import {
   ChevronRight, ChevronDown, X, Undo2, FolderInput,
 } from 'lucide-react';
 import { TRASH_TTL_MS, canMoveFile, moveTargets } from '@/lib/fileWorkbooks';
+import { loadExpandedFolders, saveExpandedFolders } from '@/lib/expandedFolders';
 import type { FileItem as FileEntry } from '@/types';
 import { MOBILE_PANEL_BELOW_TITLEBAR } from '@/components/panels/dockPanelLayout';
 
@@ -67,7 +68,7 @@ export function FileExplorer() {
     })),
   );
 
-  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(loadExpandedFolders);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [showNewInput, setShowNewInput] = useState<'file' | 'folder' | null>(null);
@@ -77,6 +78,17 @@ export function FileExplorer() {
   const [dragId, setDragId] = useState<string | null>(null);
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
   const [movingId, setMovingId] = useState<string | null>(null);
+
+  // Remember which folders are open across reloads. Skips the first render: the file list may
+  // still be hydrating then, and saving would prune folders that exist but are not loaded yet.
+  const firstRender = useRef(true);
+  useEffect(() => {
+    if (firstRender.current) {
+      firstRender.current = false;
+      return;
+    }
+    saveExpandedFolders(expandedFolders, useStore.getState().files.map((f) => f.id));
+  }, [expandedFolders]);
 
   // Close the full-screen mobile drawer with Escape (desktop is an inline sidebar).
   useEffect(() => {
