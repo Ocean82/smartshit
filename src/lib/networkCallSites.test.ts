@@ -31,6 +31,7 @@ const EXPECTED_FETCH_SITES: Record<string, number> = {
   'src/components/TemplateGallery.tsx': 3,
   'src/engine/aiFunctionDefinitions.ts': 2,
   'src/ai/agentClient.ts': 2,
+  'src/auth/openBillingPortal.ts': 1,
   'src/auth/startCheckout.ts': 1,
   'src/auth/useUsage.ts': 1,
   'src/onnx/sseClient.ts': 1,

@@ -92,6 +92,24 @@ export async function createCheckoutSession(
   return { url: session.url }
 }
 
+/**
+ * Open a Stripe-hosted billing portal session (update card, invoices, cancel).
+ * Requires a portal configuration saved in the Stripe Dashboard for the live account.
+ */
+export async function createBillingPortalSession(customerId: string): Promise<{ url: string }> {
+  const session = await getStripeClient().billingPortal.sessions.create({
+    customer: customerId,
+    return_url: `${config.appUrl}/app`,
+  })
+  return { url: session.url }
+}
+
+/** The Stripe customer id that owns a subscription. */
+export async function getCustomerIdForSubscription(subscriptionId: string): Promise<string> {
+  const sub = await getStripeClient().subscriptions.retrieve(subscriptionId)
+  return typeof sub.customer === 'string' ? sub.customer : sub.customer.id
+}
+
 export type StripeWebhookEvent = {
   id: string
   type: string
@@ -159,6 +177,15 @@ export function claimWebhookEvent(eventId: string): boolean {
   return true
 }
 
+/**
+ * Forget an event id so Stripe's retry of a FAILED delivery is processed again.
+ * Without this, a failure after `claimWebhookEvent` makes the retry look like a
+ * duplicate, answers 200, and drops the purchase until the daily reconcile.
+ */
+export function releaseWebhookEvent(eventId: string): void {
+  seenEventIds.delete(eventId)
+}
+
 /** Test helper — clear the dedupe map. */
 export function resetWebhookEventDedupe(): void {
   seenEventIds.clear()
@@ -187,6 +214,8 @@ export async function handleStripeWebhook(
     data: { object: Record<string, unknown> }
   },
   fallback?: (email: string) => Promise<string | null>,
+  /** Reads the Stripe customer's email; a subscription object carries only the customer id. */
+  customerEmail?: (customerId: string) => Promise<string | null>,
 ): Promise<StripeWebhookPlanUpdate | null> {
   const obj = event.data.object
 
@@ -220,12 +249,17 @@ export async function handleStripeWebhook(
 
   if (event.type === 'customer.subscription.created') {
     const subId = typeof obj.id === 'string' ? obj.id : null
-    const userId =
-      resolveUserIdFromPayload(obj) ??
-      (await resolveUserIdByEmail(
-        (obj.customer_details as { email?: string } | undefined)?.email ?? '',
-        fallback ?? (async () => null),
-      ))
+    let userId = resolveUserIdFromPayload(obj)
+    if (!userId) {
+      // A subscription object has no email; look it up from the customer. Lookup
+      // errors propagate so the webhook answers 5xx and Stripe retries.
+      const customerId = typeof obj.customer === 'string' ? obj.customer : null
+      const email =
+        (obj.customer_details as { email?: string } | undefined)?.email ||
+        (customerId && customerEmail ? await customerEmail(customerId) : null) ||
+        ''
+      userId = await resolveUserIdByEmail(email, fallback ?? (async () => null))
+    }
     if (userId) {
       return { userId, plan: 'pro', stripeSubscriptionId: subId, revocationReason: null }
     }

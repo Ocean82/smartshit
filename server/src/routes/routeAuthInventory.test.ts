@@ -37,6 +37,7 @@ const EXPECTED_APP_REGISTRATIONS = [
   'POST /api/usage route requireAuth',
   'POST /api/autofix/reserve route requireAuth',
   'POST /api/checkout route requireAuth',
+  'POST /api/billing-portal route requireAuth',
   'USE * inline public', // error handler
 ]
 

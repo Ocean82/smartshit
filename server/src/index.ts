@@ -129,8 +129,9 @@ app.use((_req, res, next) => {
 // Stripe webhook needs raw body — register BEFORE express.json()
 app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
   try {
-    const { verifyWebhookSignature, handleStripeWebhook, claimWebhookEvent } = await import('./stripe.js')
-    const { findClerkUserIdByEmail } = await import('./subscriptions.js')
+    const { verifyWebhookSignature, handleStripeWebhook, claimWebhookEvent, releaseWebhookEvent } =
+      await import('./stripe.js')
+    const { findClerkUserIdByEmail, getStripeCustomerEmail } = await import('./subscriptions.js')
     const signatureHeader = req.headers['stripe-signature'] as string | undefined
 
     const event = verifyWebhookSignature(req.body, signatureHeader)
@@ -139,21 +140,27 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
       res.json({ received: true, duplicate: true })
       return
     }
-    const result = await handleStripeWebhook(event, findClerkUserIdByEmail)
+    try {
+      const result = await handleStripeWebhook(event, findClerkUserIdByEmail, getStripeCustomerEmail)
 
-    if (result) {
-      const client = getClerkClient()
-      await client.users.updateUserMetadata(result.userId, {
-        publicMetadata: {
-          plan: result.plan,
-          stripeSubscriptionId: result.stripeSubscriptionId ?? null,
-          // Match reconciler writeClerkPlan so demotion notices have a reason.
-          revocationReason: result.revocationReason,
-        },
-      })
-      // Invalidate pro cache so the user sees the change immediately
-      invalidateProCache(result.userId)
-      console.log(`Stripe webhook: user ${result.userId} -> plan ${result.plan}`)
+      if (result) {
+        const client = getClerkClient()
+        await client.users.updateUserMetadata(result.userId, {
+          publicMetadata: {
+            plan: result.plan,
+            stripeSubscriptionId: result.stripeSubscriptionId ?? null,
+            // Match reconciler writeClerkPlan so demotion notices have a reason.
+            revocationReason: result.revocationReason,
+          },
+        })
+        // Invalidate pro cache so the user sees the change immediately
+        invalidateProCache(result.userId)
+        console.log(`Stripe webhook: user ${result.userId} -> plan ${result.plan}`)
+      }
+    } catch (err) {
+      // Un-claim so Stripe's retry is processed, not acknowledged as a duplicate.
+      releaseWebhookEvent(event.id)
+      throw err
     }
 
     res.json({ received: true })
@@ -1108,7 +1115,9 @@ app.post('/api/checkout', requireAuth, checkoutRateLimiter, async (req, res) => 
   let email = bodyEmail ?? ''
   try {
     const user = await getClerkClient().users.getUser(userId)
-    email = email || user.emailAddresses[0]?.emailAddress || ''
+    const primary =
+      user.emailAddresses.find((e) => e.id === user.primaryEmailAddressId) ?? user.emailAddresses[0]
+    email = email || primary?.emailAddress || ''
   } catch (err) {
     const message = err instanceof Error ? err.message : 'unknown'
     console.error(`[checkout] Clerk getUser failed (falling back to body email): ${message}`)
@@ -1130,6 +1139,45 @@ app.post('/api/checkout', requireAuth, checkoutRateLimiter, async (req, res) => 
     console.error(`[checkout] (${errorId})`, err)
     captureError(err, { errorId, context: 'checkout.createSession' })
     res.status(500).json({ error: 'Could not start checkout. Please try again.', errorId })
+  }
+})
+
+// ─── Stripe billing portal ───────────────────────────────────────────────────
+// Lets a paying user update their card, view invoices, or cancel. The customer is
+// derived server-side from the subscription id stored in Clerk; the client sends nothing.
+
+app.post('/api/billing-portal', requireAuth, checkoutRateLimiter, async (req, res) => {
+  const userId = getRequestUserId(req)
+  if (!userId) {
+    res.status(401).json({ error: 'Authentication required' })
+    return
+  }
+  try {
+    const { createBillingPortalSession, getCustomerIdForSubscription } = await import('./stripe.js')
+    const { isMissingResource, isForeignAccountStripeId } = await import('./subscriptions.js')
+    const user = await getClerkClient().users.getUser(userId)
+    const subId = (user.publicMetadata as Record<string, unknown> | undefined)?.stripeSubscriptionId
+    if (typeof subId !== 'string' || !subId || isForeignAccountStripeId(subId)) {
+      res.status(404).json({ error: 'No subscription found for this account.' })
+      return
+    }
+    let customerId: string
+    try {
+      customerId = await getCustomerIdForSubscription(subId)
+    } catch (err) {
+      if (isMissingResource(err)) {
+        res.status(404).json({ error: 'No subscription found for this account.' })
+        return
+      }
+      throw err
+    }
+    const { url } = await createBillingPortalSession(customerId)
+    res.json({ url })
+  } catch (err) {
+    const errorId = randomUUID().slice(0, 8)
+    console.error(`[billing-portal] (${errorId})`, err)
+    captureError(err, { errorId, context: 'billing.portalSession' })
+    res.status(500).json({ error: 'Could not open billing. Please try again.', errorId })
   }
 })
 

@@ -26,7 +26,7 @@ import { EmptyGridGuide } from '@/components/EmptyGridGuide'
 import { ImportInsightsOverlay } from '@/components/ImportInsightsOverlay'
 import { ApplyPostureToggle } from '@/components/ApplyPostureToggle'
 import { Sparkles, Zap, Cloud, CloudOff, Loader2, Share2, MessageSquare, SquarePen, Search } from 'lucide-react'
-import { UserNav, SubscriptionNoticeSlot } from '@/auth'
+import { UserNav, PlanControl, SubscriptionNoticeSlot } from '@/auth'
 import { useAuthStatus } from '@/lib/serverAccess'
 import {
   getSyncStatus,
@@ -524,6 +524,7 @@ function TitleBar({ onOpenTemplates, onOpenCloudPicker, onOpenShare, onOpenComma
         <span className="hidden sm:inline text-[10px]" style={{ color: 'var(--neutral-500)' }}>
           {new Date(workbookUpdatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
         </span>
+        <PlanControl />
         <UserNav />
       </div>
     </div>

@@ -24,6 +24,7 @@ import {
   verifyWebhookSignature,
   handleStripeWebhook,
   claimWebhookEvent,
+  releaseWebhookEvent,
   resetWebhookEventDedupe,
 } from './stripe'
 
@@ -517,5 +518,62 @@ describe('handleStripeWebhook', () => {
       expect(fallback).toHaveBeenCalledWith('owner@example.com')
       expect(result).toBeNull()
     })
+  })
+})
+
+describe('releaseWebhookEvent', () => {
+  it('lets a retried event be claimed again after a failed attempt', () => {
+    expect(claimWebhookEvent('evt_retry')).toBe(true)
+    expect(claimWebhookEvent('evt_retry')).toBe(false)
+    releaseWebhookEvent('evt_retry')
+    expect(claimWebhookEvent('evt_retry')).toBe(true)
+  })
+})
+
+describe('customer.subscription.created via the Stripe customer email', () => {
+  const sub = { id: 'sub_n1', customer: 'cus_1', metadata: {} }
+
+  it('looks the email up from the customer id and resolves the Clerk user', async () => {
+    const customerEmail = vi.fn(async () => 'Owner@Example.com')
+    const fallback = vi.fn(async () => 'user_by_email')
+    const result = await handleStripeWebhook(
+      { type: 'customer.subscription.created', data: { object: sub } },
+      fallback,
+      customerEmail,
+    )
+    expect(customerEmail).toHaveBeenCalledWith('cus_1')
+    expect(fallback).toHaveBeenCalledWith('owner@example.com')
+    expect(result).toEqual({
+      userId: 'user_by_email',
+      plan: 'pro',
+      stripeSubscriptionId: 'sub_n1',
+      revocationReason: null,
+    })
+  })
+
+  it('skips the customer lookup when metadata already names the user', async () => {
+    const customerEmail = vi.fn(async () => 'x@example.com')
+    const result = await handleStripeWebhook(
+      {
+        type: 'customer.subscription.created',
+        data: { object: { ...sub, metadata: { userId: 'user_meta' } } },
+      },
+      undefined,
+      customerEmail,
+    )
+    expect(customerEmail).not.toHaveBeenCalled()
+    expect(result?.userId).toBe('user_meta')
+  })
+
+  it('propagates a customer lookup failure so the webhook answers 5xx and Stripe retries', async () => {
+    await expect(
+      handleStripeWebhook(
+        { type: 'customer.subscription.created', data: { object: sub } },
+        async () => null,
+        async () => {
+          throw new Error('stripe down')
+        },
+      ),
+    ).rejects.toThrow('stripe down')
   })
 })
