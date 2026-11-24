@@ -49,7 +49,7 @@ function SubscriptionNoticeSlotInner() {
         <ConfirmingUpgradeNotice confirming={confirmingUpgrade} />
         <SubscriptionNotice
           reason={revocationReason}
-          onResubscribe={startCheckout}
+          onResubscribe={() => void startCheckout('monthly')}
           onDismiss={dismissNotice}
         />
       </div>

@@ -10,8 +10,12 @@ export type CheckoutInterval = 'monthly' | 'annual'
  * (`STRIPE_PRICE_ID` / `STRIPE_PRICE_ID_ANNUAL`); the client only sends interval.
  */
 export async function startCheckout(
-  interval: CheckoutInterval = 'monthly',
+  requested: unknown = 'monthly',
 ): Promise<'redirected' | 'no-url' | 'failed'> {
+  // Typed unknown on purpose: passing this function straight to `onClick` hands it a
+  // React click event, and JSON.stringify of that event threw inside the try below, so
+  // the button silently did nothing. Anything that is not 'annual' means monthly.
+  const interval: CheckoutInterval = requested === 'annual' ? 'annual' : 'monthly'
   // Anonymous visitors are sent to sign-in; no request is made.
   // A returning signed-in user may click before Clerk settles: wait (bounded) first.
   let status = getAuthStatus()

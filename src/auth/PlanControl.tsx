@@ -11,6 +11,27 @@ const PLANS: { interval: CheckoutInterval; label: string; price: string; note: s
   { interval: 'annual', label: 'Annual', price: '$59 / year', note: 'Save $25 vs monthly' },
 ]
 
+/**
+ * `/app?upgrade=monthly|annual` (the landing page's pricing buttons) opens the plan
+ * menu. Read once and stripped from the URL so a reload doesn't reopen it; kept in
+ * module scope so the menu still opens after the signed-out -> signed-in remount.
+ */
+let upgradeIntent: boolean | null = null
+function takeUpgradeIntent(): boolean {
+  if (upgradeIntent === null) {
+    upgradeIntent = false
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href)
+      if (url.searchParams.has('upgrade')) {
+        upgradeIntent = true
+        url.searchParams.delete('upgrade')
+        window.history.replaceState(window.history.state, '', url.toString())
+      }
+    }
+  }
+  return upgradeIntent
+}
+
 const ERROR_COPY = {
   checkout: "Couldn't start checkout. Please try again.",
   portal: "Couldn't open billing. Please try again.",
@@ -43,18 +64,26 @@ const buttonBase =
   'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-400 disabled:opacity-60'
 
 function UpgradeMenu() {
-  const [open, setOpen] = useState(false)
+  const [open, setOpenState] = useState(takeUpgradeIntent)
+  const setOpen = (next: boolean | ((v: boolean) => boolean)) => {
+    upgradeIntent = false
+    setOpenState(next)
+  }
   const [busy, setBusy] = useState<CheckoutInterval | null>(null)
   const [error, setError] = useState<string | null>(null)
   const rootRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!open) return
+    const close = () => {
+      upgradeIntent = false
+      setOpenState(false)
+    }
     const onPointerDown = (e: PointerEvent) => {
-      if (!rootRef.current?.contains(e.target as Node)) setOpen(false)
+      if (!rootRef.current?.contains(e.target as Node)) close()
     }
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false)
+      if (e.key === 'Escape') close()
     }
     document.addEventListener('pointerdown', onPointerDown)
     document.addEventListener('keydown', onKeyDown)

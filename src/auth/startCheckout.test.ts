@@ -54,6 +54,16 @@ describe('startCheckout', () => {
     expect(fakeWindow.location.href).toBe('https://checkout.stripe.com/c/pay/cs_test_123')
   })
 
+  it('treats a click event passed as onClick={startCheckout} as monthly instead of failing silently', async () => {
+    const fetchMock = vi.fn(() => ok({ url: 'https://checkout.stripe.com/c/pay/cs_evt' }))
+    stubClerkAndFetch({ fetchImpl: fetchMock })
+    // A React click event is circular, so JSON.stringify of it used to throw before fetch.
+    const fakeEvent: Record<string, unknown> = { type: 'click' }
+    fakeEvent.self = fakeEvent
+    await expect(startCheckout(fakeEvent)).resolves.toBe('redirected')
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
+    expect(init.body).toBe(JSON.stringify({ email: '', interval: 'monthly' }))
+  })
   it('forwards annual interval to /api/checkout', async () => {
     const fetchMock = vi.fn(() => ok({ url: 'https://checkout.stripe.com/c/pay/cs_annual' }))
     stubClerkAndFetch({ fetchImpl: fetchMock })

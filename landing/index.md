@@ -193,7 +193,7 @@ $0 forever
 - Version history (last 50 saves)
 - Audit reports without the smartsht footer
 
-[Start Free, Upgrade Later](https://smartsht.com/app)
+[Upgrade to Pro](https://smartsht.com/app?upgrade=monthly)
 
 ### Pro Annual
 
@@ -207,7 +207,7 @@ $59/year ($4.92/mo — save 30%)
 - Audit reports without the smartsht footer
 - **Save $25 vs monthly**
 
-[Start Free, Upgrade Later](https://smartsht.com/app)
+[Get Pro Annual](https://smartsht.com/app?upgrade=annual)
 
 ## smartsht vs Excel and Google Sheets
 
