@@ -138,20 +138,25 @@ export function StatusBar() {
 
   return (
     <>
-    {stats && stats.count > 1 && (
+    {((stats && stats.count > 1) || saveStatus === 'failed') && (
       <div
         className="md:hidden h-6 border-t flex items-center px-3 text-[10px] gap-3 shrink-0"
         style={{ background: 'var(--surface-secondary)', borderColor: 'var(--neutral-200)', color: 'var(--neutral-600)' }}
         role="status"
         aria-live="polite"
       >
-        <span>Count: {stats.count}</span>
-        {stats.sum !== null && (
+        {stats && stats.count > 1 && (
           <>
-            <span className="font-medium">Sum: {stats.sum.toLocaleString()}</span>
-            <span>Avg: {stats.avg?.toLocaleString()}</span>
+            <span>Count: {stats.count}</span>
+            {stats.sum !== null && (
+              <>
+                <span className="font-medium">Sum: {stats.sum.toLocaleString()}</span>
+                <span>Avg: {stats.avg?.toLocaleString()}</span>
+              </>
+            )}
           </>
         )}
+        {saveStatus === 'failed' && <span style={{ color: 'var(--error)' }}>Save failed</span>}
       </div>
     )}
     <div
