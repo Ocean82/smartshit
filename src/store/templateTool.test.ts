@@ -16,6 +16,9 @@ function resetStore() {
   })
 }
 
+/** Generous limit for the first sendMessage in a worker; see the comment on that test. */
+const COLD_START_TIMEOUT_MS = 20_000
+
 describe('template execution through the real store', () => {
   beforeEach(resetStore)
 
@@ -77,6 +80,8 @@ describe('template execution through the real store', () => {
     expect(applied?.status).toBe('applied')
   })
 
+  // The first sendMessage in a worker loads the chat pipeline's lazy modules (about 0.5-2 s cold,
+  // 5 ms warm), which can pass the default 5 s when the machine is busy.
   it('sendMessage builds a niche template from a gallery prompt without the LLM', async () => {
     useStore.setState({ chatInput: 'Create a wedding budget tracker', isAiProcessing: false })
     await useStore.getState().sendMessage()
@@ -89,5 +94,5 @@ describe('template execution through the real store', () => {
 
     const lastAssistant = [...useStore.getState().messages].reverse().find((m) => m.role === 'assistant')
     expect(lastAssistant?.content).toContain('Built wedding budget')
-  })
+  }, COLD_START_TIMEOUT_MS)
 })

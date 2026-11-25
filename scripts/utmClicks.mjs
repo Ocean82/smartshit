@@ -28,6 +28,18 @@ const LINE = /^\S+ \S+ \S+ \[(\d{2})\/(\w{3})\/(\d{4}):[^\]]*\] "(\w+) (\S+) [^"
 const MONTHS = { Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06', Jul: '07', Aug: '08', Sep: '09', Oct: '10', Nov: '11', Dec: '12' }
 
 /**
+ * Parse one nginx "combined" access-log line. The address is skipped on purpose.
+ * @param {string} line
+ * @returns {{ day: string, month: string, year: string, method: string, target: string, status: string, userAgent: string } | null}
+ */
+export function parseAccessLine(line) {
+  const m = LINE.exec(line)
+  if (!m) return null
+  const [, day, month, year, method, target, status, userAgent] = m
+  return { day, month, year, method, target, status, userAgent }
+}
+
+/**
  * @param {Iterable<string>} lines access-log lines
  * @param {{ campaign?: string }} [options]
  * @returns {{ total: number, byDay: Record<string, number>, bySource: Record<string, number> }}
@@ -37,16 +49,16 @@ export function summarizeUtmClicks(lines, { campaign = 'report-footer' } = {}) {
   const bySource = {}
   let total = 0
   for (const line of lines) {
-    const m = LINE.exec(line)
-    if (!m) continue
-    const [, day, mon, year, method, target, status, userAgent] = m
+    const entry = parseAccessLine(line)
+    if (!entry) continue
+    const { day, month, year, method, target, status, userAgent } = entry
     if (method !== 'GET' || (status !== '200' && status !== '304')) continue
     const [path, query = ''] = target.split('?')
     if (path !== PAGE_PATH) continue
     const params = new URLSearchParams(query)
     if (params.get('utm_campaign') !== campaign) continue
     if (BOT_UA.test(userAgent)) continue
-    const key = `${year}-${MONTHS[mon] ?? '??'}-${day}`
+    const key = `${year}-${MONTHS[month] ?? '??'}-${day}`
     byDay[key] = (byDay[key] ?? 0) + 1
     const source = params.get('utm_source') ?? '(none)'
     bySource[source] = (bySource[source] ?? 0) + 1
@@ -54,7 +66,6 @@ export function summarizeUtmClicks(lines, { campaign = 'report-footer' } = {}) {
   }
   return { total, byDay, bySource }
 }
-
 function readLines(file) {
   const raw = fs.readFileSync(file)
   const text = file.endsWith('.gz') ? zlib.gunzipSync(raw).toString('utf8') : raw.toString('utf8')

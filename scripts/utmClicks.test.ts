@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 // @ts-expect-error plain .mjs script without type declarations
-import { summarizeUtmClicks } from './utmClicks.mjs'
+import { parseAccessLine, summarizeUtmClicks } from './utmClicks.mjs'
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0) Chrome/130 Safari/537.36'
 const line = (when: string, target: string, status = 200, ua = UA, method = 'GET') =>
@@ -35,5 +35,18 @@ describe('summarizeUtmClicks', () => {
   it('can count another campaign', () => {
     const lines = [line('21/Nov/2026:10:00:00', '/formula-auditor?utm_campaign=newsletter')]
     expect(summarizeUtmClicks(lines, { campaign: 'newsletter' }).total).toBe(1)
+  })
+})
+
+describe('parseAccessLine', () => {
+  it('reads the request parts of a combined-format line and never returns the address', () => {
+    const entry = parseAccessLine(line('21/Nov/2026:10:00:00', '/formula-auditor?utm_campaign=report-footer'))
+    expect(entry).toMatchObject({ day: '21', month: 'Nov', year: '2026', method: 'GET', target: '/formula-auditor?utm_campaign=report-footer', status: '200' })
+    expect(JSON.stringify(entry)).not.toContain('203.0.113.7')
+  })
+
+  it('returns null for scanner junk that nginx logs with a 400', () => {
+    expect(parseAccessLine('203.0.113.7 - - [21/Nov/2026:10:00:00 +0000] "\\x16\\x03\\x01" 400 0 "-" "-"')).toBeNull()
+    expect(parseAccessLine('')).toBeNull()
   })
 })

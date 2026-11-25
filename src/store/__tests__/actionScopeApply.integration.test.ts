@@ -184,6 +184,7 @@ describe('action scope binding on Apply', () => {
     expect(useStore.getState().undoStack).toHaveLength(1)
   })
 
+  // First sendMessage in a worker loads lazy chat modules (about 0.5-2 s cold); allow for a busy machine.
   it('blocks a second concurrent send at the store boundary', async () => {
     useStore.setState({ chatInput: 'sort by amount' })
     const first = useStore.getState().sendMessage()
@@ -197,5 +198,5 @@ describe('action scope binding on Apply', () => {
     const userMessages = useStore.getState().messages.filter((m) => m.role === 'user')
     expect(userMessages).toHaveLength(1)
     await expect(Promise.all([first, second])).resolves.toBeDefined()
-  })
+  }, 20_000)
 })
