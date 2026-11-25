@@ -48,6 +48,14 @@ export function cellSignature(cell: { value: unknown; formula?: string | null } 
   return cell.value == null ? '' : String(cell.value)
 }
 
+/**
+ * The formula with the contents of its string literals blanked ("Q3 2024" becomes ""), so rules
+ * do not read text as numbers, function names or sheet references.
+ */
+export function stripStringLiterals(formula: string): string {
+  return formula.replace(/"(?:[^"]|"")*"/g, '""')
+}
+
 /** Findings that reference `cellId`, preserving the audit's severity order. */
 export function findingsForCell(findings: AuditFinding[], cellId: string): AuditFinding[] {
   return findings.filter((finding) => finding.cells.some((cell) => cell.cellId === cellId))

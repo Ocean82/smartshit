@@ -6,7 +6,7 @@
  */
 
 import type { AuditRule, AuditFinding, AuditContext } from '../types'
-import { findingId } from '../utils'
+import { findingId, stripStringLiterals } from '../utils'
 
 /**
  * Matches cross-sheet references:
@@ -41,7 +41,7 @@ export const hiddenDependenciesRule: AuditRule = {
       CROSS_SHEET_PATTERN.lastIndex = 0
       // amazonq-ignore-next-line
       // safeFormula: explicit String() cast cuts the taint chain (RegExp.exec is not child_process.exec)
-      const safeFormula: string = String(cell.formula).replace(/"(?:[^"]|"")*"/g, '""') // text inside quotes is not a reference
+      const safeFormula: string = stripStringLiterals(String(cell.formula)) // text inside quotes is not a reference
       while ((match = CROSS_SHEET_PATTERN.exec(safeFormula)) !== null) {
         const sheetName = match[1] || match[2] // quoted or unquoted name
         // Skip if it references the current sheet (self-reference is fine)

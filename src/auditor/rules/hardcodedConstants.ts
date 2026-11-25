@@ -6,7 +6,7 @@
  */
 
 import type { AuditRule, AuditFinding, AuditContext, FixWrite } from '../types'
-import { findingId, refToCell } from '../utils'
+import { findingId, refToCell, stripStringLiterals } from '../utils'
 
 /** Numbers that are commonly used as formula constants and aren't suspicious. */
 const ACCEPTABLE_CONSTANTS = new Set([
@@ -42,8 +42,7 @@ export const hardcodedConstantsRule: AuditRule = {
       if (!cell.formula) continue
 
       // Strip cell references and range references so we don't false-flag them
-      const stripped = cell.formula
-        .replace(/"(?:[^"]|"")*"/g, '""') // text such as "Q3 2024" is not a number in the formula
+      const stripped = stripStringLiterals(cell.formula) // text such as "Q3 2024" is not a number in the formula
         .replace(/[A-Z]{1,3}\d{1,5}:[A-Z]{1,3}\d{1,5}/g, '') // remove ranges
         .replace(/[A-Z]{1,3}\d{1,5}/g, '') // remove cell refs
 

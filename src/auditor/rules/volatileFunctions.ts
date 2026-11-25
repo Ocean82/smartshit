@@ -5,7 +5,7 @@
  */
 
 import type { AuditRule, AuditFinding, AuditContext } from '../types'
-import { findingId } from '../utils'
+import { findingId, stripStringLiterals } from '../utils'
 
 const VOLATILE_FUNCTIONS: Array<{ name: string; risk: string; suggestion: string }> = [
   { name: 'NOW', risk: 'Recalculates on every change', suggestion: 'Use a static date value if real-time updates are not needed' },
@@ -29,7 +29,7 @@ export const volatileFunctionsRule: AuditRule = {
       if (!cell.formula) continue
 
       // Whole function names only (not KNOW( or SUBTOTAL-like substrings), and not text inside quotes.
-      const upper = cell.formula.replace(/"(?:[^"]|"")*"/g, '""').toUpperCase()
+      const upper = stripStringLiterals(cell.formula).toUpperCase()
       for (const vf of VOLATILE_FUNCTIONS) {
         if (new RegExp(`(?<![A-Z0-9_.])${vf.name}\\(`).test(upper)) {
           findings.push({

@@ -216,3 +216,40 @@ describe('hidden dependencies', () => {
     expect(runAudit(sheetOf(cells), () => '').findings.some((f) => f.ruleId === 'hidden-dependencies')).toBe(false)
   })
 })
+
+describe('outlier detection is robust', () => {
+  const column = (values: number[]): SheetData['cells'] => {
+    const cells: SheetData['cells'] = {}
+    values.forEach((v, i) => { cells[`A${i + 1}`] = { value: v } })
+    return cells
+  }
+  const flagged = (values: number[]) =>
+    runAudit(sheetOf(column(values)), () => '1').findings.filter((f) => f.ruleId === 'magnitude-outliers').map((f) => f.cells[0].cellId)
+
+  it('finds a huge value in a short column, which a mean/standard-deviation test cannot', () => {
+    // One 100x entry among 10 values scores 2.85 against the mean and sample standard deviation,
+    // under the old cutoff of 3, so the old rule stayed silent. The median/MAD score catches it.
+    expect(flagged([100, 102, 98, 101, 99, 10000, 103, 97, 100, 101])).toEqual(['A6'])
+  })
+
+  it('finds several outliers at once instead of letting them hide each other (old score: 2.48)', () => {
+    expect(flagged([50, 52, 49, 51, 48, 50, 53, 47, 50000, 60000, 51, 49, 50])).toEqual(['A9', 'A10'])
+  })
+
+  it('falls back when more than half the values are identical', () => {
+    expect(flagged([100, 100, 100, 100, 100, 100, 100, 101, 100, 99, 100, 5000, 100])).toEqual(['A12'])
+  })
+
+  it('stays quiet on ordinary variation and on identical values', () => {
+    expect(flagged([10, 12, 11, 13, 12, 11, 10, 14, 12, 13, 11, 12])).toEqual([])
+    expect(flagged(Array(12).fill(7))).toEqual([])
+  })
+
+  it('does not run on very short columns', () => {
+    expect(flagged([1, 2, 3, 2, 1, 9000])).toEqual([])
+  })
+
+  it('scores direction too: a tiny value among large ones is flagged', () => {
+    expect(flagged([5000, 5100, 4900, 5050, 4950, 5000, 5100, 4900, 3, 5000, 5020, 4980])).toEqual(['A9'])
+  })
+})
