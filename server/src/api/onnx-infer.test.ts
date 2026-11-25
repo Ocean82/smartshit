@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Unit Tests for ONNX SSE Inference Endpoint
  *
  * Tests validation, chunking logic, operator scanning,
@@ -70,7 +70,7 @@ describe('extractChunk', () => {
   });
 
   it('extracts correct chunk with multiple columns', () => {
-    // 4 rows Ã— 3 columns = 12 elements
+    // 4 rows × 3 columns = 12 elements
     const results = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
     // chunkSize=2, totalRows=4, columnsPerRow=3
     expect(extractChunk(results, 0, 2, 4, 3)).toEqual([1, 2, 3, 4, 5, 6]);
