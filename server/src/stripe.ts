@@ -16,8 +16,13 @@ interface CheckoutSession {
  *
  * Keep the Checkout `Stripe-Version` header in sync with this constant so the
  * redirect session is created under the same contract as the SDK client.
+ *
+ * Basil, not the SDK's pinned acacia: the account uses Stripe Managed Payments,
+ * which rejects Checkout on versions older than 2025-03-31.basil. The fields this
+ * server reads (subscription id/status/created/customer/metadata, customer email,
+ * session url) are the same in both versions.
  */
-export const STRIPE_API_VERSION = '2025-02-24.acacia' as const
+export const STRIPE_API_VERSION = '2025-03-31.basil'
 
 /**
  * Shared Stripe client. Exported so the reconciler can read subscriptions without
@@ -28,7 +33,8 @@ export function getStripeClient(): Stripe {
     throw new Error('STRIPE_SECRET_KEY not configured')
   }
   return new Stripe(config.stripeSecretKey, {
-    apiVersion: STRIPE_API_VERSION,
+    // stripe@17 types accept only its pinned version; the runtime sends any version.
+    apiVersion: STRIPE_API_VERSION as Stripe.LatestApiVersion,
   })
 }
 
