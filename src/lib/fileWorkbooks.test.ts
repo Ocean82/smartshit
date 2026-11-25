@@ -408,3 +408,26 @@ describe('buildPersistenceSnapshot', () => {
     expect(snapshot.workbooks.wb1).toBe(slots.wb1)
   })
 })
+
+describe('addFileState workbook ids', () => {
+  it('gives a new workbook a fresh id when its id is already used, so no other file is overwritten', () => {
+    const live = makeWorkbook('wb1', 'Open')
+    const other = makeWorkbook('wb2', 'Other')
+    const files = [makeFile('f1', 'wb1'), makeFile('f2', 'wb2')]
+    const collide = makeWorkbook('wb2', 'Backup of Other') // same id as the other file's workbook
+    const next = addFileState({ workbookSlots: { wb2: other }, files, activeFileId: 'f1', workbook: live, newWorkbook: collide, name: 'Restored' })
+    expect(next.workbook.id).not.toBe('wb2')
+    expect(next.workbookSlots.wb2).toBe(other)
+    expect(next.files[2].workbookId).toBe(next.workbook.id)
+    expect(next.workbookSlots.wb1).toBe(live)
+  })
+
+  it('keeps the id when it is free, and assigns one when it is missing', () => {
+    const live = makeWorkbook('wb1', 'Open')
+    const files = [makeFile('f1', 'wb1')]
+    const free = addFileState({ workbookSlots: {}, files, activeFileId: 'f1', workbook: live, newWorkbook: makeWorkbook('fresh', 'A'), name: 'A' })
+    expect(free.workbook.id).toBe('fresh')
+    const noId = { ...makeWorkbook('x', 'B'), id: '' }
+    expect(addFileState({ workbookSlots: {}, files, activeFileId: 'f1', workbook: live, newWorkbook: noId, name: 'B' }).workbook.id).toBeTruthy()
+  })
+})

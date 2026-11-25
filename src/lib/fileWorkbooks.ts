@@ -178,7 +178,11 @@ export function addFileState(input: AddFileInput): SwitchResult {
   const current = input.files.find((f) => f.id === input.activeFileId)
   if (current?.workbookId) workbookSlots[current.workbookId] = input.workbook
 
-  const newWorkbook = { ...input.newWorkbook, name: input.name }
+  // A restored backup or a copy can carry the id of a workbook that is already open
+  // in another file; reusing it would overwrite that file's content.
+  const taken = new Set<string>([input.workbook.id, ...Object.keys(workbookSlots), ...input.files.flatMap((f) => (f.workbookId ? [f.workbookId] : []))])
+  const id = input.newWorkbook.id && !taken.has(input.newWorkbook.id) ? input.newWorkbook.id : uuid()
+  const newWorkbook = { ...input.newWorkbook, id, name: input.name }
   workbookSlots[newWorkbook.id] = newWorkbook
   const file = fileForWorkbook(newWorkbook, input.name)
   return { workbook: newWorkbook, workbookSlots, files: [...input.files, file], activeFileId: file.id }

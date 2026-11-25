@@ -125,6 +125,8 @@ export interface AppState extends UIState, UIActions, FileActions, ChatActions {
   // Workbook / sheet actions
   /** New Workbook: adds a blank file and opens it. The current file is kept as it is. */
   initWorkbook: (name?: string) => void
+  /** Open a cloud workbook: as its own file when the open file has content, else into the empty file. Binds it to the cloud workbook. */
+  openCloudWorkbook: (workbook: WorkbookData, cloudId: string) => void
   /** Unbind every file's cloudWorkbookId (account switch). Local data is untouched. */
   clearCloudBindings: () => void
   /**

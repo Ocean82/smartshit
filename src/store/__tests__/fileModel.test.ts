@@ -194,3 +194,61 @@ describe('fileByName helper sanity', () => {
     expect(fileNamed('Alpha').id).toBe('fa')
   })
 })
+
+describe('restoring into the open file', () => {
+  it('keeps the file name when a version or backup is restored, but not on a plain load', () => {
+    const backup = createEmptyWorkbook('Old name from a backup')
+    s().loadWorkbookData(backup, { pushUndo: true })
+    expect(s().workbook.name).toBe('Alpha')
+    expect(s().files.find((f) => f.id === 'fa')!.name).toBe('Alpha')
+    s().loadWorkbookData(createEmptyWorkbook('Plain load'))
+    expect(s().workbook.name).toBe('Plain load')
+  })
+})
+
+describe('cloud workbooks', () => {
+  const cloudCopy = () => {
+    const wb = createEmptyWorkbook('From the cloud')
+    wb.sheets[0].cells.A1 = { value: 'cloud data' }
+    return wb
+  }
+
+  it('open as their own file when the open file has content, bound to the cloud workbook', () => {
+    edit(7)
+    s().openCloudWorkbook(cloudCopy(), 'cloud-1')
+    const active = s().files.find((f) => f.id === s().activeFileId)!
+    expect(active).toMatchObject({ name: 'From the cloud', cloudWorkbookId: 'cloud-1' })
+    expect(cellA1()).toBe('cloud data')
+    s().openFile('fa')
+    expect(cellA1()).toBe(7) // the file that was open is untouched
+    expect(s().files.find((f) => f.id === 'fa')!.cloudWorkbookId).toBeUndefined()
+  })
+
+  it('fill an empty open file and rename it to the cloud workbook', () => {
+    s().openCloudWorkbook(cloudCopy(), 'cloud-2')
+    expect(s().activeFileId).toBe('fa')
+    expect(s().files.find((f) => f.id === 'fa')).toMatchObject({ name: 'From the cloud', cloudWorkbookId: 'cloud-2' })
+    expect(s().workbook.name).toBe('From the cloud')
+    expect(cellA1()).toBe('cloud data')
+  })
+
+  it('are bound to one local file at a time, so two files never autosave to the same cloud workbook', () => {
+    s().setActiveFileCloudId('shared-cloud')
+    s().openFile('fb')
+    s().setActiveFileCloudId('shared-cloud')
+    expect(s().files.filter((f) => f.cloudWorkbookId === 'shared-cloud').map((f) => f.id)).toEqual(['fb'])
+  })
+})
+
+describe('importing a workbook that has the same id as one already open', () => {
+  it('keeps both files intact', () => {
+    edit(5)
+    const sameId = createEmptyWorkbook('Backup copy')
+    sameId.id = s().workbook.id
+    sameId.sheets[0].cells.A1 = { value: 'from backup' }
+    s().importWorkbook(sameId, { fileName: 'backup.json', asNewFile: true })
+    expect(cellA1()).toBe('from backup')
+    s().openFile('fa')
+    expect(cellA1()).toBe(5)
+  })
+})

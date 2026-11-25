@@ -6,7 +6,7 @@
  * auditor's findings), so they stay as regression guards.
  */
 import { expect, test, type Page } from '@playwright/test'
-import { BUDGET_XLSX, cell, editCell, gotoApp } from './helpers'
+import { BUDGET_XLSX, cell, editCell, gotoApp, mockServerHealth, seedDismissedWelcome } from './helpers'
 
 /** A row in the file list (its text is just the name; the action buttons are icons). */
 const row = (page: Page, name: string) =>
@@ -87,6 +87,20 @@ test('files: folders hold files via the folder button, drag and the Move menu', 
   await expect(page.getByText('Acme', { exact: true })).toBeVisible()
 })
 
+test('files: a folder can be created inside a folder', async ({ page }) => {
+  await gotoApp(page)
+  await openFileExplorer(page)
+  await page.getByTitle('New Folder', { exact: true }).click()
+  await page.getByLabel('New folder name').fill('Clients')
+  await page.getByLabel('New folder name').press('Enter')
+  await row(page, 'Clients').hover()
+  await page.getByLabel('New folder in Clients').click()
+  await page.getByLabel('New folder name').fill('2026')
+  await page.getByLabel('New folder name').press('Enter')
+  await expect(row(page, '2026')).toBeVisible()
+  expect(await row(page, '2026').evaluate((el) => (el as HTMLElement).style.paddingLeft)).toBe('20px')
+})
+
 test('files: open and closed folders are remembered after a reload', async ({ page }) => {
   await gotoApp(page)
   await openFileExplorer(page)
@@ -113,6 +127,64 @@ test('files: open and closed folders are remembered after a reload', async ({ pa
   await openFileExplorer(page)
   await expect(row(page, 'Clients')).toBeVisible()
   await expect(row(page, 'Acme')).toHaveCount(0) // still closed
+})
+/** A minimal smartsht JSON backup whose A1 holds `value`. */
+function backupJson(value: string): Buffer {
+  const sheet = { id: 's1', name: 'Sheet1', cells: { A1: { value } }, columnWidths: {}, rowHeights: {}, charts: [] }
+  const workbook = { id: 'backup-wb', name: 'Old name', sheets: [sheet], activeSheetId: 's1', createdAt: 1, updatedAt: 1 }
+  return Buffer.from(JSON.stringify({ version: 1, type: 'smartsht-workbook', exportedAt: 1, workbook }))
+}
+
+test('restore from JSON: the command palette asks first, and the restore can be undone', async ({ page }) => {
+  await gotoApp(page)
+  await editCell(page, 'A1', 'alpha')
+
+  await page.keyboard.press('Control+k')
+  await page.getByLabel('Search commands').fill('restore workbook from json')
+  await page.keyboard.press('Enter')
+
+  // It used to replace the workbook with no question and no way back.
+  const confirm = page.locator('dialog.confirm-dialog')
+  await expect(confirm.getByText('Restore from backup')).toBeVisible()
+  await expect(cell(page, 'A1')).toContainText('alpha')
+  await confirm.getByRole('button', { name: 'Cancel' }).click()
+  await expect(cell(page, 'A1')).toContainText('alpha')
+
+  await page.keyboard.press('Control+k')
+  await page.getByLabel('Search commands').fill('restore workbook from json')
+  await page.keyboard.press('Enter')
+  const [chooser] = await Promise.all([
+    page.waitForEvent('filechooser'),
+    page.locator('dialog.confirm-dialog').getByRole('button', { name: 'Restore' }).click(),
+  ])
+  await chooser.setFiles({ name: 'backup.smartsht.json', mimeType: 'application/json', buffer: backupJson('restored') })
+  await expect(cell(page, 'A1')).toContainText('restored')
+
+  await page.locator('body').click({ position: { x: 5, y: 300 } })
+  await page.keyboard.press('Control+z')
+  await expect(cell(page, 'A1')).toContainText('alpha')
+})
+
+test('make a copy: a shared workbook opens as a new file and leaves the open one alone', async ({ page }) => {
+  await seedDismissedWelcome(page)
+  await mockServerHealth(page)
+  await page.goto('./')
+  await expect(page.getByRole('grid', { name: 'Spreadsheet grid' })).toBeVisible()
+  await editCell(page, 'A1', 'alpha')
+  await page.waitForTimeout(1500) // autosave
+
+  const shared = JSON.parse(backupJson('from a shared link').toString()).workbook
+  shared.name = 'Team budget'
+  await page.evaluate((wb) => localStorage.setItem('smartsht-import-shared', JSON.stringify(wb)), shared)
+  await page.reload()
+  await expect(page.getByRole('grid', { name: 'Spreadsheet grid' })).toBeVisible()
+  await expect(cell(page, 'A1')).toContainText('from a shared link')
+
+  await openFileExplorer(page)
+  await expect(row(page, 'Team budget')).toBeVisible()
+  await row(page, 'My Budget').click()
+  await expect(cell(page, 'A1')).toContainText('alpha') // the work that was open is intact
+  expect(await page.evaluate(() => localStorage.getItem('smartsht-import-shared'))).toBeNull()
 })
 test.describe('phone width', () => {
   test.use({ viewport: { width: 375, height: 700 } })

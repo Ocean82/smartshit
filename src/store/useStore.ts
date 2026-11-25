@@ -37,6 +37,7 @@ import { applyWorkbookImportEffects } from './importOrchestration'
 import { runAudit } from '@/auditor'
 import { loadCustomRules } from '@/auditor/customRules'
 import { findingKey, cellSignature } from '@/auditor/utils'
+import { workbookHasContent } from '@/lib/workbookGuard'
 import { isAuditorEnabled, saveAuditorEnabled, loadDismissed, saveDismissed } from '@/auditor/preferences'
 import type { AuditFinding } from '@/auditor/types'
 
@@ -356,6 +357,28 @@ export const useStore = create<AppState>()(
           useStore.getState().workbook,
           meta,
         )
+      },
+      // A restore (pushUndo: version history, JSON backup) puts an earlier copy back into the
+      // open file, so the file keeps its own name instead of taking the backup's.
+      loadWorkbookData: (workbook: WorkbookData, opts?: { pushUndo?: boolean }) => {
+        workbookActions.loadWorkbookData(workbook, opts)
+        if (!opts?.pushUndo) return
+        const { files, activeFileId } = useStore.getState()
+        const name = files.find((f) => f.id === activeFileId)?.name
+        if (name) useStore.setState((st) => { st.workbook.name = name })
+      },
+      // Opening a cloud workbook never replaces work: with content in the open file it opens as
+      // its own file; an empty file is filled and takes the cloud workbook's name. Either way the
+      // file is bound to the cloud workbook so autosave targets the right slot.
+      openCloudWorkbook: (workbook: WorkbookData, cloudId: string) => {
+        const s = useStore.getState()
+        if (workbookHasContent(s.workbook)) {
+          openAsNewFile(workbook, workbook.name || 'Cloud workbook')
+        } else {
+          s.loadWorkbookData(workbook)
+          if (s.activeFileId) s.renameFile(s.activeFileId, workbook.name)
+        }
+        useStore.getState().setActiveFileCloudId(cloudId)
       },
       // New Workbook opens a blank file next to the others; nothing is replaced.
       initWorkbook: (name?: string) => {

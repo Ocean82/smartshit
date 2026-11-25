@@ -8,8 +8,8 @@ import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '@/store/useStore'
 import { exportWorkbookToXlsx, exportSheetToCsv } from '@/io/xlsx'
 import { useWorkbookFileImport } from '@/hooks/useWorkbookFileImport'
-import { exportWorkbookToJson, importWorkbookFromJsonFile, normalizeImportedWorkbook } from '@/io/workbookJson'
-import { workbookHasContent } from '@/lib/workbookGuard'
+import { useJsonRestore } from '@/hooks/useJsonRestore'
+import { exportWorkbookToJson } from '@/io/workbookJson'
 import { v4 as uuid } from 'uuid'
 import { AnchoredPanel } from '@/components/AnchoredPanel'
 import { RenameWorkbookDialog } from '@/components/RenameWorkbookDialog'
@@ -37,7 +37,7 @@ export function MenuBar() {
   const triggerRefs = useRef<Partial<Record<MenuId, HTMLButtonElement | null>>>({})
   const activeTriggerRef = useRef<HTMLButtonElement | null>(null)
   const { requestImport, fileInput } = useWorkbookFileImport()
-  const jsonInputRef = useRef<HTMLInputElement>(null)
+  const { requestRestore: requestJsonRestore, fileInput: jsonFileInput } = useJsonRestore()
 
   const {
     workbook,
@@ -69,7 +69,6 @@ export function MenuBar() {
     initWorkbook,
     addMessage,
     getActiveSheet,
-    showConfirm,
     showToolbar,
     toggleToolbar,
     showFormulaBar,
@@ -109,7 +108,6 @@ export function MenuBar() {
     initWorkbook: s.initWorkbook,
     addMessage: s.addMessage,
     getActiveSheet: s.getActiveSheet,
-    showConfirm: s.showConfirm,
     showToolbar: s.showToolbar,
     toggleToolbar: s.toggleToolbar,
     showFormulaBar: s.showFormulaBar,
@@ -253,46 +251,9 @@ export function MenuBar() {
   }
 
   const handleRestoreJson = () => {
-    const proceed = () => jsonInputRef.current?.click()
-    if (workbookHasContent(useStore.getState().workbook)) {
-      showConfirm({
-        title: 'Restore from backup',
-        message:
-          'Restoring a backup will replace the current workbook, including its autosaved copy. You can undo this with Ctrl+Z.',
-        confirmLabel: 'Restore',
-        variant: 'warning',
-        onConfirm: proceed,
-      })
-    } else {
-      proceed()
-    }
+    requestJsonRestore()
     setOpenMenu(null)
   }
-
-  const handleImportJsonFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    try {
-      const wb = normalizeImportedWorkbook(await importWorkbookFromJsonFile(file))
-      // Snapshot the current workbook so the restore is reversible with Ctrl+Z.
-      useStore.getState().loadWorkbookData(wb, { pushUndo: true })
-      addMessage({
-        id: uuid(),
-        role: 'assistant',
-        content: `Restored workbook from **${file.name}**.`,
-        timestamp: Date.now(),
-      })
-    } catch (err) {
-      addMessage({
-        id: uuid(),
-        role: 'assistant',
-        content: `Could not restore **${file.name}**: ${err instanceof Error ? err.message : 'invalid backup'}.`,
-        timestamp: Date.now(),
-      })
-    }
-    if (jsonInputRef.current) jsonInputRef.current.value = ''
-  }
-
   const handleRename = () => {
     setRenameOpen(true)
     setOpenMenu(null)
@@ -482,13 +443,7 @@ export function MenuBar() {
       </AnchoredPanel>
 
       {fileInput}
-      <input
-        ref={jsonInputRef}
-        type="file"
-        accept=".json,.smartsht.json"
-        className="hidden"
-        onChange={handleImportJsonFile}
-      />
+      {jsonFileInput}
 
       <RenameWorkbookDialog open={renameOpen} onClose={() => setRenameOpen(false)} />
     </nav>

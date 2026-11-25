@@ -86,8 +86,14 @@ export function createFileActions(
       set((s) => {
         const file = s.files.find((f) => f.id === s.activeFileId)
         if (!file) return
-        if (cloudId) file.cloudWorkbookId = cloudId
-        else delete file.cloudWorkbookId
+        if (cloudId) {
+          // A cloud workbook belongs to one local file. Two files autosaving to the same
+          // cloud workbook would overwrite each other, so the older binding is dropped.
+          for (const other of s.files) {
+            if (other.id !== file.id && other.cloudWorkbookId === cloudId) delete other.cloudWorkbookId
+          }
+          file.cloudWorkbookId = cloudId
+        } else delete file.cloudWorkbookId
       })
     },
   }

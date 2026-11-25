@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, lazy, Suspense } from 'react'
+import { useEffect, useState, lazy, Suspense } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '@/store/useStore'
 import { useServerHealth } from '@/ai/useServerHealth'
@@ -36,7 +36,8 @@ import {
   isCloudConfigured,
   type SyncStatus,
 } from '@/lib/cloudSync'
-import { exportWorkbookToJson, importWorkbookFromJsonFile, normalizeImportedWorkbook } from '@/io/workbookJson'
+import { exportWorkbookToJson } from '@/io/workbookJson'
+import { useJsonRestore } from '@/hooks/useJsonRestore'
 import { exportWorkbookToXlsx } from '@/io/xlsx'
 import { refToCell } from '@/engine/spreadsheet'
 import { assetUrl } from '@/lib/assetUrl'
@@ -106,7 +107,7 @@ const {
   const [showWorkbookPicker, setShowWorkbookPicker] = useState(false)
   const [showShareDialog, setShowShareDialog] = useState(false)
   const [showGoToCell, setShowGoToCell] = useState(false)
-  const jsonRestoreInputRef = useRef<HTMLInputElement>(null)
+  const { requestRestore: requestJsonRestore, fileInput: jsonFileInput } = useJsonRestore()
 
   useEffect(() => {
     if (auditEntry) setActivePanel('auditor')
@@ -333,27 +334,10 @@ const {
             }, 50)
           }}
           onExportJson={() => exportWorkbookToJson(workbook)}
-          onImportJson={() => jsonRestoreInputRef.current?.click()}
+          onImportJson={requestJsonRestore}
         />
       </Suspense>
-      <input
-        ref={jsonRestoreInputRef}
-        type="file"
-        accept=".json,.smartsht.json"
-        className="hidden"
-        onChange={async (e) => {
-          const file = e.target.files?.[0]
-          if (!file) return
-          try {
-            const wb = normalizeImportedWorkbook(await importWorkbookFromJsonFile(file))
-            useStore.getState().pushHistory('Restore JSON backup')
-            useStore.getState().loadWorkbookData(wb)
-          } catch {
-            /* ignore — user can retry from File menu for messaging */
-          }
-          e.target.value = ''
-        }}
-      />
+      {jsonFileInput}
       <Suspense fallback={null}>
         <WorkbookPicker open={showWorkbookPicker} onClose={() => setShowWorkbookPicker(false)} />
         <ShareDialog open={showShareDialog} onClose={() => setShowShareDialog(false)} />

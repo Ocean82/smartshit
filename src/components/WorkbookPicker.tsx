@@ -11,7 +11,6 @@ import {
 import { useStore } from '@/store/useStore'
 import { useShallow } from 'zustand/react/shallow'
 import { useFocusTrap } from '@/hooks/useFocusTrap'
-import { workbookHasContent } from '@/lib/workbookGuard'
 import { useAuthStatus } from '@/lib/serverAccess'
 import { openSignIn } from '@/auth'
 import { ANON_CLOUD_MESSAGE, SIGN_IN_BUTTON } from '@/auth/anonCopy'
@@ -55,32 +54,15 @@ export function WorkbookPicker({ open, onClose }: WorkbookPickerProps) {
 
   if (!open) return null
 
-  const doOpen = async (id: string) => {
+  const handleOpen = async (id: string) => {
     setActionId(id)
     const data = await loadFromCloud(id)
     if (data) {
-      // Load into store — this replaces the current workbook — then bind the
-      // active file to this cloud workbook so autosave targets the right slot.
-      useStore.getState().loadWorkbookData(data)
-      useStore.getState().setActiveFileCloudId(id)
+      // Opens as its own file when the current one has content, so nothing is replaced.
+      useStore.getState().openCloudWorkbook(data, id)
       onClose()
     }
     setActionId(null)
-  }
-
-  const handleOpen = (id: string) => {
-    if (workbookHasContent(useStore.getState().workbook)) {
-      showConfirm({
-        title: 'Open cloud workbook',
-        message:
-          'Opening a cloud workbook will replace the current workbook and clear undo history. This cannot be undone.',
-        confirmLabel: 'Open',
-        variant: 'warning',
-        onConfirm: () => void doOpen(id),
-      })
-    } else {
-      void doOpen(id)
-    }
   }
 
   const handleDelete = async (id: string) => {

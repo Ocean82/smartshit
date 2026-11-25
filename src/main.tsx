@@ -12,6 +12,7 @@ import { useStore } from '@/store/useStore'
 import { savePersistedState, savePersistedStateAsync } from '@/lib/persistence'
 import { setSaveStatus } from '@/lib/saveStatus'
 import { hydrateFromIdbIfNewer } from '@/store/hydrateFromIdb'
+import { importSharedCopy } from '@/lib/importSharedCopy'
 import { buildPersistenceSnapshot } from '@/lib/fileWorkbooks'
 import { flushSave, isCloudConfigured } from '@/lib/cloudSync'
 import { migrateLegacyStorageKeys } from '@/lib/storageKeys'
@@ -25,7 +26,7 @@ initErrorReporting()
 
 migrateLegacyStorageKeys()
 
-// Warn once per failure episode â€” the snapshot save runs on every store change
+// Warn once per failure episode — the snapshot save runs on every store change
 // (debounced 400ms), so we must not toast on every keystroke while blocked.
 let localSaveBlocked = false
 
@@ -49,8 +50,8 @@ function warnSaveFailedOnce(reason: 'quota' | 'error') {
   useStore.getState().showToast({
     type: 'warning',
     message: reason === 'quota'
-      ? `Local autosave paused â€” browser storage is full. ${cloud ? 'Your work is still cloud-saved. ' : ''}Export a workbook or remove old ones to free space.`
-      : 'Local autosave failed â€” export your work to avoid losing it.',
+      ? `Local autosave paused — browser storage is full. ${cloud ? 'Your work is still cloud-saved. ' : ''}Export a workbook or remove old ones to free space.`
+      : 'Local autosave failed — export your work to avoid losing it.',
   })
 }
 
@@ -102,9 +103,9 @@ useStore.subscribe(() => {
 
 // Reconcile the sync localStorage seed with the durable IndexedDB primary: if
 // IDB holds a newer snapshot (e.g. last session's localStorage mirror was
-// quota-truncated on a large workbook), swap it in â€” but only if the user
+// quota-truncated on a large workbook), swap it in — but only if the user
 // hasn't touched anything yet. Self-guarded; safe to fire-and-forget.
-void hydrateFromIdbIfNewer()
+const hydrated = hydrateFromIdbIfNewer().catch(() => undefined)
 
 // Flush on teardown. `pagehide` is the reliable modern unload signal (fires for
 // bfcache navigations where `beforeunload` may not), and `visibilitychange` â†’
@@ -127,21 +128,11 @@ document.addEventListener('visibilitychange', () => {
 // Check if this is a shared workbook view (/shared/:token)
 const sharedMatch = window.location.pathname.match(/^\/shared\/([a-f0-9-]+)$/i)
 
-// Check if a shared workbook was imported (from "Make a copy" button)
-const importedShared = localStorage.getItem('smartsht-import-shared')
-if (importedShared && !sharedMatch) {
-  try {
-    const wb = JSON.parse(importedShared)
-    // Defer import to after store is initialized
-    setTimeout(() => {
-      useStore.getState().loadWorkbookData(wb)
-    }, 100)
-  } catch {
-    // ignore malformed data
-  }
-  localStorage.removeItem('smartsht-import-shared')
+// A shared workbook the visitor chose to copy opens as its own file. It waits for the IndexedDB
+// hydration above so the new file is added to the real saved state, not to a stale seed.
+if (!sharedMatch) {
+  void hydrated.then(() => importSharedCopy((wb, meta) => useStore.getState().importWorkbook(wb, meta)))
 }
-
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary scope="SmartSht">

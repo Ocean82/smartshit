@@ -26,6 +26,7 @@ interface TreeActions {
   movingId: string | null;
   setMovingId: (id: string | null) => void;
   onNewIn: (folderId: string) => void;
+  onNewFolderIn: (folderId: string) => void;
 }
 
 /** Days until a trashed item is deleted for good. */
@@ -157,6 +158,7 @@ export function FileExplorer() {
     movingId,
     setMovingId,
     onNewIn: (folderId) => startNew('file', folderId),
+    onNewFolderIn: (folderId) => startNew('folder', folderId),
   };
 
   const handleStartRename = (id: string, name: string) => {
@@ -505,6 +507,19 @@ function FileItem({
               aria-label={`New file in ${file.name}`}
             >
               <FilePlus size={10} />
+            </button>
+          )}
+          {isFolder && (
+            <button
+              className="p-0.5 max-md:p-2 hover:text-blue-600"
+              onClick={(e) => {
+                e.stopPropagation();
+                tree.onNewFolderIn(file.id);
+              }}
+              title="New folder in this folder"
+              aria-label={`New folder in ${file.name}`}
+            >
+              <FolderPlus size={10} />
             </button>
           )}
           <button
