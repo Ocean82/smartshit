@@ -131,7 +131,7 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
   try {
     const { verifyWebhookSignature, handleStripeWebhook, claimWebhookEvent, releaseWebhookEvent } =
       await import('./stripe.js')
-    const { findClerkUserIdByEmail, getStripeCustomerEmail } = await import('./subscriptions.js')
+    const { findClerkUserIdByStripeCustomerId } = await import('./subscriptions.js')
     const signatureHeader = req.headers['stripe-signature'] as string | undefined
 
     const event = verifyWebhookSignature(req.body, signatureHeader)
@@ -141,16 +141,36 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
       return
     }
     try {
-      const result = await handleStripeWebhook(event, findClerkUserIdByEmail, getStripeCustomerEmail)
+      const { getStripeClient } = await import('./stripe.js')
+      const result = await handleStripeWebhook(event, {
+        lookupUserIdByCustomerId: findClerkUserIdByStripeCustomerId,
+        retrieveSubscription: async (id) => {
+          const sub = await getStripeClient().subscriptions.retrieve(id)
+          return {
+            id: sub.id,
+            status: typeof sub.status === 'string' ? sub.status : null,
+            customer: typeof sub.customer === 'string' ? sub.customer : sub.customer.id,
+            metadata: (sub.metadata ?? {}) as Record<string, unknown>,
+          }
+        },
+      })
 
       if (result) {
         const client = getClerkClient()
+        let stripeCustomerId = result.stripeCustomerId
+        // Demotion may omit customer on the event; keep any id already stored.
+        if (stripeCustomerId == null) {
+          const existing = await client.users.getUser(result.userId)
+          const meta = (existing.publicMetadata ?? {}) as Record<string, unknown>
+          if (typeof meta.stripeCustomerId === 'string') stripeCustomerId = meta.stripeCustomerId
+        }
         await client.users.updateUserMetadata(result.userId, {
           publicMetadata: {
             plan: result.plan,
             stripeSubscriptionId: result.stripeSubscriptionId ?? null,
             // Match reconciler writeClerkPlan so demotion notices have a reason.
             revocationReason: result.revocationReason,
+            stripeCustomerId,
           },
         })
         // Invalidate pro cache so the user sees the change immediately
@@ -1129,10 +1149,44 @@ app.post('/api/checkout', requireAuth, checkoutRateLimiter, async (req, res) => 
   }
 
   try {
-    const { createCheckoutSession } = await import('./stripe.js')
+    const { createCheckoutSession, createStripeCustomer } = await import('./stripe.js')
+    const { isMissingResource } = await import('./subscriptions.js')
     const interval = (req.body as { interval?: string }).interval === 'annual' ? 'annual' : 'monthly'
-    const session = await createCheckoutSession(userId, email, interval)
-    res.json({ url: session.url })
+    const client = getClerkClient()
+    const user = await client.users.getUser(userId)
+    const meta = (user.publicMetadata ?? {}) as Record<string, unknown>
+    let customerId = typeof meta.stripeCustomerId === 'string' ? meta.stripeCustomerId : null
+
+    const persistCustomerId = async (cusId: string) => {
+      await client.users.updateUserMetadata(userId, {
+        publicMetadata: { stripeCustomerId: cusId },
+      })
+    }
+
+    if (!customerId) {
+      customerId = await createStripeCustomer(userId, email)
+      await persistCustomerId(customerId)
+    }
+
+    try {
+      const session = await createCheckoutSession(userId, email, interval, customerId)
+      res.json({ url: session.url })
+    } catch (err) {
+      // Stale/missing customer: recreate once and retry.
+      const message = err instanceof Error ? err.message : String(err)
+      const looksMissing =
+        isMissingResource(err) ||
+        /no such customer/i.test(message) ||
+        /\(404\)/.test(message)
+      if (!looksMissing) throw err
+      await client.users.updateUserMetadata(userId, {
+        publicMetadata: { stripeCustomerId: null },
+      })
+      customerId = await createStripeCustomer(userId, email)
+      await persistCustomerId(customerId)
+      const session = await createCheckoutSession(userId, email, interval, customerId)
+      res.json({ url: session.url })
+    }
   } catch (err) {
     // Stripe errors can embed account/price details — log, don't echo
     const errorId = randomUUID().slice(0, 8)
@@ -1153,24 +1207,43 @@ app.post('/api/billing-portal', requireAuth, checkoutRateLimiter, async (req, re
     return
   }
   try {
-    const { createBillingPortalSession, getCustomerIdForSubscription } = await import('./stripe.js')
+    const {
+      createBillingPortalSession,
+      getCustomerIdForSubscription,
+      resolvePortalCustomerId,
+    } = await import('./stripe.js')
     const { isMissingResource, isForeignAccountStripeId } = await import('./subscriptions.js')
-    const user = await getClerkClient().users.getUser(userId)
-    const subId = (user.publicMetadata as Record<string, unknown> | undefined)?.stripeSubscriptionId
-    if (typeof subId !== 'string' || !subId || isForeignAccountStripeId(subId)) {
-      res.status(404).json({ error: 'No subscription found for this account.' })
-      return
-    }
-    let customerId: string
-    try {
-      customerId = await getCustomerIdForSubscription(subId)
-    } catch (err) {
-      if (isMissingResource(err)) {
+    const client = getClerkClient()
+    const user = await client.users.getUser(userId)
+    const meta = (user.publicMetadata ?? {}) as Record<string, unknown>
+    const resolved = resolvePortalCustomerId(meta)
+    let customerId = resolved.customerId
+
+    if (!customerId && resolved.needsSubscriptionLookup) {
+      const subId = meta.stripeSubscriptionId
+      if (typeof subId !== 'string' || !subId || isForeignAccountStripeId(subId)) {
         res.status(404).json({ error: 'No subscription found for this account.' })
         return
       }
-      throw err
+      try {
+        customerId = await getCustomerIdForSubscription(subId)
+        await client.users.updateUserMetadata(userId, {
+          publicMetadata: { stripeCustomerId: customerId },
+        })
+      } catch (err) {
+        if (isMissingResource(err)) {
+          res.status(404).json({ error: 'No subscription found for this account.' })
+          return
+        }
+        throw err
+      }
     }
+
+    if (!customerId) {
+      res.status(404).json({ error: 'No subscription found for this account.' })
+      return
+    }
+
     const { url } = await createBillingPortalSession(customerId)
     res.json({ url })
   } catch (err) {

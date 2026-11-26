@@ -37,6 +37,9 @@ describe('planFromPublicMetadata', () => {
   it('denies pro when the plan is free even if a reason is recorded', () => {
     expect(planFromPublicMetadata({ plan: 'free', revocationReason: 'canceled' })).toBe('free')
   })
+  it('denies pro when only stripeCustomerId is set', () => {
+    expect(planFromPublicMetadata({ plan: 'free', stripeCustomerId: 'cus_x' })).toBe('free')
+  })
 })
 
 describe('hasClerkUserId', () => {

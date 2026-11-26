@@ -1,6 +1,6 @@
 import Stripe from 'stripe'
 import { config } from './config.js'
-import { resolveUserIdFromPayload, resolveUserIdByEmail, mapStatusToPlan } from './subscriptions.js'
+import { resolveUserIdFromPayload, mapStatusToPlan } from './subscriptions.js'
 
 interface CheckoutSession {
   url: string | null
@@ -42,13 +42,26 @@ export function getStripeClient(): Stripe {
  * Create a Stripe Checkout session for subscription.
  * Only accepts userId, email, and billing interval — price is server-controlled to prevent spoofing.
  */
+/** Create a Stripe Customer tagged with the Clerk user id. */
+export async function createStripeCustomer(userId: string, email: string): Promise<string> {
+  const customer = await getStripeClient().customers.create({
+    email,
+    metadata: { userId },
+  })
+  return customer.id
+}
+
 export async function createCheckoutSession(
   userId: string,
   email: string,
   interval: 'monthly' | 'annual' = 'monthly',
+  customerId: string,
 ): Promise<CheckoutSession> {
   if (!config.stripeSecretKey) {
     throw new Error('STRIPE_SECRET_KEY not configured')
+  }
+  if (!customerId || !customerId.startsWith('cus_')) {
+    throw new Error('Stripe customer id is required for checkout')
   }
 
   const priceId = interval === 'annual' ? config.stripePriceIdAnnual : config.stripePriceId
@@ -68,7 +81,7 @@ export async function createCheckoutSession(
   params.set('mode', 'subscription')
   params.set('success_url', `${config.appUrl}/app?upgraded=true`)
   params.set('cancel_url', `${config.appUrl}/app`)
-  params.set('customer_email', email)
+  params.set('customer', customerId)
   params.set('client_reference_id', userId)
   // Always use the server-configured price — never trust client input
   params.set('line_items[0][price]', priceId)
@@ -114,6 +127,20 @@ export async function createBillingPortalSession(customerId: string): Promise<{ 
 export async function getCustomerIdForSubscription(subscriptionId: string): Promise<string> {
   const sub = await getStripeClient().subscriptions.retrieve(subscriptionId)
   return typeof sub.customer === 'string' ? sub.customer : sub.customer.id
+}
+
+/** Prefer stored stripeCustomerId; else require a subscription lookup. */
+export function resolvePortalCustomerId(meta: {
+  stripeCustomerId?: unknown
+  stripeSubscriptionId?: unknown
+}): { customerId: string | null; needsSubscriptionLookup: boolean } {
+  if (typeof meta.stripeCustomerId === 'string' && meta.stripeCustomerId.trim()) {
+    return { customerId: meta.stripeCustomerId.trim(), needsSubscriptionLookup: false }
+  }
+  if (typeof meta.stripeSubscriptionId === 'string' && meta.stripeSubscriptionId.trim()) {
+    return { customerId: null, needsSubscriptionLookup: true }
+  }
+  return { customerId: null, needsSubscriptionLookup: false }
 }
 
 export type StripeWebhookEvent = {
@@ -201,17 +228,40 @@ export function resetWebhookEventDedupe(): void {
  * Handle Stripe webhook event (subscription created/updated/deleted).
  * Returns user plan update info, or null if event is irrelevant.
  *
- * Subscriptions created outside Checkout carry no `userId` metadata, so their
- * events fall back to the payer's email — `resolveUserIdByEmail` lower-cases the
- * address before asking the injected fallback lookup (Clerk's search is a plain
- * case-sensitive equality match).
+ * User resolution is strict: `client_reference_id` / `metadata.userId`, then
+ * Clerk lookup by stored `stripeCustomerId`. Email matching is reconciler-only.
  */
 export type StripeWebhookPlanUpdate = {
   userId: string
   plan: 'pro' | 'free'
   stripeSubscriptionId?: string | null
+  stripeCustomerId: string | null
   /** Cleared on grant; set on demotion so UI notices match the reconciler. */
   revocationReason: string | null
+}
+
+export type WebhookLookupDeps = {
+  lookupUserIdByCustomerId?: (customerId: string) => Promise<string | null>
+  retrieveSubscription?: (subscriptionId: string) => Promise<{
+    id: string
+    status: string | null
+    customer: string | null
+    metadata: Record<string, unknown>
+  }>
+}
+
+async function resolveWebhookUserId(
+  obj: Record<string, unknown>,
+  deps?: WebhookLookupDeps,
+): Promise<{ userId: string; customerId: string | null } | null> {
+  const customerId = typeof obj.customer === 'string' ? obj.customer : null
+  const fromPayload = resolveUserIdFromPayload(obj)
+  if (fromPayload) return { userId: fromPayload, customerId }
+  if (customerId && deps?.lookupUserIdByCustomerId) {
+    const userId = await deps.lookupUserIdByCustomerId(customerId)
+    if (userId) return { userId, customerId }
+  }
+  return null
 }
 
 export async function handleStripeWebhook(
@@ -219,9 +269,7 @@ export async function handleStripeWebhook(
     type: string
     data: { object: Record<string, unknown> }
   },
-  fallback?: (email: string) => Promise<string | null>,
-  /** Reads the Stripe customer's email; a subscription object carries only the customer id. */
-  customerEmail?: (customerId: string) => Promise<string | null>,
+  deps?: WebhookLookupDeps,
 ): Promise<StripeWebhookPlanUpdate | null> {
   const obj = event.data.object
 
@@ -240,14 +288,15 @@ export async function handleStripeWebhook(
       }
     }
     const metadata = obj.metadata as Record<string, string> | undefined
-    const userId = resolveUserIdFromPayload(obj)
+    const resolved = await resolveWebhookUserId(obj, deps)
     const stripeSubscriptionId =
       typeof obj.subscription === 'string' ? obj.subscription : metadata?.stripeSubscriptionId
-    if (userId) {
+    if (resolved) {
       return {
-        userId,
+        userId: resolved.userId,
         plan: 'pro',
         stripeSubscriptionId: stripeSubscriptionId ?? null,
+        stripeCustomerId: resolved.customerId,
         revocationReason: null,
       }
     }
@@ -255,30 +304,26 @@ export async function handleStripeWebhook(
 
   if (event.type === 'customer.subscription.created') {
     const subId = typeof obj.id === 'string' ? obj.id : null
-    let userId = resolveUserIdFromPayload(obj)
-    if (!userId) {
-      // A subscription object has no email; look it up from the customer. Lookup
-      // errors propagate so the webhook answers 5xx and Stripe retries.
-      const customerId = typeof obj.customer === 'string' ? obj.customer : null
-      const email =
-        (obj.customer_details as { email?: string } | undefined)?.email ||
-        (customerId && customerEmail ? await customerEmail(customerId) : null) ||
-        ''
-      userId = await resolveUserIdByEmail(email, fallback ?? (async () => null))
-    }
-    if (userId) {
-      return { userId, plan: 'pro', stripeSubscriptionId: subId, revocationReason: null }
+    const resolved = await resolveWebhookUserId(obj, deps)
+    if (resolved) {
+      return {
+        userId: resolved.userId,
+        plan: 'pro',
+        stripeSubscriptionId: subId,
+        stripeCustomerId: resolved.customerId,
+        revocationReason: null,
+      }
     }
   }
 
   if (event.type === 'customer.subscription.deleted') {
-    const metadata = obj.metadata as Record<string, string> | undefined
-    const userId = metadata?.userId
-    if (userId) {
+    const resolved = await resolveWebhookUserId(obj, deps)
+    if (resolved) {
       return {
-        userId,
+        userId: resolved.userId,
         plan: 'free',
         stripeSubscriptionId: null,
+        stripeCustomerId: resolved.customerId,
         revocationReason: 'canceled',
       }
     }
@@ -291,19 +336,43 @@ export async function handleStripeWebhook(
   // revoke list here previously demoted a paying user on `past_due`, contradicting
   // the stated policy until the next reconcile sweep corrected it.
   if (event.type === 'customer.subscription.updated') {
-    const metadata = obj.metadata as Record<string, string> | undefined
-    const userId = metadata?.userId
     const status = obj.status as string | undefined
-    if (userId) {
+    const resolved = await resolveWebhookUserId(obj, deps)
+    if (resolved) {
       const plan = mapStatusToPlan(status)
       const subId = plan === 'pro' && typeof obj.id === 'string' ? obj.id : null
       return {
-        userId,
+        userId: resolved.userId,
         plan,
         stripeSubscriptionId: subId,
+        stripeCustomerId: resolved.customerId,
         revocationReason: plan === 'pro' ? null : status === 'canceled' ? 'canceled' : 'lapsed',
       }
     }
+  }
+
+  if (event.type === 'invoice.paid') {
+    const subscriptionId = typeof obj.subscription === 'string' ? obj.subscription : null
+    if (!subscriptionId || !deps?.retrieveSubscription) return null
+    const sub = await deps.retrieveSubscription(subscriptionId)
+    if (mapStatusToPlan(sub.status) !== 'pro') return null
+    const resolved = await resolveWebhookUserId(
+      { customer: sub.customer, metadata: sub.metadata },
+      deps,
+    )
+    if (!resolved) return null
+    return {
+      userId: resolved.userId,
+      plan: 'pro',
+      stripeSubscriptionId: sub.id,
+      stripeCustomerId: resolved.customerId ?? sub.customer,
+      revocationReason: null,
+    }
+  }
+
+  // Failed renewals leave Pro in place while Stripe retries (past_due policy).
+  if (event.type === 'invoice.payment_failed') {
+    return null
   }
 
   return null

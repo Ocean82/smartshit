@@ -305,10 +305,19 @@ curl -s https://smartsht.com/api/stripe/webhook -X POST
 In the **SmartSht** Stripe dashboard (not BurntBeats):
 1. Go to Developers → Webhooks
 2. Endpoint: `https://smartsht.com/api/stripe/webhook` (already created as `we_1UWNpbCpwOYArhO2dGme77VR` if intact)
-3. Events: `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`
+3. Events: `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.paid`, `invoice.payment_failed`
 4. Copy the signing secret → `STRIPE_WEBHOOK_SECRET` in `/opt/smartsht/.env` (must match this account’s endpoint)
 5. Set `STRIPE_SECRET_KEY` to the SmartSht live secret key and price IDs above
 6. Restart PM2: `pm2 restart smartsht-api`
+
+### Customer hardening (2026-11-26)
+
+After deploying the Stripe customer-id persistence work:
+
+1. Confirm the webhook endpoint includes `invoice.paid` and `invoice.payment_failed` (listed above).
+2. After API restart, confirm boot log shows `[reconcile] boot:` (backfills `stripeCustomerId` for existing Pros).
+3. Spot-check one Pro user in Clerk → Public metadata has `stripeCustomerId` (`cus_…`).
+4. Checkout for a returning Pro should reuse that customer (no second `cus_…` created in Stripe).
 
 ---
 

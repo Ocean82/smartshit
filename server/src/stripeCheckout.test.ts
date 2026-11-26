@@ -35,7 +35,7 @@ function captureFetch() {
 describe('createCheckoutSession', () => {
   it('uses an API version that Managed Payments accepts (basil or later)', async () => {
     const call = captureFetch()
-    await createCheckoutSession('user_1', 'a@b.com', 'monthly')
+    await createCheckoutSession('user_1', 'a@b.com', 'monthly', 'cus_test')
     const { headers } = call()
     expect(headers['Stripe-Version']).toBe(STRIPE_API_VERSION)
     expect(STRIPE_API_VERSION >= '2025-03-31').toBe(true)
@@ -43,7 +43,7 @@ describe('createCheckoutSession', () => {
 
   it('sends the server-configured price for the interval and tags the user on session and subscription', async () => {
     const call = captureFetch()
-    const session = await createCheckoutSession('user_1', 'a@b.com', 'annual')
+    const session = await createCheckoutSession('user_1', 'a@b.com', 'annual', 'cus_test')
     const { url, body } = call()
     expect(url).toBe('https://api.stripe.com/v1/checkout/sessions')
     expect(body.get('line_items[0][price]')).toBe('price_annual')
@@ -53,8 +53,20 @@ describe('createCheckoutSession', () => {
     expect(session.url).toBe('https://checkout.stripe.com/c/pay/cs_x')
   })
 
+  it('sends customer id and does not send customer_email', async () => {
+    const call = captureFetch()
+    await createCheckoutSession('user_1', 'a@b.com', 'monthly', 'cus_123')
+    const { body } = call()
+    expect(body.get('customer')).toBe('cus_123')
+    expect(body.get('customer_email')).toBeNull()
+    expect(body.get('client_reference_id')).toBe('user_1')
+    expect(body.get('subscription_data[metadata][userId]')).toBe('user_1')
+  })
+
   it('surfaces a Stripe rejection as an error for the route to log', async () => {
     globalThis.fetch = vi.fn(async () => new Response('{"error":{"message":"nope"}}', { status: 400 })) as unknown as typeof fetch
-    await expect(createCheckoutSession('user_1', 'a@b.com')).rejects.toThrow('Stripe checkout failed (400)')
+    await expect(createCheckoutSession('user_1', 'a@b.com', 'monthly', 'cus_test')).rejects.toThrow(
+      'Stripe checkout failed (400)',
+    )
   })
 })

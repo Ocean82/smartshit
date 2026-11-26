@@ -31,6 +31,7 @@ export type VerificationResult = {
   reason: SubscriptionReason
   status: string | null
   subscriptionId: string | null
+  customerId: string | null
 }
 
 /**
@@ -81,6 +82,7 @@ export type StripeSubList = {
   id: string
   status?: string | null
   created?: number | null
+  customer?: string | null
 }
 
 /**
@@ -134,6 +136,7 @@ export type PlanWriterDeps = {
     plan: 'free' | 'pro',
     subscriptionId: string | null,
     revocationReason: string | null,
+    customerId: string | null,
   ): Promise<void>
   invalidateCache(userId: string): void
 }
@@ -184,6 +187,7 @@ export async function writeClerkPlan(
   result: VerificationResult,
   currentPlan: 'free' | 'pro',
   deps: PlanWriterDeps,
+  retainedCustomerId: string | null = null,
 ): Promise<boolean> {
   if (result.reason === 'unknown') return false
   const plan = result.isPro ? 'pro' : 'free'
@@ -191,11 +195,13 @@ export async function writeClerkPlan(
   // demotion must clear it or the very next read re-grants Pro and the write is
   // a no-op in practice.
   const subscriptionId = result.isPro ? result.subscriptionId : null
+  const customerId = result.customerId ?? retainedCustomerId ?? null
   await deps.updatePublicMetadata(
     userId,
     plan,
     subscriptionId,
     revocationReasonFor(result, currentPlan),
+    customerId,
   )
   deps.invalidateCache(userId)
   return true
@@ -282,7 +288,7 @@ export async function verifySubscriptionForUser(
     } catch (err) {
       // Definite deletion: keep looking by email rather than reporting unknown.
       if (!isMissingResource(err)) {
-        return { isPro: false, reason: 'unknown', status: null, subscriptionId: null }
+        return { isPro: false, reason: 'unknown', status: null, subscriptionId: null, customerId: null }
       }
     }
   }
@@ -295,21 +301,41 @@ export async function verifySubscriptionForUser(
       // Reached only when no Pro answer is already in hand, so an email outage leaves
       // us unable to tell whether a resubscription was missed. Report unknown and
       // write nothing; the next reconcile retries.
-      return { isPro: false, reason: 'unknown', status: null, subscriptionId: null }
+      return { isPro: false, reason: 'unknown', status: null, subscriptionId: null, customerId: null }
     }
     if (byEmail && mapStatusToPlan(byEmail.status) === 'pro') sub = byEmail
   }
 
   if (!sub) {
-    return { isPro: false, reason: 'no_subscription', status: null, subscriptionId: null }
+    return { isPro: false, reason: 'no_subscription', status: null, subscriptionId: null, customerId: null }
   }
+
+  const customerId =
+    typeof sub.customer === 'string' && sub.customer.trim() ? sub.customer.trim() : null
 
   return {
     isPro: mapStatusToPlan(sub.status) === 'pro',
     reason: reasonForStatus(sub.status),
     status: typeof sub.status === 'string' ? sub.status : null,
     subscriptionId: sub.id,
+    customerId,
   }
+}
+
+/**
+ * Ensure Stripe subscription metadata carries the Clerk user id so later webhooks
+ * can resolve the user without email matching.
+ */
+export async function ensureStripeSubscriptionUserId(
+  subscriptionId: string,
+  userId: string,
+  getMeta: (subscriptionId: string) => Promise<Record<string, unknown>>,
+  updateMeta: (subscriptionId: string, metadata: { userId: string }) => Promise<void>,
+): Promise<void> {
+  const meta = await getMeta(subscriptionId)
+  const existing = meta.userId
+  if (typeof existing === 'string' && existing.trim()) return
+  await updateMeta(subscriptionId, { userId })
 }
 
 export type ReconcileUser = {
@@ -317,12 +343,19 @@ export type ReconcileUser = {
   email: string | null
   plan: 'free' | 'pro'
   subscriptionId: string | null
+  customerId: string | null
 }
 
 export type ReconcileDeps = {
   listUsers(): AsyncIterable<ReconcileUser>
   verify(user: ReconcileUser): Promise<VerificationResult>
-  write(userId: string, result: VerificationResult, currentPlan: 'free' | 'pro'): Promise<boolean>
+  write(
+    userId: string,
+    result: VerificationResult,
+    currentPlan: 'free' | 'pro',
+    retainedCustomerId?: string | null,
+  ): Promise<boolean>
+  stampSubscriptionUserId?(subscriptionId: string, userId: string): Promise<void>
 }
 
 /**
@@ -381,12 +414,33 @@ export async function reconcileAllUsers(
       const idChanged =
         wasPro === shouldBePro &&
         (shouldBePro ? (user.subscriptionId ?? null) !== result.subscriptionId : false)
-      if (shouldBePro === wasPro && !idChanged) continue
+      const customerChanged =
+        result.customerId != null && (user.customerId ?? null) !== result.customerId
+      if (shouldBePro === wasPro && !idChanged && !customerChanged) {
+        // Even when Clerk plan state is already correct, stamp Stripe metadata so
+        // future webhooks can resolve the user without email.
+        if (shouldBePro && result.subscriptionId && deps.stampSubscriptionUserId) {
+          try {
+            await deps.stampSubscriptionUserId(result.subscriptionId, user.id)
+          } catch {
+            // Non-fatal: next reconcile retries.
+          }
+        }
+        continue
+      }
 
       try {
-        const wrote = await deps.write(user.id, result, user.plan)
-        if (wrote) summary.changed += 1
-        else {
+        const wrote = await deps.write(user.id, result, user.plan, user.customerId)
+        if (wrote) {
+          summary.changed += 1
+          if (shouldBePro && result.subscriptionId && deps.stampSubscriptionUserId) {
+            try {
+              await deps.stampSubscriptionUserId(result.subscriptionId, user.id)
+            } catch {
+              // Non-fatal: next reconcile retries.
+            }
+          }
+        } else {
           // The verified fact could not be persisted. Count it as unknown so the
           // cycle reports the truth, and keep going — aborting here would leave
           // every remaining user unverified until the next run.
@@ -421,6 +475,7 @@ export async function* listAllClerkUsers(): AsyncIterable<ReconcileUser> {
     for (const user of page.data) {
       const meta = (user.publicMetadata ?? {}) as Record<string, unknown>
       const subId = typeof meta.stripeSubscriptionId === 'string' ? meta.stripeSubscriptionId : null
+      const customerId = typeof meta.stripeCustomerId === 'string' ? meta.stripeCustomerId : null
       // Clerk lists every address a user owns; the Stripe customer email that the
       // reconciler pairs against is the one the user checked out with, which is their
       // primary address unless they changed it since. Picking emailAddresses[0] would
@@ -435,6 +490,7 @@ export async function* listAllClerkUsers(): AsyncIterable<ReconcileUser> {
         email: email ? email.toLowerCase() : null,
         plan: planFromPublicMetadata(meta),
         subscriptionId: subId,
+        customerId,
       }
     }
     // The only way out of the loop without hitting the cap is exhausting the listing.
@@ -464,6 +520,22 @@ export async function findClerkUserIdByEmail(email: string): Promise<string | nu
   const client = getClerkClient()
   const page = await client.users.getUserList({ emailAddress: [email], limit: 1 })
   return page.data[0]?.id ?? null
+}
+
+/**
+ * Find a Clerk user whose publicMetadata.stripeCustomerId matches.
+ *
+ * Clerk cannot filter getUserList by publicMetadata, so this walks listAllClerkUsers
+ * (O(n)). Acceptable at current account scale; replace if user counts grow large.
+ */
+export async function findClerkUserIdByStripeCustomerId(
+  customerId: string,
+): Promise<string | null> {
+  if (!customerId || !customerId.trim()) return null
+  for await (const user of listAllClerkUsers()) {
+    if (user.customerId === customerId) return user.id
+  }
+  return null
 }
 
 /** List every subscription belonging to any Stripe customer with this email. */
@@ -496,7 +568,14 @@ async function listStripeSubscriptionsByEmailWith(
   const subscriptions: StripeSubList[] = []
   for (const customer of customers) {
     const page = await stripe.subscriptions.list({ customer: customer.id, status: 'all', limit: 10 })
-    subscriptions.push(...page.data.map((s) => ({ id: s.id, status: s.status, created: s.created })))
+    subscriptions.push(
+      ...page.data.map((s) => ({
+        id: s.id,
+        status: s.status,
+        created: s.created,
+        customer: typeof s.customer === 'string' ? s.customer : s.customer?.id,
+      })),
+    )
   }
   return subscriptions
 }
@@ -542,19 +621,43 @@ export function createProductionDeps(): ReconcileDeps {
             status: sub.status,
             created: sub.created,
             cancel_at_period_end: sub.cancel_at_period_end,
+            customer: typeof sub.customer === 'string' ? sub.customer : sub.customer?.id,
           }
         },
         listSubscriptionsByEmail: (email) => listStripeSubscriptionsByEmailWith(stripe, email),
       }),
-    write: (userId, result, currentPlan) =>
-      writeClerkPlan(userId, result, currentPlan, {
-        updatePublicMetadata: async (id, plan, subscriptionId, revocationReason) => {
-          await getClerkClient().users.updateUserMetadata(id, {
-            publicMetadata: { plan, stripeSubscriptionId: subscriptionId, revocationReason },
-          })
+    write: (userId, result, currentPlan, retainedCustomerId = null) =>
+      writeClerkPlan(
+        userId,
+        result,
+        currentPlan,
+        {
+          updatePublicMetadata: async (id, plan, subscriptionId, revocationReason, customerId) => {
+            await getClerkClient().users.updateUserMetadata(id, {
+              publicMetadata: {
+                plan,
+                stripeSubscriptionId: subscriptionId,
+                revocationReason,
+                stripeCustomerId: customerId,
+              },
+            })
+          },
+          invalidateCache: invalidateProCache,
         },
-        invalidateCache: invalidateProCache,
-      }),
+        retainedCustomerId ?? null,
+      ),
+    stampSubscriptionUserId: (subscriptionId, userId) =>
+      ensureStripeSubscriptionUserId(
+        subscriptionId,
+        userId,
+        async (id) => {
+          const sub = await stripe.subscriptions.retrieve(id)
+          return (sub.metadata ?? {}) as Record<string, unknown>
+        },
+        async (id, metadata) => {
+          await stripe.subscriptions.update(id, { metadata })
+        },
+      ),
   }
 }
 

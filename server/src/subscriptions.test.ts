@@ -15,6 +15,7 @@ import {
   isForeignAccountStripeId,
   missingStripeResourceError,
   writeClerkPlan,
+  ensureStripeSubscriptionUserId,
   reconcileAllUsers,
   listStripeSubscriptionsByEmail,
   listAllClerkUsers,
@@ -272,30 +273,49 @@ describe('resolveUserIdByEmail', () => {
   })
 })
 
+describe('ensureStripeSubscriptionUserId', () => {
+  it('stamps userId when Stripe metadata is missing it', async () => {
+    const update = vi.fn(async () => {})
+    await ensureStripeSubscriptionUserId('sub_1', 'user_1', async () => ({}), update)
+    expect(update).toHaveBeenCalledWith('sub_1', { userId: 'user_1' })
+  })
+
+  it('does not stamp when userId already set', async () => {
+    const update = vi.fn(async () => {})
+    await ensureStripeSubscriptionUserId(
+      'sub_1',
+      'user_1',
+      async () => ({ userId: 'user_1' }),
+      update,
+    )
+    expect(update).not.toHaveBeenCalled()
+  })
+})
+
 describe('revocationReasonFor', () => {
   it('is null when the result is pro', () => {
-    const result = { isPro: true, reason: 'active', status: 'active', subscriptionId: 'sub_1' } as const
+    const result = { isPro: true, reason: 'active', status: 'active', subscriptionId: 'sub_1' , customerId: null} as const
     expect(revocationReasonFor(result, 'free')).toBeNull()
     expect(revocationReasonFor(result, 'pro')).toBeNull()
   })
 
   it('records the stripe status when a pro user is demoted', () => {
-    const result = { isPro: false, reason: 'lapsed', status: 'canceled', subscriptionId: 'sub_1' } as const
+    const result = { isPro: false, reason: 'lapsed', status: 'canceled', subscriptionId: 'sub_1' , customerId: null} as const
     expect(revocationReasonFor(result, 'pro')).toBe('canceled')
   })
 
   it('falls back to lapsed when the status is missing', () => {
-    const result = { isPro: false, reason: 'lapsed', status: null, subscriptionId: 'sub_1' } as const
+    const result = { isPro: false, reason: 'lapsed', status: null, subscriptionId: 'sub_1' , customerId: null} as const
     expect(revocationReasonFor(result, 'pro')).toBe('lapsed')
   })
 
   it('is null for a user who was already free, so no banner is shown', () => {
-    const result = { isPro: false, reason: 'lapsed', status: 'canceled', subscriptionId: null } as const
+    const result = { isPro: false, reason: 'lapsed', status: 'canceled', subscriptionId: null , customerId: null} as const
     expect(revocationReasonFor(result, 'free')).toBeNull()
   })
 
   it('is null when there is no subscription at all', () => {
-    const result = { isPro: false, reason: 'no_subscription', status: null, subscriptionId: null } as const
+    const result = { isPro: false, reason: 'no_subscription', status: null, subscriptionId: null , customerId: null} as const
     expect(revocationReasonFor(result, 'free')).toBeNull()
   })
 
@@ -303,7 +323,7 @@ describe('revocationReasonFor', () => {
     // Silent demotion is the failure mode worth avoiding: a stored pro whose
     // subscription no longer exists in Stripe has lost access, and gets no
     // explanation unless the reconciler records why.
-    const result = { isPro: false, reason: 'no_subscription', status: null, subscriptionId: null } as const
+    const result = { isPro: false, reason: 'no_subscription', status: null, subscriptionId: null , customerId: null} as const
     expect(revocationReasonFor(result, 'pro')).toBe('lapsed')
   })
 })
@@ -319,20 +339,62 @@ describe('writeClerkPlan', () => {
     const { updatePublicMetadata, invalidateCache, deps } = makeDeps()
     const wrote = await writeClerkPlan(
       'user_1',
-      { isPro: true, reason: 'active', status: 'active', subscriptionId: 'sub_1' },
+      { isPro: true, reason: 'active', status: 'active', subscriptionId: 'sub_1', customerId: null },
       'free',
       deps,
     )
     expect(wrote).toBe(true)
-    expect(updatePublicMetadata).toHaveBeenCalledWith('user_1', 'pro', 'sub_1', null)
+    expect(updatePublicMetadata).toHaveBeenCalledWith('user_1', 'pro', 'sub_1', null, null)
     expect(invalidateCache).toHaveBeenCalledWith('user_1')
+  })
+
+  it('retains stripeCustomerId on demotion when result has no customerId', async () => {
+    const { updatePublicMetadata, deps } = makeDeps()
+    await writeClerkPlan(
+      'user_1',
+      { isPro: false, reason: 'lapsed', status: 'canceled', subscriptionId: null, customerId: null },
+      'pro',
+      deps,
+      'cus_keep',
+    )
+    expect(updatePublicMetadata).toHaveBeenCalledWith(
+      'user_1',
+      'free',
+      null,
+      'canceled',
+      'cus_keep',
+    )
+  })
+
+  it('writes customerId on grant when present on the result', async () => {
+    const { updatePublicMetadata, deps } = makeDeps()
+    await writeClerkPlan(
+      'user_1',
+      {
+        isPro: true,
+        reason: 'active',
+        status: 'active',
+        subscriptionId: 'sub_1',
+        customerId: 'cus_1',
+      },
+      'free',
+      deps,
+      null,
+    )
+    expect(updatePublicMetadata).toHaveBeenCalledWith(
+      'user_1',
+      'pro',
+      'sub_1',
+      null,
+      'cus_1',
+    )
   })
 
   it('refuses to write when the reason is unknown', async () => {
     const { updatePublicMetadata, invalidateCache, deps } = makeDeps()
     const wrote = await writeClerkPlan(
       'user_1',
-      { isPro: false, reason: 'unknown', status: null, subscriptionId: null },
+      { isPro: false, reason: 'unknown', status: null, subscriptionId: null , customerId: null},
       'pro',
       deps,
     )
@@ -347,7 +409,7 @@ describe('writeClerkPlan', () => {
     const { updatePublicMetadata, invalidateCache, deps } = makeDeps()
     const wrote = await writeClerkPlan(
       'user_1b',
-      { isPro: true, reason: 'unknown', status: null, subscriptionId: 'sub_1b' },
+      { isPro: true, reason: 'unknown', status: null, subscriptionId: 'sub_1b' , customerId: null},
       'free',
       deps,
     )
@@ -362,25 +424,25 @@ describe('writeClerkPlan', () => {
     const { updatePublicMetadata, deps } = makeDeps()
     await writeClerkPlan(
       'user_1c',
-      { isPro: false, reason: 'lapsed', status: 'canceled', subscriptionId: 'sub_1c' },
+      { isPro: false, reason: 'lapsed', status: 'canceled', subscriptionId: 'sub_1c' , customerId: null},
       'free',
       deps,
     )
-    expect(updatePublicMetadata).toHaveBeenCalledWith('user_1c', 'free', null, null)
+    expect(updatePublicMetadata).toHaveBeenCalledWith('user_1c', 'free', null, null, null)
   })
 
   it('writes free, records why, and clears the subscription id when a pro user is demoted', async () => {
     const { updatePublicMetadata, invalidateCache, deps } = makeDeps()
     await writeClerkPlan(
       'user_2',
-      { isPro: false, reason: 'lapsed', status: 'unpaid', subscriptionId: 'sub_2' },
+      { isPro: false, reason: 'lapsed', status: 'unpaid', subscriptionId: 'sub_2' , customerId: null},
       'pro',
       deps,
     )
     // subscriptionId MUST be null here. planFromPublicMetadata grants pro when
     // stripeSubscriptionId is set, so persisting it alongside plan 'free' would
     // silently re-grant Pro on the next read — see Task 3a.
-    expect(updatePublicMetadata).toHaveBeenCalledWith('user_2', 'free', null, 'unpaid')
+    expect(updatePublicMetadata).toHaveBeenCalledWith('user_2', 'free', null, 'unpaid', null)
     // The cache must be dropped on the demotion path too, not just on promotion:
     // the cached entry is 5 minutes of live Pro for a customer who just got revoked.
     expect(invalidateCache).toHaveBeenCalledWith('user_2')
@@ -390,7 +452,7 @@ describe('writeClerkPlan', () => {
     const { updatePublicMetadata, deps } = makeDeps()
     await writeClerkPlan(
       'user_3',
-      { isPro: false, reason: 'lapsed', status: 'canceled', subscriptionId: 'sub_9' },
+      { isPro: false, reason: 'lapsed', status: 'canceled', subscriptionId: 'sub_9' , customerId: null},
       'pro',
       deps,
     )
@@ -410,11 +472,11 @@ describe('writeClerkPlan', () => {
     const { updatePublicMetadata, deps } = makeDeps()
     await writeClerkPlan(
       'user_4',
-      { isPro: true, reason: 'active', status: 'active', subscriptionId: 'sub_4' },
+      { isPro: true, reason: 'active', status: 'active', subscriptionId: 'sub_4' , customerId: null},
       'pro',
       deps,
     )
-    expect(updatePublicMetadata).toHaveBeenCalledWith('user_4', 'pro', 'sub_4', null)
+    expect(updatePublicMetadata).toHaveBeenCalledWith('user_4', 'pro', 'sub_4', null, null)
   })
 
   it('propagates a write failure instead of reporting a write that never happened', async () => {
@@ -428,7 +490,7 @@ describe('writeClerkPlan', () => {
     await expect(
       writeClerkPlan(
         'user_5',
-        { isPro: true, reason: 'active', status: 'active', subscriptionId: 'sub_5' },
+        { isPro: true, reason: 'active', status: 'active', subscriptionId: 'sub_5' , customerId: null},
         'free',
         deps,
       ),
@@ -440,15 +502,42 @@ describe('writeClerkPlan', () => {
 })
 
 describe('verifySubscriptionForUser', () => {
-  const user = { id: 'user_1', email: 'owner@example.com', subscriptionId: 'sub_1' }
+  const user = { id: 'user_1', email: 'owner@example.com', subscriptionId: 'sub_1' , customerId: null}
 
   it('returns pro for a live subscription', async () => {
     const deps = {
-      retrieveSubscription: async () => ({ id: 'sub_1', status: 'active', created: 10 }),
+      retrieveSubscription: async () => ({
+        id: 'sub_1',
+        status: 'active',
+        created: 10,
+        customer: 'cus_9',
+      }),
       listSubscriptionsByEmail: async () => [],
     }
     const result = await verifySubscriptionForUser(user, deps)
-    expect(result).toEqual({ isPro: true, reason: 'active', status: 'active', subscriptionId: 'sub_1' })
+    expect(result).toEqual({
+      isPro: true,
+      reason: 'active',
+      status: 'active',
+      subscriptionId: 'sub_1',
+      customerId: 'cus_9',
+    })
+  })
+
+  it('verifySubscriptionForUser returns customerId from the retrieved subscription', async () => {
+    const result = await verifySubscriptionForUser(
+      { id: 'u1', email: 'a@b.com', subscriptionId: 'sub_1' },
+      {
+        retrieveSubscription: async () => ({
+          id: 'sub_1',
+          status: 'active',
+          created: 1,
+          customer: 'cus_9',
+        }),
+        listSubscriptionsByEmail: async () => [],
+      },
+    )
+    expect(result.customerId).toBe('cus_9')
   })
 
   it('returns free with reason lapsed for a canceled subscription', async () => {
@@ -468,8 +557,8 @@ describe('verifySubscriptionForUser', () => {
       },
       listSubscriptionsByEmail: async () => [{ id: 'sub_email', status: 'active', created: 5 }],
     }
-    const result = await verifySubscriptionForUser({ ...user, subscriptionId: null }, deps)
-    expect(result).toEqual({ isPro: true, reason: 'active', status: 'active', subscriptionId: 'sub_email' })
+    const result = await verifySubscriptionForUser({ ...user, subscriptionId: null , customerId: null}, deps)
+    expect(result).toEqual({ isPro: true, reason: 'active', status: 'active', subscriptionId: 'sub_email' , customerId: null})
   })
 
   it('falls back to email when the stored subscription id no longer exists', async () => {
@@ -480,7 +569,7 @@ describe('verifySubscriptionForUser', () => {
       listSubscriptionsByEmail: async () => [{ id: 'sub_resub', status: 'active', created: 90 }],
     }
     const result = await verifySubscriptionForUser(user, deps)
-    expect(result).toEqual({ isPro: true, reason: 'active', status: 'active', subscriptionId: 'sub_resub' })
+    expect(result).toEqual({ isPro: true, reason: 'active', status: 'active', subscriptionId: 'sub_resub' , customerId: null})
   })
 
   it('returns no_subscription when the id is gone and email finds nothing', async () => {
@@ -491,7 +580,7 @@ describe('verifySubscriptionForUser', () => {
       listSubscriptionsByEmail: async () => [],
     }
     const result = await verifySubscriptionForUser(user, deps)
-    expect(result).toEqual({ isPro: false, reason: 'no_subscription', status: null, subscriptionId: null })
+    expect(result).toEqual({ isPro: false, reason: 'no_subscription', status: null, subscriptionId: null , customerId: null})
   })
 
   it('returns no_subscription when neither id nor email finds anything', async () => {
@@ -501,8 +590,8 @@ describe('verifySubscriptionForUser', () => {
       },
       listSubscriptionsByEmail: async () => [],
     }
-    const result = await verifySubscriptionForUser({ ...user, subscriptionId: null }, deps)
-    expect(result).toEqual({ isPro: false, reason: 'no_subscription', status: null, subscriptionId: null })
+    const result = await verifySubscriptionForUser({ ...user, subscriptionId: null , customerId: null}, deps)
+    expect(result).toEqual({ isPro: false, reason: 'no_subscription', status: null, subscriptionId: null , customerId: null})
   })
 
   it('returns unknown, never false, when Stripe throws a non-404 error', async () => {
@@ -513,7 +602,7 @@ describe('verifySubscriptionForUser', () => {
       listSubscriptionsByEmail: async () => [],
     }
     const result = await verifySubscriptionForUser(user, deps)
-    expect(result).toEqual({ isPro: false, reason: 'unknown', status: null, subscriptionId: null })
+    expect(result).toEqual({ isPro: false, reason: 'unknown', status: null, subscriptionId: null , customerId: null})
   })
 
   it.each([500, 429])(
@@ -528,7 +617,7 @@ describe('verifySubscriptionForUser', () => {
         listSubscriptionsByEmail: async () => [],
       }
       const result = await verifySubscriptionForUser(user, deps)
-      expect(result).toEqual({ isPro: false, reason: 'unknown', status: null, subscriptionId: null })
+      expect(result).toEqual({ isPro: false, reason: 'unknown', status: null, subscriptionId: null , customerId: null})
     },
   )
 
@@ -538,7 +627,7 @@ describe('verifySubscriptionForUser', () => {
       listSubscriptionsByEmail: async () => [],
     }
     const result = await verifySubscriptionForUser(user, deps)
-    expect(result).toEqual({ isPro: true, reason: 'past_due', status: 'past_due', subscriptionId: 'sub_1' })
+    expect(result).toEqual({ isPro: true, reason: 'past_due', status: 'past_due', subscriptionId: 'sub_1' , customerId: null})
   })
 
   it('keeps pro for an active subscription flagged cancel_at_period_end', async () => {
@@ -559,7 +648,7 @@ describe('verifySubscriptionForUser', () => {
       listSubscriptionsByEmail: async () => [{ id: 'sub_2', status: 'active', created: 90 }],
     }
     const result = await verifySubscriptionForUser(user, deps)
-    expect(result).toEqual({ isPro: true, reason: 'active', status: 'active', subscriptionId: 'sub_2' })
+    expect(result).toEqual({ isPro: true, reason: 'active', status: 'active', subscriptionId: 'sub_2' , customerId: null})
   })
 
   it('does not consult email when the stored subscription is already pro', async () => {
@@ -587,7 +676,7 @@ describe('verifySubscriptionForUser', () => {
     const result = await verifySubscriptionForUser(user, deps)
     // Not 'lapsed': without the email lookup we cannot rule out a live sub_2, and
     // a wrong demotion is far worse than a delayed one.
-    expect(result).toEqual({ isPro: false, reason: 'unknown', status: null, subscriptionId: null })
+    expect(result).toEqual({ isPro: false, reason: 'unknown', status: null, subscriptionId: null , customerId: null})
   })
 
   it('reports no_subscription for a 404 when the user has no email to search by', async () => {
@@ -599,7 +688,7 @@ describe('verifySubscriptionForUser', () => {
       listSubscriptionsByEmail,
     }
     const result = await verifySubscriptionForUser({ ...user, email: null }, deps)
-    expect(result).toEqual({ isPro: false, reason: 'no_subscription', status: null, subscriptionId: null })
+    expect(result).toEqual({ isPro: false, reason: 'no_subscription', status: null, subscriptionId: null , customerId: null})
     expect(listSubscriptionsByEmail).not.toHaveBeenCalled()
   })
 
@@ -611,7 +700,7 @@ describe('verifySubscriptionForUser', () => {
       listSubscriptionsByEmail: async () => [{ id: 'sub_old', status: 'unpaid', created: 5 }],
     }
     const result = await verifySubscriptionForUser(user, deps)
-    expect(result).toEqual({ isPro: false, reason: 'lapsed', status: 'canceled', subscriptionId: 'sub_1' })
+    expect(result).toEqual({ isPro: false, reason: 'lapsed', status: 'canceled', subscriptionId: 'sub_1' , customerId: null})
   })
 
   it('reports no_subscription when a 404 turns up only dead subscriptions by email', async () => {
@@ -624,7 +713,7 @@ describe('verifySubscriptionForUser', () => {
       listSubscriptionsByEmail: async () => [{ id: 'sub_old', status: 'canceled', created: 5 }],
     }
     const result = await verifySubscriptionForUser(user, deps)
-    expect(result).toEqual({ isPro: false, reason: 'no_subscription', status: null, subscriptionId: null })
+    expect(result).toEqual({ isPro: false, reason: 'no_subscription', status: null, subscriptionId: null , customerId: null})
   })
 
   it('picks the best of several email subscriptions, newest-first', async () => {
@@ -639,7 +728,7 @@ describe('verifySubscriptionForUser', () => {
       ],
     }
     const result = await verifySubscriptionForUser(user, deps)
-    expect(result).toEqual({ isPro: true, reason: 'active', status: 'active', subscriptionId: 'sub_live' })
+    expect(result).toEqual({ isPro: true, reason: 'active', status: 'active', subscriptionId: 'sub_live' , customerId: null})
   })
 
   it('prefers a live over a past_due subscription regardless of recency', async () => {
@@ -653,7 +742,7 @@ describe('verifySubscriptionForUser', () => {
       ],
     }
     const result = await verifySubscriptionForUser(user, deps)
-    expect(result).toEqual({ isPro: true, reason: 'past_due', status: 'past_due', subscriptionId: 'sub_past_due' })
+    expect(result).toEqual({ isPro: true, reason: 'past_due', status: 'past_due', subscriptionId: 'sub_past_due' , customerId: null})
   })
 
   it('normalizes a missing status to null rather than leaking undefined', async () => {
@@ -664,7 +753,7 @@ describe('verifySubscriptionForUser', () => {
       listSubscriptionsByEmail: async () => [],
     }
     const result = await verifySubscriptionForUser(user, deps)
-    expect(result).toEqual({ isPro: false, reason: 'lapsed', status: null, subscriptionId: 'sub_nostatus' })
+    expect(result).toEqual({ isPro: false, reason: 'lapsed', status: null, subscriptionId: 'sub_nostatus' , customerId: null})
   })
 })
 
@@ -715,6 +804,7 @@ describe('reconcileAllUsers', () => {
     email: `${id}@example.com`,
     plan,
     subscriptionId,
+    customerId: null as string | null,
   })
 
   it('upgrades a free user whose subscription was never recorded', async () => {
@@ -723,12 +813,12 @@ describe('reconcileAllUsers', () => {
       listUsers: async function* () {
         yield makeUser('user_a', 'free', null)
       },
-      verify: async () => ({ isPro: true, reason: 'active' as const, status: 'active', subscriptionId: 'sub_x' }),
+      verify: async () => ({ isPro: true, reason: 'active' as const, status: 'active', subscriptionId: 'sub_x' , customerId: null}),
       write,
     }
     const summary = await reconcileAllUsers(deps)
     expect(summary).toEqual({ verified: 1, changed: 1, unknown: 0 })
-    expect(write).toHaveBeenCalledWith('user_a', expect.objectContaining({ isPro: true }), 'free')
+    expect(write).toHaveBeenCalledWith('user_a', expect.objectContaining({ isPro: true }), 'free', null)
   })
 
   it('records a revocation reason when a pro user is demoted', async () => {
@@ -737,11 +827,11 @@ describe('reconcileAllUsers', () => {
       listUsers: async function* () {
         yield makeUser('user_a', 'pro', 'sub_1')
       },
-      verify: async () => ({ isPro: false, reason: 'lapsed' as const, status: 'canceled', subscriptionId: 'sub_1' }),
+      verify: async () => ({ isPro: false, reason: 'lapsed' as const, status: 'canceled', subscriptionId: 'sub_1' , customerId: null}),
       write,
     }
     await reconcileAllUsers(deps)
-    expect(write).toHaveBeenCalledWith('user_a', expect.objectContaining({ isPro: false }), 'pro')
+    expect(write).toHaveBeenCalledWith('user_a', expect.objectContaining({ isPro: false }), 'pro', null)
   })
 
   it('adopts a changed subscription id even when the plan itself is unchanged', async () => {
@@ -750,12 +840,12 @@ describe('reconcileAllUsers', () => {
       listUsers: async function* () {
         yield makeUser('user_a', 'pro', 'sub_old')
       },
-      verify: async () => ({ isPro: true, reason: 'active' as const, status: 'active', subscriptionId: 'sub_new' }),
+      verify: async () => ({ isPro: true, reason: 'active' as const, status: 'active', subscriptionId: 'sub_new' , customerId: null}),
       write,
     }
     const summary = await reconcileAllUsers(deps)
     expect(summary.changed).toBe(1)
-    expect(write).toHaveBeenCalledWith('user_a', expect.objectContaining({ subscriptionId: 'sub_new' }), 'pro')
+    expect(write).toHaveBeenCalledWith('user_a', expect.objectContaining({ subscriptionId: 'sub_new' , customerId: null}), 'pro', null)
   })
 
   it('counts unknown without writing, and keeps going', async () => {
@@ -767,8 +857,8 @@ describe('reconcileAllUsers', () => {
       },
       verify: async (u) =>
         u.id === 'user_a'
-          ? { isPro: false, reason: 'unknown' as const, status: null, subscriptionId: null }
-          : { isPro: true, reason: 'active' as const, status: 'active', subscriptionId: 'sub_2' },
+          ? { isPro: false, reason: 'unknown' as const, status: null, subscriptionId: null , customerId: null}
+          : { isPro: true, reason: 'active' as const, status: 'active', subscriptionId: 'sub_2' , customerId: null},
       write,
     }
     const summary = await reconcileAllUsers(deps)
@@ -782,7 +872,7 @@ describe('reconcileAllUsers', () => {
       listUsers: async function* () {
         yield makeUser('user_a', 'pro', 'sub_1')
       },
-      verify: async () => ({ isPro: true, reason: 'active' as const, status: 'active', subscriptionId: 'sub_1' }),
+      verify: async () => ({ isPro: true, reason: 'active' as const, status: 'active', subscriptionId: 'sub_1' , customerId: null}),
       write,
     }
     const summary = await reconcileAllUsers(deps)
@@ -798,7 +888,7 @@ describe('reconcileAllUsers', () => {
       },
       verify: async (u) => {
         if (u.id === 'user_a') throw new Error('boom')
-        return { isPro: true, reason: 'active' as const, status: 'active', subscriptionId: 'sub_2' }
+        return { isPro: true, reason: 'active' as const, status: 'active', subscriptionId: 'sub_2' , customerId: null}
       },
       write: vi.fn(async () => true),
     }
@@ -820,8 +910,8 @@ describe('reconcileAllUsers', () => {
       },
       verify: async (u) =>
         u.id === 'user_a'
-          ? { isPro: false, reason: 'lapsed' as const, status: 'canceled', subscriptionId: 'sub_1' }
-          : { isPro: true, reason: 'active' as const, status: 'active', subscriptionId: 'sub_2' },
+          ? { isPro: false, reason: 'lapsed' as const, status: 'canceled', subscriptionId: 'sub_1' , customerId: null}
+          : { isPro: true, reason: 'active' as const, status: 'active', subscriptionId: 'sub_2' , customerId: null},
       write,
     }
     const summary = await reconcileAllUsers(deps)
@@ -836,7 +926,7 @@ describe('reconcileAllUsers', () => {
       listUsers: async function* () {
         yield makeUser('user_a', 'free', null)
       },
-      verify: async () => ({ isPro: false, reason: 'no_subscription' as const, status: null, subscriptionId: null }),
+      verify: async () => ({ isPro: false, reason: 'no_subscription' as const, status: null, subscriptionId: null , customerId: null}),
       write,
     }
     const summary = await reconcileAllUsers(deps)
@@ -853,7 +943,7 @@ describe('reconcileAllUsers', () => {
       listUsers: async function* () {
         yield makeUser('user_a', 'free', null)
       },
-      verify: async () => ({ isPro: false, reason: 'canceled' as const, status: 'canceled', subscriptionId: 'sub_dead' }),
+      verify: async () => ({ isPro: false, reason: 'canceled' as const, status: 'canceled', subscriptionId: 'sub_dead' , customerId: null}),
       write,
     }
     const summary = await reconcileAllUsers(deps)
@@ -870,12 +960,12 @@ describe('reconcileAllUsers', () => {
       listUsers: async function* () {
         yield makeUser('user_a', 'pro', null)
       },
-      verify: async () => ({ isPro: false, reason: 'lapsed' as const, status: 'canceled', subscriptionId: 'sub_old' }),
+      verify: async () => ({ isPro: false, reason: 'lapsed' as const, status: 'canceled', subscriptionId: 'sub_old' , customerId: null}),
       write,
     }
     const summary = await reconcileAllUsers(deps)
     expect(summary).toEqual({ verified: 1, changed: 1, unknown: 0 })
-    expect(write).toHaveBeenCalledWith('user_a', expect.objectContaining({ isPro: false }), 'pro')
+    expect(write).toHaveBeenCalledWith('user_a', expect.objectContaining({ isPro: false }), 'pro', null)
   })
 
   it('adopts a live id for a stored-pro ghost whose sub is found by email', async () => {
@@ -884,12 +974,12 @@ describe('reconcileAllUsers', () => {
       listUsers: async function* () {
         yield makeUser('user_a', 'pro', null)
       },
-      verify: async () => ({ isPro: true, reason: 'active' as const, status: 'active', subscriptionId: 'sub_2' }),
+      verify: async () => ({ isPro: true, reason: 'active' as const, status: 'active', subscriptionId: 'sub_2' , customerId: null}),
       write,
     }
     const summary = await reconcileAllUsers(deps)
     expect(summary).toEqual({ verified: 1, changed: 1, unknown: 0 })
-    expect(write).toHaveBeenCalledWith('user_a', expect.objectContaining({ subscriptionId: 'sub_2' }), 'pro')
+    expect(write).toHaveBeenCalledWith('user_a', expect.objectContaining({ subscriptionId: 'sub_2' , customerId: null}), 'pro', null)
   })
 
   it('counts a write that refuses as unknown, not as changed', async () => {
@@ -898,7 +988,7 @@ describe('reconcileAllUsers', () => {
       listUsers: async function* () {
         yield makeUser('user_a', 'free', null)
       },
-      verify: async () => ({ isPro: true, reason: 'active' as const, status: 'active', subscriptionId: 'sub_2' }),
+      verify: async () => ({ isPro: true, reason: 'active' as const, status: 'active', subscriptionId: 'sub_2' , customerId: null}),
       write,
     }
     const summary = await reconcileAllUsers(deps)
@@ -915,7 +1005,7 @@ describe('reconcileAllUsers', () => {
         yield makeUser('user_a', 'free', null)
         throw new Error('Clerk page 500')
       },
-      verify: async () => ({ isPro: true, reason: 'active' as const, status: 'active', subscriptionId: 'sub_2' }),
+      verify: async () => ({ isPro: true, reason: 'active' as const, status: 'active', subscriptionId: 'sub_2' , customerId: null}),
       write: vi.fn(async () => true),
     }
     await expect(reconcileAllUsers(deps)).rejects.toThrow(

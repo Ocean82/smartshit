@@ -26,6 +26,7 @@ import {
   claimWebhookEvent,
   releaseWebhookEvent,
   resetWebhookEventDedupe,
+  resolvePortalCustomerId,
 } from './stripe'
 
 /** Generate a valid Stripe-Signature header via the SDK (same path as constructEvent). */
@@ -122,6 +123,24 @@ describe('claimWebhookEvent', () => {
   })
 })
 
+describe('resolvePortalCustomerId', () => {
+  it('prefers stripeCustomerId for portal', () => {
+    expect(
+      resolvePortalCustomerId({
+        stripeCustomerId: 'cus_1',
+        stripeSubscriptionId: 'sub_1',
+      }),
+    ).toEqual({ customerId: 'cus_1', needsSubscriptionLookup: false })
+  })
+
+  it('falls back to subscription lookup when customer id is missing', () => {
+    expect(resolvePortalCustomerId({ stripeSubscriptionId: 'sub_1' })).toEqual({
+      customerId: null,
+      needsSubscriptionLookup: true,
+    })
+  })
+})
+
 describe('handleStripeWebhook', () => {
   describe('checkout.session.completed', () => {
     it('upgrades user to Pro using client_reference_id', async () => {
@@ -139,6 +158,7 @@ describe('handleStripeWebhook', () => {
         userId: 'user_abc123',
         plan: 'pro',
         stripeSubscriptionId: 'sub_xyz789',
+        stripeCustomerId: null,
         revocationReason: null,
       })
     })
@@ -157,6 +177,7 @@ describe('handleStripeWebhook', () => {
         userId: 'user_from_meta',
         plan: 'pro',
         stripeSubscriptionId: 'sub_456',
+        stripeCustomerId: null,
         revocationReason: null,
       })
     })
@@ -216,6 +237,7 @@ describe('handleStripeWebhook', () => {
         userId: 'user_async',
         plan: 'pro',
         stripeSubscriptionId: 'sub_async',
+        stripeCustomerId: null,
         revocationReason: null,
       })
     })
@@ -235,6 +257,7 @@ describe('handleStripeWebhook', () => {
         userId: 'user_del',
         plan: 'free',
         stripeSubscriptionId: null,
+        stripeCustomerId: null,
         revocationReason: 'canceled',
       })
     })
@@ -268,6 +291,7 @@ describe('handleStripeWebhook', () => {
         userId: 'user_pd',
         plan: 'pro',
         stripeSubscriptionId: 'sub_pd',
+        stripeCustomerId: null,
         revocationReason: null,
       })
     })
@@ -286,6 +310,7 @@ describe('handleStripeWebhook', () => {
         userId: 'user_c',
         plan: 'free',
         stripeSubscriptionId: null,
+        stripeCustomerId: null,
         revocationReason: 'canceled',
       })
     })
@@ -304,6 +329,7 @@ describe('handleStripeWebhook', () => {
         userId: 'user_u',
         plan: 'free',
         stripeSubscriptionId: null,
+        stripeCustomerId: null,
         revocationReason: 'lapsed',
       })
     })
@@ -323,6 +349,7 @@ describe('handleStripeWebhook', () => {
         userId: 'user_re',
         plan: 'pro',
         stripeSubscriptionId: 'sub_reactivated',
+        stripeCustomerId: null,
         revocationReason: null,
       })
     })
@@ -344,6 +371,7 @@ describe('handleStripeWebhook', () => {
         userId: 'user_t',
         plan: 'pro',
         stripeSubscriptionId: 'sub_trial',
+        stripeCustomerId: null,
         revocationReason: null,
       })
     })
@@ -362,16 +390,71 @@ describe('handleStripeWebhook', () => {
     })
   })
 
-  describe('irrelevant events', () => {
-    it('returns null for unhandled event types', async () => {
-      await expect(
-        handleStripeWebhook({
+  describe('invoice.paid', () => {
+    it('grants pro when the subscription is active and userId is on subscription metadata', async () => {
+      const retrieveSubscription = vi.fn(async () => ({
+        id: 'sub_inv',
+        status: 'active',
+        customer: 'cus_inv',
+        metadata: { userId: 'user_inv' },
+      }))
+      const result = await handleStripeWebhook(
+        {
           type: 'invoice.paid',
-          data: { object: {} },
-        }),
-      ).resolves.toBeNull()
+          data: { object: { subscription: 'sub_inv', customer: 'cus_inv' } },
+        },
+        { retrieveSubscription },
+      )
+      expect(retrieveSubscription).toHaveBeenCalledWith('sub_inv')
+      expect(result).toEqual({
+        userId: 'user_inv',
+        plan: 'pro',
+        stripeSubscriptionId: 'sub_inv',
+        stripeCustomerId: 'cus_inv',
+        revocationReason: null,
+      })
     })
 
+    it('returns null when subscription is not Pro-eligible', async () => {
+      const result = await handleStripeWebhook(
+        {
+          type: 'invoice.paid',
+          data: { object: { subscription: 'sub_x', customer: 'cus_x' } },
+        },
+        {
+          retrieveSubscription: async () => ({
+            id: 'sub_x',
+            status: 'canceled',
+            customer: 'cus_x',
+            metadata: { userId: 'user_x' },
+          }),
+        },
+      )
+      expect(result).toBeNull()
+    })
+  })
+
+  describe('invoice.payment_failed', () => {
+    it('does not demote; returns null (no entitlement write)', async () => {
+      const result = await handleStripeWebhook(
+        {
+          type: 'invoice.payment_failed',
+          data: { object: { subscription: 'sub_f', customer: 'cus_f' } },
+        },
+        {
+          retrieveSubscription: async () => ({
+            id: 'sub_f',
+            status: 'past_due',
+            customer: 'cus_f',
+            metadata: { userId: 'user_f' },
+          }),
+        },
+      )
+      expect(result).toBeNull()
+    })
+  })
+
+  describe('irrelevant events', () => {
     it('returns null for charge.succeeded', async () => {
       await expect(
         handleStripeWebhook({
@@ -392,12 +475,31 @@ describe('handleStripeWebhook', () => {
         userId: 'user_1',
         plan: 'pro',
         stripeSubscriptionId: 'sub_1',
+        stripeCustomerId: null,
         revocationReason: null,
       })
     })
 
-    it('prefers a client_reference_id over the email fallback', async () => {
-      const fallback = vi.fn(async () => 'user_email')
+        it('resolves subscription.created via stripeCustomerId lookup when metadata.userId is missing', async () => {
+      const lookupUserIdByCustomerId = vi.fn(async () => 'user_from_cus')
+      const result = await handleStripeWebhook(
+        {
+          type: 'customer.subscription.created',
+          data: { object: { id: 'sub_1', status: 'active', customer: 'cus_1', metadata: {} } },
+        },
+        { lookupUserIdByCustomerId },
+      )
+      expect(lookupUserIdByCustomerId).toHaveBeenCalledWith('cus_1')
+      expect(result).toEqual({
+        userId: 'user_from_cus',
+        plan: 'pro',
+        stripeSubscriptionId: 'sub_1',
+        stripeCustomerId: 'cus_1',
+        revocationReason: null,
+      })
+    })
+
+    it('returns null when subscription.created has no userId and customer lookup misses', async () => {
       const result = await handleStripeWebhook(
         {
           type: 'customer.subscription.created',
@@ -405,24 +507,44 @@ describe('handleStripeWebhook', () => {
             object: {
               id: 'sub_1',
               status: 'active',
-              client_reference_id: 'user_ref',
+              customer: 'cus_1',
               customer_details: { email: 'Owner@Example.com' },
               metadata: {},
             },
           },
         },
-        fallback,
+        { lookupUserIdByCustomerId: async () => null },
       )
-      expect(fallback).not.toHaveBeenCalled()
+      expect(result).toBeNull()
+    })
+
+    it('prefers metadata userId over customer lookup', async () => {
+      const lookupUserIdByCustomerId = vi.fn(async () => 'user_email')
+      const result = await handleStripeWebhook(
+        {
+          type: 'customer.subscription.created',
+          data: {
+            object: {
+              id: 'sub_1',
+              status: 'active',
+              customer: 'cus_1',
+              metadata: { userId: 'user_ref' },
+            },
+          },
+        },
+        { lookupUserIdByCustomerId },
+      )
+      expect(lookupUserIdByCustomerId).not.toHaveBeenCalled()
       expect(result).toEqual({
         userId: 'user_ref',
         plan: 'pro',
         stripeSubscriptionId: 'sub_1',
+        stripeCustomerId: 'cus_1',
         revocationReason: null,
       })
     })
 
-    it('returns null with no userId when there is no fallback', async () => {
+    it('returns null with no userId and no customer lookup deps', async () => {
       const result = await handleStripeWebhook({
         type: 'customer.subscription.created',
         data: {
@@ -435,31 +557,6 @@ describe('handleStripeWebhook', () => {
         },
       })
       expect(result).toBeNull()
-    })
-
-    it('uses the email fallback when no userId is present', async () => {
-      const fallback = vi.fn(async () => 'user_email')
-      const result = await handleStripeWebhook(
-        {
-          type: 'customer.subscription.created',
-          data: {
-            object: {
-              id: 'sub_1',
-              status: 'active',
-              customer_details: { email: 'Owner@Example.com' },
-              metadata: {},
-            },
-          },
-        },
-        fallback,
-      )
-      expect(fallback).toHaveBeenCalledWith('owner@example.com')
-      expect(result).toEqual({
-        userId: 'user_email',
-        plan: 'pro',
-        stripeSubscriptionId: 'sub_1',
-        revocationReason: null,
-      })
     })
 
     it('grants pro on created even when the subscription status is not yet active', async () => {
@@ -475,49 +572,11 @@ describe('handleStripeWebhook', () => {
         userId: 'user_created',
         plan: 'pro',
         stripeSubscriptionId: 'sub_1',
+        stripeCustomerId: null,
         revocationReason: null,
       })
     })
 
-    it('propagates a lookup failure instead of swallowing it', async () => {
-      const fallback = vi.fn(() => Promise.reject(new Error('Clerk unreachable')))
-      await expect(
-        handleStripeWebhook(
-          {
-            type: 'customer.subscription.created',
-            data: {
-              object: {
-                id: 'sub_1',
-                status: 'active',
-                customer_details: { email: 'Owner@Example.com' },
-                metadata: {},
-              },
-            },
-          },
-          fallback,
-        ),
-      ).rejects.toThrow('Clerk unreachable')
-    })
-
-    it('returns null when the email fallback finds no user', async () => {
-      const fallback = vi.fn(async () => null)
-      const result = await handleStripeWebhook(
-        {
-          type: 'customer.subscription.created',
-          data: {
-            object: {
-              id: 'sub_1',
-              status: 'active',
-              customer_details: { email: 'Owner@Example.com' },
-              metadata: {},
-            },
-          },
-        },
-        fallback,
-      )
-      expect(fallback).toHaveBeenCalledWith('owner@example.com')
-      expect(result).toBeNull()
-    })
   })
 })
 
@@ -530,50 +589,3 @@ describe('releaseWebhookEvent', () => {
   })
 })
 
-describe('customer.subscription.created via the Stripe customer email', () => {
-  const sub = { id: 'sub_n1', customer: 'cus_1', metadata: {} }
-
-  it('looks the email up from the customer id and resolves the Clerk user', async () => {
-    const customerEmail = vi.fn(async () => 'Owner@Example.com')
-    const fallback = vi.fn(async () => 'user_by_email')
-    const result = await handleStripeWebhook(
-      { type: 'customer.subscription.created', data: { object: sub } },
-      fallback,
-      customerEmail,
-    )
-    expect(customerEmail).toHaveBeenCalledWith('cus_1')
-    expect(fallback).toHaveBeenCalledWith('owner@example.com')
-    expect(result).toEqual({
-      userId: 'user_by_email',
-      plan: 'pro',
-      stripeSubscriptionId: 'sub_n1',
-      revocationReason: null,
-    })
-  })
-
-  it('skips the customer lookup when metadata already names the user', async () => {
-    const customerEmail = vi.fn(async () => 'x@example.com')
-    const result = await handleStripeWebhook(
-      {
-        type: 'customer.subscription.created',
-        data: { object: { ...sub, metadata: { userId: 'user_meta' } } },
-      },
-      undefined,
-      customerEmail,
-    )
-    expect(customerEmail).not.toHaveBeenCalled()
-    expect(result?.userId).toBe('user_meta')
-  })
-
-  it('propagates a customer lookup failure so the webhook answers 5xx and Stripe retries', async () => {
-    await expect(
-      handleStripeWebhook(
-        { type: 'customer.subscription.created', data: { object: sub } },
-        async () => null,
-        async () => {
-          throw new Error('stripe down')
-        },
-      ),
-    ).rejects.toThrow('stripe down')
-  })
-})
