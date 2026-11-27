@@ -49,6 +49,9 @@ async function run() {
   console.log('✅ Connected to database')
 
   // Create a migrations tracking table if it doesn't exist
+  // The schema is normally created by 001; create it here so a fresh database
+  // does not fail before 001 can run.
+  await client.query('CREATE SCHEMA IF NOT EXISTS smartsht')
   await client.query(`
     CREATE TABLE IF NOT EXISTS smartsht.migrations (
       id SERIAL PRIMARY KEY,
@@ -75,13 +78,18 @@ async function run() {
     console.log(`▶️  Running ${filename}...`)
 
     try {
+      // One transaction per file so a failure cannot leave a half-applied
+      // migration that is not recorded (and would be re-run next time).
+      await client.query('BEGIN')
       await client.query(sql)
       await client.query(
         'INSERT INTO smartsht.migrations (filename) VALUES ($1)',
         [filename],
       )
+      await client.query('COMMIT')
       console.log(`✅ Applied ${filename}`)
     } catch (err) {
+      await client.query('ROLLBACK').catch(() => {})
       console.error(`❌ Failed on ${filename}:`, err.message)
       process.exit(1)
     }

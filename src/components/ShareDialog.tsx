@@ -91,6 +91,10 @@ export function ShareDialog({ open, onClose }: ShareDialogProps) {
         signal: AbortSignal.timeout(10_000),
       })
       if (res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { emailMissing?: boolean }
+        if (body.emailMissing) {
+          useStore.getState().showToast({ type: 'error', message: 'Link created, but your email could not be found, so it was not included.' })
+        }
         await fetchShares()
       } else {
         useStore.getState().showToast({ type: 'error', message: 'Failed to create share link' })

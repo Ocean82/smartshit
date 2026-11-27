@@ -26,7 +26,7 @@ async function resolveSharedBy(
   userId: string,
   typedName: unknown,
   includeEmail: boolean,
-): Promise<string | null> {
+): Promise<{ label: string | null; emailMissing: boolean }> {
   let name = cleanName(typedName)
   let email = ''
   try {
@@ -45,8 +45,13 @@ async function resolveSharedBy(
   } catch {
     // Clerk unavailable: fall back to whatever the user typed.
   }
-  if (includeEmail && email) return name ? `${name} (${email})` : email
-  return name || null
+  if (includeEmail && email) {
+    // Keep the whole label within SHARED_BY_MAX by trimming the name, never the email.
+    const room = Math.max(0, SHARED_BY_MAX - email.length - 3)
+    const n = name.slice(0, room).trim()
+    return { label: n ? `${n} (${email})` : email, emailMissing: false }
+  }
+  return { label: name || null, emailMissing: includeEmail }
 }
 
 // ─── POST /api/workbooks/:id/share — Create a share link ─────────────────────
@@ -114,7 +119,7 @@ sharesRouter.post('/:id/share', async (req, res) => {
     // Generate share token
     const shareToken = randomUUID()
 
-    const sharedBy = await resolveSharedBy(userId, sharedByName, includeEmail === true)
+    const { label: sharedBy, emailMissing } = await resolveSharedBy(userId, sharedByName, includeEmail === true)
 
     await query(
       `INSERT INTO smartsht.shares (workbook_id, shared_by, share_token, permission, expires_at, shared_by_name)
@@ -127,6 +132,7 @@ sharesRouter.post('/:id/share', async (req, res) => {
       permission,
       expiresAt: expiresAt?.toISOString() ?? null,
       workbookName: workbook.rows[0].name,
+      emailMissing,
     })
   } catch (err) {
     sendServerError(res, 'shares', err)
