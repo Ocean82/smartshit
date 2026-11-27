@@ -26,6 +26,7 @@ const EXPECTED_APP_REGISTRATIONS = [
   'USE /api/workbooks workbooksRouter requireAuth',
   'USE /api/workbooks versionsRouter requireAuth',
   'USE /api/workbooks sharesRouter requireAuth',
+  'DELETE /api/shares/:token route requireAuth',
   'USE /api/shared publicSharesRouter public', // read-only link viewer, rate limited
   'USE /api/community-templates templatesRouter public', // handler-auth, checked below
   'USE /api/ai-function aiFunctionRouter public', // router-level requireAuth, checked below

@@ -37,6 +37,8 @@ export function ShareDialog({ open, onClose }: ShareDialogProps) {
   const [loading, setLoading] = useState(false)
   const [creating, setCreating] = useState(false)
   const [copiedToken, setCopiedToken] = useState<string | null>(null)
+  const [sharedByName, setSharedByName] = useState('')
+  const [includeEmail, setIncludeEmail] = useState(false)
   // Shared links are read-only until collaborative editing is implemented.
   const permission = 'view' as const
   const [expiresIn, setExpiresIn] = useState<'24h' | '7d' | '30d' | 'never'>('never')
@@ -85,16 +87,31 @@ export function ShareDialog({ open, onClose }: ShareDialogProps) {
       const res = await fetch(`${API_BASE}/api/workbooks/${cloudId}/share`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ permission, expiresIn }),
+        body: JSON.stringify({ permission, expiresIn, sharedByName: sharedByName.trim(), includeEmail }),
         signal: AbortSignal.timeout(10_000),
       })
       if (res.ok) {
         await fetchShares()
+      } else {
+        useStore.getState().showToast({ type: 'error', message: 'Failed to create share link' })
       }
     } catch {
-      // ignore
+      useStore.getState().showToast({ type: 'error', message: 'Failed to create share link' })
+    } finally {
+      setCreating(false)
     }
-    setCreating(false)
+  }
+
+  // True when the link is gone (revoked now, or already revoked: 404).
+  const revokeToken = async (token: string): Promise<boolean> => {
+    const headers = await getAuthHeaders()
+    if (!headers.Authorization) return false
+    const res = await fetch(`${API_BASE}/api/shares/${token}`, {
+      method: 'DELETE',
+      headers,
+      signal: AbortSignal.timeout(10_000),
+    })
+    return res.ok || res.status === 404
   }
 
   const handleRevoke = async (token: string) => {
@@ -108,13 +125,10 @@ export function ShareDialog({ open, onClose }: ShareDialogProps) {
       onConfirm: async () => {
         if (!canCallServer()) return
         try {
-          const headers = await getAuthHeaders()
-          if (!headers.Authorization) return
-          await fetch(`${API_BASE}/api/shares/${token}`, {
-            method: 'DELETE',
-            headers,
-            signal: AbortSignal.timeout(10_000),
-          })
+          if (!(await revokeToken(token))) {
+            showToast({ type: 'error', message: 'Failed to revoke share link' })
+            return
+          }
           setShares((prev) => prev.filter((s) => s.share_token !== token))
           showToast({ type: 'success', message: 'Share link revoked' })
         } catch {
@@ -124,11 +138,35 @@ export function ShareDialog({ open, onClose }: ShareDialogProps) {
     })
   }
 
-  const handleCopy = (token: string) => {
+  const handleRemoveExpired = async () => {
+    const { showToast } = useStore.getState()
+    if (!canCallServer()) return
+    const expiredTokens = shares.filter((s) => isExpired(s.expires_at)).map((s) => s.share_token)
+    const removed: string[] = []
+    for (const t of expiredTokens) {
+      try {
+        if (await revokeToken(t)) removed.push(t)
+      } catch {
+        // counted as failed below
+      }
+    }
+    setShares((prev) => prev.filter((s) => !removed.includes(s.share_token)))
+    if (removed.length === expiredTokens.length) {
+      showToast({ type: 'success', message: 'Expired links removed' })
+    } else {
+      showToast({ type: 'error', message: 'Some expired links could not be removed' })
+    }
+  }
+
+  const handleCopy = async (token: string) => {
     const url = `${window.location.origin}/shared/${token}`
-    void navigator.clipboard.writeText(url)
-    setCopiedToken(token)
-    setTimeout(() => setCopiedToken(null), 2000)
+    try {
+      await navigator.clipboard.writeText(url)
+      setCopiedToken(token)
+      setTimeout(() => setCopiedToken(null), 2000)
+    } catch {
+      useStore.getState().showToast({ type: 'error', message: 'Could not copy the link. Copy it manually.' })
+    }
   }
 
   const formatDate = (iso: string): string => {
@@ -206,6 +244,23 @@ export function ShareDialog({ open, onClose }: ShareDialogProps) {
                   <option value="30d">Expires in 30 days</option>
                 </select>
               </div>
+              <input
+                type="text"
+                value={sharedByName}
+                onChange={(e) => setSharedByName(e.target.value)}
+                maxLength={80}
+                placeholder="Shared by (defaults to your account name)"
+                className="w-full mb-2 border border-gray-200 rounded-lg px-3 py-2 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                aria-label="Shared by"
+              />
+              <label className="flex items-center gap-2 mb-3 text-xs text-gray-600">
+                <input
+                  type="checkbox"
+                  checked={includeEmail}
+                  onChange={(e) => setIncludeEmail(e.target.checked)}
+                />
+                Include my email
+              </label>
               <button
                 type="button"
                 onClick={handleCreate}
@@ -234,6 +289,17 @@ export function ShareDialog({ open, onClose }: ShareDialogProps) {
                 </div>
               ) : (
                 <div className="py-2">
+                  {shares.some((s) => isExpired(s.expires_at)) && (
+                    <div className="px-5 pb-1 text-right">
+                      <button
+                        type="button"
+                        onClick={() => void handleRemoveExpired()}
+                        className="text-[11px] text-red-600 hover:underline"
+                      >
+                        Remove expired
+                      </button>
+                    </div>
+                  )}
                   {shares.map((share) => {
                     const expired = isExpired(share.expires_at)
                     return (
@@ -273,7 +339,7 @@ export function ShareDialog({ open, onClose }: ShareDialogProps) {
                         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 max-md:opacity-100 transition-opacity">
                           <button
                             type="button"
-                            onClick={() => handleCopy(share.share_token)}
+                            onClick={() => void handleCopy(share.share_token)}
                             className="p-1.5 max-md:p-2.5 rounded-md hover:bg-blue-100 text-blue-600 transition-colors"
                             title="Copy link"
                             aria-label="Copy link"

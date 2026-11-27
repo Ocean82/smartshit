@@ -19,6 +19,9 @@ let mockUserId: string | null = 'user_owner'
 
 vi.mock('../auth/clerk.js', () => ({
   getRequestUserId: () => mockUserId,
+  getClerkClient: () => ({
+    users: { getUser: async () => { throw new Error('no clerk in test') } },
+  }),
 }))
 
 const mockQueryResults = new Map<string, { rows: Record<string, unknown>[] }>()

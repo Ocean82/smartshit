@@ -64,7 +64,7 @@ import { dbHealthCheck, closePool } from './db.js'
 import { s3HealthCheck } from './s3.js'
 import { workbooksRouter } from './routes/workbooks.js'
 import { versionsRouter } from './routes/versions.js'
-import { sharesRouter, publicSharesRouter } from './routes/shares.js'
+import { sharesRouter, publicSharesRouter, revokeShareHandler } from './routes/shares.js'
 import { templatesRouter } from './routes/templates.js'
 import { aiFunctionRouter } from './routes/aiFunction.js'
 import {
@@ -205,6 +205,7 @@ app.use(globalRateLimiter)
 app.use('/api/workbooks', requireAuth, workbooksRouter)
 app.use('/api/workbooks', requireAuth, versionsRouter)
 app.use('/api/workbooks', requireAuth, sharesRouter)
+app.delete('/api/shares/:token', requireAuth, revokeShareHandler)
 // Intentionally public: view-only share links are opened by recipients who may
 // have no Clerk account. Access is gated by an unguessable share token + expiry.
 app.use('/api/shared', sharedAccessRateLimiter, publicSharesRouter)

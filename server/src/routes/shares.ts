@@ -1,14 +1,52 @@
-import { Router, type Request } from 'express'
+﻿import { Router, type Request, type Response } from 'express'
 import { randomUUID } from 'node:crypto'
 import { query } from '../db.js'
 import { downloadObject } from '../s3.js'
-import { getRequestUserId } from '../auth/clerk.js'
+import { getRequestUserId, getClerkClient } from '../auth/clerk.js'
 import { sendServerError } from '../httpError.js'
 
 export const sharesRouter = Router()
 
 function getUserId(req: Request): string | null {
   return getRequestUserId(req)
+}
+
+const SHARED_BY_MAX = 80
+
+function cleanName(v: unknown): string {
+  return typeof v === 'string' ? v.trim().slice(0, SHARED_BY_MAX) : ''
+}
+
+/**
+ * Resolve the "Shared by" label stored on a share row. Email is only included
+ * when the owner ticked includeEmail for this share. Also backfills
+ * smartsht.users.display_name/email when Clerk data is available.
+ */
+async function resolveSharedBy(
+  userId: string,
+  typedName: unknown,
+  includeEmail: boolean,
+): Promise<string | null> {
+  let name = cleanName(typedName)
+  let email = ''
+  try {
+    const u = await getClerkClient().users.getUser(userId)
+    const clerkName = cleanName([u.firstName, u.lastName].filter(Boolean).join(' '))
+    const primary = u.emailAddresses?.find((e) => e.id === u.primaryEmailAddressId)?.emailAddress
+    email = (primary ?? u.emailAddresses?.[0]?.emailAddress ?? '').trim()
+    if (!name) name = clerkName
+    await query(
+      `UPDATE smartsht.users
+       SET display_name = COALESCE(display_name, NULLIF($2, '')),
+           email = COALESCE(email, NULLIF($3, ''))
+       WHERE id = $1`,
+      [userId, clerkName, email],
+    )
+  } catch {
+    // Clerk unavailable: fall back to whatever the user typed.
+  }
+  if (includeEmail && email) return name ? `${name} (${email})` : email
+  return name || null
 }
 
 // ─── POST /api/workbooks/:id/share — Create a share link ─────────────────────
@@ -21,7 +59,9 @@ sharesRouter.post('/:id/share', async (req, res) => {
   }
 
   const { id } = req.params
-  const { permission: requestedPermission, expiresIn } = req.body as {
+  const { permission: requestedPermission, expiresIn, sharedByName, includeEmail } = req.body as {
+    sharedByName?: string
+    includeEmail?: boolean
     permission?: 'view' | 'edit'
     expiresIn?: '24h' | '7d' | '30d' | 'never'
   }
@@ -74,10 +114,12 @@ sharesRouter.post('/:id/share', async (req, res) => {
     // Generate share token
     const shareToken = randomUUID()
 
+    const sharedBy = await resolveSharedBy(userId, sharedByName, includeEmail === true)
+
     await query(
-      `INSERT INTO smartsht.shares (workbook_id, shared_by, share_token, permission, expires_at)
-       VALUES ($1, $2, $3, $4, $5)`,
-      [id, userId, shareToken, permission, expiresAt],
+      `INSERT INTO smartsht.shares (workbook_id, shared_by, share_token, permission, expires_at, shared_by_name)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [id, userId, shareToken, permission, expiresAt, sharedBy],
     )
 
     res.status(201).json({
@@ -135,7 +177,8 @@ sharesRouter.get('/:id/shares', async (req, res) => {
 
 // ─── DELETE /api/shares/:token — Revoke a share link ─────────────────────────
 
-sharesRouter.delete('/shares/:token', async (req, res) => {
+// Mounted in index.ts as app.delete('/api/shares/:token', requireAuth, ...).
+export async function revokeShareHandler(req: Request, res: Response): Promise<void> {
   const userId = getUserId(req)
   if (!userId) {
     res.status(401).json({ error: 'Authentication required' })
@@ -166,7 +209,7 @@ sharesRouter.delete('/shares/:token', async (req, res) => {
   } catch (err) {
     sendServerError(res, 'shares', err)
   }
-})
+}
 
 // ─── GET /api/shared/:token — Access a shared workbook (PUBLIC) ──────────────
 // Mounted at /api/shared (not under the broad /api sharesRouter) so mutating
@@ -176,6 +219,7 @@ export const publicSharesRouter = Router()
 
 publicSharesRouter.get('/:token', async (req, res) => {
   const { token } = req.params
+  res.setHeader('X-Robots-Tag', 'noindex, nofollow')
 
   try {
     // Look up the share — check token and expiration
@@ -184,8 +228,9 @@ publicSharesRouter.get('/:token', async (req, res) => {
       permission: string
       expires_at: string | null
       shared_by: string
+      shared_by_name: string | null
     }>(
-      `SELECT s.workbook_id, s.permission, s.expires_at, s.shared_by
+      `SELECT s.workbook_id, s.permission, s.expires_at, s.shared_by, s.shared_by_name
        FROM smartsht.shares s
        WHERE s.share_token = $1`,
       [token],
@@ -220,7 +265,7 @@ publicSharesRouter.get('/:token', async (req, res) => {
       `SELECT display_name FROM smartsht.users WHERE id = $1`,
       [share.shared_by],
     )
-    const sharedByName = user.rows[0]?.display_name || 'Someone'
+    const sharedByName = share.shared_by_name || user.rows[0]?.display_name || 'Someone'
 
     // Download the workbook data from S3
     const data = await downloadObject(workbook.rows[0].s3_key)
@@ -238,3 +283,4 @@ publicSharesRouter.get('/:token', async (req, res) => {
     sendServerError(res, 'shares', err)
   }
 })
+

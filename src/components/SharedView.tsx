@@ -22,6 +22,7 @@ export function SharedView({ token }: SharedViewProps) {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [copied, setCopied] = useState(false)
+  const [copyError, setCopyError] = useState<string | null>(null)
   const [activeSheetId, setActiveSheetId] = useState<string | null>(null)
 
   useEffect(() => {
@@ -32,8 +33,15 @@ export function SharedView({ token }: SharedViewProps) {
         })
 
         if (!res.ok) {
-          const body = (await res.json().catch(() => ({}))) as { error?: string }
-          setError(body.error ?? `Failed to load (HTTP ${res.status})`)
+          if (res.status === 429) {
+            setError('Too many requests right now. Please wait a minute and try again.')
+          } else if (res.status === 410) {
+            setError('This share link has expired. Ask the owner for a new link.')
+          } else if (res.status === 404) {
+            setError('This link was not found or has been revoked by its owner.')
+          } else {
+            setError(`Failed to load the shared workbook (HTTP ${res.status}).`)
+          }
           return
         }
 
@@ -63,7 +71,12 @@ export function SharedView({ token }: SharedViewProps) {
     try {
       localStorage.setItem('smartsht-import-shared', JSON.stringify(workbook))
     } catch {
-      alert('This workbook is too large to copy into browser storage.')
+      try {
+        localStorage.removeItem('smartsht-import-shared')
+      } catch {
+        // storage unavailable
+      }
+      setCopyError('This workbook is too large to copy into browser storage.')
       return
     }
     window.location.href = '/'
@@ -98,7 +111,7 @@ export function SharedView({ token }: SharedViewProps) {
             href="/"
             className="inline-block mt-4 px-4 py-2 text-sm text-blue-600 hover:text-blue-700 underline"
           >
-            Go to smartsh!t
+            Go to smartsht.com
           </a>
         </div>
       </div>
@@ -113,10 +126,15 @@ export function SharedView({ token }: SharedViewProps) {
     <div className="h-screen w-screen flex flex-col bg-white overflow-hidden">
       {/* Banner */}
       <div className="h-12 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 flex items-center px-4 gap-3 shrink-0">
-        <div className="flex items-center gap-2">
-          <img src="/pwa-icon-192.png" alt="smartsh!t" className="w-6 h-6 rounded-lg" />
-          <span className="text-sm font-bold text-white tracking-tight">smartsh!t</span>
-        </div>
+        <a
+          href="https://smartsht.com"
+          target="_blank"
+          rel="noopener"
+          className="flex items-center gap-2"
+        >
+          <img src="/pwa-icon-192.png" alt="smartsht.com" className="w-6 h-6 rounded-lg" />
+          <span className="text-sm font-bold text-white tracking-tight">smartsht.com</span>
+        </a>
 
         <div className="w-px h-5 bg-slate-600" />
 
@@ -180,7 +198,19 @@ export function SharedView({ token }: SharedViewProps) {
         <span className="text-gray-300">|</span>
         <span>{Object.keys(activeSheet.cells).filter((k) => activeSheet.cells[k]?.value != null).length} cells</span>
         <div className="flex-1" />
-        <span className="text-gray-400">smartsh!t · shared view</span>
+        {copyError && (
+          <span role="alert" className="text-red-600">
+            {copyError}
+          </span>
+        )}
+        <a
+          href="https://smartsht.com"
+          target="_blank"
+          rel="noopener"
+          className="text-gray-400 hover:text-gray-600 underline"
+        >
+          smartsht.com
+        </a>
       </div>
     </div>
   )
