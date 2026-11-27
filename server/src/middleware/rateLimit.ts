@@ -106,7 +106,9 @@ export const globalRateLimiter = rateLimit({
  */
 export const sharedAccessRateLimiter = rateLimit({
   windowMs: 60_000,
-  max: 10,
+  // Per IP: 10/min blocked several recipients behind one office/school NAT.
+  // Tokens are random UUIDs, so this is abuse control, not anti-guessing.
+  max: 60,
   standardHeaders: true,
   legacyHeaders: false,
   message: {

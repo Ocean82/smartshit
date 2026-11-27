@@ -13,6 +13,11 @@
 
 set -euo pipefail
 
+# The whole script is one { ... } block so bash parses it fully before running.
+# Without this, `git reset --hard` below rewrites this file mid-run and bash
+# keeps reading the new file at the old byte offset (undefined behavior).
+{
+
 # ─── Configuration ────────────────────────────────────────────────────────────
 
 APP_DIR="/opt/smartsht/current"
@@ -86,8 +91,9 @@ command -v pm2 >/dev/null || die "PM2 not found"
 
 cd "$APP_DIR"
 
-# Record current commit for rollback
-PREV_COMMIT=$(git rev-parse HEAD)
+# Record current commit for rollback. A re-exec (below) passes the original one
+# through, since HEAD has already moved to the new commit by then.
+PREV_COMMIT="${SMARTSHT_DEPLOY_PREV:-$(git rev-parse HEAD)}"
 log "Current commit: ${PREV_COMMIT:0:8}"
 
 # ─── Pull Latest Code ─────────────────────────────────────────────────────────
@@ -96,6 +102,14 @@ log "Pulling latest from origin/main..."
 git fetch origin main --quiet
 git reset --hard origin/main --quiet
 NEW_COMMIT=$(git rev-parse HEAD)
+
+# This process is still the OLD deploy.sh (bash read it before the reset). If
+# the update changed this script, hand over to the new version so new deploy
+# steps run in the same deploy, not the next one. Guarded to re-exec once.
+if [ -z "${SMARTSHT_DEPLOY_PREV:-}" ] && ! git diff --quiet "$PREV_COMMIT" "$NEW_COMMIT" -- scripts/deploy.sh; then
+  log "deploy.sh changed in this update - re-running the new version"
+  SMARTSHT_DEPLOY_PREV="$PREV_COMMIT" exec bash "$APP_DIR/scripts/deploy.sh" "$@"
+fi
 log "Updated to: ${NEW_COMMIT:0:8}"
 
 # "Nothing to do" must mean the target commit is the one that last finished
@@ -491,3 +505,5 @@ echo "  Frontend: https://smartsht.com/app"
 echo "  API:      https://smartsht.com/health"
 echo "  Logs:     pm2 logs smartsht-api --lines 20"
 echo ""
+exit 0
+}

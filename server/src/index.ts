@@ -61,6 +61,7 @@ import { checkUsage, getUsageStats, reserveUsage, releaseUsage } from './usage.j
 import { reserveAutoFix } from './autofixUsage.js'
 import { decideAiAccess, shouldRecordServerUsage } from './aiAccess.js'
 import { dbHealthCheck, closePool } from './db.js'
+import { migrationsHealthCheck } from './migrationsHealth.js'
 import { s3HealthCheck } from './s3.js'
 import { workbooksRouter } from './routes/workbooks.js'
 import { versionsRouter } from './routes/versions.js'
@@ -722,10 +723,11 @@ app.get('/health', async (req, res) => {
   // Stripe are intentionally NOT gated — they degrade gracefully, so gating
   // rollback on a Groq/Stripe blip would revert a healthy deploy.
   if (req.query.strict !== undefined && req.query.strict !== '0') {
-    const [db, s3] = await Promise.all([dbHealthCheck(), s3HealthCheck()])
+    const [db, s3, migrations] = await Promise.all([dbHealthCheck(), s3HealthCheck(), migrationsHealthCheck()])
     // Config-only: a live Clerk API probe would make deploys flake on brief outages.
     const clerk = clerkConfigHealth()
-    const ready = db.ok && s3.ok && clerk.ok
+    // Unapplied migrations = new code against an old schema; fail so deploy rolls back.
+    const ready = db.ok && s3.ok && clerk.ok && migrations.ok
 
     // The deploy gate only reads the HTTP status (curl -f → 503 rolls back), so
     // the per-subsystem `critical` object — which carries raw DB/S3 driver error
@@ -745,7 +747,7 @@ app.get('/health', async (req, res) => {
       service: 'smartsht-server',
       mode: 'strict',
       liveness: isOk,
-      ...(showDiagnostics ? { critical: { database: db, s3, clerk } } : {}),
+      ...(showDiagnostics ? { critical: { database: db, s3, clerk, migrations } } : {}),
     })
     return
   }

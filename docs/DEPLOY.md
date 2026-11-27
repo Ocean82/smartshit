@@ -133,7 +133,9 @@ Invoked by Actions or `deploy-remote.sh`:
 5. Builds frontend → mirrors `dist/` to `/var/www/smartsht/app/` (fails → rollback if no `.wasm`)
 6. Installs nginx conf, `nginx -t`, reload
 7. Builds server (`tsc`), runs `npm run migrate` (pending migrations only; a failure aborts before the restart), then `pm2 restart smartsht-api --update-env`
-8. Strict health check `http://127.0.0.1:8787/health?strict=1` (DB + S3 + Clerk); rollback on failure
+8. Strict health check `http://127.0.0.1:8787/health?strict=1` (DB + S3 + Clerk + no unapplied migrations); rollback on failure
+
+Actions runs a `/tmp` copy of `deploy.sh`, and the script is one `{ ... }` block, so the `git reset --hard` in step 1 cannot rewrite the running script. If the update changed `deploy.sh`, it re-execs the new version once (keeping the original commit for rollback), so new deploy steps take effect in the same deploy.
 
 ### Server directory layout
 
@@ -393,7 +395,7 @@ CREATE INDEX IF NOT EXISTS idx_usage_date ON smartsht.ai_usage_daily(usage_date)
 | All tests pass | `npm test` + `npm test --prefix server` |
 | Release gates | `npm run release:check:v1` |
 | Provider order | Boot log shows `Provider order: groq -> openrouter` (Ollama disabled since 2026-11-14; see `docs/MAJOR_CHANGES.md`) |
-| DB migrations | `cd /opt/smartsht/current/server && DATABASE_URL="$(sed -n 's/^DATABASE_URL=//p' /opt/smartsht/.env)" npm run migrate`. Read the URL from `/opt/smartsht/.env`, the file the running API loads through its symlink, not the `server/.env` copy. The runner skips applied files and runs each file plus its tracking row in one transaction; latest is `008_share_shared_by_name.sql`. `deploy.sh` now runs this automatically after the server build and before the PM2 restart, so a normal deploy needs no manual step; the manual command is for ad hoc use. Ordering matters: 008 adds `smartsht.shares.shared_by_name`, and the new share routes read and write it, so a restart before the migration breaks share creation and every existing share link. Confirm with `SELECT filename FROM smartsht.migrations ORDER BY id DESC LIMIT 3;`. Note: DB TLS is currently not certificate-verified (see `docs/MAJOR_CHANGES.md` 2026-11-13). |
+| DB migrations | `cd /opt/smartsht/current/server && DATABASE_URL="$(sed -n 's/^DATABASE_URL=//p' /opt/smartsht/.env)" npm run migrate`. Read the URL from `/opt/smartsht/.env`, the file the running API loads through its symlink, not the `server/.env` copy. The runner skips applied files and runs each file plus its tracking row in one transaction; latest is `008_share_shared_by_name.sql`. `deploy.sh` now runs this automatically after the server build and before the PM2 restart, so a normal deploy needs no manual step; the manual command is for ad hoc use. Ordering matters: 008 adds `smartsht.shares.shared_by_name`, and the new share routes read and write it, so a restart before the migration breaks share creation and every existing share link. Confirm with `SELECT filename FROM smartsht.migrations ORDER BY id DESC LIMIT 3;`. `/health?strict=1` returns 503 while any shipped migration is unapplied, so a deploy that skips migrations rolls back. **Migration rules:** (1) additive only (new tables/columns/indexes), so the previous build still works if a deploy rolls back, since rollback does not undo migrations; (2) the production DB role is the app role, which cannot `CREATE SCHEMA` or `CREATE EXTENSION`, so a migration that needs either must be run once by hand with an admin role (the deploy will fail safely, old build serving, until it is). Note: DB TLS is currently not certificate-verified (see `docs/MAJOR_CHANGES.md` 2026-11-13). |
 | HTTPS works | `curl -I https://smartsht.com` → 200 |
 | Health endpoint | `curl https://smartsht.com/health` → ok; `curl -sf https://smartsht.com/health?strict=1` → 200 (DB+S3+Clerk up) |
 | Clerk auth | Sign in works, JWT verified |

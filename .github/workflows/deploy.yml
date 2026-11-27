@@ -177,7 +177,10 @@ jobs:
           echo "Running deploy.sh ${flags:- (full)}"
           # shellcheck disable=SC2086
           ssh -i ~/.ssh/smartsht_gha_deploy -o IdentitiesOnly=yes -o BatchMode=yes "$SSH_HOST" \
-            "cd /opt/smartsht/current && bash ./scripts/deploy.sh ${flags}"
+            "cd /opt/smartsht/current && cp ./scripts/deploy.sh /tmp/smartsht-deploy.sh && bash /tmp/smartsht-deploy.sh ${flags}"
+          # Runs a copy: deploy.sh's own `git reset --hard` would otherwise rewrite
+          # the file bash is executing. The copy re-execs the updated repo version
+          # when deploy.sh itself changed (see SMARTSHT_DEPLOY_PREV in deploy.sh).
 
       - name: Public strict health check
         run: |
