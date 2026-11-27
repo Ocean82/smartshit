@@ -50,8 +50,10 @@ async function run() {
 
   // Create a migrations tracking table if it doesn't exist
   // The schema is normally created by 001; create it here so a fresh database
-  // does not fail before 001 can run.
-  await client.query('CREATE SCHEMA IF NOT EXISTS smartsht')
+  // does not fail before 001 can run. Only when missing: CREATE SCHEMA IF NOT
+  // EXISTS still needs database CREATE privilege, which the production role lacks.
+  const schema = await client.query("SELECT 1 FROM pg_namespace WHERE nspname = 'smartsht'")
+  if (schema.rows.length === 0) await client.query('CREATE SCHEMA smartsht')
   await client.query(`
     CREATE TABLE IF NOT EXISTS smartsht.migrations (
       id SERIAL PRIMARY KEY,
