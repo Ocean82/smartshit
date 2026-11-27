@@ -25,6 +25,24 @@ export function SharedView({ token }: SharedViewProps) {
   const [copyError, setCopyError] = useState<string | null>(null)
   const [activeSheetId, setActiveSheetId] = useState<string | null>(null)
 
+  // Shared views hold user data: keep them out of search indexes. Restores the
+  // previous robots value on unmount.
+  useEffect(() => {
+    let tag = document.head.querySelector<HTMLMetaElement>('meta[name="robots"]')
+    const created = !tag
+    const prev = tag?.content ?? ''
+    if (!tag) {
+      tag = document.createElement('meta')
+      tag.name = 'robots'
+      document.head.appendChild(tag)
+    }
+    tag.content = 'noindex,nofollow'
+    return () => {
+      if (created) tag.remove()
+      else tag.content = prev
+    }
+  }, [])
+
   useEffect(() => {
     async function load() {
       try {
