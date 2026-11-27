@@ -424,6 +424,18 @@ if [ "$DEPLOY_SERVER" = true ]; then
     die "Server build failed — dist/server/src/index.js not found"
   fi
 
+  # Apply pending DB migrations BEFORE the restart: new code may read columns a
+  # migration adds (e.g. 008 shares.shared_by_name), so the old process keeps
+  # serving until the schema is ready. The runner is idempotent (skips applied
+  # files, one transaction per file). A failure aborts here, before the restart.
+  log "Applying database migrations..."
+  DB_URL="$(sed -n 's/^DATABASE_URL=//p' "$SHARED_ENV" | tail -1)"
+  [ -n "$DB_URL" ] || die "DATABASE_URL missing in $SHARED_ENV - cannot run migrations"
+  if ! MIGRATE_OUT=$(cd "$APP_DIR/server" && DATABASE_URL="$DB_URL" npm run migrate 2>&1); then
+    printf '%s\n' "$MIGRATE_OUT" | tail -20 | tee -a "$DEPLOY_LOG"
+    die "Database migration failed - not restarting (old build keeps serving)"
+  fi
+  printf '%s\n' "$MIGRATE_OUT" | grep -E 'Applied|Failed' | tee -a "$DEPLOY_LOG" || true
   log "Restarting PM2 process: $PM2_PROCESS..."
   pm2 restart "$PM2_PROCESS" --update-env 2>&1 | tail -3
 
