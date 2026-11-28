@@ -91,7 +91,7 @@ export function createLLMGatewayStage(deps?: LLMGatewayDeps): PipelineStage {
       let auditBlock = ''
       if ((isLlmOnlyMode(mode) || mode === 'advise') && isAuditorEnabled()) {
         try {
-          const auditResult = runAudit(target.sheet, target.getComputedValue, loadCustomRules(), loadDismissed(target.workbook.id))
+          const auditResult = runAudit(target.sheet, target.getComputedValue, loadCustomRules(), loadDismissed(target.workbook.id), { workbook: target.workbook })
           auditBlock = formatAuditForContext(auditResult)
         } catch {
           // Audit failure is non-fatal — continue without it

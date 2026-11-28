@@ -15,22 +15,34 @@ import { volatileFunctionsRule } from './volatileFunctions'
 import { duplicateFormulasRule } from './duplicateFormulas'
 import { onnxFormulaConsistencyRule } from './onnxFormulaConsistency'
 import { hardcodedWeightsRule } from './hardcodedWeights'
+import { overwrittenFormulasRule } from './overwrittenFormulas'
+import { missingSheetReferencesRule } from './missingSheetReferences'
+import { numbersAsTextRule } from './numbersAsText'
+import { approximateLookupRule } from './approximateLookup'
+import { percentDecimalMixRule } from './percentDecimalMix'
+import { orphanedInputsRule } from './orphanedInputs'
 
 export const ALL_RULES: AuditRule[] = [
   // Critical
   errorCellsRule,
   circularRefsRule,
+  missingSheetReferencesRule,
   // High
   rangeGapsRule,
   inconsistentFormulasRule,
+  overwrittenFormulasRule,
   onnxFormulaConsistencyRule,
   // Medium
   hardcodedConstantsRule,
   hardcodedWeightsRule,
   hiddenDependenciesRule,
+  numbersAsTextRule,
+  approximateLookupRule,
+  percentDecimalMixRule,
   // Low
   magnitudeOutliersRule,
   // Info
   volatileFunctionsRule,
   duplicateFormulasRule,
+  orphanedInputsRule,
 ]

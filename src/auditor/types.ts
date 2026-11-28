@@ -6,6 +6,8 @@
  * user reviews and accepts them.
  */
 
+import type { SheetData } from '@/types'
+
 export type Severity = 'critical' | 'high' | 'medium' | 'low' | 'info'
 
 export interface CellLocation {
@@ -76,8 +78,15 @@ export interface DismissedFindingEntry {
   valueSnapshot?: Record<string, string | number | boolean | null>
 }
 
+/** The sheets of the workbook being audited, for rules that follow references across sheets. */
+export interface AuditWorkbook {
+  sheets: ReadonlyArray<Pick<SheetData, 'id' | 'name' | 'cells'>>
+}
+
 export interface AuditContext {
   sheetName: string
+  /** Present when the caller passed the workbook; rules fall back to single-sheet behaviour without it. */
+  workbook?: AuditWorkbook
   allCells: CellInfo[]
   formulaCells: CellInfo[]
   /** Get a cell by row/col. Returns null if empty or out of bounds. */

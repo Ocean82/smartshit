@@ -9,19 +9,17 @@
  */
 
 import type { SheetData } from '@/types'
-import type { AuditResult, AuditContext, AuditFinding, CellInfo, DismissedFindingEntry, FixWrite, Severity } from './types'
+import type { AuditResult, AuditContext, AuditFinding, AuditWorkbook, CellInfo, DismissedFindingEntry, FixWrite, Severity } from './types'
 import { ALL_RULES } from './rules'
+import { computeHealthScore } from './score'
 import { createCustomAuditRule, type CustomAuditRule } from './customRules'
 import { refToCell, cellToRef, classifyCellType, isErrorValue, getErrorType, findingKey, cellSignature, stableFindingId } from './utils'
 
 export type { AuditResult, AuditFinding, CellInfo, Severity } from './types'
-export type { CellLocation, AuditRule, AuditContext, DismissedFindingEntry } from './types'
+export type { CellLocation, AuditRule, AuditContext, AuditWorkbook, DismissedFindingEntry } from './types'
 export { findingKey, cellSignature } from './utils'
 export { createCustomAuditRule, loadCustomRules, saveCustomRules, ruleMatches, OPERATOR_LABELS } from './customRules'
 export type { CustomAuditRule, CustomRuleOperator, NumericRuleOperator, TextRuleOperator, EmptyRuleOperator } from './customRules'
-
-/** Most points any single rule can take off the 100-point health score. */
-const MAX_PENALTY_PER_RULE = 40
 
 /**
  * Reason a batch of fix writes cannot be applied, or null if all targets are free.
@@ -45,6 +43,9 @@ export function getFixAbortReason(sheet: SheetData, fixActions: FixWrite[]): str
  * @param customRules - Optional user-defined custom audit rules to run alongside the built-ins.
  * @param dismissed - Findings the user dismissed, keyed by `findingKey`. A
  *   dismissal applies only while every cell it covers is unchanged.
+ * @param options.workbook - The whole workbook, so rules can follow references into other
+ *   sheets (cross-sheet cycles, missing sheets, inputs read elsewhere). Without it every rule
+ *   sees this sheet alone.
  * @returns Structured audit result with findings and score.
  */
 export function runAudit(
@@ -52,6 +53,7 @@ export function runAudit(
   getComputedValue: (row: number, col: number) => string,
   customRules: CustomAuditRule[] = [],
   dismissed: Record<string, DismissedFindingEntry> = {},
+  options: { workbook?: AuditWorkbook } = {},
 ): AuditResult {
   const startTime = performance.now()
 
@@ -114,6 +116,7 @@ export function runAudit(
   // Build the audit context
   const ctx: AuditContext = {
     sheetName: sheet.name,
+    workbook: options.workbook,
     allCells,
     formulaCells,
     maxRow,
@@ -171,23 +174,7 @@ export function runAudit(
     ;(stillApplies ? dismissedFindings : findings).push(finding)
   }
 
-  // Calculate health score (100 = perfect, 0 = catastrophic)
-  const weights: Record<Severity, number> = {
-    critical: 20,
-    high: 10,
-    medium: 5,
-    low: 2,
-    info: 0,
-  }
-  // Cap each rule's share so one noisy rule (say a pasted block that trips
-  // "inconsistent formulas") cannot alone drive the score to zero.
-  const penaltyByRule = new Map<string, number>()
-  for (const f of findings) {
-    penaltyByRule.set(f.ruleId, (penaltyByRule.get(f.ruleId) ?? 0) + weights[f.severity])
-  }
-  let totalPenalty = 0
-  for (const penalty of penaltyByRule.values()) totalPenalty += Math.min(penalty, MAX_PENALTY_PER_RULE)
-  const score = Math.max(0, Math.min(100, 100 - totalPenalty))
+  const score = computeHealthScore(findings, formulaCells.length)
 
   // Generate summary
   const durationMs = Math.round(performance.now() - startTime)

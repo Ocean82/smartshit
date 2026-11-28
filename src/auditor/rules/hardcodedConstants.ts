@@ -1,25 +1,25 @@
 /**
  * Rule: Hardcoded Constants
  * Detects "magic numbers" embedded directly in formulas that should
- * probably be input cells. Common acceptable constants (0, 1, 100, 12, etc.)
- * are excluded.
+ * probably be input cells. Structural constants (0 to 10, 12, 24, 52, 60,
+ * 100, 365, 1000 and similar) are excluded. Rates such as a tax or markup
+ * (0.08, 1.2) are deliberately NOT excluded: a wrong rate is a common error.
  */
 
 import type { AuditRule, AuditFinding, AuditContext, FixWrite } from '../types'
-import { findingId, refToCell, stripStringLiterals } from '../utils'
+import { findingId, refToCell, findNumericLiterals } from '../utils'
 
 /** Numbers that are commonly used as formula constants and aren't suspicious. */
 const ACCEPTABLE_CONSTANTS = new Set([
   '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10',
   '12', '24', '30', '31', '52', '60', '100', '365', '366',
   '1000', '0.5', '0.01', '0.1',
-  // Common tax rates and percentage multipliers
-  '0.05', '0.06', '0.07', '0.08', '0.09',
-  '0.15', '0.18', '0.2', '0.21', '0.22', '0.25', '0.3', '0.33',
-  '1.05', '1.06', '1.07', '1.08', '1.09', '1.1', '1.15', '1.2', '1.21', '1.25',
   // Common denominators and statistical
-  '4', '7', '14', '26', '90', '180', '360',
+  '7', '14', '26', '90', '180', '360',
 ])
+
+/** `.50`, `1.0` and `1E1` compare equal to their canonical form. */
+const canonical = (text: string) => String(Number(text))
 
 /** First empty cell in the row, scanning right from the formula's column. */
 function findFirstEmptyCellRight(ctx: AuditContext, row: number, col: number): string | null {
@@ -41,45 +41,35 @@ export const hardcodedConstantsRule: AuditRule = {
     for (const cell of ctx.formulaCells) {
       if (!cell.formula) continue
 
-      // Strip cell references and range references so we don't false-flag them
-      const stripped = stripStringLiterals(cell.formula) // text such as "Q3 2024" is not a number in the formula
-        .replace(/[A-Z]{1,3}\d{1,5}:[A-Z]{1,3}\d{1,5}/g, '') // remove ranges
-        .replace(/[A-Z]{1,3}\d{1,5}/g, '') // remove cell refs
+      const suspicious = findNumericLiterals(cell.formula).filter((n) => !ACCEPTABLE_CONSTANTS.has(canonical(n.text)))
+      if (suspicious.length === 0) continue
 
-      // Find numeric literals
-      const numbers = stripped.match(/\b\d+\.?\d*\b/g)
-      if (!numbers) continue
+      // The fix moves the first suspicious constant; the message lists them all.
+      const first = suspicious[0]
+      const target = findFirstEmptyCellRight(ctx, cell.row, cell.col)
+      // Positional rewrite: only that literal changes, never a reference or quoted text.
+      const fixActions: FixWrite[] | undefined = target
+        ? [
+            { cellId: target, value: Number(first.text) },
+            {
+              cellId: cell.cellId,
+              formula: `=${cell.formula.slice(0, first.start)}${target}${cell.formula.slice(first.start + first.text.length)}`,
+            },
+          ]
+        : undefined
 
-      const suspicious = numbers.filter((n) => !ACCEPTABLE_CONSTANTS.has(n))
-
-      // Only report the first suspicious constant per cell to avoid noise
-      if (suspicious.length > 0) {
-        const num = suspicious[0]
-        const target = findFirstEmptyCellRight(ctx, cell.row, cell.col)
-        const escaped = num.replace(/\./g, '\\.')
-        const replacePattern = new RegExp(`(?<![A-Za-z0-9_.])${escaped}(?![A-Za-z0-9_.])`)
-        // The fix rewrites the first match, so skip it when the same digits also sit inside quoted text.
-        const inText = (cell.formula.match(/"(?:[^"]|"")*"/g) ?? []).some((s) => replacePattern.test(s))
-        const fixActions: FixWrite[] | undefined =
-          target && !inText && replacePattern.test(cell.formula)
-            ? [
-                { cellId: target, value: Number(num) },
-                { cellId: cell.cellId, formula: `=${cell.formula.replace(replacePattern, target)}` },
-              ]
-            : undefined
-
-        findings.push({
-          id: findingId(),
-          ruleId: 'hardcoded-constants',
-          severity: 'medium',
-          title: `Magic number ${num} in ${cell.cellId}`,
-          message: `Cell ${cell.cellId} has hardcoded value ${num} in formula =${cell.formula}. Hardcoded values are fragile — if the number changes, you have to find every formula that uses it.`,
-          cells: [{ cellId: cell.cellId, row: cell.row, col: cell.col }],
-          suggestion: `Move ${num} to a dedicated input cell and reference that cell instead`,
-          autoFixable: !!fixActions,
-          fixActions,
-        })
-      }
+      const all = [...new Set(suspicious.map((n) => n.text))]
+      findings.push({
+        id: findingId(),
+        ruleId: 'hardcoded-constants',
+        severity: 'medium',
+        title: `Magic number ${first.text} in ${cell.cellId}`,
+        message: `Cell ${cell.cellId} has hardcoded ${all.length > 1 ? `values ${all.join(', ')}` : `value ${first.text}`} in formula =${cell.formula}. Hardcoded values are fragile — if the number changes, you have to find every formula that uses it.`,
+        cells: [{ cellId: cell.cellId, row: cell.row, col: cell.col }],
+        suggestion: `Move ${first.text} to a dedicated input cell and reference that cell instead`,
+        autoFixable: !!fixActions,
+        fixActions,
+      })
     }
 
     return findings

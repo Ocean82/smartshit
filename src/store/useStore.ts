@@ -169,6 +169,7 @@ export const useStore = create<AppState>()(
           state.getComputedValue,
           loadCustomRules(),
           loadDismissed(state.workbook.id),
+          { workbook: state.workbook },
         )
         useStore.setState((st) => {
           st.lastAuditResult = result

@@ -14,6 +14,9 @@ const ERROR_DESCRIPTIONS: Record<string, string> = {
   '#NULL!': 'Invalid range intersection — check for missing operators',
   '#N/A': 'Value not available — a lookup function could not find a match',
   '#NUM!': 'Invalid numeric value — a number is too large, too small, or invalid',
+  '#CIRC!': 'Circular reference — the formula depends on its own result, directly or through other cells',
+  '#SPILL!': 'Spill blocked — the formula returns several values but the cells they need are not empty',
+  '#CALC!': 'Calculation failed — the engine could not evaluate this formula',
 }
 
 const ERROR_SUGGESTIONS: Record<string, (formula: string | null) => string> = {
@@ -24,6 +27,9 @@ const ERROR_SUGGESTIONS: Record<string, (formula: string | null) => string> = {
   '#N/A': (f) => f ? `Add error handling: =IFERROR(${f}, "Not found")` : 'Verify the lookup value exists in the source range',
   '#NULL!': () => 'Check for missing comma or colon between cell references',
   '#NUM!': () => 'Verify the numeric arguments are within valid ranges',
+  '#CIRC!': () => 'Break the loop: change one cell in the chain so it no longer reads a cell that depends on it',
+  '#SPILL!': () => 'Clear the cells below or beside the formula that block its results, or reduce the size of the result',
+  '#CALC!': () => 'Check the formula arguments and ranges, then re-enter it',
 }
 
 export const errorCellsRule: AuditRule = {
@@ -50,6 +56,9 @@ export const errorCellsRule: AuditRule = {
         '#VALUE!': 'high',
         '#NULL!': 'high',
         '#NUM!': 'high',
+        '#CIRC!': 'critical',
+        '#SPILL!': 'high',
+        '#CALC!': 'high',
         '#NAME?': 'medium',
         '#N/A': 'medium',
       }

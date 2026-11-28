@@ -3,15 +3,26 @@
  * Detects cells that break a formula pattern established by their neighbors
  * in a row or column. For example, if B2:B9 all use "=C2-A2" pattern but
  * B5 uses "=C5*A5", that's flagged.
+ *
+ * A row or column is first split into blocks (two or more empty cells start a
+ * new block), so separate tables stacked in the same columns are never
+ * compared with each other. A cell that breaks the pattern both in its row and
+ * in its column is reported once, against the larger agreeing group.
  */
 
 import type { AuditRule, AuditFinding, AuditContext, CellInfo } from '../types'
-import { findingId, normalizeFormula, colToLetter, isSummaryCell } from '../utils'
+import { findingId, normalizeFormula, colToLetter, isSummaryCell, splitIntoBlocks, type Axis } from '../utils'
 
 /** Minimum cells needed to establish a pattern before flagging outliers. */
 const MIN_PATTERN_SIZE = 3
 /** What fraction of cells must share a pattern to consider it "dominant". */
 const DOMINANCE_THRESHOLD = 0.7
+
+interface Candidate {
+  finding: AuditFinding
+  /** How many other cells share the pattern this cell breaks. */
+  dominantCount: number
+}
 
 export const inconsistentFormulasRule: AuditRule = {
   id: 'inconsistent-formulas',
@@ -20,29 +31,36 @@ export const inconsistentFormulasRule: AuditRule = {
   defaultSeverity: 'high',
 
   run(ctx: AuditContext): AuditFinding[] {
-    const findings: AuditFinding[] = []
+    // One entry per cell; a later group replaces it only with a stronger pattern.
+    const best = new Map<string, Candidate>()
+    const consider = (candidates: Candidate[]) => {
+      for (const candidate of candidates) {
+        const cellId = candidate.finding.cells[0].cellId
+        const existing = best.get(cellId)
+        if (!existing || candidate.dominantCount > existing.dominantCount) best.set(cellId, candidate)
+      }
+    }
 
-    // Check columns
     for (let col = 0; col <= ctx.maxCol; col++) {
-      const colFindings = checkGroup(ctx.getColumn(col), 'column', colToLetter(col))
-      findings.push(...colFindings)
+      for (const block of splitIntoBlocks(ctx.getColumn(col), 'column')) {
+        consider(checkGroup(block, 'column', colToLetter(col)))
+      }
     }
-
-    // Check rows
     for (let row = 0; row <= ctx.maxRow; row++) {
-      const rowFindings = checkGroup(ctx.getRow(row), 'row', String(row + 1))
-      findings.push(...rowFindings)
+      for (const block of splitIntoBlocks(ctx.getRow(row), 'row')) {
+        consider(checkGroup(block, 'row', String(row + 1)))
+      }
     }
 
-    return findings
+    return [...best.values()].map((c) => c.finding)
   },
 }
 
-function checkGroup(cells: CellInfo[], direction: 'row' | 'column', label: string): AuditFinding[] {
-  const findings: AuditFinding[] = []
+function checkGroup(cells: CellInfo[], direction: Axis, label: string): Candidate[] {
+  const candidates: Candidate[] = []
   const formulaCells = cells.filter((c) => c.formula)
 
-  if (formulaCells.length < MIN_PATTERN_SIZE) return findings
+  if (formulaCells.length < MIN_PATTERN_SIZE) return candidates
 
   // Normalize each formula relative to its position
   const normalized = formulaCells.map((c) => ({
@@ -67,7 +85,7 @@ function checkGroup(cells: CellInfo[], direction: 'row' | 'column', label: strin
   }
 
   // Only flag if the dominant pattern is actually dominant
-  if (dominantCount / formulaCells.length < DOMINANCE_THRESHOLD) return findings
+  if (dominantCount / formulaCells.length < DOMINANCE_THRESHOLD) return candidates
 
   // Flag cells that deviate from the dominant pattern
   for (const { cell, pattern } of normalized) {
@@ -79,17 +97,20 @@ function checkGroup(cells: CellInfo[], direction: 'row' | 'column', label: strin
 
     const dirLabel = direction === 'column' ? `column ${label}` : `row ${label}`
 
-    findings.push({
-      id: findingId(),
-      ruleId: 'inconsistent-formulas',
-      severity: 'high',
-      title: `Formula pattern break in ${cell.cellId}`,
-      message: `Cell ${cell.cellId} breaks the formula pattern in ${dirLabel}. ${dominantCount} other cells use a consistent pattern. Current formula: =${cell.formula}`,
-      cells: [{ cellId: cell.cellId, row: cell.row, col: cell.col }],
-      suggestion: `Review formula in ${cell.cellId} — it differs from the ${dominantCount} neighboring cells that share a common pattern`,
-      autoFixable: false,
+    candidates.push({
+      dominantCount,
+      finding: {
+        id: findingId(),
+        ruleId: 'inconsistent-formulas',
+        severity: 'high',
+        title: `Formula pattern break in ${cell.cellId}`,
+        message: `Cell ${cell.cellId} breaks the formula pattern in ${dirLabel}. ${dominantCount} other cells use a consistent pattern. Current formula: =${cell.formula}`,
+        cells: [{ cellId: cell.cellId, row: cell.row, col: cell.col }],
+        suggestion: `Review formula in ${cell.cellId} — it differs from the ${dominantCount} neighboring cells that share a common pattern`,
+        autoFixable: false,
+      },
     })
   }
 
-  return findings
+  return candidates
 }

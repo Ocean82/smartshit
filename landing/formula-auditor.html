@@ -147,12 +147,17 @@
     <h2>What it looks for</h2>
     <ul>
       <li><strong>Formula errors.</strong> Cells that show #REF!, #DIV/0!, #VALUE!, #N/A, #NAME? or #NUM!, with a plain reason and a suggested fix.</li>
-      <li><strong>Range gaps.</strong> A SUM that stops short of the last value, such as a total that skips the row above it.</li>
-      <li><strong>Inconsistent formulas.</strong> A column of formulas where one cell was typed differently from the rest.</li>
-      <li><strong>Circular references.</strong> A formula that depends on its own result.</li>
+      <li><strong>Range gaps.</strong> A SUM that stops short of nearby data, such as a total that skips the row above it or sits one empty row away from more values.</li>
+      <li><strong>Inconsistent formulas.</strong> A column of formulas where one cell was typed differently from the rest, including a total that adds up fewer rows than the totals beside it.</li>
+      <li><strong>Typed-over formulas.</strong> A plain number sitting in the middle of a column of formulas, where a formula was probably overwritten.</li>
+      <li><strong>Circular references.</strong> A formula that depends on its own result, directly or through another sheet.</li>
       <li><strong>Outliers.</strong> A value far from the rest of the column, which is often a typo or a unit mismatch.</li>
       <li><strong>Hardcoded numbers.</strong> A number typed inside a formula, such as <code>=B2*4817</code>, that belongs in its own input cell.</li>
-      <li><strong>Cross-sheet links.</strong> Formulas that read from another sheet and break silently if that sheet is renamed or deleted.</li>
+      <li><strong>Cross-sheet links.</strong> Formulas that read from another sheet and break silently if that sheet is renamed or deleted, and formulas that point at a sheet the workbook does not have.</li>
+      <li><strong>Numbers stored as text.</strong> Values such as "1,200" in a column of numbers, which SUM and AVERAGE skip.</li>
+      <li><strong>Approximate lookups.</strong> VLOOKUP, HLOOKUP or MATCH that match approximately, often because the last argument was left out.</li>
+      <li><strong>Percent and decimal mixes.</strong> A rate column holding both 0.08 and 8, where one entry is 100 times too big.</li>
+      <li><strong>Unused inputs.</strong> A labelled assumption that no formula reads, so changing it changes nothing.</li>
       <li><strong>Volatile functions.</strong> NOW, TODAY, RAND, INDIRECT and OFFSET, which recalculate on every change or break when rows move.</li>
       <li><strong>Duplicate formulas.</strong> The same formula pasted unchanged into several cells.</li>
       <li><strong>Your own rules.</strong> Add a rule for a column, such as column B must be greater than 0, and it runs with the rest.</li>

@@ -115,7 +115,7 @@ export function applyWorkbookImportEffects(
         if (get().auditorEnabled === false) return
         const activeSheet = get().getActiveSheet()
         if (Object.keys(activeSheet.cells).length > 4) {
-          const auditResult = runAudit(activeSheet, get().getComputedValue, loadCustomRules())
+          const auditResult = runAudit(activeSheet, get().getComputedValue, loadCustomRules(), {}, { workbook: get().workbook })
           set((s) => {
             s.lastAuditResult = auditResult
             s.lastAuditRevision = s.workbookRevision

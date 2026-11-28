@@ -901,7 +901,7 @@ export async function processMessage(input: ProcessMessageInput): Promise<ToolRe
   let auditBlock = ''
   if ((isLlmOnlyMode(mode) || mode === 'advise') && isAuditorEnabled()) {
     try {
-      const auditResult = runAudit(input.sheet, input.getComputedValue, loadCustomRules(), loadDismissed(input.workbook.id))
+      const auditResult = runAudit(input.sheet, input.getComputedValue, loadCustomRules(), loadDismissed(input.workbook.id), { workbook: input.workbook })
       auditBlock = formatAuditForContext(auditResult)
     } catch { /* non-fatal */ }
   }

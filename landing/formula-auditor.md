@@ -15,12 +15,17 @@ The smartsht formula auditor is a free spreadsheet audit tool and Excel formula 
 ## What it looks for
 
 - **Formula errors.** Cells that show #REF!, #DIV/0!, #VALUE!, #N/A, #NAME? or #NUM!, with a plain reason and a suggested fix.
-- **Range gaps.** A SUM that stops short of the last value, such as a total that skips the row above it.
-- **Inconsistent formulas.** A column of formulas where one cell was typed differently from the rest.
-- **Circular references.** A formula that depends on its own result.
+- **Range gaps.** A SUM that stops short of nearby data, such as a total that skips the row above it or sits one empty row away from more values.
+- **Inconsistent formulas.** A column of formulas where one cell was typed differently from the rest, including a total that adds up fewer rows than the totals beside it.
+- **Typed-over formulas.** A plain number sitting in the middle of a column of formulas, where a formula was probably overwritten.
+- **Circular references.** A formula that depends on its own result, directly or through another sheet.
 - **Outliers.** A value far from the rest of the column, which is often a typo or a unit mismatch.
 - **Hardcoded numbers.** A number typed inside a formula, such as `=B2*4817`, that belongs in its own input cell.
-- **Cross-sheet links.** Formulas that read from another sheet and break silently if that sheet is renamed or deleted.
+- **Cross-sheet links.** Formulas that read from another sheet and break silently if that sheet is renamed or deleted, and formulas that point at a sheet the workbook does not have.
+- **Numbers stored as text.** Values such as "1,200" in a column of numbers, which SUM and AVERAGE skip.
+- **Approximate lookups.** VLOOKUP, HLOOKUP or MATCH that match approximately, often because the last argument was left out.
+- **Percent and decimal mixes.** A rate column holding both 0.08 and 8, where one entry is 100 times too big.
+- **Unused inputs.** A labelled assumption that no formula reads, so changing it changes nothing.
 - **Volatile functions.** NOW, TODAY, RAND, INDIRECT and OFFSET, which recalculate on every change or break when rows move.
 - **Duplicate formulas.** The same formula pasted unchanged into several cells.
 - **Your own rules.** Add a rule for a column, such as column B must be greater than 0, and it runs with the rest.

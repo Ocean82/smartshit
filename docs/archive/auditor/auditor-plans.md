@@ -1,3 +1,5 @@
+> **Superseded.** This is the original design sketch. The shipped auditor lives in `src/auditor/`; `orphanedCells.ts` and `fixSuggestions.ts` were never built as listed here (see `src/auditor/rules/orphanedInputs.ts` and `docs/auditor-fix-plan.md`).
+
 
 
 
